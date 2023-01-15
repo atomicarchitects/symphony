@@ -2,32 +2,27 @@ import e3nn_jax as e3nn
 from e3nn_jax._src.s2grid import s2_grid, _quadrature_weights_soft, to_s2grid
 import jax
 from jax import numpy as jnp
-from matplotlib import pyplot as plt
 import numpy as np
-import typing
 
 
-def sample_s2grid_angular(proba, res_beta, res_alpha, *, quadrature: str, key: jax.random.PRNGKey):
-    r"""
-    Take samples from a signal on the S2 grid.
+def sample_on_s2grid(key, prob_s2, y, alpha, qw):
+    """Sample points on the sphere
+
     Args:
-        proba (`jax.numpy.ndarray`): signal on the sphere of shape ``(res_beta, res_alpha)``
-        num_samples (int): the number of samples to take from proba
-        quadrature (str): "soft" or "gausslegendre"
-        key (jax.random.PRNGKey)
+        key (jnp.ndarray): random key
+        prob_s2 (jnp.ndarray): shape ``(y, alpha)``, no need to be normalized
+        y (jnp.ndarray): shape ``(y,)``
+        alpha (jnp.ndarray): shape ``(alpha,)``
+        qw (jnp.ndarray): shape ``(y,)``
+
     Returns:
-        sampled_z (float): sampled z taken from proba
-        sampled_alpha (float): sampled alpha taken from proba
+        y_index (jnp.ndarray): shape ``()``
+        alpha_index (jnp.ndarray): shape ``()``
     """
-    zs, alphas = s2_grid(res_beta, res_alpha, quadrature=quadrature)
-    if quadrature == "soft":
-        qw = _quadrature_weights_soft(res_beta // 2) * res_beta**2  # [b]
-    elif quadrature == "gausslegendre":
-        _, qw = np.polynomial.legendre.leggauss(res_beta)
-        qw /= 2
-    p_z = jnp.sum(proba, axis=-1) * qw
-    z_i = jax.random.choice(key, jnp.arange(proba.shape[0]), p=p_z)
-    sampled_z = zs[z_i]
-    sampled_alpha = jax.random.choice(key, alphas, p=proba[z_i])
-    
-    return sampled_z, sampled_alpha
+    k1, k2 = jax.random.split(key)
+    p_ya = prob_s2  # [y, alpha]
+    p_y = qw * jnp.sum(p_ya, axis=1)  # [y]
+    y_index = jax.random.choice(k1, jnp.arange(len(y)), p=p_y)
+    p_a = p_ya[y_index]  # [alpha]
+    alpha_index = jax.random.choice(k2, jnp.arange(len(alpha)), p=p_a)
+    return y_index, alpha_index
