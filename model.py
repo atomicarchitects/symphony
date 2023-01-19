@@ -14,6 +14,7 @@ from util import Atom, cross_entropy, sample_on_s2grid
 TYPE_MAP = ["STOP", "H", "C", "N", "O", "F"]
 
 
+## this needs to become a haiku module
 class Model:
     def __init__(self, feature_model_args, distance_model_args, seed):
         # feature extraction models
@@ -28,7 +29,7 @@ class Model:
         # models to map each atom to P(atom = focus)
         # inputs: atom feature vectors
         # outputs: P(atom = focus) for each atom (so 2 numbers - p and 1-p?)
-        self.focus_model = e3nn.flax.MultiLayerPerceptron(
+        self.focus_model = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[
                 128,
                 128,
@@ -46,19 +47,17 @@ class Model:
         # choosing element type for the next atom
         # inputs: atom feature vectors
         # outputs: H, C, N, O, F, STOP
-        self.type_model = e3nn.flax.MultiLayerPerceptron(
+        self.type_model = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[128, 128, 128, 128, 128, 128, 6], act=jax.nn.softplus
         )
         self.focus_model.init(
             jax.random.PRNGKey(seed), jnp.ones()
         )  # make this key choice random as well
 
-        # distance distribution
+        # radial/angular distribution
         # inputs: focus atom's features, focus atom type
-        # outputs: distance distribution
-        self.distance_model, self.distance_params, num_message_passing = model(
-            **distance_model_args, initialize_seed=seed
-        )
+        # outputs: distributions for radial and angular distributions
+        self.position_model, self.position_params, num_message_passing = e3nn.haiku.
 
     def __call__(self, input_data):
         """Single step forward (one atom generated), not the entire generation process"""
@@ -98,10 +97,6 @@ def train(model: Model, loss):
     # run through the whole generate process and compare results?
 
 
-def take_step(model: Model, optimizer):
-    pass
-
-
 def evaluate(model: Model, data_loader):
     p_bar = tqdm.tqdm(data_loader, desc="Evaluating", total=data_loader.approx_length())
     for ref_graph in p_bar:
@@ -121,6 +116,7 @@ def generate(model, input_data, res_beta, res_alpha, quadrature):
             break
 
         ## sample position distribution
+        # this needs to be changed if we're predicting radial and angular distributions together
         f = e3nn.to_s2grid(distance_dist, (res_beta, res_alpha), quadrature=quadrature)
         Z = e3nn.from_s2grid(
             jnp.exp(f), 0, p_val=1, p_arg=1, quadrature=quadrature
