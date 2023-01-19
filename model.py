@@ -84,7 +84,7 @@ class Model:
 
         # get distance distribution
         distance_input = np.concatenate(
-            [np.asarray(features_out[atom]), np.asarray([focus])]
+            [np.asarray(features_out[atom]), np.asarray([type]), np.asarray([focus])]
         )
         distance_dist = self.distance_model(distance_input)
 
@@ -106,32 +106,8 @@ def evaluate(model: Model, data_loader):
     p_bar = tqdm.tqdm(data_loader, desc="Evaluating", total=data_loader.approx_length())
     for ref_graph in p_bar:
         output = model(ref_graph)
-        pred_graph = ref_graph._replace(
-            nodes=ref_graph.nodes._replace(forces=output["forces"]),
-            globals=ref_graph.globals._replace(
-                energy=output["energy"], stress=output["stress"]
-            ),
-        )
-
-        if last_cache_size is not None and last_cache_size != model._cache_size():
-            last_cache_size = model._cache_size()
-
-            logging.info("Compiled function `model` for args:")
-            logging.info(f"- n_node={ref_graph.n_node} total={ref_graph.n_node.sum()}")
-            logging.info(f"- n_edge={ref_graph.n_edge} total={ref_graph.n_edge.sum()}")
-            logging.info(f"cache size: {last_cache_size}")
-
-        ref_graph = jraph.unpad_with_graphs(ref_graph)
-        pred_graph = jraph.unpad_with_graphs(pred_graph)
-
-        loss = jnp.sum(
-            cross_entropy(ref_graph, pred_graph)
-        )
-        total_loss += float(loss)
-        num_graphs += len(ref_graph.n_edge)
-        p_bar.set_postfix({"n": num_graphs})
-
-    avg_loss = total_loss / num_graphs
+        # how does this work when we aren't dealing with forces/energy/stresses?
+        
 
 
 def generate(model, input_data, res_beta, res_alpha, quadrature):
@@ -174,6 +150,7 @@ def generate(model, input_data, res_beta, res_alpha, quadrature):
         sampled_x = jnp.cos(sampled_alpha) * jnp.sqrt(1 - sampled_y**2)
         sampled_z = jnp.sin(sampled_alpha) * jnp.sqrt(1 - sampled_y**2)
 
+        # also need to keep track of which atoms are connected!
         output_molecule.append(Atom(sampled_x, sampled_y, sampled_z, curr_atom_type))
 
     return output_molecule
