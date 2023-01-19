@@ -1,5 +1,6 @@
 import e3nn_jax as e3nn
 from e3nn_jax._src.s2grid import s2_grid, _quadrature_weights_soft
+import haiku as hk
 import jax
 from jax import numpy as jnp
 import logging
@@ -11,17 +12,14 @@ import tqdm
 from util import Atom, cross_entropy, sample_on_s2grid
 
 
-TYPE_MAP = ["STOP", "H", "C", "N", "O", "F"]
-
-
 ## this needs to become a haiku module
-class Model:
+# also need to include atom type embeddings
+class Model(hk.Module):
     def __init__(self, feature_model_args, distance_model_args, seed):
         # feature extraction models
         # inputs: types + positions of the atoms constructed thus far
         # outputs: equivariant features used by the model
 
-        # feature_params: weights used in the NN
         self.feature_model, self.feature_params, num_message_passing = model(
             **feature_model_args, initialize_seed=seed
         )
@@ -40,9 +38,6 @@ class Model:
             ],  # idk, but I know I want 2 at the end
             act=jax.nn.relu,  # idk I just chose one
         )
-        self.focus_model.init(
-            jax.random.PRNGKey(seed), jnp.ones()
-        )  # make this key choice random as well
 
         # choosing element type for the next atom
         # inputs: atom feature vectors
@@ -50,9 +45,6 @@ class Model:
         self.type_model = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[128, 128, 128, 128, 128, 128, 6], act=jax.nn.softplus
         )
-        self.focus_model.init(
-            jax.random.PRNGKey(seed), jnp.ones()
-        )  # make this key choice random as well
 
         # radial/angular distribution
         # inputs: focus atom's features, focus atom type
@@ -65,14 +57,6 @@ class Model:
         features_out = self.feature_model(input_data)
 
         # get focus
-        focus_probs = [0, 1]
-        focus = -1
-        for atom in range(len(features_out)):
-            probs = jax.nn.softmax(self.focus_model(features_out[atom]))
-            if probs[0] > focus_probs:  # whichever of them is the "P(focus)" one
-                focus_probs = probs
-                focus = atom
-        assert len(probs) == 2 and probs[0] + probs[1] == 1
 
         # get atom type
         type_inputs = np.concatenate([np.asarray(features_out[atom])])
@@ -82,12 +66,12 @@ class Model:
             return "STOP", []
 
         # get distance distribution
-        distance_input = np.concatenate(
+        position_input = np.concatenate(
             [np.asarray(features_out[atom]), np.asarray([type]), np.asarray([focus])]
         )
-        distance_dist = self.distance_model(distance_input)
+        position_distributions = self.distance_model(position_input)
 
-        return TYPE_MAP[type], distance_dist
+        return type, position_distributions
 
 
 def train(model: Model, loss):
@@ -110,14 +94,14 @@ def generate(model, input_data, res_beta, res_alpha, quadrature):
     output_molecule = []
     curr_atom_type = "X"
     while curr_atom_type != "STOP":
-        ## generate position distribution
-        curr_atom_type, distance_dist = model(input_data)
+        ## get atom type, generate position distribution
+        curr_atom_type, position_distributions = model(input_data)
         if curr_atom_type == "STOP":
             break
 
         ## sample position distribution
         # this needs to be changed if we're predicting radial and angular distributions together
-        f = e3nn.to_s2grid(distance_dist, (res_beta, res_alpha), quadrature=quadrature)
+        f = e3nn.to_s2grid(position_distributions, (res_beta, res_alpha), quadrature=quadrature)
         Z = e3nn.from_s2grid(
             jnp.exp(f), 0, p_val=1, p_arg=1, quadrature=quadrature
         ).array[
