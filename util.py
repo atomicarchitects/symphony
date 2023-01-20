@@ -43,9 +43,21 @@ def sample_on_s2grid(key, prob_s2, y, alpha, qw):
     return y_index, alpha_index
 
 
+def integral_s2grid(x, quadrature):
+    return e3nn.from_s2grid(jnp.exp(x), 0, p_val=1, p_arg=1, quadrature=quadrature).array[0]
+
+
 class Atom:
     def __init__(self, x, y, z, atom_type):
         self.x = x
         self.y = y
         self.z = z
         self.type = atom_type
+
+
+class Molecule:
+    def __init__(self):
+        self.atoms = set([])
+
+    def add(self, atom: Atom):
+        self.atoms.add(atom)
