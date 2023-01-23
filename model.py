@@ -1,22 +1,20 @@
 import e3nn_jax as e3nn
-from e3nn_jax._src.s2grid import s2_grid, _quadrature_weights_soft
+from e3nn_jax import Irreps, IrrepsArray, s2_grid, _quadrature_weights_soft
 import haiku as hk
 import jax
 from jax import numpy as jnp
-import logging
-import mace_jax as mace
 from mace_jax.tools.gin_model import model
 import numpy as np
+import optax
 import tqdm
 
-from util import Atom, Molecule, cross_entropy, integral_s2grid, sample_on_s2grid
+from util import Atom, Molecule, integral_s2grid, loss_fn, sample_on_s2grid
 
 
 ## this needs to become a haiku module
 # also need to include atom type embeddings
 class Model(hk.Module):
-    def __init__(self, feature_model_args, distance_model_args, seed, dist_bins=300, dist_step=0.05):
-        self.key = jax.random.PRNGKey(seed)
+    def __init__(self, feature_model_args, distance_model_args, seed=0, dist_bins=300, dist_step=0.05):
         self.dist_bins = dist_bins
         self.dist_step = dist_step
 
@@ -46,9 +44,11 @@ class Model(hk.Module):
         # inputs: focus atom's features, focus atom type
         # outputs: distributions for radial and angular distributions (dims 300 x [# of sh terms])
         # will need to get distance distribution by marginalizing over the angular distribution
-        self.position_model, self.position_params, num_message_passing = e3nn.haiku.
+        self.position_model, self.position_params, num_message_passing = e3nn.haiku.Linear(
+            Irreps('64x0e+64x1o')
+        )  # this architecture is temporary
 
-        # atom type embedding
+        # atom type embedding: IrrepsArray
         # shape (5, t)
         self.type_embedding = jnp.ones((5, 128))
 
@@ -67,23 +67,44 @@ class Model(hk.Module):
         # get atom type
         # these concatenates could become element-wise multiplications
         type_inputs = jnp.concatenate([jnp.asarray(features_out[focus])])
-        type_outputs = jax.nn.softmax(self.type_model(type_inputs))
+        type_outputs = jax.nn.softmax(self.type_model(type_inputs))  # jnp.ndarray
         type = jnp.argmax(type_outputs)
 
         # get position distribution
         position_input = jnp.concatenate(
             [jnp.asarray(features_out[focus]), self.type_embedding[type]]
         )
-        position_distributions = self.distance_model(position_input)
+        position_distributions = self.distance_model(position_input)  # IrrepsArray
 
         types = ['H', 'C', 'N', 'O', 'F']
         return types[type], position_distributions
 
 
-def train(model: Model, loss):
-    pass
+def train(model_w_loss, data_loader, learning_rate, key, N):
+    '''
+    Args:
+        model_w_loss: transformed function that runs a model and returns the corresponding loss
+        data_loader
+        learning_rate
+        key (jax.PRNGKey)
+        N (int)
+    '''
+    optimizer = optax.adam(learning_rate)
+    loss_and_grad_fn = jax.value_and_grad(model_w_loss.apply)
+    data = next(data_loader)
+    params = model_w_loss.init(key, data)
+    opt_state = optimizer.init(params)
 
-    # run through the whole generate process and compare results?
+    for i in range(N):
+        data = next(data_loader)
+        key, key_new = jax.random.split(key)
+        loss, gradients = loss_and_grad_fn(params, key_new, data)
+        updates, opt_state = optimizer.update(gradients, opt_state, params)
+        params = optax.apply_updates(params, updates)
+        if i % 10 == 0:
+            print(f'Step {i}: loss {loss}')
+
+    return params
 
 
 def evaluate(model: Model, data_loader):
@@ -106,17 +127,20 @@ def generate(model, input_data, res_beta, res_alpha, quadrature, seed=0):
 
         ## get radial distribution, sample a distance
         radial_dist = e3nn.sum(position_distributions, axis=-1)
-        radial_dist = jax.vmap(lambda d: integral_s2grid(d, quadrature), radial_dist)
+        lmax_r = radial_dist.irreps.ls[-1]
+        f = e3nn.to_s2grid(radial_dist, (res_beta, res_alpha), quadrature=quadrature)
+        Z = integral_s2grid(f, quadrature)
+        radial_dist = jnp.exp(f) / Z
         r_ndx = jax.random.choice(model.key, model.dist_bins, radial_dist)
 
         ## get angular distribution
         angular_dist = position_distributions[r_ndx]
-
-        ## sample angular distribution
+        lmax_a = angular_dist.irreps.ls[-1]
         f = e3nn.to_s2grid(angular_dist, (res_beta, res_alpha), quadrature=quadrature)
         Z = integral_s2grid(f, quadrature)
-        p = jnp.exp(f) / Z
+        angular_dist = jnp.exp(f) / Z
 
+        ## sample angular distribution
         y, alpha = s2_grid(res_beta, res_alpha, quadrature=quadrature)
     
         if quadrature == "soft":
@@ -128,7 +152,7 @@ def generate(model, input_data, res_beta, res_alpha, quadrature, seed=0):
             Exception('quadrature should be either "soft" or "gausslegendre"')
 
         sampled_y_i, sampled_alpha_i = sample_on_s2grid(
-            jax.random.PRNGKey(seed), p, y, alpha, qw
+            jax.random.PRNGKey(seed), angular_dist, y, alpha, qw
         )
         sampled_y = y[sampled_y_i]
         sampled_alpha = alpha[sampled_alpha_i]

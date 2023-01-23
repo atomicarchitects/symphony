@@ -1,23 +1,38 @@
 import e3nn_jax as e3nn
-from e3nn_jax._src.s2grid import s2_grid, _quadrature_weights_soft
+from e3nn_jax import from_s2grid
 import jax
 from jax import numpy as jnp
-import mace_jax as mace
-from mace_jax.tools.gin_model import model
 import numpy as np
 import time
 
 
-def get_qm9_data():
-    pass
-
-
-def cross_entropy(labels, predictions):
+def loss_fn(type_a, type_dist, rad_a, rad_p, ang_a, angular_dist_grid, lmax, quadrature):
     """
-    labels:
-    predictions: predicted
+    Args:
+        type_a (): actual type
+        type_p (``jnp.ndarray``): predicted type distribution
+        rad_a (float): index of actual distance from focus
+        rad_p (``e3nn.IrrepsArray``): predicted radial distribution
+        ang_a (float): index of actual angular position
+        angular_dist_grid (``e3nn.IrrepsArray``): predicted angular distribution
+        res_beta (int): number of points on the sphere in the :math:`\theta` direction
+        res_alpha (int): number of points on the sphere in the :math:`\phi` direction
+        quadrature (str): "soft" or "gausslegendre"
     """
-    -1 * np.sum()
+    # type loss
+    loss_type = type_a * jnp.sum(jnp.log(type_dist))
+
+    # radial loss
+    radial_dist = from_s2grid()
+
+    # angular loss
+    angular_dist = from_s2grid(angular_dist_grid, lmax, quadrature=quadrature, p_val=p_val, p_arg=p_arg)
+    # p_val and p_arg should match the original output of the NN
+    angular_max_prob = jnp.max(angular_dist_grid)
+    angular_log = jnp.log(integral_s2grid(jnp.exp(angular_dist_grid - angular_max_prob), quadrature))
+    loss_ang = s(x) - angular_max_prob - angular_log
+
+    return -1 * (loss_type + loss_rad + loss_ang)
 
 
 def sample_on_s2grid(key, prob_s2, y, alpha, qw):
