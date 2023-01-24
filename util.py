@@ -6,21 +6,22 @@ import numpy as np
 import time
 
 
-def loss_fn(type_a, type_dist, rad_a, rad_p, ang_a, angular_dist_grid, lmax, quadrature):
+def loss_fn(type, radius, y, alpha, type_dist, radial_dist, angular_dist_grid, lmax, quadrature):
     """
     Args:
-        type_a (): actual type
-        type_p (``jnp.ndarray``): predicted type distribution
-        rad_a (float): index of actual distance from focus
-        rad_p (``e3nn.IrrepsArray``): predicted radial distribution
-        ang_a (float): index of actual angular position
+        type (): actual type
+        type_dist (``jnp.ndarray``): predicted type distribution
+        radius (float): actual distance from focus
+        radial_dist (``e3nn.IrrepsArray``): predicted radial distribution
+        y (float): y of actual angular position
+        alpha (float): alpha of actual angular position
         angular_dist_grid (``e3nn.IrrepsArray``): predicted angular distribution
         res_beta (int): number of points on the sphere in the :math:`\theta` direction
         res_alpha (int): number of points on the sphere in the :math:`\phi` direction
         quadrature (str): "soft" or "gausslegendre"
     """
     # type loss
-    loss_type = type_a * jnp.sum(jnp.log(type_dist))
+    loss_type = type * jnp.sum(jnp.log(type_dist))
 
     # radial loss
     radial_dist = from_s2grid()
@@ -30,7 +31,7 @@ def loss_fn(type_a, type_dist, rad_a, rad_p, ang_a, angular_dist_grid, lmax, qua
     # p_val and p_arg should match the original output of the NN
     angular_max_prob = jnp.max(angular_dist_grid)
     angular_log = jnp.log(integral_s2grid(jnp.exp(angular_dist_grid - angular_max_prob), quadrature))
-    loss_ang = s(x) - angular_max_prob - angular_log
+    loss_ang = s(angle) - angular_max_prob - angular_log
 
     return -1 * (loss_type + loss_rad + loss_ang)
 
