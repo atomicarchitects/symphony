@@ -1,39 +1,32 @@
 import e3nn_jax as e3nn
-from e3nn_jax import from_s2grid
+from e3nn_jax import to_s2grid
 import jax
 from jax import numpy as jnp
+from jax.scipy.special import logsumexp
+from model import sample
 import numpy as np
 import time
 
 
-def loss_fn(key, type, radius, y, alpha, type_dist, radial_dist, angular_dist_grid, lmax, quadrature):
-    """
-    Args:
-        type (): actual type
-        type_dist (``jnp.ndarray``): predicted type distribution
-        radius (float): actual distance from focus
-        radial_dist (``e3nn.IrrepsArray``): predicted radial distribution
-        y (float): y of actual angular position
-        alpha (float): alpha of actual angular position
-        angular_dist_grid (``e3nn.IrrepsArray``): predicted angular distribution
-        res_beta (int): number of points on the sphere in the :math:`\theta` direction
-        res_alpha (int): number of points on the sphere in the :math:`\phi` direction
-        quadrature (str): "soft" or "gausslegendre"
-    """
-    # type loss
-    loss_type = type * jnp.sum(jnp.log(type_dist))
+def loss_fn(key, weights, mace_input, y, res_beta, res_alpha, quadrature):
+    output = sample(key, weights, mace_input, res_beta, res_alpha, quadrature)
+    
+    # focus loss
+    loss_focus = -1 * jnp.log(output["focus_logits"][y["focus"]]) + logsumexp(output["focus_logits"])
+    if output["stop"]:
+        return loss_focus
 
-    # radial loss
-    radial_dist = from_s2grid()
+    # atom type loss
+    loss_type = -1 * jnp.log(output["atom_type_logits"][y["atom_type"]]) + logsumexp(output["atom_type_logits"])
 
-    # angular loss
-    angular_dist = from_s2grid(angular_dist_grid, lmax, quadrature=quadrature, p_val=p_val, p_arg=p_arg)
-    # p_val and p_arg should match the original output of the NN
-    angular_max_prob = jnp.max(angular_dist_grid)
-    angular_log = jnp.log(integral_s2grid(jnp.exp(angular_dist_grid - angular_max_prob), quadrature))
-    loss_ang = s(angle) - angular_max_prob - angular_log
+    # position loss
+    f = to_s2grid(output["position_coeffs"], res_beta, res_alpha, quadrature=quadrature)
+    position_signal = position_signal.apply(jnp.exp)
+    prob_radius = position_signal.integrate()
+    true_eval =   # f(r*, r_hat*)
+    loss_pos = -true_eval + jnp.log(jnp.sum(prob_radius) * radius_weights)
 
-    return -1 * (loss_type + loss_rad + loss_ang)
+    return loss_focus + loss_type + loss_pos
 
 
 def sample_on_s2grid(key, prob_s2, y, alpha, qw):
