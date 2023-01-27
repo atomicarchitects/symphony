@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 
-def loss_fn(type, radius, y, alpha, type_dist, radial_dist, angular_dist_grid, lmax, quadrature):
+def loss_fn(key, type, radius, y, alpha, type_dist, radial_dist, angular_dist_grid, lmax, quadrature):
     """
     Args:
         type (): actual type
@@ -59,8 +59,8 @@ def sample_on_s2grid(key, prob_s2, y, alpha, qw):
     return y_index, alpha_index
 
 
-def integral_s2grid(x, quadrature):
-    return e3nn.from_s2grid(jnp.exp(x), 0, p_val=1, p_arg=1, quadrature=quadrature).array[0]
+def integral_s2grid(x, quadrature, p_val=1, p_arg=-1):
+    return e3nn.from_s2grid(x, 0, p_val, p_arg, quadrature=quadrature)
 
 
 class Atom:
@@ -69,11 +69,3 @@ class Atom:
         self.y = y
         self.z = z
         self.type = atom_type
-
-
-class Molecule:
-    def __init__(self):
-        self.atoms = set([])
-
-    def add(self, atom: Atom):
-        self.atoms.add(atom)
