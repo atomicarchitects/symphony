@@ -1,6 +1,6 @@
 from collections import namedtuple
 import e3nn_jax as e3nn
-from e3nn_jax import Irreps, IrrepsArray, s2_grid, _quadrature_weights_soft
+from e3nn_jax import Irreps, IrrepsArray, s2grid_, _quadrature_weights_soft
 import haiku as hk
 import jax
 from jax import numpy as jnp
@@ -121,15 +121,7 @@ def sample(key, w: weight_tuple, mace_input: mace_input, res_beta, res_alpha, qu
     prob_angle = angular_signal.integrate()  # (irreps)
 
     # sample angular distribution
-    y, alpha = s2_grid(res_beta, res_alpha, quadrature=quadrature)
-
-    if quadrature == "soft":
-        qw = _quadrature_weights_soft(res_beta // 2) * res_beta**2  # (b)
-    elif quadrature == "gausslegendre":
-        _, qw = np.polynomial.legendre.leggauss(res_beta)
-        qw /= 2
-    else:
-        raise ValueError('quadrature should be either "soft" or "gausslegendre"')
+    y, alpha, qw = s2grid_(res_beta, res_alpha, quadrature=quadrature)
 
     key, new_key = jax.random.split(key)
     sampled_y_i, sampled_alpha_i = sample_on_s2grid(new_key, prob_angle, y, alpha, qw)

@@ -28,7 +28,6 @@ def loss_fn(key, weights, mace_input, y, lmax, res_beta, res_alpha, quadrature, 
     sh_a = _sh_alpha(lmax, y["alpha"])  # [1, 2 * lmax + 1]
     sh_y = _sh_beta(lmax, y["y"])  # [1, (lmax + 1) * (lmax + 2) // 2 + 1]
     sh_y = _rollout_sh(sh_y, lmax)
-    # exact dimensions will be figured out later
     true_eval_pos = jnp.sum(sh_y * sh_a * output["position_coeffs"])
 
     # get radius weights for the "true" distribution
@@ -64,10 +63,6 @@ def sample_on_s2grid(key, prob_s2, y, alpha, qw):
     p_a = p_ya[y_index]  # [alpha]
     alpha_index = jax.random.choice(k2, jnp.arange(len(alpha)), p=p_a)
     return y_index, alpha_index
-
-
-def integral_s2grid(x, quadrature, p_val=1, p_arg=-1):
-    return e3nn.from_s2grid(x, 0, p_val, p_arg, quadrature=quadrature)
 
 
 class Atom:
