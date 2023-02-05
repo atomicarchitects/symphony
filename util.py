@@ -1,45 +1,53 @@
 import e3nn_jax as e3nn
-from e3nn_jax import to_s2grid, _sh_alpha, _sh_beta, _expand_matrix, _rollout_sh
+from e3nn_jax import to_s2grid, _sh_alpha, _sh_beta, _rollout_sh, to_s2point
 import jax
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp
 from model import sample, DISTANCES
-import numpy as np
-import time
 
 
-def loss_fn(key, weights, mace_input, y, lmax, res_beta, res_alpha, quadrature, gamma=30):
+def loss_fn(key, weights, mace_input, y, res_beta, res_alpha, quadrature, gamma=30):
     output = sample(key, weights, mace_input, res_beta, res_alpha, quadrature)
     
+    return _loss(output, y, res_beta, res_alpha, quadrature, gamma)
+
+
+def _loss(output, graph, y, res_beta, res_alpha, quadrature, gamma=30):
+    """
+    Args:
+        output (ModelOutput):  # might change this to a NamedTuple
+        graph (jraph.GraphTuple): graph representing the current generated molecule
+        y (GlobalsInfo): true global information about the target atom
+    """
+    # TODO: account for concatenated graphs
+
     ## focus loss
-    loss_focus = -1 * jnp.log(output["focus_logits"][y["focus"]]) + logsumexp(output["focus_logits"])
-    if output["stop"]:
-        return loss_focus
+    loss_focus = -1 * output.focus_logits[y["focus"]] + logsumexp(output.focus_logits)
+    focus_probs = jax.nn.softmax(output.focus_logits)
+    correct_focus_prob = y["focus"] ==   # if we're making the true focus the first atom in y, how do we know which atom it was in the original input?
 
     ## atom type loss
-    loss_type = -1 * jnp.log(output["atom_type_logits"][y["atom_type"]]) + logsumexp(output["atom_type_logits"])
+    loss_type = -1 * output.atom_type_logits[y.target_atomic_number] + logsumexp(output.atom_type_logits)
 
     ## position loss
-    position_signal = to_s2grid(output["position_coeffs"], res_beta, res_alpha, quadrature=quadrature)
-    position_signal = position_signal.apply(jnp.exp)
-    prob_radius = position_signal.integrate()
-
-    # getting f(r*, rhat*) [aka, our model's output for the true location]
-    sh_a = _sh_alpha(lmax, y["alpha"])  # [1, 2 * lmax + 1]
-    sh_y = _sh_beta(lmax, y["y"])  # [1, (lmax + 1) * (lmax + 2) // 2 + 1]
-    sh_y = _rollout_sh(sh_y, lmax)
-    true_eval_pos = jnp.sum(sh_y * sh_a * output["position_coeffs"])
+    position_signal = to_s2grid(output.position_coeffs, res_beta, res_alpha, quadrature=quadrature)
+    pos_max = jnp.max(position_signal)
+    prob_radius = position_signal.apply(lambda x: jnp.exp(x - pos_max)).integrate()
 
     # get radius weights for the "true" distribution
+    target_pos = y.target_position - graph[-1].nodes.positions[0]  # local position relative to focus
     radius_weights = jax.vmap(
-        lambda dist_bucket: jnp.exp(-1 * (y["radius"] - dist_bucket)**2 / gamma),
+        lambda dist_bucket: jnp.exp(-1 * (jnp.linalg.norm(target_pos) - dist_bucket)**2 / gamma),
         DISTANCES
     )
     radius_weights = radius_weights / jnp.sum(radius_weights)
-    loss_pos = -true_eval_pos + jnp.log(jnp.sum(prob_radius * radius_weights))
+    # getting f(r*, rhat*) [aka, our model's output for the true location]
+    true_eval_pos = to_s2point(output.position_coeffs, target_pos)
+
+    loss_pos = -jnp.sum(radius_weights * true_eval_pos) + jnp.log(jnp.sum(prob_radius)) + pos_max
 
     ## return total loss
-    return loss_focus + loss_type + loss_pos
+    return loss_focus + (1 - output.stop) * (loss_type + loss_pos) * (1 - correct_focus_prob)
 
 
 def sample_on_s2grid(key, prob_s2, y, alpha, qw):

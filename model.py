@@ -1,13 +1,12 @@
 from collections import namedtuple
 import e3nn_jax as e3nn
-from e3nn_jax import Irreps, IrrepsArray, s2grid_, _quadrature_weights_soft
+from e3nn_jax import Irreps, s2grid_, _loss
 import haiku as hk
 import jax
 from jax import numpy as jnp
 import jraph
 from mace_jax.data import GraphNodes, GraphEdges, GraphGlobals
 from mace_jax.modules import GeneralMACE
-import numpy as np
 import optax
 import tqdm
 
@@ -20,6 +19,9 @@ DISTANCES = jnp.arange(0.05, 15.05, 0.05)
 
 weight_tuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
 mace_input = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
+model_output = namedtuple("ModelOutput", [
+    "stop", "focus_logits", "atom_type_logits", "position_coeffs"
+])
 
 
 @hk.without_apply_rng
@@ -124,20 +126,17 @@ def sample(key, w: weight_tuple, mace_input: mace_input, res_beta, res_alpha, qu
     y, alpha, qw = s2grid_(res_beta, res_alpha, quadrature=quadrature)
 
     key, new_key = jax.random.split(key)
+    # sampled_y_i, sampled_alpha_i = angular_signal.sample(new_key)
     sampled_y_i, sampled_alpha_i = sample_on_s2grid(new_key, prob_angle, y, alpha, qw)
     sampled_y = y[sampled_y_i]
     sampled_alpha = alpha[sampled_alpha_i]
 
-    return {
-        "stop": focus == len(focus_probs) - 1,
-        "focus_logits": focus_logits,
-        "atom_type_logits": atom_type_logits,
-        "position_coeffs": position_coeffs,
-        "atom_type_pred": atom_type,
-        "r_pred": DISTANCES[r_ndx],
-        "y_pred": sampled_y,
-        "alpha_pred": sampled_alpha,
-    }
+    return model_output(
+        focus == len(focus_probs) - 1,
+        focus_logits,
+        atom_type_logits,
+        position_coeffs,
+    )
 
 
 def train(data_loader, learning_rate=1e-4):
@@ -182,34 +181,10 @@ def _train(w, x, y, state, optim):
     return w, state
 
 
-# this isn't done
-def evaluate(model, data_loader, res_beta, res_alpha, quadrature):
+def evaluate(weights, data_loader, res_beta, res_alpha, lmax, quadrature):
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Evaluating", total=data_loader.approx_length()
     )
     for data in datapoints_bar:
-        output = model(data, res_beta, res_alpha, quadrature)
-
-
-def generate(model, input_data, res_beta, res_alpha, quadrature):
-    """Entire generation process; creates a molecule atom-by-atom until a stop token is reached"""
-    output_molecule = set()
-    while True:
-        ## get atom type, generate position distribution
-        output = model(input_data, res_beta, res_alpha, quadrature)
-        if output["stop"]:
-            break
-
-        sampled_x = jnp.cos(output["alpha_pred"]) * jnp.sqrt(1 - output["y_pred"] ** 2)
-        sampled_z = jnp.sin(output["alpha_pred"]) * jnp.sqrt(1 - output["y_pred"] ** 2)
-
-        output_molecule.add(
-            Atom(
-                sampled_x * output["radius"],
-                output["y_pred"] * output["radius"],
-                sampled_z * output["radius"],
-                output["atom_type_pred"],
-            )
-        )
-
-    return output_molecule
+        output = sample(jax.random.PRNGKey(0), weights, mace_input, res_beta, res_alpha, quadrature)
+        loss = _loss(output, y, lmax, res_beta, res_alpha, quadrature, gamma)
