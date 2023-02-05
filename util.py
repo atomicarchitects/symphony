@@ -22,9 +22,9 @@ def _loss(output, graph, y, res_beta, res_alpha, quadrature, gamma=30):
     # TODO: account for concatenated graphs
 
     ## focus loss
-    loss_focus = -1 * output.focus_logits[y["focus"]] + logsumexp(output.focus_logits)
+    loss_focus = -1 * output.focus_logits[y.focus] + logsumexp(output.focus_logits)
     focus_probs = jax.nn.softmax(output.focus_logits)
-    correct_focus_prob = y["focus"] ==   # if we're making the true focus the first atom in y, how do we know which atom it was in the original input?
+    correct_focus_prob = focus_probs[y.focus]  # I feel like this is the way to go, we just need to get it to work
 
     ## atom type loss
     loss_type = -1 * output.atom_type_logits[y.target_atomic_number] + logsumexp(output.atom_type_logits)
@@ -47,7 +47,7 @@ def _loss(output, graph, y, res_beta, res_alpha, quadrature, gamma=30):
     loss_pos = -jnp.sum(radius_weights * true_eval_pos) + jnp.log(jnp.sum(prob_radius)) + pos_max
 
     ## return total loss
-    return loss_focus + (1 - output.stop) * (loss_type + loss_pos) * (1 - correct_focus_prob)
+    return loss_focus + (1 - output.stop) * (1 - correct_focus_prob) * (loss_type + loss_pos)
 
 
 def sample_on_s2grid(key, prob_s2, y, alpha, qw):
