@@ -186,5 +186,6 @@ def evaluate(weights, data_loader, res_beta, res_alpha, lmax, quadrature):
         data_loader, desc="Evaluating", total=data_loader.approx_length()
     )
     for data in datapoints_bar:
+        # what format is data in? look at jraph.ipynb
         output = sample(jax.random.PRNGKey(0), weights, mace_input, res_beta, res_alpha, quadrature)
-        loss = _loss(output, y, lmax, res_beta, res_alpha, quadrature, gamma)
+        loss = _loss(output, graph, y, lmax, res_beta, res_alpha, quadrature, gamma)
