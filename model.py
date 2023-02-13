@@ -1,6 +1,6 @@
 from collections import namedtuple
 import e3nn_jax as e3nn
-from e3nn_jax import Irreps, s2grid_, _loss
+from e3nn_jax import Irreps
 import haiku as hk
 import jax
 from jax import numpy as jnp
@@ -10,18 +10,12 @@ from mace_jax.modules import GeneralMACE
 import optax
 import tqdm
 
-from util import Atom, loss_fn, sample_on_s2grid
+from datatypes import WeightTuple, MaceInput, ModelOutput
+from util import _loss
 
 
 TYPES = ["H", "C", "N", "O", "F"]
 DISTANCES = jnp.arange(0.05, 15.05, 0.05)
-
-
-weight_tuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
-mace_input = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
-model_output = namedtuple("ModelOutput", [
-    "stop", "focus_logits", "atom_type_logits", "position_coeffs"
-])
 
 
 @hk.without_apply_rng
@@ -82,7 +76,7 @@ def position_fn(x, z):
     )  # this architecture is temporary
 
 
-def sample(key, w: weight_tuple, mace_input: mace_input, res_beta, res_alpha, quadrature):
+def model_run(w: WeightTuple, mace_input: MaceInput):
     """Runs one step of the model"""
 
     # get feature representations
@@ -94,48 +88,25 @@ def sample(key, w: weight_tuple, mace_input: mace_input, res_beta, res_alpha, qu
     )
     focus_probs = jax.nn.softmax(focus_logits)
     key, new_key = jax.random.split(key)
-    focus = jax.random.choice(new_key, jnp.arange(len(focus_probs)), p=focus_probs)
+    focus_pred = jax.random.choice(new_key, jnp.arange(len(focus_probs)), p=focus_probs)
+    focus_true = jnp.concatenate([jnp.array([0]), jnp.cumsum(mace_input.n_node[:-1])])
 
     # get atom type
-    atom_type_logits = atom_type_fn.apply(w.atom_type, features[focus])
+    atom_type_logits = atom_type_fn.apply(w.atom_type, features[focus_true])
     atom_type_dist = jax.nn.softmax(atom_type_logits)
     key, new_key = jax.random.split(key)
     atom_type = jax.random.choice(new_key, jnp.arange(5), p=atom_type_dist)
 
     # get position distribution
     position_coeffs = position_fn.apply(
-        w.position, features[focus], atom_type
+        w.position, features[focus_true], atom_type
     )  # IrrepsArray (300, irreps)
 
-    # get radial distribution
-    position_signal = e3nn.to_s2grid(position_coeffs, res_beta, res_alpha, quadrature=quadrature)  # (300, beta, alpha)
-    position_signal = position_signal.apply(jnp.exp)
-    prob_radius = position_signal.integrate()  # (300)
-
-    # sample a distance
-    key, new_key = jax.random.split(key)
-    r_ndx = jax.random.choice(new_key, DISTANCES, prob_radius)
-
-    # get angular distribution
-    angular_coeffs = position_coeffs[r_ndx]  # (irreps)
-    angular_signal = e3nn.to_s2grid(angular_coeffs, res_beta, res_alpha, quadrature=quadrature)  # (irreps, beta, alpha)
-    angular_signal = angular_signal.apply(jnp.exp)
-    prob_angle = angular_signal.integrate()  # (irreps)
-
-    # sample angular distribution
-    y, alpha, qw = s2grid_(res_beta, res_alpha, quadrature=quadrature)
-
-    key, new_key = jax.random.split(key)
-    # sampled_y_i, sampled_alpha_i = angular_signal.sample(new_key)
-    sampled_y_i, sampled_alpha_i = sample_on_s2grid(new_key, prob_angle, y, alpha, qw)
-    sampled_y = y[sampled_y_i]
-    sampled_alpha = alpha[sampled_alpha_i]
-
-    return model_output(
-        focus == len(focus_probs) - 1,
-        focus_logits,
-        atom_type_logits,
-        position_coeffs,
+    return ModelOutput(
+        focus_pred == len(focus_probs) - 1,  # stop (global)
+        focus_logits,  # focus (node)
+        atom_type_logits,  # atom type (global)
+        position_coeffs,  # postiion (global)
     )
 
 
@@ -151,7 +122,7 @@ def train(data_loader, learning_rate=1e-4):
     )
     vectors = g.nodes.positions[g.receivers] - g.nodes.positions[g.senders]
     atom_types = g.nodes.species
-    mace_input = mace_input(vectors, atom_types, g.senders, g.receivers)
+    mace_input = MaceInput(vectors, atom_types, g.senders, g.receivers)
 
     w_mace = mace_fn.init(jax.random.PRNGKey(0), mace_input)
     w_focus = focus_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
@@ -160,17 +131,17 @@ def train(data_loader, learning_rate=1e-4):
         jax.random.PRNGKey(0), jnp.zeros((2, 128)), jnp.zeros((2,), dtype=jnp.int32)
     )
 
-    weights = weight_tuple(w_mace, w_focus, w_type, w_position)
+    weights = WeightTuple(w_mace, w_focus, w_type, w_position)
     optimizer = optax.adam(learning_rate)
     opt_state = optimizer.init(weights)
 
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Training", total=data_loader.approx_length()
     )
-    for data in datapoints_bar:
-        x = 
-        y = 
-        weights, opt_state = _train(weights, x, y, opt_state)
+    # for data in datapoints_bar:
+    #     x = 
+    #     y = 
+    #     weights, opt_state = _train(weights, x, y, opt_state)
 
 
 @jax.jit
@@ -181,11 +152,17 @@ def _train(w, x, y, state, optim):
     return w, state
 
 
+def loss_fn(graph, weights, res_beta, res_alpha, quadrature, gamma=30):
+    output = model_run(weights, graph)
+    
+    return _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
+
+
 def evaluate(weights, data_loader, res_beta, res_alpha, lmax, quadrature):
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Evaluating", total=data_loader.approx_length()
     )
     for data in datapoints_bar:
         # what format is data in? look at jraph.ipynb
-        output = sample(jax.random.PRNGKey(0), weights, mace_input, res_beta, res_alpha, quadrature)
-        loss = _loss(output, graph, y, lmax, res_beta, res_alpha, quadrature, gamma)
+        output = model_run(jax.random.PRNGKey(0), weights, mace_input)
+        loss = _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
