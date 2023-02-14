@@ -12,9 +12,7 @@ from datatypes import NodesInfo, GlobalsInfo
 
 def ase_atoms_to_jraph_graph(atoms: ase.Atoms, cutoff: float) -> jraph.GraphsTuple:
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij",
-        positions=atoms.positions,
-        cutoff=cutoff,
+        quantities="ij", positions=atoms.positions, cutoff=cutoff, cell=np.eye(3)
     )
 
     return jraph.GraphsTuple(
@@ -112,14 +110,13 @@ def generative_sequence(
 
     for _ in range(n - 2):
         mask = jnp.isin(graph.senders, visited) & ~jnp.isin(graph.receivers, visited)
-        min_dist = dist[mask].min()
 
+        min_dist = dist[mask].min()
         maks = mask & (dist < min_dist + epsilon)
-        i = jnp.where(maks)[0]
 
         # pick a random edge
         rng, k = jax.random.split(rng)
-        edge = jax.random.choice(k, i, shape=())
+        edge = jax.random.choice(k, jnp.where(maks)[0], shape=())
 
         focus_node = graph.senders[edge]
         target_node = graph.receivers[edge]
