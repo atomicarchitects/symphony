@@ -11,11 +11,7 @@ import optax
 import tqdm
 
 from datatypes import WeightTuple, MaceInput, ModelOutput
-from util import _loss
-
-
-TYPES = ["H", "C", "N", "O", "F"]
-DISTANCES = jnp.arange(0.05, 15.05, 0.05)
+from util import _loss, TYPES, DISTANCES
 
 
 @hk.without_apply_rng
@@ -27,12 +23,18 @@ def mace_fn(mace_input):
         num_interactions=2,
         hidden_irreps="128x0e + 128x1o + 128x2e",
         readout_mlp_irreps="128x0e + 128x1o + 128x2e",
-        avg_num_neighbors=3, # idk
+        avg_num_neighbors=3,  # idk
         num_species=5,
         radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
         radial_envelope=e3nn.soft_envelope,
-        max_ell=3
-    )(mace_input.vectors, mace_input.atom_types, mace_input.senders, mace_input.receivers)
+        max_ell=3,
+    )(
+        mace_input.vectors,
+        mace_input.atom_types,
+        mace_input.senders,
+        mace_input.receivers,
+    )
+
 
 mace_apply = jax.jit(mace_fn.apply)
 
@@ -110,19 +112,7 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     )
 
 
-def train(data_loader, learning_rate=1e-4):
-    g = jraph.GraphsTuple(
-        nodes=GraphNodes(jnp.asarray([[0.0, 0, 0], [1.0, 2, 0]]), None, jnp.asarray([1, 4])),
-        edges=GraphEdges(None),
-        globals=GraphGlobals(None, None, None, None),
-        receivers=jnp.asarray([0, 1]),
-        senders=jnp.asarray([1, 0]),
-        n_node=jnp.asarray([2]),
-        n_edge=jnp.asarray([2])
-    )
-    vectors = g.nodes.positions[g.receivers] - g.nodes.positions[g.senders]
-    atom_types = g.nodes.species
-    mace_input = MaceInput(vectors, atom_types, g.senders, g.receivers)
+def train(data_loader, res_beta, res_alpha, quadrature, gamma=30, learning_rate=1e-4):
 
     w_mace = mace_fn.init(jax.random.PRNGKey(0), mace_input)
     w_focus = focus_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
@@ -138,15 +128,23 @@ def train(data_loader, learning_rate=1e-4):
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Training", total=data_loader.approx_length()
     )
-    # for data in datapoints_bar:
-    #     x = 
-    #     y = 
-    #     weights, opt_state = _train(weights, x, y, opt_state)
+    for graph in datapoints_bar:
+        vectors = (
+            graph.nodes.positions[graph.receivers]
+            - graph.nodes.positions[graph.senders]
+        )
+        atom_types = graph.nodes.species
+        mace_input = MaceInput(vectors, atom_types, graph.senders, graph.receivers)
+        weights, opt_state = _train(
+            graph, weights, opt_state, optimizer, res_beta, res_alpha, quadrature, gamma
+        )
 
 
 @jax.jit
-def _train(w, x, y, state, optim):
-    loss, grad = jax.value_and_grad(loss_fn)(w, x, y)
+def _train(graph, weights, state, optim, res_beta, res_alpha, quadrature, gamma=30):
+    loss, grad = jax.value_and_grad(loss_fn)(
+        graph, weights, res_beta, res_alpha, quadrature, gamma
+    )
     updates, state = optim.update(grad, state, w)
     w = optax.apply_updates(w, updates)
     return w, state
@@ -154,11 +152,11 @@ def _train(w, x, y, state, optim):
 
 def loss_fn(graph, weights, res_beta, res_alpha, quadrature, gamma=30):
     output = model_run(weights, graph)
-    
+
     return _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
 
 
-def evaluate(weights, data_loader, res_beta, res_alpha, lmax, quadrature):
+def evaluate(weights, data_loader, res_beta, res_alpha, quadrature):
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Evaluating", total=data_loader.approx_length()
     )

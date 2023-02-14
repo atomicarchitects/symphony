@@ -7,7 +7,18 @@ import jraph
 from datatypes import GlobalsInfo, NodesInfo, ModelOutput
 
 
-def _loss(output: ModelOutput, graph: jraph.GraphsTuple, res_beta, res_alpha, quadrature, gamma=30):
+TYPES = ["H", "C", "N", "O", "F"]
+DISTANCES = jnp.arange(0.05, 15.05, 0.05)
+
+
+def _loss(
+    output: ModelOutput,
+    graph: jraph.GraphsTuple,
+    res_beta,
+    res_alpha,
+    quadrature,
+    gamma=30,
+):
     """
     Args:
         output (ModelOutput):
@@ -24,32 +35,47 @@ def _loss(output: ModelOutput, graph: jraph.GraphsTuple, res_beta, res_alpha, qu
     correct_focus_probs = focus_probs[focus_true]
 
     ## atom type loss
-    # TODO: not sure if I am allowed to do this (will the jnp.arange get jit'ed correctly?)
-    true_type_indices = jnp.vmap(lambda g: g.target_atomic_number, graph.globals) + jnp.arange(0, graph.globals.shape * 5, 5)
-    loss_type = -1 * output.atom_type_logits[true_type_indices] + logsumexp(output.atom_type_logits)
+    # TODO: this won't get jit'ed correctly?
+    true_type_indices = jnp.vmap(lambda i, g: g.target_atomic_number + 5 * i)(
+        enumerate(graph.globals)
+    )
+    loss_type = -1 * output.atom_type_logits[true_type_indices] + logsumexp(
+        output.atom_type_logits
+    )
     atom_type_dist = jax.nn.softmax(output.atom_type_logits)
-    correct_type_probs = jax.vmap(lambda g: g.atom_type == jnp.argmax(), graph.globals)
+    correct_type_probs = jax.vmap(lambda g: g.atom_type == jnp.argmax())(graph.globals)
 
     ## position loss
-    position_signal = to_s2grid(output.position_coeffs, res_beta, res_alpha, quadrature=quadrature)
+    position_signal = to_s2grid(
+        output.position_coeffs, res_beta, res_alpha, quadrature=quadrature
+    )
     pos_max = jnp.max(position_signal)
     prob_radius = position_signal.apply(lambda x: jnp.exp(x - pos_max)).integrate()
 
     # local position relative to focus
-    target_pos = jax.vmap(lambda g: g.target_position, graph.globals) - jnp.repeat(graph.nodes.positions[focus_true], graph.n_node, axis=0)
+    target_pos = jax.vmap(lambda g: g.target_position)(graph.globals) - jnp.repeat(
+        graph.nodes.positions[focus_true], graph.n_node, axis=0
+    )
     # get radius weights for the "true" distribution
     radius_weights = jax.vmap(
-        lambda dist_bucket: jnp.exp(-1 * (jnp.linalg.norm(target_pos) - dist_bucket)**2 / gamma),
-        DISTANCES
-    )
+        lambda dist_bucket: jnp.exp(
+            -1 * (jnp.linalg.norm(target_pos) - dist_bucket) ** 2 / gamma
+        )
+    )(DISTANCES)
     radius_weights = radius_weights / jnp.sum(radius_weights)
     # getting f(r*, rhat*) [aka, our model's output for the true location]
     true_eval_pos = to_s2point(output.position_coeffs, target_pos)
 
-    loss_pos = -jnp.sum(radius_weights * true_eval_pos) + jnp.log(jnp.sum(prob_radius)) + pos_max
+    loss_pos = (
+        -jnp.sum(radius_weights * true_eval_pos)
+        + jnp.log(jnp.sum(prob_radius))
+        + pos_max
+    )
 
     ## return total loss
-    losses = loss_focus + (1 - output.stop) * correct_focus_probs * (loss_type + correct_type_probs * loss_pos)
+    losses = loss_focus + (1 - output.stop) * correct_focus_probs * (
+        loss_type + correct_type_probs * loss_pos
+    )
     return losses
 
 
