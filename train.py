@@ -1,17 +1,3 @@
-# Copyright 2022 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Library file for executing training and evaluation on ogbg-molpcba."""
 
 import os
@@ -23,6 +9,7 @@ from clu import metric_writers
 from clu import metrics
 from clu import parameter_overview
 from clu import periodic_actions
+import e3nn_jax as e3nn
 import flax
 import flax.core
 import flax.linen as nn
@@ -33,6 +20,8 @@ import jraph
 import ml_collections
 import numpy as np
 import optax
+
+import datatypes
 import input_pipeline
 import models
 
@@ -56,10 +45,9 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
   return {f'{prefix}_{key}': val for key, val in result.items()}
 
 
-
 def create_model(config: ml_collections.ConfigDict,
                  deterministic: bool) -> nn.Module:
-  """Creates a Flax model, as specified by the config."""
+  """Create a Flax model as specified by the config."""
   if config.model == 'GraphNet':
     return models.GraphNet(
         latent_size=config.latent_size,
@@ -88,7 +76,7 @@ def create_model(config: ml_collections.ConfigDict,
 
 def create_optimizer(
     config: ml_collections.ConfigDict) -> optax.GradientTransformation:
-  """Creates an optimizer, as specified by the config."""
+  """Create an optimizer as specified by the config."""
   if config.optimizer == 'adam':
     return optax.adam(
         learning_rate=config.learning_rate)
@@ -99,23 +87,86 @@ def create_optimizer(
   raise ValueError(f'Unsupported optimizer: {config.optimizer}.')
 
 
-def loss(*, logits: jnp.ndarray, labels: jnp.ndarray,
-                                   mask: jnp.ndarray):
-  """Loss"""
-  assert logits.shape == labels.shape == mask.shape
-  assert len(logits.shape) == 2
 
-  # To prevent propagation of NaNs during grad().
-  # We mask over the loss for invalid targets later.
-  labels = jnp.where(mask, labels, -1)
+def generation_loss(preds: datatypes.ModelOutput, graphs: jraph.GraphsTuple, res_beta, res_alpha, radius_rbf_variance=30):
+    """ Computes the loss for the generation task.
+    Args:
+        output (ModelOutput):
+        graphs (jraph.GraphsTuple): a batch of graphs representing the current generated molecules
+    """
+    # TODO: ameyad Handle padding graphs with mask.
 
-  # Numerically stable implementation of BCE loss.
-  # This mimics TensorFlow's tf.nn.sigmoid_cross_entropy_with_logits().
-  positive_logits = (logits >= 0)
-  relu_logits = jnp.where(positive_logits, logits, 0)
-  abs_logits = jnp.where(positive_logits, logits, -logits)
-  return relu_logits - (logits * labels) + (
-      jnp.log(1 + jnp.exp(-abs_logits)))
+    num_radii = RADII.shape[0]
+    num_graphs = graphs.n_node.shape[0]
+    num_nodes = graphs.nodes.shape[0]
+    num_elements = ELEMENTS.shape[0]
+
+    # The true focus is the first element of each subgraph.
+    # Compute indices for the true focus in each subgraph of the batch.
+    true_focus_indices = jnp.concatenate([jnp.array([0]), jnp.cumsum(graphs.n_node[:-1])])
+    
+    def focus_loss():
+        # focus_logits is of shape (num_nodes,)
+        assert preds.focus_logits.shape == (num_nodes,)
+        assert graphs.globals['focus_distribution'] == (num_nodes,)
+        jnp.sum(-preds.focus_logits * graphs.globals['focus_distribution'])
+        return jnp.sum(-preds.focus_logits[true_focus_indices]) + jax.scipy.special.logsumexp(preds.focus_logits)
+    
+    jraph.segment_softmax()
+    all_focus_probs = jax.nn.softmax(preds.focus_logits)
+    correct_focus_probs = all_focus_probs[true_focus_indices]
+
+    e3nn.scatter_sum(graphs.nodes, nel=graphs.n_node)
+
+    def atom_type_loss():
+        # atom_type_logits is of shape (num_graphs, num_elements)
+        assert graphs.globals['atom_type_distribution'] == (num_graphs, num_elements)
+        assert preds.atom_type_logits.shape == (num_graphs, num_elements)
+
+        return optax.softmax_cross_entropy(graphs.globals['atom_type_distribution'], preds.atom_type_logits).mean()
+
+
+    def position_loss():
+        # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
+        assert preds.position_coeffs == (num_graphs, num_radii, preds.position_coeffs.irreps.dim)
+
+        # Integrate the position signal over each sphere to get the probability distribution over the radii.
+        position_signal = e3nn.to_s2grid(preds.position_coeffs, res_beta, res_alpha, quadrature="gausslegendre", normalization="integral")
+
+        # position_signal is of shape (# of graphs, # of radii, res_beta, res_alpha)
+        assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
+
+        # For numerical stability, we subtract out the maximum value over each sphere before exponentiating.
+        position_max = jnp.max(position_signal, axis=(-3, -2, -1), keepdims=True)
+        sphere_normalizing_factors = position_signal.apply(lambda pos: jnp.exp(pos - position_max)).integrate()
+
+        # sphere_normalizing_factors is of shape (num_graphs, num_radii)
+        assert sphere_normalizing_factors.shape == (num_graphs, num_radii)
+
+        # Compare distance of target relative to focus to target_radius.
+        target_positions = graphs.globals['target_positions']
+        assert target_positions.shape == (num_graphs, 3)
+    
+        # Get radius weights from the "true" distribution, described by a RBF kernel around the target positions.
+        radius_weights = jax.vmap(lambda target_position: jax.vmap(
+            lambda radius: jnp.exp(-(radius - jnp.linalg.norm(target_position))**2 / (2 * radius_rbf_variance)))(RADII))(target_positions)
+        radius_weights = radius_weights / jnp.sum(radius_weights, axis=-1, keepdims=True)
+
+        # radius_weights is of shape (num_graphs, num_radii)
+        assert radius_weights.shape == (num_graphs, num_radii)
+
+        # Compute f(r*, rhat*) which is our model predictions for the target positions.
+        target_positions_logits = e3nn.to_s2point(preds.position_coeffs, target_positions, normalization="integral")
+        assert target_positions_logits.shape == (num_graphs, num_radii)
+        loss_positions = jax.vmap(lambda fr, qr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c)(target_positions_logits, radius_weights, sphere_normalizing_factors, position_max)
+        
+        assert loss_positions.shape == (num_graphs,)
+        return jnp.mean(loss_positions)
+
+    total_loss = focus_loss() + (1 - preds.stop) * correct_focus_probs * (loss_type + correct_type_probs * position_loss())
+    return total_loss
+
+
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
@@ -169,7 +220,7 @@ def train_step(
     # Compute logits and resulting loss.
     logits = get_predicted_logits(curr_state, graphs, rngs)
     mask = get_valid_mask(labels, graphs)
-    loss = prediction_loss(
+    loss = generation_loss(
         logits=logits, labels=labels, mask=mask)
     mean_loss = jnp.sum(jnp.where(mask, loss, 0)) / jnp.sum(mask)
 
@@ -208,6 +259,7 @@ def evaluate_step(
 
   return EvalMetrics.single_from_model_output(
       loss=loss, logits=logits, labels=labels, mask=mask)
+
 
 
 def evaluate_model(state: train_state.TrainState,

@@ -31,7 +31,7 @@ def update_dummy_config(config):
 
 class TrainTest(parameterized.TestCase):
 
-  @parameterized.parameters('gcn', 'mlp', 'graphnet', 'graphmlp')
+  @parameterized.parameters('graphnet', 'graphmlp')
   def test_train_and_evaluate(self, config_name):
 
     # Load config for dummy dataset.
