@@ -22,9 +22,10 @@ import numpy as np
 import optax
 import tensorflow as tf
 
+from dataloader import dataloader
 import datatypes
-import input_pipeline
 import models
+from qm9 import load_qm9
 
 
 @flax.struct.dataclass
@@ -111,7 +112,9 @@ def generation_loss(
         assert preds.focus_logits.shape == (num_nodes,)
         assert graphs.globals.focus_distribution == (num_nodes,)
 
-        loss_focus = e3nn.scatter_sum(-preds.focus_logits * graphs.globals.focus_distribution, nel=graphs.n_node)
+        loss_focus = e3nn.scatter_sum(
+            -preds.focus_logits * graphs.globals.focus_distribution, nel=graphs.n_node
+        )
         loss_focus += (
             jnp.log(
                 1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
@@ -122,7 +125,11 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # atom_type_logits is of shape (num_graphs, num_elements)
-        assert preds.atom_type_logits.shape == graphs.globals.atom_type_distribution == (num_graphs, num_elements)
+        assert (
+            preds.atom_type_logits.shape
+            == graphs.globals.atom_type_distribution
+            == (num_graphs, num_elements)
+        )
 
         return optax.softmax_cross_entropy(
             graphs.globals.atom_type_distribution, preds.atom_type_logits
@@ -194,10 +201,14 @@ def generation_loss(
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
-    
-    assert loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
 
-    total_loss = loss_focus + (loss_atom_type + loss_position) * (1 - graphs.globals.stop)
+    assert (
+        loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
+    )
+
+    total_loss = loss_focus + (loss_atom_type + loss_position) * (
+        1 - graphs.globals.stop
+    )
     return total_loss, (
         loss_focus,
         loss_atom_type,
@@ -259,8 +270,8 @@ def evaluate_step(
     # Take mean over valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
     total_loss, (focus_loss, atom_type_loss, position_loss) = jax.tree_map(
-      lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
-      (total_loss, (focus_loss, atom_type_loss, position_loss))
+        lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
+        (total_loss, (focus_loss, atom_type_loss, position_loss)),
     )
 
     return EvalMetrics.single_from_model_output(
@@ -316,12 +327,14 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    datasets = input_pipeline.get_datasets(config.batch_size)
+    rng = jax.random.PRNGKey(0)
+    molecules = load_qm9("qm9_data")
+    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
+    datasets = dataloader(rng, molecules, atomic_numbers, 0.1, config.batch_size)
     train_iter = iter(datasets["train"])
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
     init_graphs = next(datasets["train"].as_numpy_iterator())
     init_graphs = replace_globals(init_graphs)
