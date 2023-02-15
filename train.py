@@ -83,7 +83,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
 def generation_loss(
     preds: datatypes.Predictions,
-    graphs: jraph.GraphsTuple,
+    graphs: datatypes.Fragment,
     res_beta: int,
     res_alpha: int,
     radius_rbf_variance: float,
@@ -107,10 +107,9 @@ def generation_loss(
 
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
-        assert preds.focus_logits.shape == (num_nodes,)
-        assert graphs.globals.focus_distribution == (num_nodes,)
+        assert preds.focus_logits.shape == graphs.nodes.focus_probability.shape == (num_nodes,)
 
-        loss_focus = e3nn.scatter_sum(-preds.focus_logits * graphs.globals.focus_distribution, nel=graphs.n_node)
+        loss_focus = e3nn.scatter_sum(-preds.focus_logits * graphs.nodes.focus_probability, nel=graphs.n_node)
         loss_focus += (
             jnp.log(
                 1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
@@ -121,7 +120,7 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # atom_type_logits is of shape (num_graphs, num_elements)
-        assert preds.atom_type_logits.shape == graphs.globals.atom_type_distribution == (num_graphs, num_elements)
+        assert preds.atom_type_logits.shape == graphs.globals.atom_type_distribution.shape == (num_graphs, num_elements)
 
         return optax.softmax_cross_entropy(
             graphs.globals.atom_type_distribution, preds.atom_type_logits
