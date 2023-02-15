@@ -107,9 +107,15 @@ def generation_loss(
 
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
-        assert preds.focus_logits.shape == graphs.nodes.focus_probability.shape == (num_nodes,)
+        assert (
+            preds.focus_logits.shape
+            == graphs.nodes.focus_probability.shape
+            == (num_nodes,)
+        )
 
-        loss_focus = e3nn.scatter_sum(-preds.focus_logits * graphs.nodes.focus_probability, nel=graphs.n_node)
+        loss_focus = e3nn.scatter_sum(
+            -preds.focus_logits * graphs.nodes.focus_probability, nel=graphs.n_node
+        )
         loss_focus += (
             jnp.log(
                 1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
@@ -120,7 +126,11 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # atom_type_logits is of shape (num_graphs, num_elements)
-        assert preds.atom_type_logits.shape == graphs.globals.atom_type_distribution.shape == (num_graphs, num_elements)
+        assert (
+            preds.atom_type_logits.shape
+            == graphs.globals.atom_type_distribution.shape
+            == (num_graphs, num_elements)
+        )
 
         return optax.softmax_cross_entropy(
             graphs.globals.atom_type_distribution, preds.atom_type_logits
@@ -153,6 +163,7 @@ def generation_loss(
         ).integrate()
 
         # sphere_normalizing_factors is of shape (num_graphs, num_radii)
+        assert position_max.shape == (num_graphs,)
         assert sphere_normalizing_factors.shape == (num_graphs, num_radii)
 
         # Compare distance of target relative to focus to target_radius.
@@ -192,10 +203,14 @@ def generation_loss(
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
-    
-    assert loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
 
-    total_loss = loss_focus + (loss_atom_type + loss_position) * (1 - graphs.globals.stop)
+    assert (
+        loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
+    )
+
+    total_loss = loss_focus + (loss_atom_type + loss_position) * (
+        1 - graphs.globals.stop
+    )
     return total_loss, (
         loss_focus,
         loss_atom_type,
@@ -257,8 +272,8 @@ def evaluate_step(
     # Take mean over valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
     total_loss, (focus_loss, atom_type_loss, position_loss) = jax.tree_map(
-      lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
-      (total_loss, (focus_loss, atom_type_loss, position_loss))
+        lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
+        (total_loss, (focus_loss, atom_type_loss, position_loss)),
     )
 
     return EvalMetrics.single_from_model_output(
