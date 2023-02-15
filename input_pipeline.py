@@ -23,7 +23,7 @@ def ase_atoms_to_jraph_graph(atoms: ase.Atoms, cutoff: float) -> jraph.GraphsTup
     )
 
     return jraph.GraphsTuple(
-        nodes=TrainingNodesInfo(atoms.positions, atoms.numbers),  # will have a better probability system later
+        nodes=NodesInfo(atoms.positions, atoms.numbers),
         edges=None,
         globals=None,
         senders=senders,
@@ -107,7 +107,7 @@ def generative_sequence(
     target = jax.random.choice(k, targets, shape=())
     target_specie = graph.nodes.atomic_numbers[target][None]
 
-    globals = TrainingGlobalsInfo(
+    globals = FragmentGlobals(
         stop=jnp.array([False], dtype=bool),  # [1]
         target_position=graph.nodes.positions[target][None],  # [1, 3]
         target_specie=target_specie,  # [1]

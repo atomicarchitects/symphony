@@ -23,6 +23,10 @@ def get_config():
 
     config.num_classes = 128  # temporary
 
+    config.max_n_nodes = 128
+    config.max_n_edges = 1024
+    config.max_n_graphs = 16
+
     # GNN hyperparameters.
     config.model = "GraphMLP"
     config.latent_size = 256

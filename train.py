@@ -20,10 +20,11 @@ import jraph
 import ml_collections
 import numpy as np
 import optax
+from dataloader import dataloader
 
 import datatypes
-import input_pipeline
 import models
+from qm9 import load_qm9
 
 
 @flax.struct.dataclass
@@ -329,14 +330,26 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    datasets = input_pipeline.get_datasets(config.batch_size)
-    train_iter = iter(datasets["train"])
+    molecules = load_qm9("qm9_data")
+    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
+    rng = jax.random.PRNGKey(0)
+    # datasets = dataloader(rng, molecules, atomic_numbers, 0.1, 5)
+    # train_iter = iter(datasets["train"])
+    train_iter = dataloader(
+        rng,
+        molecules,
+        atomic_numbers,
+        0.1,
+        5,
+        config.max_n_nodes,
+        config.max_n_edges,
+        config.max_n_graphs,
+    )
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
-    init_graphs = next(datasets["train"].as_numpy_iterator())
+    init_graphs = next(train_iter)
     init_graphs = replace_globals(init_graphs)
     init_net = create_model(config, deterministic=True)
     params = jax.jit(init_net.init)(init_rng, init_graphs)
@@ -402,21 +415,21 @@ def train_and_evaluate(
             )
             train_metrics = None
 
-        # Evaluate on validation and test splits, if required.
-        if step % config.eval_every_steps == 0 or is_last_step:
-            eval_state = eval_state.replace(params=state.params)
+        # # Evaluate on validation and test splits, if required.
+        # if step % config.eval_every_steps == 0 or is_last_step:
+        #     eval_state = eval_state.replace(params=state.params)
 
-            splits = ["validation", "test"]
-            with report_progress.timed("eval"):
-                eval_metrics = evaluate_model(eval_state, datasets, splits=splits)
-            for split in splits:
-                writer.write_scalars(
-                    step, add_prefix_to_keys(eval_metrics[split].compute(), split)
-                )
+        #     splits = ["validation", "test"]
+        #     with report_progress.timed("eval"):
+        #         eval_metrics = evaluate_model(eval_state, datasets, splits=splits)
+        #     for split in splits:
+        #         writer.write_scalars(
+        #             step, add_prefix_to_keys(eval_metrics[split].compute(), split)
+        #         )
 
-        # Checkpoint model, if required.
-        if step % config.checkpoint_every_steps == 0 or is_last_step:
-            with report_progress.timed("checkpoint"):
-                ckpt.save(state)
+        # # Checkpoint model, if required.
+        # if step % config.checkpoint_every_steps == 0 or is_last_step:
+        #     with report_progress.timed("checkpoint"):
+        #         ckpt.save(state)
 
     return state
