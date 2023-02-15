@@ -12,13 +12,19 @@ import numpy as np
 from datatypes import NodesInfo, TrainingGlobalsInfo, TrainingNodesInfo
 
 
-def ase_atoms_to_jraph_graph(atoms: ase.Atoms, cutoff: float) -> jraph.GraphsTuple:
+def ase_atoms_to_jraph_graph(
+    atoms: ase.Atoms, atomic_numbers: np.ndarray, cutoff: float
+) -> jraph.GraphsTuple:
+    # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
         quantities="ij", positions=atoms.positions, cutoff=cutoff, cell=np.eye(3)
     )
 
+    # Get the species indices
+    species = jnp.searchsorted(atomic_numbers, atoms.numbers)
+
     return jraph.GraphsTuple(
-        nodes=NodesInfo(atoms.positions, atoms.numbers),
+        nodes=NodesInfo(atoms.positions, species),
         edges=None,
         globals=None,
         senders=senders,
@@ -62,7 +68,7 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
 def generative_sequence(
     rng: jnp.ndarray,
     graph: jraph.GraphsTuple,
-    atomic_numbers: jnp.ndarray,
+    n_species: int,
     epsilon: float = 0.01,
 ) -> Iterator[jraph.GraphsTuple]:
     """Generative sequence for a molecular graph.
@@ -92,16 +98,6 @@ def generative_sequence(
         graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
         axis=1,
     )  # [n_edge]
-
-    # replace atomic numbers with species
-    n_species = len(atomic_numbers)
-    graph = graph._replace(
-        nodes=TrainingNodesInfo(
-            positions=graph.nodes.positions,
-            species=jnp.searchsorted(atomic_numbers, graph.nodes.atomic_numbers),
-            focus_probability=None,
-        )
-    )
 
     rng, visited_nodes, sample = _make_first_sample(
         rng, graph, dist, n_species, epsilon
