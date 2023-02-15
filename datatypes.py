@@ -29,6 +29,6 @@ TrainingNodesInfo = namedtuple(
 
 WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "specie", "position"])
 MaceInput = namedtuple("MACEinput", ["vectors", "species", "senders", "receivers"])
-ModelOutput = namedtuple(
-    "ModelOutput", ["stop", "focus_logits", "specie_logits", "position_coeffs"]
+Predictions = namedtuple(
+    "Predictions", ["focus_logits", "specie_logits", "position_coeffs"]
 )

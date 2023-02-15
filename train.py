@@ -1,4 +1,4 @@
-"""Library file for executing training and evaluation on ogbg-molpcba."""
+"""Library file for executing training and evaluation of generative model."""
 
 import os
 from typing import Any, Dict, Iterable, Tuple, Optional, Union
@@ -52,7 +52,6 @@ def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.M
             latent_size=config.latent_size,
             num_mlp_layers=config.num_mlp_layers,
             message_passing_steps=config.message_passing_steps,
-            output_nodes_size=config.num_classes,
             dropout_rate=config.dropout_rate,
             skip_connections=config.skip_connections,
             layer_norm=config.layer_norm,
@@ -63,7 +62,6 @@ def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.M
         return models.GraphMLP(
             latent_size=config.latent_size,
             num_mlp_layers=config.num_mlp_layers,
-            output_nodes_size=config.num_classes,
             dropout_rate=config.dropout_rate,
             layer_norm=config.layer_norm,
             deterministic=deterministic,
@@ -85,7 +83,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
 
 def generation_loss(
-    preds: datatypes.ModelOutput,
+    preds: datatypes.Predictions,
     graphs: jraph.GraphsTuple,
     res_beta: int,
     res_alpha: int,
@@ -93,13 +91,13 @@ def generation_loss(
 ):
     """Computes the loss for the generation task.
     Args:
-        output (ModelOutput):
-        graphs (jraph.GraphsTuple): a batch of graphs representing the current generated molecules
+        preds (datatypes.Predictions): the model predictions
+        graphs (jraph.GraphsTuple): a batch of graphs representing the current molecules
     """
-    num_radii = RADII.shape[0]
+    num_radii = models.RADII.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.shape[0]
-    num_elements = ELEMENTS.shape[0]
+    num_elements = models.NUM_ELEMENTS
 
     # We need to ignore the padding nodes and graphs when computing the loss.
     node_mask, graph_mask = jraph.get_node_padding_mask(
@@ -108,31 +106,29 @@ def generation_loss(
     assert node_mask.shape == (num_nodes,)
     assert graph_mask.shape == (num_graphs,)
 
-    def focus_loss():
+    def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
         assert preds.focus_logits.shape == (num_nodes,)
-        assert graphs.globals["focus_distribution"] == (num_nodes,)
+        assert graphs.globals.focus_distribution == (num_nodes,)
 
-        loss_focus = -preds.focus_logits * graphs.globals["focus_distribution"]
+        loss_focus = e3nn.scatter_sum(-preds.focus_logits * graphs.globals.focus_distribution, nel=graphs.n_node)
         loss_focus += (
             jnp.log(
                 1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
             )
             * graph_mask
-        ).sum()
-        return jnp.sum(loss_focus * node_mask) / jnp.sum(node_mask)
-
-    def atom_type_loss():
-        # atom_type_logits is of shape (num_graphs, num_elements)
-        assert graphs.globals["atom_type_distribution"] == (num_graphs, num_elements)
-        assert preds.atom_type_logits.shape == (num_graphs, num_elements)
-
-        loss_atom_type = optax.softmax_cross_entropy(
-            graphs.globals["atom_type_distribution"], preds.atom_type_logits
         )
-        return jnp.sum(loss_atom_type * graph_mask) / jnp.sum(graph_mask)
+        return loss_focus
 
-    def position_loss():
+    def atom_type_loss() -> jnp.ndarray:
+        # atom_type_logits is of shape (num_graphs, num_elements)
+        assert preds.atom_type_logits.shape == graphs.globals.atom_type_distribution == (num_graphs, num_elements)
+
+        return optax.softmax_cross_entropy(
+            graphs.globals.atom_type_distribution, preds.atom_type_logits
+        )
+
+    def position_loss() -> jnp.ndarray:
         # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
         assert preds.position_coeffs == (
             num_graphs,
@@ -153,7 +149,7 @@ def generation_loss(
         assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
 
         # For numerical stability, we subtract out the maximum value over each sphere before exponentiating.
-        position_max = jnp.max(position_signal, axis=(-3, -2, -1), keepdims=True)
+        position_max = jnp.max(position_signal, axis=(-3, -2, -1), keepdims=False)
         sphere_normalizing_factors = position_signal.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
@@ -162,7 +158,7 @@ def generation_loss(
         assert sphere_normalizing_factors.shape == (num_graphs, num_radii)
 
         # Compare distance of target relative to focus to target_radius.
-        target_positions = graphs.globals["target_positions"]
+        target_positions = graphs.globals.target_positions
         assert target_positions.shape == (num_graphs, 3)
 
         # Get radius weights from the true distribution, described by a RBF kernel around the target positions.
@@ -172,7 +168,7 @@ def generation_loss(
                     -((radius - jnp.linalg.norm(target_position)) ** 2)
                     / (2 * radius_rbf_variance)
                 )
-            )(RADII)
+            )(models.RADII)
         )(target_positions)
         radius_weights = radius_weights / jnp.sum(
             radius_weights, axis=-1, keepdims=True
@@ -186,7 +182,7 @@ def generation_loss(
             preds.position_coeffs, target_positions, normalization="integral"
         )
         assert target_positions_logits.shape == (num_graphs, num_radii)
-        loss_positions = jax.vmap(
+        return jax.vmap(
             lambda fr, qr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
         )(
             target_positions_logits,
@@ -195,16 +191,17 @@ def generation_loss(
             position_max,
         )
 
-        assert loss_positions.shape == (num_graphs,)
-        return jnp.sum(loss_positions * graph_mask) / jnp.sum(graph_mask)
+    loss_focus = focus_loss()
+    loss_atom_type = atom_type_loss()
+    loss_position = position_loss()
+    
+    assert loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
 
-    focus_loss_evaluated = focus_loss()
-    atom_type_loss_evaluated = atom_type_loss()
-    position_loss_evaluated = position_loss()
-    return focus_loss_evaluated + atom_type_loss_evaluated + position_loss_evaluated, (
-        focus_loss_evaluated,
-        atom_type_loss_evaluated,
-        position_loss_evaluated,
+    total_loss = loss_focus + (loss_atom_type + loss_position) * (1 - graphs.globals.stop)
+    return total_loss, (
+        loss_focus,
+        loss_atom_type,
+        loss_position,
     )
 
 
@@ -217,7 +214,7 @@ def get_predictions(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rngs: Optional[Dict[str, jnp.ndarray]],
-) -> datatypes.ModelOutput:
+) -> datatypes.Predictions:
     """Get predictions from the network for input graphs."""
     return state.apply_fn(state.params, graphs, rngs=rngs)
 
@@ -234,8 +231,9 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rngs)
-        total_loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
-        return total_loss
+        loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        mask = jraph.get_graph_padding_mask(graphs)
+        return jnp.sum(loss * mask) / jnp.sum(mask)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
     total_loss, grads = grad_fn(state.params, graphs)
@@ -256,6 +254,13 @@ def evaluate_step(
     preds = get_predictions(state, graphs)
     total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
         preds=preds, graphs=graphs, **loss_kwargs
+    )
+
+    # Take mean over valid graphs.
+    mask = jraph.get_graph_padding_mask(graphs)
+    total_loss, (focus_loss, atom_type_loss, position_loss) = jax.tree_map(
+      lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
+      (total_loss, (focus_loss, atom_type_loss, position_loss))
     )
 
     return EvalMetrics.single_from_model_output(
