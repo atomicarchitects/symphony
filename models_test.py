@@ -26,9 +26,9 @@ class ModelsTest(parameterized.TestCase):
             n_edge=n_edge,
             senders=jnp.zeros(total_n_edge, dtype=jnp.int32),
             receivers=jnp.ones(total_n_edge, dtype=jnp.int32),
-            nodes=datatypes.NodesInfo(positions=jnp.ones((total_n_node, 3)), atomic_numbers=(jnp.arange(total_n_node) % models.NUM_ELEMENTS)),
+            nodes=datatypes.NodesInfo(positions=jnp.ones((total_n_node, 3)), species=(jnp.arange(total_n_node) % models.NUM_ELEMENTS)),
             edges=jnp.zeros((total_n_edge, 10)),
-            globals=datatypes.GlobalsInfo(stop=jnp.zeros((n_graph,)), target_position=jnp.ones((n_graph, 3)), target_atomic_number=jnp.arange(n_graph) % models.NUM_ELEMENTS)
+            globals=datatypes.TrainingGlobalsInfo(stop=jnp.zeros((n_graph,)), target_positions=jnp.ones((n_graph, 3)), target_species=jnp.arange(n_graph) % models.NUM_ELEMENTS, target_species_probability=jnp.ones((n_graph, models.NUM_ELEMENTS)) / models.NUM_ELEMENTS),
         )
 
     @parameterized.product(

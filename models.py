@@ -192,10 +192,10 @@ class GraphMLP(nn.Module):
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
-        atomic_number_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
+        species_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
         
         def embed_node_fn(nodes: datatypes.NodesInfo):
-          atomic_numbers_embedded = atomic_number_embedder(nodes.atomic_numbers)
+          species_embedded = species_embedder(nodes.species)
           positions_embedded = MLP(
               [self.latent_size * self.num_mlp_layers],
               dropout_rate=self.dropout_rate,
@@ -203,21 +203,21 @@ class GraphMLP(nn.Module):
               activation=self.activation,
               layer_norm=self.layer_norm,
           )(nodes.positions)
-          return nn.Dense(self.latent_size)(jnp.concatenate([atomic_numbers_embedded, positions_embedded], axis=-1))
+          return nn.Dense(self.latent_size)(jnp.concatenate([species_embedded, positions_embedded], axis=-1))
 
         # Embed the nodes.
         processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
 
         # Predict the properties.
         node_embeddings = processed_graphs.nodes
-        focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
-        target_atomic_number_embeddings = atomic_number_embedder(graphs.globals.target_atomic_number)
+        true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        atom_type_logits = nn.Dense(NUM_ELEMENTS)(focus_node_embeddings)
+        atom_type_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
         irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
 
-        input_for_position_coeffs = jnp.concatenate((focus_node_embeddings, target_atomic_number_embeddings), axis=-1)
+        input_for_position_coeffs = jnp.concatenate((true_focus_node_embeddings, target_species_embeddings), axis=-1)
         position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
@@ -240,9 +240,9 @@ class GraphNet(nn.Module):
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
-        atomic_number_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
+        species_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
         def embed_node_fn(nodes: datatypes.NodesInfo):
-          atomic_numbers_embedded = atomic_number_embedder(nodes.atomic_numbers)
+          species_embedded = species_embedder(nodes.species)
           positions_embedded = MLP(
               [self.latent_size * self.num_mlp_layers],
               dropout_rate=self.dropout_rate,
@@ -250,7 +250,7 @@ class GraphNet(nn.Module):
               activation=jax.nn.relu,
               layer_norm=self.layer_norm,
           )(nodes.positions)
-          return nn.Dense(self.latent_size)(jnp.concatenate([atomic_numbers_embedded, positions_embedded], axis=-1))
+          return nn.Dense(self.latent_size)(jnp.concatenate([species_embedded, positions_embedded], axis=-1))
 
         # We will first linearly project the original features as 'embeddings'.
         embedder = jraph.GraphMapFeatures(
@@ -311,14 +311,14 @@ class GraphNet(nn.Module):
 
         # Predict the properties.
         node_embeddings = processed_graphs.nodes
-        focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
-        target_atomic_number_embeddings = atomic_number_embedder(graphs.globals.target_atomic_number)
+        true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        atom_type_logits = nn.Dense(NUM_ELEMENTS)(focus_node_embeddings)
+        atom_type_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
         irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
 
-        input_for_position_coeffs = jnp.concatenate((focus_node_embeddings, target_atomic_number_embeddings), axis=-1)
+        input_for_position_coeffs = jnp.concatenate((true_focus_node_embeddings, target_species_embeddings), axis=-1)
         position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
