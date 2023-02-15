@@ -7,8 +7,9 @@ import jraph
 import numpy as np
 from roundmantissa import ceil_mantissa
 
-from dataset import ase_atoms_to_jraph_graph, generative_sequence
+from dataset import ase_atoms_to_jraph_graph, generate_fragments
 from dynamically_batch import dynamically_batch
+from datatypes import Fragment
 
 
 def dataloader(
@@ -17,7 +18,7 @@ def dataloader(
     atomic_numbers: jnp.ndarray,
     epsilon: float,
     cutoff: float,
-) -> Iterator[jraph.GraphsTuple]:
+) -> Iterator[Fragment]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
@@ -26,7 +27,7 @@ def dataloader(
         epsilon: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
         cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
     Returns:
-        An iterator of padded batches of graphs. Each graph is a jraph.GraphsTuple object.
+        An iterator of (batched and padded) fragments.
     """
     # TODO: Make these configurable.
     MAX_N_NODES = 128
@@ -40,7 +41,7 @@ def dataloader(
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
     for graphs in dynamically_batch(
-        sample_iterator(rng, graph_molecules, len(atomic_numbers), epsilon),
+        fragments_pool_iterator(rng, graph_molecules, len(atomic_numbers), epsilon),
         MAX_N_NODES,
         MAX_N_EDGES,
         MAX_N_GRAPHS,
@@ -55,25 +56,28 @@ def dataloader(
         )
 
 
-def sample_iterator(rng, graph_molecules, n_species, epsilon):
+def fragments_pool_iterator(
+    rng, graph_molecules, n_species, epsilon
+) -> Iterator[Fragment]:
+    """A pool of fragments that are generated on the fly."""
     # TODO: Make this configurable.
     SAMPLES_POOL_SIZE = 1024
 
-    samples = []
+    fragments = []
     while True:
-        while len(samples) < SAMPLES_POOL_SIZE:
+        while len(fragments) < SAMPLES_POOL_SIZE:
             rng, k = jax.random.split(rng)
             i = jax.random.randint(k, (), 0, len(graph_molecules))
 
             rng, k = jax.random.split(rng)
-            samples += list(
-                generative_sequence(k, graph_molecules[i], n_species, epsilon)
+            fragments += list(
+                generate_fragments(k, graph_molecules[i], n_species, epsilon)
             )
-            assert all([isinstance(sample, jraph.GraphsTuple) for sample in samples])
+            assert all([isinstance(sample, jraph.GraphsTuple) for sample in fragments])
 
         rng, k = jax.random.split(rng)
-        i = jax.random.randint(k, (), 0, len(samples))
-        yield samples.pop(i)
+        i = jax.random.randint(k, (), 0, len(fragments))
+        yield fragments.pop(i)
 
 
 def pad_graph_to_nearest_ceil_mantissa(

@@ -9,7 +9,7 @@ import jraph
 import matscipy.neighbours
 import numpy as np
 
-from datatypes import NodesInfo, TrainingGlobalsInfo, TrainingNodesInfo
+from datatypes import NodesInfo, Fragment, FragmentGlobals, FragmentNodes
 
 
 def ase_atoms_to_jraph_graph(
@@ -65,12 +65,12 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
     )
 
 
-def generative_sequence(
+def generate_fragments(
     rng: jnp.ndarray,
     graph: jraph.GraphsTuple,
     n_species: int,
     epsilon: float = 0.01,
-) -> Iterator[jraph.GraphsTuple]:
+) -> Iterator[Fragment]:
     """Generative sequence for a molecular graph.
 
     Args:
@@ -80,11 +80,7 @@ def generative_sequence(
         epsilon: Tolerance for the nearest neighbours.
 
     Returns:
-        A generator that yields the next subgraph.
-        - The globals are:
-            - a boolean indicating whether the molecule is complete
-            - the target position and atomic number
-        - The last node is the focus node.
+        A sequence of fragments.
     """
     n = len(graph.nodes.positions)
 
@@ -99,23 +95,23 @@ def generative_sequence(
         axis=1,
     )  # [n_edge]
 
-    rng, visited_nodes, sample = _make_first_sample(
+    rng, visited_nodes, frag = _make_first_fragment(
         rng, graph, dist, n_species, epsilon
     )
-    yield sample
+    yield frag
 
     for _ in range(n - 2):
-        rng, visited_nodes, sample = _make_middle_sample(
+        rng, visited_nodes, frag = _make_middle_fragment(
             rng, visited_nodes, graph, dist, n_species, epsilon
         )
-        yield sample
+        yield frag
 
     assert len(visited_nodes) == n
 
-    yield _make_last_sample(graph, n_species)
+    yield _make_last_fragment(graph, n_species)
 
 
-def _make_first_sample(rng, graph, dist, n_species, epsilon):
+def _make_first_fragment(rng, graph, dist, n_species, epsilon):
     # pick a random initial node
     rng, k = jax.random.split(rng)
     first_node = jax.random.randint(
@@ -133,7 +129,7 @@ def _make_first_sample(rng, graph, dist, n_species, epsilon):
     rng, k = jax.random.split(rng)
     target = jax.random.choice(k, targets)
 
-    sample = _sample_graph(
+    sample = _into_fragment(
         graph,
         visited=jnp.array([first_node]),
         focus_probability=jnp.array([1.0]),
@@ -147,7 +143,7 @@ def _make_first_sample(rng, graph, dist, n_species, epsilon):
     return rng, visited, sample
 
 
-def _make_middle_sample(rng, visited, graph, dist, n_species, epsilon):
+def _make_middle_fragment(rng, visited, graph, dist, n_species, epsilon):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
 
@@ -174,7 +170,7 @@ def _make_middle_sample(rng, visited, graph, dist, n_species, epsilon):
 
     new_visited = jnp.concatenate([visited, jnp.array([target_node])])
 
-    sample = _sample_graph(
+    sample = _into_fragment(
         graph,
         visited,
         focus_probability,
@@ -187,8 +183,8 @@ def _make_middle_sample(rng, visited, graph, dist, n_species, epsilon):
     return rng, new_visited, sample
 
 
-def _make_last_sample(graph, n_species):
-    return _sample_graph(
+def _make_last_fragment(graph, n_species):
+    return _into_fragment(
         graph,
         visited=jnp.arange(len(graph.nodes.positions)),
         focus_probability=jnp.zeros((len(graph.nodes.positions),)),
@@ -199,7 +195,7 @@ def _make_last_sample(graph, n_species):
     )
 
 
-def _sample_graph(
+def _into_fragment(
     graph,
     visited,
     focus_probability,
@@ -208,12 +204,12 @@ def _sample_graph(
     target_node,
     stop,
 ):
-    nodes = TrainingNodesInfo(
+    nodes = FragmentNodes(
         positions=graph.nodes.positions,
         species=graph.nodes.species,
         focus_probability=focus_probability,
     )
-    globals = TrainingGlobalsInfo(
+    globals = FragmentGlobals(
         stop=jnp.array([stop], dtype=bool),  # [1]
         target_specie_probability=target_specie_probability[None],  # [1, n_species]
         target_specie=graph.nodes.species[target_node][None],  # [1]
