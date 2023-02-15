@@ -112,6 +112,7 @@ def generation_loss(
         assert graphs.globals["focus_distribution"] == (num_nodes,)
 
         loss_focus = -preds.focus_logits * graphs.globals["focus_distribution"]
+        loss_focus += (jnp.log(1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)) * graph_mask).sum()
         return jnp.sum(loss_focus * node_mask) / jnp.sum(node_mask)
 
     def atom_type_loss():
