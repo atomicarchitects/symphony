@@ -15,35 +15,33 @@ import train
 from configs import graphmlp, graphnet
 
 _ALL_CONFIGS = {
-    'graphmlp': graphmlp.get_config(),
-    'graphnet': graphnet.get_config(),
+    "graphmlp": graphmlp.get_config(),
+    "graphnet": graphnet.get_config(),
 }
 
 
 def update_dummy_config(config):
-  """Updates the dummy config."""
-  config.dataset = 'dummy'
-  config.batch_size = 10
-  config.max_degree = 2
-  config.num_training_steps = 10
-  config.num_classes = 10
+    """Updates the dummy config."""
+    config.dataset = "dummy"
+    config.batch_size = 10
+    config.max_degree = 2
+    config.num_training_steps = 10
+    config.num_classes = 10
 
 
 class TrainTest(parameterized.TestCase):
+    @parameterized.parameters("graphnet", "graphmlp")
+    def test_train_and_evaluate(self, config_name):
+        # Load config for dummy dataset.
+        config = _ALL_CONFIGS[config_name]
+        update_dummy_config(config)
 
-  @parameterized.parameters('graphnet', 'graphmlp')
-  def test_train_and_evaluate(self, config_name):
+        # Create a temporary directory where metrics are written.
+        workdir = tempfile.mkdtemp()
 
-    # Load config for dummy dataset.
-    config = _ALL_CONFIGS[config_name]
-    update_dummy_config(config)
-
-    # Create a temporary directory where metrics are written.
-    workdir = tempfile.mkdtemp()
-
-    # Training should proceed without any errors.
-    train.train_and_evaluate(config, workdir)
+        # Training should proceed without any errors.
+        train.train_and_evaluate(config, workdir)
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

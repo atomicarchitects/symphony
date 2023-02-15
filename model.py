@@ -111,7 +111,21 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     )
 
 
-def train(data_loader, res_beta, res_alpha, quadrature, gamma=30, learning_rate=1e-4):
+def train(data_loader, learning_rate=1e-4):
+    g = jraph.GraphsTuple(
+        nodes=GraphNodes(
+            jnp.asarray([[0.0, 0, 0], [1.0, 2, 0]]), None, jnp.asarray([1, 4])
+        ),
+        edges=GraphEdges(None),
+        globals=GraphGlobals(None, None, None, None),
+        receivers=jnp.asarray([0, 1]),
+        senders=jnp.asarray([1, 0]),
+        n_node=jnp.asarray([2]),
+        n_edge=jnp.asarray([2]),
+    )
+    vectors = g.nodes.positions[g.receivers] - g.nodes.positions[g.senders]
+    atom_types = g.nodes.species
+    mace_input = MaceInput(vectors, atom_types, g.senders, g.receivers)
 
     w_mace = mace_fn.init(jax.random.PRNGKey(0), mace_input)
     w_focus = focus_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
@@ -127,16 +141,10 @@ def train(data_loader, res_beta, res_alpha, quadrature, gamma=30, learning_rate=
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Training", total=data_loader.approx_length()
     )
-    for graph in datapoints_bar:
-        vectors = (
-            graph.nodes.positions[graph.receivers]
-            - graph.nodes.positions[graph.senders]
-        )
-        atom_types = graph.nodes.species
-        mace_input = MaceInput(vectors, atom_types, graph.senders, graph.receivers)
-        weights, opt_state = _train(
-            graph, weights, opt_state, optimizer, res_beta, res_alpha, quadrature, gamma
-        )
+    # for data in datapoints_bar:
+    #     x =
+    #     y =
+    #     weights, opt_state = _train(weights, x, y, opt_state)
 
 
 @jax.jit

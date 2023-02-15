@@ -1,7 +1,7 @@
 """Library file for executing training and evaluation on ogbg-molpcba."""
 
 import os
-from typing import Any, Dict, Iterable, Tuple, Optional
+from typing import Any, Dict, Iterable, Tuple, Optional, Union
 
 from absl import logging
 from clu import checkpoint
@@ -29,16 +29,15 @@ import models
 
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
-
-    loss: metrics.Average.from_output("loss")
-    log_likelihood: metrics.Average.from_output("log_likelihood")
+    total_loss: metrics.Average.from_output("total_loss")
 
 
 @flax.struct.dataclass
 class EvalMetrics(metrics.Collection):
-
-    loss: metrics.Average.from_output("loss")
-    log_likelihood: metrics.Average.from_output("log_likelihood")
+    total_loss: metrics.Average.from_output("total_loss")
+    focus_loss: metrics.Average.from_output("focus_loss")
+    atom_type_loss: metrics.Average.from_output("atom_type_loss")
+    position_loss: metrics.Average.from_output("position_loss")
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -88,51 +87,50 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 def generation_loss(
     preds: datatypes.ModelOutput,
     graphs: jraph.GraphsTuple,
-    res_beta,
-    res_alpha,
-    radius_rbf_variance=30,
+    res_beta: int,
+    res_alpha: int,
+    radius_rbf_variance: float,
 ):
     """Computes the loss for the generation task.
     Args:
         output (ModelOutput):
         graphs (jraph.GraphsTuple): a batch of graphs representing the current generated molecules
     """
-    # TODO: ameyad Handle padding graphs with mask.
-
     num_radii = RADII.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.shape[0]
     num_elements = ELEMENTS.shape[0]
 
-    # The true focus is the first element of each subgraph.
-    # Compute indices for the true focus in each subgraph of the batch.
-    true_focus_indices = jnp.concatenate(
-        [jnp.array([0]), jnp.cumsum(graphs.n_node[:-1])]
-    )
+    # We need to ignore the padding nodes and graphs when computing the loss.
+    node_mask, graph_mask = jraph.get_node_padding_mask(
+        graphs
+    ), jraph.get_graph_padding_mask(graphs)
+    assert node_mask.shape == (num_nodes,)
+    assert graph_mask.shape == (num_graphs,)
 
     def focus_loss():
         # focus_logits is of shape (num_nodes,)
         assert preds.focus_logits.shape == (num_nodes,)
         assert graphs.globals["focus_distribution"] == (num_nodes,)
-        jnp.sum(-preds.focus_logits * graphs.globals["focus_distribution"])
-        return jnp.sum(
-            -preds.focus_logits[true_focus_indices]
-        ) + jax.scipy.special.logsumexp(preds.focus_logits)
 
-    jraph.segment_softmax()
-    all_focus_probs = jax.nn.softmax(preds.focus_logits)
-    correct_focus_probs = all_focus_probs[true_focus_indices]
-
-    e3nn.scatter_sum(graphs.nodes, nel=graphs.n_node)
+        loss_focus = -preds.focus_logits * graphs.globals["focus_distribution"]
+        loss_focus += (
+            jnp.log(
+                1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
+            )
+            * graph_mask
+        ).sum()
+        return jnp.sum(loss_focus * node_mask) / jnp.sum(node_mask)
 
     def atom_type_loss():
         # atom_type_logits is of shape (num_graphs, num_elements)
         assert graphs.globals["atom_type_distribution"] == (num_graphs, num_elements)
         assert preds.atom_type_logits.shape == (num_graphs, num_elements)
 
-        return optax.softmax_cross_entropy(
+        loss_atom_type = optax.softmax_cross_entropy(
             graphs.globals["atom_type_distribution"], preds.atom_type_logits
-        ).mean()
+        )
+        return jnp.sum(loss_atom_type * graph_mask) / jnp.sum(graph_mask)
 
     def position_loss():
         # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
@@ -167,7 +165,7 @@ def generation_loss(
         target_positions = graphs.globals["target_positions"]
         assert target_positions.shape == (num_graphs, 3)
 
-        # Get radius weights from the "true" distribution, described by a RBF kernel around the target positions.
+        # Get radius weights from the true distribution, described by a RBF kernel around the target positions.
         radius_weights = jax.vmap(
             lambda target_position: jax.vmap(
                 lambda radius: jnp.exp(
@@ -198,12 +196,16 @@ def generation_loss(
         )
 
         assert loss_positions.shape == (num_graphs,)
-        return jnp.mean(loss_positions)
+        return jnp.sum(loss_positions * graph_mask) / jnp.sum(graph_mask)
 
-    total_loss = focus_loss() + (1 - preds.stop) * correct_focus_probs * (
-        loss_type + correct_type_probs * position_loss()
+    focus_loss_evaluated = focus_loss()
+    atom_type_loss_evaluated = atom_type_loss()
+    position_loss_evaluated = position_loss()
+    return focus_loss_evaluated + atom_type_loss_evaluated + position_loss_evaluated, (
+        focus_loss_evaluated,
+        atom_type_loss_evaluated,
+        position_loss_evaluated,
     )
-    return total_loss
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
@@ -211,31 +213,13 @@ def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     return graphs._replace(globals=jnp.ones([graphs.n_node.shape[0], 1]))
 
 
-def get_predicted_logits(
+def get_predictions(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rngs: Optional[Dict[str, jnp.ndarray]],
-) -> jnp.ndarray:
-    """Get predicted logits from the network for input graphs."""
-    pred_graphs = state.apply_fn(state.params, graphs, rngs=rngs)
-    logits = pred_graphs.globals
-    return logits
-
-
-def get_valid_mask(labels: jnp.ndarray, graphs: jraph.GraphsTuple) -> jnp.ndarray:
-    """Gets the binary mask indicating only valid labels and graphs."""
-    # We have to ignore all NaN values - which indicate labels for which
-    # the current graphs have no label.
-    labels_mask = ~jnp.isnan(labels)
-
-    # Since we have extra 'dummy' graphs in our batch due to padding, we want
-    # to mask out any loss associated with the dummy graphs.
-    # Since we padded with `pad_with_graphs` we can recover the mask by using
-    # get_graph_padding_mask.
-    graph_mask = jraph.get_graph_padding_mask(graphs)
-
-    # Combine the mask over labels with the mask over graphs.
-    return labels_mask & graph_mask[:, None]
+) -> datatypes.ModelOutput:
+    """Get predictions from the network for input graphs."""
+    return state.apply_fn(state.params, graphs, rngs=rngs)
 
 
 @jax.jit
@@ -243,33 +227,21 @@ def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rngs: Dict[str, jnp.ndarray],
+    loss_kwargs: Dict[str, Union[float, int]],
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
-    def loss_fn(params, graphs):
+    def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
+        preds = get_predictions(curr_state, graphs, rngs)
+        total_loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        return total_loss
 
-        # Extract labels.
-        labels = graphs.globals
-
-        # Replace the global feature for graph classification.
-        graphs = replace_globals(graphs)
-
-        # Compute logits and resulting loss.
-        logits = get_predicted_logits(curr_state, graphs, rngs)
-        mask = get_valid_mask(labels, graphs)
-        loss = generation_loss(logits=logits, labels=labels, mask=mask)
-        mean_loss = jnp.sum(jnp.where(mask, loss, 0)) / jnp.sum(mask)
-
-        return mean_loss, (loss, logits, labels, mask)
-
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (_, (loss, logits, labels, mask)), grads = grad_fn(state.params, graphs)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
+    total_loss, grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    metrics_update = TrainMetrics.single_from_model_output(
-        loss=loss, logits=logits, labels=labels, mask=mask
-    )
+    metrics_update = TrainMetrics.single_from_model_output(total_loss=total_loss)
     return state, metrics_update
 
 
@@ -277,33 +249,25 @@ def train_step(
 def evaluate_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
+    loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
-
-    # The target labels our model has to predict.
-    labels = graphs.globals
-
-    # Replace the global feature for graph classification.
-    graphs = replace_globals(graphs)
-
-    # Get predicted logits, and corresponding probabilities.
-    logits = get_predicted_logits(state, graphs, rngs=None)
-
-    # Get the mask for valid labels and graphs.
-    mask = get_valid_mask(labels, graphs)
-
-    # Compute the various metrics.
-    loss = loss(logits=logits, labels=labels, mask=mask)
+    # Compute predictions and resulting loss.
+    preds = get_predictions(state, graphs)
+    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+        preds=preds, graphs=graphs, **loss_kwargs
+    )
 
     return EvalMetrics.single_from_model_output(
-        loss=loss, logits=logits, labels=labels, mask=mask
+        total_loss=total_loss,
+        focus_loss=focus_loss,
+        atom_type_loss=atom_type_loss,
+        position_loss=position_loss,
     )
 
 
 def evaluate_model(
-    state: train_state.TrainState,
-    datasets: Dict[str, tf.data.Dataset],
-    splits: Iterable[str],
+    state: train_state.TrainState, datasets, splits: Iterable[str]
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -327,7 +291,7 @@ def evaluate_model(
 
 
 def train_and_evaluate(
-    config: ml_collections.ConfigDict, workdir: str, key: jax.random.PRNGKey
+    config: ml_collections.ConfigDict, workdir: str
 ) -> train_state.TrainState:
     """Execute model training and evaluation loop.
 
@@ -347,7 +311,7 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    datasets = input_pipeline.get_datasets(key, config.batch_size)
+    datasets = input_pipeline.get_datasets(config.batch_size)
     train_iter = iter(datasets["train"])
 
     # Create and initialize the network.
@@ -388,7 +352,6 @@ def train_and_evaluate(
     logging.info("Starting training.")
     train_metrics = None
     for step in range(initial_step, config.num_train_steps + 1):
-
         # Split PRNG key, to ensure different 'randomness' for every step.
         rng, dropout_rng = jax.random.split(rng)
 
@@ -396,7 +359,10 @@ def train_and_evaluate(
         with jax.profiler.StepTraceAnnotation("train", step_num=step):
             graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
             state, metrics_update = train_step(
-                state, graphs, rngs={"dropout": dropout_rng}
+                state,
+                graphs,
+                rngs={"dropout": dropout_rng},
+                loss_kwargs=config.loss_kwargs.to_dict(),
             )
 
             # Update metrics.
