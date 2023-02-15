@@ -20,12 +20,10 @@ import jraph
 import ml_collections
 import numpy as np
 import optax
-import tensorflow as tf
 
-from dataloader import dataloader
 import datatypes
+import input_pipeline
 import models
-from qm9 import load_qm9
 
 
 @flax.struct.dataclass
@@ -85,7 +83,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
 def generation_loss(
     preds: datatypes.Predictions,
-    graphs: jraph.GraphsTuple,
+    graphs: datatypes.Fragment,
     res_beta: int,
     res_alpha: int,
     radius_rbf_variance: float,
@@ -109,11 +107,14 @@ def generation_loss(
 
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
-        assert preds.focus_logits.shape == (num_nodes,)
-        assert graphs.globals.focus_distribution == (num_nodes,)
+        assert (
+            preds.focus_logits.shape
+            == graphs.nodes.focus_probability.shape
+            == (num_nodes,)
+        )
 
         loss_focus = e3nn.scatter_sum(
-            -preds.focus_logits * graphs.globals.focus_distribution, nel=graphs.n_node
+            -preds.focus_logits * graphs.nodes.focus_probability, nel=graphs.n_node
         )
         loss_focus += (
             jnp.log(
@@ -127,7 +128,7 @@ def generation_loss(
         # atom_type_logits is of shape (num_graphs, num_elements)
         assert (
             preds.atom_type_logits.shape
-            == graphs.globals.atom_type_distribution
+            == graphs.globals.atom_type_distribution.shape
             == (num_graphs, num_elements)
         )
 
@@ -162,6 +163,7 @@ def generation_loss(
         ).integrate()
 
         # sphere_normalizing_factors is of shape (num_graphs, num_radii)
+        assert position_max.shape == (num_graphs,)
         assert sphere_normalizing_factors.shape == (num_graphs, num_radii)
 
         # Compare distance of target relative to focus to target_radius.
@@ -327,14 +329,12 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    rng = jax.random.PRNGKey(0)
-    molecules = load_qm9("qm9_data")
-    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
-    datasets = dataloader(rng, molecules, atomic_numbers, 0.1, config.batch_size)
+    datasets = input_pipeline.get_datasets(config.batch_size)
     train_iter = iter(datasets["train"])
 
     # Create and initialize the network.
     logging.info("Initializing network.")
+    rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
     init_graphs = next(datasets["train"].as_numpy_iterator())
     init_graphs = replace_globals(init_graphs)
