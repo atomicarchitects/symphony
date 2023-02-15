@@ -27,12 +27,18 @@ def mace_fn(mace_input):
         num_interactions=2,
         hidden_irreps="128x0e + 128x1o + 128x2e",
         readout_mlp_irreps="128x0e + 128x1o + 128x2e",
-        avg_num_neighbors=3, # idk
+        avg_num_neighbors=3,  # idk
         num_species=5,
         radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
         radial_envelope=e3nn.soft_envelope,
-        max_ell=3
-    )(mace_input.vectors, mace_input.atom_types, mace_input.senders, mace_input.receivers)
+        max_ell=3,
+    )(
+        mace_input.vectors,
+        mace_input.atom_types,
+        mace_input.senders,
+        mace_input.receivers,
+    )
+
 
 mace_apply = jax.jit(mace_fn.apply)
 
@@ -112,13 +118,15 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
 
 def train(data_loader, learning_rate=1e-4):
     g = jraph.GraphsTuple(
-        nodes=GraphNodes(jnp.asarray([[0.0, 0, 0], [1.0, 2, 0]]), None, jnp.asarray([1, 4])),
+        nodes=GraphNodes(
+            jnp.asarray([[0.0, 0, 0], [1.0, 2, 0]]), None, jnp.asarray([1, 4])
+        ),
         edges=GraphEdges(None),
         globals=GraphGlobals(None, None, None, None),
         receivers=jnp.asarray([0, 1]),
         senders=jnp.asarray([1, 0]),
         n_node=jnp.asarray([2]),
-        n_edge=jnp.asarray([2])
+        n_edge=jnp.asarray([2]),
     )
     vectors = g.nodes.positions[g.receivers] - g.nodes.positions[g.senders]
     atom_types = g.nodes.species
@@ -139,8 +147,8 @@ def train(data_loader, learning_rate=1e-4):
         data_loader, desc="Training", total=data_loader.approx_length()
     )
     # for data in datapoints_bar:
-    #     x = 
-    #     y = 
+    #     x =
+    #     y =
     #     weights, opt_state = _train(weights, x, y, opt_state)
 
 
@@ -154,7 +162,7 @@ def _train(w, x, y, state, optim):
 
 def loss_fn(graph, weights, res_beta, res_alpha, quadrature, gamma=30):
     output = model_run(weights, graph)
-    
+
     return _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
 
 

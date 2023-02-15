@@ -7,52 +7,6 @@ import jraph
 from datatypes import GlobalsInfo, NodesInfo, ModelOutput
 
 
-def _loss(output: ModelOutput, graph: jraph.GraphsTuple, res_beta, res_alpha, quadrature, gamma=30):
-    """
-    Args:
-        output (ModelOutput):
-        graph (jraph.GraphsTuple): graph representing the current generated molecule
-        y (GlobalsInfo): true global information about the target atom
-    """
-    # indices for the true focus in each subgraph of the batch
-    focus_true = jnp.concatenate([jnp.array([0]), jnp.cumsum(graph.n_node[:-1])])
-
-    ## focus loss: node-based quantity
-    # assume that focus is the first element
-    loss_focus = -1 * output.focus_logits[focus_true] + logsumexp(output.focus_logits)
-    focus_probs = jax.nn.softmax(output.focus_logits)
-    correct_focus_probs = focus_probs[focus_true]
-
-    ## atom type loss
-    # TODO: not sure if I am allowed to do this (will the jnp.arange get jit'ed correctly?)
-    true_type_indices = jnp.vmap(lambda g: g.target_atomic_number, graph.globals) + jnp.arange(0, graph.globals.shape * 5, 5)
-    loss_type = -1 * output.atom_type_logits[true_type_indices] + logsumexp(output.atom_type_logits)
-    atom_type_dist = jax.nn.softmax(output.atom_type_logits)
-    correct_type_probs = jax.vmap(lambda g: g.atom_type == jnp.argmax(), graph.globals)
-
-    ## position loss
-    position_signal = to_s2grid(output.position_coeffs, res_beta, res_alpha, quadrature=quadrature)
-    pos_max = jnp.max(position_signal)
-    prob_radius = position_signal.apply(lambda x: jnp.exp(x - pos_max)).integrate()
-
-    # local position relative to focus
-    target_pos = jax.vmap(lambda g: g.target_position, graph.globals) - jnp.repeat(graph.nodes.positions[focus_true], graph.n_node, axis=0)
-    # get radius weights for the "true" distribution
-    radius_weights = jax.vmap(
-        lambda dist_bucket: jnp.exp(-1 * (jnp.linalg.norm(target_pos) - dist_bucket)**2 / gamma),
-        DISTANCES
-    )
-    radius_weights = radius_weights / jnp.sum(radius_weights)
-    # getting f(r*, rhat*) [aka, our model's output for the true location]
-    true_eval_pos = to_s2point(output.position_coeffs, target_pos)
-
-    loss_pos = -jnp.sum(radius_weights * true_eval_pos) + jnp.log(jnp.sum(prob_radius)) + pos_max
-
-    ## return total loss
-    losses = loss_focus + (1 - output.stop) * correct_focus_probs * (loss_type + correct_type_probs * loss_pos)
-    return losses
-
-
 def sample_on_s2grid(key, prob_s2, y, alpha, qw):
     """Sample points on the sphere
 
