@@ -15,9 +15,9 @@ FragmentGlobals = namedtuple(
     "FragmentGlobalsInfo",
     [
         "stop",  # [n_graph] bool array (only for training)
-        "target_specie_probability",  # [n_graph, n_species] float array (only for training)
-        "target_specie",  # [n_graph] int array (only for training)
-        "target_position",  # [n_graph, 3] float array (only for training)
+        "target_positions",  # [n_graph, 3] float array (only for training)
+        "target_species",  # [n_graph] int array (only for training)
+        "target_species_probability",  # [n_graph, n_species] float array (only for training)
     ],
 )
 FragmentNodes = namedtuple(
@@ -42,6 +42,6 @@ class Fragment(jraph.GraphsTuple):
 
 WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
 MaceInput = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
-ModelOutput = namedtuple(
-    "ModelOutput", ["stop", "focus_logits", "atom_type_logits", "position_coeffs"]
+Predictions = namedtuple(
+    "Predictions", ["focus_logits", "atom_type_logits", "position_coeffs"]
 )

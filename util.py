@@ -4,7 +4,7 @@ import jax
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp
 import jraph
-from datatypes import GlobalsInfo, NodesInfo, ModelOutput
+from datatypes import GlobalsInfo, NodesInfo, Predictions
 
 
 def sample_on_s2grid(key, prob_s2, y, alpha, qw):
