@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import jraph
 
 import models
-
+import datatypes
 
 class ModelsTest(parameterized.TestCase):
     def setUp(self):
@@ -21,15 +21,14 @@ class ModelsTest(parameterized.TestCase):
         total_n_node = jnp.sum(n_node)
         total_n_edge = jnp.sum(n_edge)
         n_graph = n_node.shape[0]
-        feature_dim = 10
         self.graphs = jraph.GraphsTuple(
             n_node=n_node,
             n_edge=n_edge,
             senders=jnp.zeros(total_n_edge, dtype=jnp.int32),
             receivers=jnp.ones(total_n_edge, dtype=jnp.int32),
-            nodes=jnp.ones((total_n_node, feature_dim)),
-            edges=jnp.zeros((total_n_edge, feature_dim)),
-            globals=jnp.zeros((n_graph, feature_dim)),
+            nodes=datatypes.NodesInfo(positions=jnp.ones((total_n_node, 3)), species=(jnp.arange(total_n_node) % models.NUM_ELEMENTS)),
+            edges=jnp.zeros((total_n_edge, 10)),
+            globals=datatypes.TrainingGlobalsInfo(stop=jnp.zeros((n_graph,)), target_positions=jnp.ones((n_graph, 3)), target_species=jnp.arange(n_graph) % models.NUM_ELEMENTS, target_species_probability=jnp.ones((n_graph, models.NUM_ELEMENTS)) / models.NUM_ELEMENTS),
         )
 
     @parameterized.product(
@@ -37,7 +36,7 @@ class ModelsTest(parameterized.TestCase):
     )
     def test_mlp(self, dropout_rate, output_size, num_layers):
         # Input definition.
-        nodes = self.graphs.nodes
+        nodes = self.graphs.nodes.positions
 
         # Model definition.
         mlp = models.MLP(
@@ -65,22 +64,19 @@ class ModelsTest(parameterized.TestCase):
     @parameterized.parameters(
         {
             "latent_size": 5,
-            "output_nodes_size": 15,
             "use_edge_model": True,
         },
         {
             "latent_size": 5,
-            "output_nodes_size": 15,
             "use_edge_model": False,
         },
     )
     def test_graph_net(
-        self, latent_size: int, output_nodes_size: int, use_edge_model: bool
+        self, latent_size: int, use_edge_model: bool
     ):
         # Input definition.
         graphs = self.graphs
         num_nodes = jnp.sum(graphs.n_node)
-        num_edges = jnp.sum(graphs.n_edge)
         num_graphs = graphs.n_node.shape[0]
 
         # Model definition.
@@ -88,47 +84,40 @@ class ModelsTest(parameterized.TestCase):
             latent_size=latent_size,
             num_mlp_layers=2,
             message_passing_steps=2,
-            output_nodes_size=output_nodes_size,
             use_edge_model=use_edge_model,
         )
         output, _ = net.init_with_output(self.rngs, graphs)
 
-        # Output should be graph with the same topology, but a
-        # different number of features.
-        self.assertIsInstance(output, jraph.GraphsTuple)
-        self.assertSequenceEqual(list(output.n_node), list(graphs.n_node))
-        self.assertSequenceEqual(list(output.n_edge), list(graphs.n_edge))
-        self.assertSequenceEqual(list(output.senders), list(graphs.senders))
-        self.assertSequenceEqual(list(output.receivers), list(graphs.receivers))
-        self.assertEqual(output.nodes.shape, (num_nodes, output_nodes_size))
+        # Check that the shapes are all that we expect.
+        self.assertIsInstance(output, datatypes.Predictions)
+        self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
+        self.assertSequenceEqual(output.atom_type_logits.shape, (num_graphs, models.NUM_ELEMENTS))
+        self.assertSequenceEqual(output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0]))
+        self.assertLen(output.position_coeffs.shape, 3)
+
 
     @parameterized.parameters(
-        {"latent_size": 15, "output_nodes_size": 15},
-        {"latent_size": 5, "output_nodes_size": 5},
+        {"latent_size": 15},
+        {"latent_size": 5},
     )
-    def test_graph_mlp(self, latent_size: int, output_nodes_size: int):
+    def test_graph_mlp(self, latent_size: int):
         graphs = self.graphs
         num_nodes = jnp.sum(graphs.n_node)
+        num_graphs = graphs.n_node.shape[0]
 
         # Model definition.
         net = models.GraphMLP(
             latent_size=latent_size,
             num_mlp_layers=2,
-            output_nodes_size=output_nodes_size,
         )
         output, _ = net.init_with_output(self.rngs, graphs)
 
-        # Output should be graph with the same topology, but a
-        # different number of features.
-        self.assertIsInstance(output, jraph.GraphsTuple)
-        self.assertSequenceEqual(list(output.n_node), list(graphs.n_node))
-        self.assertSequenceEqual(list(output.n_edge), list(graphs.n_edge))
-        self.assertSequenceEqual(list(output.senders), list(graphs.senders))
-        self.assertSequenceEqual(list(output.receivers), list(graphs.receivers))
-        self.assertSequenceEqual(
-            list(output.edges.flatten()), list(graphs.edges.flatten())
-        )
-        self.assertEqual(output.nodes.shape, (num_nodes, output_nodes_size))
+        # Check that the shapes are all that we expect.
+        self.assertIsInstance(output, datatypes.Predictions)
+        self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
+        self.assertSequenceEqual(output.atom_type_logits.shape, (num_graphs, models.NUM_ELEMENTS))
+        self.assertSequenceEqual(output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0]))
+        self.assertLen(output.position_coeffs.shape, 3)
 
 
 if __name__ == "__main__":
