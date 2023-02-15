@@ -21,6 +21,8 @@ def get_config():
     config.add_undirected_edges = True
     config.add_self_loops = True
 
+    config.num_classes = 128  # temporary
+
     # GNN hyperparameters.
     config.model = "GraphMLP"
     config.latent_size = 256
