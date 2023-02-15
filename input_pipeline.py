@@ -9,15 +9,17 @@ import jax.numpy as jnp
 import jraph
 import matscipy.neighbours
 import numpy as np
+import random
+import tensorflow as tf
+
 from datatypes import NodesInfo, GlobalsInfo
+from qm9 import load_qm9
 
 
 def ase_atoms_to_jraph_graph(atoms: ase.Atoms, cutoff: float) -> jraph.GraphsTuple:
     """Converts an ASE atoms object to a Jraph graph."""
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij",
-        positions=atoms.positions,
-        cutoff=cutoff,
+        quantities="ij", positions=atoms.positions, cutoff=cutoff, cell=np.eye(3)
     )
 
     return jraph.GraphsTuple(
@@ -144,3 +146,40 @@ def generative_sequence(
         target_atomic_number=jnp.array([0], dtype=int),  # [1]
     )
     yield graph._replace(globals=globals)
+
+
+import time
+
+
+def get_datasets(key: jax.random.PRNGKey, batch_size: int, cutoff: float):
+    """Creates training and test datasets from the larger QM9 dataset."""
+    start_time = time.time()
+    datasets = {}
+    qm9_data = load_qm9("qm9_data")
+    print(time.time() - start_time)
+    subgraphs = []
+    # collect graphs of partially-assembled molecules
+    ct = 0
+    for mol in qm9_data:
+        mol_graph = ase_atoms_to_jraph_graph(mol, cutoff)
+        for subgraph in generative_sequence(key, mol_graph):
+            subgraphs.append(subgraph)
+        if ct % 500 == 0:
+            print(time.time() - start_time)
+        ct += 1
+    random.shuffle(subgraphs)
+    # get train/test sets
+    # TODO: pad these bad boys
+    datasets["train"] = jraph.dynamically_batch(
+        subgraphs[:10000],
+        n_node=100 * batch_size,
+        n_edge=100 * batch_size,
+        n_graph=batch_size,
+    )
+    datasets["test"] = jraph.dynamically_batch(
+        subgraphs[10000:12000],
+        n_node=100 * batch_size,
+        n_edge=100 * batch_size,
+        n_graph=batch_size,
+    )
+    return datasets

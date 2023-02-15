@@ -5,7 +5,6 @@ import haiku as hk
 import jax
 from jax import numpy as jnp
 import jraph
-from mace_jax.data import GraphNodes, GraphEdges, GraphGlobals
 from mace_jax.modules import GeneralMACE
 import optax
 import tqdm
