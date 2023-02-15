@@ -91,11 +91,36 @@ def generative_sequence(
     )
     dist = np.linalg.norm(vectors, axis=1)  # [n_edge]
 
-    node_species = jnp.searchsorted(atomic_numbers, graph.nodes.atomic_numbers)
+    graph = graph._replace(
+        nodes=TrainingNodesInfo(
+            positions=graph.nodes.positions,
+            species=jnp.searchsorted(atomic_numbers, graph.nodes.atomic_numbers),
+            focus_probability=jnp.ones(len(graph.nodes.positions)),
+        )
+    )
 
+    rng, visited_nodes, sample = _make_first_sample(
+        rng, graph, dist, atomic_numbers, epsilon
+    )
+    yield sample
+
+    for _ in range(n - 2):
+        rng, visited_nodes, sample = _make_middle_sample(
+            rng, visited_nodes, graph, dist, atomic_numbers, epsilon
+        )
+        yield sample
+
+    assert len(visited_nodes) == n
+
+    yield _make_last_sample(graph, atomic_numbers)
+
+
+def _make_first_sample(rng, graph, dist, atomic_numbers, epsilon):
     # pick a random initial node
     rng, k = jax.random.split(rng)
-    first_node = jax.random.randint(k, shape=(), minval=0, maxval=n)
+    first_node = jax.random.randint(
+        k, shape=(), minval=0, maxval=len(graph.nodes.positions)
+    )
 
     min_dist = dist[graph.senders == first_node].min()
     targets = graph.receivers[
@@ -103,91 +128,86 @@ def generative_sequence(
     ]
 
     species_probability = jnp.bincount(
-        node_species[targets], length=len(atomic_numbers)
+        graph.nodes.species[targets], length=len(atomic_numbers)
     ) / len(targets)
 
     # pick a random target
     rng, k = jax.random.split(rng)
     target = jax.random.choice(k, targets)
 
-    nodes = TrainingNodesInfo(
-        positions=graph.nodes.positions,
-        species=node_species,
-        focus_probability=jnp.ones(len(graph.nodes.positions)),
-    )
     globals = TrainingGlobalsInfo(
         stop=jnp.array([False], dtype=bool),  # [1]
         target_specie_probability=species_probability[None],  # [1, n_species]
-        target_specie=graph.nodes.atomic_numbers[target][None],  # [1]
+        target_specie=graph.nodes.species[target][None],  # [1]
         target_position=(
             graph.nodes.positions[target] - graph.nodes.positions[first_node]
         )[
             None
         ],  # [1, 3]
     )
-    training_graph = graph._replace(nodes=nodes, globals=globals)
-
-    yield subgraph(training_graph, jnp.array([first_node]))
+    training_graph = graph._replace(globals=globals)
 
     visited = jnp.array([first_node, target])
+    return rng, visited, subgraph(training_graph, jnp.array([first_node]))
 
-    for _ in range(n - 2):
-        mask = jnp.isin(graph.senders, visited) & ~jnp.isin(graph.receivers, visited)
 
-        min_dist = dist[mask].min()
-        mask = mask & (dist < min_dist + epsilon)
+def _make_middle_sample(rng, visited, graph, dist, atomic_numbers, epsilon):
+    mask = jnp.isin(graph.senders, visited) & ~jnp.isin(graph.receivers, visited)
 
-        # focus_probability
-        focus_probability = jnp.bincount(
-            graph.senders[mask], length=len(graph.nodes.positions)
-        )
-        focus_probability = focus_probability / focus_probability.sum()
+    min_dist = dist[mask].min()
+    mask = mask & (dist < min_dist + epsilon)
 
-        # pick a random focus node
-        rng, k = jax.random.split(rng)
-        focus_node = jax.random.choice(
-            k, len(graph.nodes.positions), p=focus_probability
-        )
+    # focus_probability
+    focus_probability = jnp.bincount(
+        graph.senders[mask], length=len(graph.nodes.positions)
+    )
+    focus_probability = focus_probability / focus_probability.sum()
 
-        # target_specie_probability
-        targets = graph.receivers[(graph.senders == focus_node) & mask]
-        target_specie_probability = jnp.bincount(
-            node_species[targets], length=len(atomic_numbers)
-        ) / len(targets)
+    # pick a random focus node
+    rng, k = jax.random.split(rng)
+    focus_node = jax.random.choice(k, len(graph.nodes.positions), p=focus_probability)
 
-        # pick a random target
-        rng, k = jax.random.split(rng)
-        target_node = jax.random.choice(k, targets)
+    # target_specie_probability
+    targets = graph.receivers[(graph.senders == focus_node) & mask]
+    target_specie_probability = jnp.bincount(
+        graph.nodes.species[targets], length=len(atomic_numbers)
+    ) / len(targets)
 
-        nodes = TrainingNodesInfo(
-            positions=graph.nodes.positions,
-            species=node_species,
-            focus_probability=focus_probability,
-        )
-        globals = TrainingGlobalsInfo(
-            stop=jnp.array([False], dtype=bool),  # [1]
-            target_specie_probability=target_specie_probability[None],  # [1, n_species]
-            target_specie=graph.nodes.atomic_numbers[target_node][None],  # [1]
-            target_position=(
-                graph.nodes.positions[target_node] - graph.nodes.positions[focus_node]
-            )[
-                None
-            ],  # [1, 3]
-        )
-        training_graph = graph._replace(nodes=nodes, globals=globals)
-
-        # move focus node to the beginning of the visited list and yield the subgraph
-        visited = jnp.roll(visited, -jnp.where(visited == focus_node, size=1)[0][0])
-        yield subgraph(training_graph, visited)
-
-        visited = jnp.concatenate([visited, jnp.array([target_node])])
-
-    assert len(visited) == n
+    # pick a random target
+    rng, k = jax.random.split(rng)
+    target_node = jax.random.choice(k, targets)
 
     nodes = TrainingNodesInfo(
         positions=graph.nodes.positions,
-        species=node_species,
-        focus_probability=jnp.zeros((n,), dtype=float),
+        species=graph.nodes.species,
+        focus_probability=focus_probability,
+    )
+    globals = TrainingGlobalsInfo(
+        stop=jnp.array([False], dtype=bool),  # [1]
+        target_specie_probability=target_specie_probability[None],  # [1, n_species]
+        target_specie=graph.nodes.species[target_node][None],  # [1]
+        target_position=(
+            graph.nodes.positions[target_node] - graph.nodes.positions[focus_node]
+        )[
+            None
+        ],  # [1, 3]
+    )
+    training_graph = graph._replace(nodes=nodes, globals=globals)
+
+    # move focus node to the beginning of the visited list and yield the subgraph
+    visited = jnp.roll(visited, -jnp.where(visited == focus_node, size=1)[0][0])
+    sub = subgraph(training_graph, visited)
+
+    visited = jnp.concatenate([visited, jnp.array([target_node])])
+
+    return rng, visited, sub
+
+
+def _make_last_sample(graph, atomic_numbers):
+    nodes = TrainingNodesInfo(
+        positions=graph.nodes.positions,
+        species=graph.nodes.species,
+        focus_probability=jnp.zeros((len(graph.nodes.positions),), dtype=float),
     )
     globals = TrainingGlobalsInfo(
         stop=jnp.array([True], dtype=bool),  # [1]
@@ -197,4 +217,4 @@ def generative_sequence(
         target_specie=jnp.array([0], dtype=int),  # [1]
         target_position=jnp.zeros((1, 3)),  # [1, 3]
     )
-    yield graph._replace(nodes=nodes, globals=globals)
+    return graph._replace(nodes=nodes, globals=globals)
