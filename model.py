@@ -10,7 +10,7 @@ from mace_jax.modules import GeneralMACE
 import optax
 import tqdm
 
-from datatypes import WeightTuple, MaceInput, ModelOutput
+from datatypes import WeightTuple, MaceInput, Predictions
 from util import _loss
 
 
@@ -108,7 +108,7 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
         w.position, features[focus_true], atom_type
     )  # IrrepsArray (300, irreps)
 
-    return ModelOutput(
+    return Predictions(
         focus_pred == len(focus_probs) - 1,  # stop (global)
         focus_logits,  # focus (node)
         atom_type_logits,  # atom type (global)

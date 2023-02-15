@@ -8,6 +8,6 @@ NodesInfo = namedtuple("NodesInfo", ["positions", "atomic_numbers"])
 
 WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
 MaceInput = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
-ModelOutput = namedtuple(
-    "ModelOutput", ["stop", "focus_logits", "atom_type_logits", "position_coeffs"]
+Predictions = namedtuple(
+    "Predictions", ["focus_logits", "atom_type_logits", "position_coeffs"]
 )

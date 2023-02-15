@@ -1,11 +1,55 @@
-"""Definition of the GNN model."""
+"""Definition of the generative models."""
 
 from typing import Callable, Sequence, Union, Optional, Tuple
 
 import e3nn_jax as e3nn
 from flax import linen as nn
+import jax
 import jax.numpy as jnp
 import jraph
+
+import datatypes
+
+
+RADII = jnp.linspace(0.0, 15.0, 300)
+NUM_ELEMENTS = 5
+
+
+def get_focus_node_indices(graphs):
+    """Returns the indices of the focus nodes in each graph."""
+    return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
+
+
+def add_graphs_tuples(
+    graphs: jraph.GraphsTuple, other_graphs: jraph.GraphsTuple
+) -> jraph.GraphsTuple:
+    """Adds the nodes, edges and global features from other_graphs to graphs."""
+    return graphs._replace(
+        nodes=graphs.nodes + other_graphs.nodes,
+        edges=graphs.edges + other_graphs.edges,
+        globals=graphs.globals + other_graphs.globals,
+    )
+
+
+class MLP(nn.Module):
+    """A multi-layer perceptron."""
+
+    feature_sizes: Sequence[int]
+    dropout_rate: float = 0
+    deterministic: bool = True
+    activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+    layer_norm: bool = True
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = inputs
+        for size in self.feature_sizes:
+            x = nn.Dense(features=size)(x)
+            x = self.activation(x)
+            x = nn.Dropout(rate=self.dropout_rate, deterministic=self.deterministic)(x)
+            if self.layer_norm:
+                x = nn.LayerNorm()(x)
+        return x
 
 
 class S2Activation(nn.Module):
@@ -17,6 +61,7 @@ class S2Activation(nn.Module):
     lmax_out: Optional[int] = None
     layer_norm: bool = True
 
+    @staticmethod
     def _complete_lmax_and_res(
         lmax: Optional[int], res_beta: Optional[int], res_alpha: Optional[int]
     ) -> Tuple[int, int, int]:
@@ -103,38 +148,6 @@ class S2Activation(nn.Module):
         return updated_feature_coeffs
 
 
-def add_graphs_tuples(
-    graphs: jraph.GraphsTuple, other_graphs: jraph.GraphsTuple
-) -> jraph.GraphsTuple:
-    """Adds the nodes, edges and global features from other_graphs to graphs."""
-    return graphs._replace(
-        nodes=graphs.nodes + other_graphs.nodes,
-        edges=graphs.edges + other_graphs.edges,
-        globals=graphs.globals + other_graphs.globals,
-    )
-
-
-class MLP(nn.Module):
-    """A multi-layer perceptron."""
-
-    feature_sizes: Sequence[int]
-    dropout_rate: float = 0
-    deterministic: bool = True
-    activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
-    layer_norm: bool = True
-
-    @nn.compact
-    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        x = inputs
-        for size in self.feature_sizes:
-            x = nn.Dense(features=size)(x)
-            x = self.activation(x)
-            x = nn.Dropout(rate=self.dropout_rate, deterministic=self.deterministic)(x)
-            if self.layer_norm:
-                x = nn.LayerNorm()(x)
-        return x
-
-
 class S2MLP(nn.Module):
     """A E(3)-equivariant MLP with S2 activations."""
 
@@ -171,23 +184,45 @@ class GraphMLP(nn.Module):
 
     latent_size: int
     num_mlp_layers: int
-    output_nodes_size: int
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
     dropout_rate: float = 0
     layer_norm: bool = True
     deterministic: bool = True
+    position_coeffs_lmax: int = 3
 
     @nn.compact
-    def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
-        def embed_node_fn(nodes):
-            return MLP(
-                [self.latent_size * self.num_mlp_layers] + [self.output_nodes_size],
-                dropout_rate=self.dropout_rate,
-                deterministic=self.deterministic,
-                activation=self.activation,
-            )(nodes)
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        atomic_number_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
+        
+        def embed_node_fn(nodes: datatypes.NodesInfo):
+          atomic_numbers_embedded = atomic_number_embedder(nodes.atomic_numbers)
+          positions_embedded = MLP(
+              [self.latent_size * self.num_mlp_layers],
+              dropout_rate=self.dropout_rate,
+              deterministic=self.deterministic,
+              activation=self.activation,
+              layer_norm=self.layer_norm,
+          )(nodes.positions)
+          return nn.Dense(self.latent_size)(jnp.concatenate([atomic_numbers_embedded, positions_embedded], axis=-1))
 
-        return jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
+        # Embed the nodes.
+        processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
+
+        # Predict the properties.
+        node_embeddings = processed_graphs.nodes
+        focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        target_atomic_number_embeddings = atomic_number_embedder(graphs.globals.target_atomic_number)
+
+        focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
+        atom_type_logits = nn.Dense(NUM_ELEMENTS)(focus_node_embeddings)
+        irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
+
+        input_for_position_coeffs = jnp.concatenate((focus_node_embeddings, target_atomic_number_embeddings), axis=-1)
+        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
+        position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
+        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
+
+        return datatypes.Predictions(focus_logits=focus_logits, atom_type_logits=atom_type_logits, position_coeffs=position_coeffs)
 
 
 class GraphNet(nn.Module):
@@ -196,20 +231,32 @@ class GraphNet(nn.Module):
     latent_size: int
     num_mlp_layers: int
     message_passing_steps: int
-    output_nodes_size: int
     dropout_rate: float = 0
     skip_connections: bool = True
     use_edge_model: bool = True
     layer_norm: bool = True
     deterministic: bool = True
+    position_coeffs_lmax: int = 3
 
     @nn.compact
-    def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        atomic_number_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
+        def embed_node_fn(nodes: datatypes.NodesInfo):
+          atomic_numbers_embedded = atomic_number_embedder(nodes.atomic_numbers)
+          positions_embedded = MLP(
+              [self.latent_size * self.num_mlp_layers],
+              dropout_rate=self.dropout_rate,
+              deterministic=self.deterministic,
+              activation=jax.nn.relu,
+              layer_norm=self.layer_norm,
+          )(nodes.positions)
+          return nn.Dense(self.latent_size)(jnp.concatenate([atomic_numbers_embedded, positions_embedded], axis=-1))
+
         # We will first linearly project the original features as 'embeddings'.
         embedder = jraph.GraphMapFeatures(
-            embed_node_fn=nn.Dense(self.latent_size),
+            embed_node_fn=embed_node_fn,
             embed_edge_fn=nn.Dense(self.latent_size),
-            embed_global_fn=nn.Dense(self.latent_size),
+            embed_global_fn=lambda _: jnp.ones((graphs.n_node.shape[0], self.latent_size))
         )
         processed_graphs = embedder(graphs)
 
@@ -262,8 +309,20 @@ class GraphNet(nn.Module):
                     globals=nn.LayerNorm()(processed_graphs.globals),
                 )
 
-        # We predict an embedding for each node.
-        decoder = jraph.GraphMapFeatures(embed_node_fn=nn.Dense(self.output_nodes_size))
-        processed_graphs = decoder(processed_graphs)
+        # Predict the properties.
+        node_embeddings = processed_graphs.nodes
+        focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        target_atomic_number_embeddings = atomic_number_embedder(graphs.globals.target_atomic_number)
 
-        return processed_graphs
+        focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
+        atom_type_logits = nn.Dense(NUM_ELEMENTS)(focus_node_embeddings)
+        irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
+
+        input_for_position_coeffs = jnp.concatenate((focus_node_embeddings, target_atomic_number_embeddings), axis=-1)
+        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
+        position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
+        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
+
+        return datatypes.Predictions(focus_logits=focus_logits, atom_type_logits=atom_type_logits, position_coeffs=position_coeffs)
+
+
