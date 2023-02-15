@@ -331,6 +331,7 @@ def train_and_evaluate(
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
     molecules = load_qm9("qm9_data")
+    molecules = molecules[:16]  # TODO remove this line
     atomic_numbers = jnp.array([1, 6, 7, 8, 9])
     rng = jax.random.PRNGKey(0)
     # datasets = dataloader(rng, molecules, atomic_numbers, 0.1, 5)
@@ -340,7 +341,7 @@ def train_and_evaluate(
         molecules,
         atomic_numbers,
         0.1,
-        5,
+        5.0,
         config.max_n_nodes,
         config.max_n_edges,
         config.max_n_graphs,

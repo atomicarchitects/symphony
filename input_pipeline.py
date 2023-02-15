@@ -1,5 +1,4 @@
-"""Implements the input pipeline for the molecular graph generation task."""
-
+from functools import partial
 from typing import Iterator
 
 import ase
@@ -9,21 +8,23 @@ import jax.numpy as jnp
 import jraph
 import matscipy.neighbours
 import numpy as np
-import random
-import tensorflow as tf
 
-from datatypes import NodesInfo, FragmentGlobals, FragmentNodes
-from qm9 import load_qm9
+from datatypes import NodesInfo, Fragment, FragmentGlobals, FragmentNodes
 
 
-def ase_atoms_to_jraph_graph(atoms: ase.Atoms, cutoff: float) -> jraph.GraphsTuple:
-    """Converts an ASE atoms object to a Jraph graph."""
+def ase_atoms_to_jraph_graph(
+    atoms: ase.Atoms, atomic_numbers: np.ndarray, cutoff: float
+) -> jraph.GraphsTuple:
+    # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
         quantities="ij", positions=atoms.positions, cutoff=cutoff, cell=np.eye(3)
     )
 
+    # Get the species indices
+    species = jnp.searchsorted(atomic_numbers, atoms.numbers)
+
     return jraph.GraphsTuple(
-        nodes=NodesInfo(atoms.positions, atoms.numbers),
+        nodes=NodesInfo(atoms.positions, species),
         edges=None,
         globals=None,
         senders=senders,
@@ -64,22 +65,22 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
     )
 
 
-def generative_sequence(
-    rng: jnp.ndarray, graph: jraph.GraphsTuple, epsilon: float = 0.01
-) -> Iterator[jraph.GraphsTuple]:
-    """Returns an iterator for a generative sequence for a molecular graph.
+def generate_fragments(
+    rng: jnp.ndarray,
+    graph: jraph.GraphsTuple,
+    n_species: int,
+    epsilon: float = 0.01,
+) -> Iterator[Fragment]:
+    """Generative sequence for a molecular graph.
 
     Args:
         rng: The random number generator.
         graph: The molecular graph.
+        atomic_numbers: The atomic numbers of the target species.
         epsilon: Tolerance for the nearest neighbours.
 
     Returns:
-        A generator that yields the next subgraph.
-        - The globals are:
-            - a boolean indicating whether the molecule is complete
-            - the target position and atomic number
-        - The last node is the focus node.
+        A sequence of fragments.
     """
     n = len(graph.nodes.positions)
 
@@ -88,68 +89,155 @@ def generative_sequence(
     ), "Only single graphs supported."
     assert n >= 2, "Graph must have at least two nodes."
 
-    vectors = (
-        graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders]
-    )
-    dist = np.linalg.norm(vectors, axis=1)  # [n_edge]
+    # compute edge distances
+    dist = np.linalg.norm(
+        graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
+        axis=1,
+    )  # [n_edge]
 
+    rng, visited_nodes, frag = _make_first_fragment(
+        rng, graph, dist, n_species, epsilon
+    )
+    yield frag
+
+    for _ in range(n - 2):
+        rng, visited_nodes, frag = _make_middle_fragment(
+            rng, visited_nodes, graph, dist, n_species, epsilon
+        )
+        yield frag
+
+    assert len(visited_nodes) == n
+
+    yield _make_last_fragment(graph, n_species)
+
+
+def _make_first_fragment(rng, graph, dist, n_species, epsilon):
     # pick a random initial node
     rng, k = jax.random.split(rng)
-    first_node = jax.random.randint(k, shape=(), minval=0, maxval=n)
+    first_node = jax.random.randint(
+        k, shape=(), minval=0, maxval=len(graph.nodes.positions)
+    )
 
     min_dist = dist[graph.senders == first_node].min()
     targets = graph.receivers[
         (graph.senders == first_node) & (dist < min_dist + epsilon)
     ]
 
+    species_probability = _normalized_bitcount(graph.nodes.species[targets], n_species)
+
     # pick a random target
     rng, k = jax.random.split(rng)
-    target = jax.random.choice(k, targets, shape=())
-    target_specie = graph.nodes.atomic_numbers[target][None]
+    target = jax.random.choice(k, targets)
 
-    globals = FragmentGlobals(
-        stop=jnp.array([False], dtype=bool),  # [1]
-        target_position=graph.nodes.positions[target][None],  # [1, 3]
-        target_specie=target_specie,  # [1]
-        target_specie_probability=jnp.vmap()
+    sample = _into_fragment(
+        graph,
+        visited=jnp.array([first_node]),
+        focus_probability=jnp.array([1.0]),
+        focus_node=first_node,
+        target_species_probability=species_probability,
+        target_node=target,
+        stop=False,
     )
-    yield subgraph(graph, jnp.array([first_node]))._replace(globals=globals)
 
     visited = jnp.array([first_node, target])
+    return rng, visited, sample
 
-    for _ in range(n - 2):
-        mask = jnp.isin(graph.senders, visited) & ~jnp.isin(graph.receivers, visited)
-        min_dist = dist[mask].min()
 
-        maks = mask & (dist < min_dist + epsilon)
-        i = jnp.where(maks)[0]
+def _make_middle_fragment(rng, visited, graph, dist, n_species, epsilon):
+    n_nodes = len(graph.nodes.positions)
+    senders, receivers = graph.senders, graph.receivers
 
-        # pick a random edge
-        rng, k = jax.random.split(rng)
-        edge = jax.random.choice(k, i, shape=())
+    mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
 
-        focus_node = graph.senders[edge]
-        target_node = graph.receivers[edge]
+    min_dist = dist[mask].min()
+    mask = mask & (dist < min_dist + epsilon)
 
-        # move focus node to the beginning of the visited list
-        visited = jnp.roll(visited, -jnp.where(visited == focus_node, size=1)[0][0])
-        globals = TrainingGlobalsInfo(
-            stop=jnp.array([False], dtype=bool),  # [1]
-            target_position=graph.nodes.positions[target_node][None],  # [1, 3]
-            target_specie=graph.nodes.atomic_numbers[target_node][None],  # [1]
-            target_specie_probability=
-        )
-        yield subgraph(graph, visited)._replace(globals=globals)
+    focus_probability = _normalized_bitcount(senders[mask], n_nodes)
 
-        visited = jnp.concatenate([visited, jnp.array([target_node])])
+    # pick a random focus node
+    rng, k = jax.random.split(rng)
+    focus_node = jax.random.choice(k, n_nodes, p=focus_probability)
 
-    globals = TrainingGlobalsInfo(
-        stop=jnp.array([True], dtype=bool),  # [1]
-        target_position=jnp.zeros((1, 3)),  # [1, 3]
-        target_specie=jnp.array([0], dtype=int),  # [1]
-        target_specie_probability=
+    # target_species_probability
+    targets = receivers[(senders == focus_node) & mask]
+    target_species_probability = _normalized_bitcount(
+        graph.nodes.species[targets], n_species
     )
-    yield graph._replace(globals=globals)
+
+    # pick a random target
+    rng, k = jax.random.split(rng)
+    target_node = jax.random.choice(k, targets)
+
+    new_visited = jnp.concatenate([visited, jnp.array([target_node])])
+
+    sample = _into_fragment(
+        graph,
+        visited,
+        focus_probability,
+        focus_node,
+        target_species_probability,
+        target_node,
+        stop=False,
+    )
+
+    return rng, new_visited, sample
 
 
-import time
+def _make_last_fragment(graph, n_species):
+    return _into_fragment(
+        graph,
+        visited=jnp.arange(len(graph.nodes.positions)),
+        focus_probability=jnp.zeros((len(graph.nodes.positions),)),
+        focus_node=0,
+        target_species_probability=jnp.zeros((n_species,)),
+        target_node=0,
+        stop=True,
+    )
+
+
+def _into_fragment(
+    graph,
+    visited,
+    focus_probability,
+    focus_node,
+    target_species_probability,
+    target_node,
+    stop,
+):
+    nodes = FragmentNodes(
+        positions=graph.nodes.positions,
+        species=graph.nodes.species,
+        focus_probability=focus_probability,
+    )
+    globals = FragmentGlobals(
+        stop=jnp.array([stop], dtype=bool),  # [1]
+        target_species_probability=target_species_probability[None],  # [1, n_species]
+        target_species=graph.nodes.species[target_node][None],  # [1]
+        target_positions=(
+            graph.nodes.positions[target_node] - graph.nodes.positions[focus_node]
+        )[
+            None
+        ],  # [1, 3]
+    )
+    graph = graph._replace(nodes=nodes, globals=globals)
+
+    if stop:
+        assert len(visited) == len(graph.nodes.positions)
+        return graph
+    else:
+        # put focus node at the beginning
+        visited = _move_first(visited, focus_node)
+
+        # return subgraph
+        return subgraph(graph, visited)
+
+
+@jax.jit
+def _move_first(xs, x):
+    return jnp.roll(xs, -jnp.where(xs == x, size=1)[0][0])
+
+
+@partial(jax.jit, static_argnums=(1,))
+def _normalized_bitcount(xs, n: int):
+    assert xs.ndim == 1
+    return jnp.bincount(xs, length=n) / len(xs)
