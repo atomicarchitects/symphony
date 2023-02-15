@@ -1,10 +1,31 @@
 from collections import namedtuple
 
 
-GlobalsInfo = namedtuple(
-    "GlobalsInfo", ["stop", "target_position", "target_atomic_number"]
+NodesInfo = namedtuple(
+    "NodesInfo",
+    [
+        "positions",  # [n_node, 3] float array
+        "species",  # [n_node] int array
+    ],
 )
-NodesInfo = namedtuple("NodesInfo", ["positions", "atomic_numbers"])
+
+TrainingGlobalsInfo = namedtuple(
+    "TrainingGlobalsInfo",
+    [
+        "stop",  # [n_graph] bool array (only for training)
+        "target_specie_probability",  # [n_graph, n_species] float array (only for training)
+        "target_specie",  # [n_graph] int array (only for training)
+        "target_position",  # [n_graph, 3] float array (only for training)
+    ],
+)
+TrainingNodesInfo = namedtuple(
+    "TrainingNodesInfo",
+    [
+        "positions",  # [n_node, 3] float array
+        "species",  # [n_node] int array
+        "focus_probability",  # [n_node] float array (only for training)
+    ],
+)
 
 WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
 MaceInput = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
