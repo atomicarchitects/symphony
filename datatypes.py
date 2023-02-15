@@ -5,7 +5,7 @@ NodesInfo = namedtuple(
     "NodesInfo",
     [
         "positions",  # [n_node, 3] float array
-        "atomic_numbers",  # [n_node] int array
+        "species",  # [n_node] int array
     ],
 )
 
@@ -27,8 +27,8 @@ TrainingNodesInfo = namedtuple(
     ],
 )
 
-WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
-MaceInput = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
+WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "specie", "position"])
+MaceInput = namedtuple("MACEinput", ["vectors", "species", "senders", "receivers"])
 ModelOutput = namedtuple(
-    "ModelOutput", ["stop", "focus_logits", "atom_type_logits", "position_coeffs"]
+    "ModelOutput", ["stop", "focus_logits", "specie_logits", "position_coeffs"]
 )

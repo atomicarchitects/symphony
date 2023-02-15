@@ -12,7 +12,7 @@ import numpy as np
 import random
 import tensorflow as tf
 
-from datatypes import NodesInfo, GlobalsInfo
+from datatypes import NodesInfo, TrainingGlobalsInfo
 from qm9 import load_qm9
 
 
@@ -105,11 +105,13 @@ def generative_sequence(
     # pick a random target
     rng, k = jax.random.split(rng)
     target = jax.random.choice(k, targets, shape=())
+    target_specie = graph.nodes.atomic_numbers[target][None]
 
-    globals = GlobalsInfo(
+    globals = TrainingGlobalsInfo(
         stop=jnp.array([False], dtype=bool),  # [1]
         target_position=graph.nodes.positions[target][None],  # [1, 3]
-        target_atomic_number=graph.nodes.atomic_numbers[target][None],  # [1]
+        target_specie=target_specie,  # [1]
+        target_specie_probability=jnp.vmap()
     )
     yield subgraph(graph, jnp.array([first_node]))._replace(globals=globals)
 
@@ -131,19 +133,21 @@ def generative_sequence(
 
         # move focus node to the beginning of the visited list
         visited = jnp.roll(visited, -jnp.where(visited == focus_node, size=1)[0][0])
-        globals = GlobalsInfo(
+        globals = TrainingGlobalsInfo(
             stop=jnp.array([False], dtype=bool),  # [1]
             target_position=graph.nodes.positions[target_node][None],  # [1, 3]
-            target_atomic_number=graph.nodes.atomic_numbers[target_node][None],  # [1]
+            target_specie=graph.nodes.atomic_numbers[target_node][None],  # [1]
+            target_specie_probability=
         )
         yield subgraph(graph, visited)._replace(globals=globals)
 
         visited = jnp.concatenate([visited, jnp.array([target_node])])
 
-    globals = GlobalsInfo(
+    globals = TrainingGlobalsInfo(
         stop=jnp.array([True], dtype=bool),  # [1]
         target_position=jnp.zeros((1, 3)),  # [1, 3]
-        target_atomic_number=jnp.array([0], dtype=int),  # [1]
+        target_specie=jnp.array([0], dtype=int),  # [1]
+        target_specie_probability=
     )
     yield graph._replace(globals=globals)
 
