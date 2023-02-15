@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Iterator
 
 import ase
@@ -130,9 +131,7 @@ def _make_first_sample(rng, graph, dist, n_species, epsilon):
         (graph.senders == first_node) & (dist < min_dist + epsilon)
     ]
 
-    species_probability = jnp.bincount(
-        graph.nodes.species[targets], length=n_species
-    ) / len(targets)
+    species_probability = _normalized_bitcount(graph.nodes.species[targets], n_species)
 
     # pick a random target
     rng, k = jax.random.split(rng)
@@ -153,30 +152,31 @@ def _make_first_sample(rng, graph, dist, n_species, epsilon):
 
 
 def _make_middle_sample(rng, visited, graph, dist, n_species, epsilon):
-    mask = jnp.isin(graph.senders, visited) & ~jnp.isin(graph.receivers, visited)
+    n_nodes = len(graph.nodes.positions)
+    senders, receivers = graph.senders, graph.receivers
+
+    mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
 
     min_dist = dist[mask].min()
     mask = mask & (dist < min_dist + epsilon)
 
-    # focus_probability
-    focus_probability = jnp.bincount(
-        graph.senders[mask], length=len(graph.nodes.positions)
-    )
-    focus_probability = focus_probability / focus_probability.sum()
+    focus_probability = _normalized_bitcount(senders[mask], n_nodes)
 
     # pick a random focus node
     rng, k = jax.random.split(rng)
-    focus_node = jax.random.choice(k, len(graph.nodes.positions), p=focus_probability)
+    focus_node = jax.random.choice(k, n_nodes, p=focus_probability)
 
     # target_specie_probability
-    targets = graph.receivers[(graph.senders == focus_node) & mask]
-    target_specie_probability = jnp.bincount(
-        graph.nodes.species[targets], length=n_species
-    ) / len(targets)
+    targets = receivers[(senders == focus_node) & mask]
+    target_specie_probability = _normalized_bitcount(
+        graph.nodes.species[targets], n_species
+    )
 
     # pick a random target
     rng, k = jax.random.split(rng)
     target_node = jax.random.choice(k, targets)
+
+    new_visited = jnp.concatenate([visited, jnp.array([target_node])])
 
     sample = _sample_graph(
         graph,
@@ -188,9 +188,7 @@ def _make_middle_sample(rng, visited, graph, dist, n_species, epsilon):
         stop=False,
     )
 
-    visited = jnp.concatenate([visited, jnp.array([target_node])])
-
-    return rng, visited, sample
+    return rng, new_visited, sample
 
 
 def _make_last_sample(graph, n_species):
@@ -229,9 +227,25 @@ def _sample_graph(
             None
         ],  # [1, 3]
     )
+    graph = graph._replace(nodes=nodes, globals=globals)
 
-    # put focus node at the beginning
-    visited = jnp.roll(visited, -jnp.where(visited == focus_node, size=1)[0][0])
+    if stop:
+        assert len(visited) == len(graph.nodes.positions)
+        return graph
+    else:
+        # put focus node at the beginning
+        visited = _move_first(visited, focus_node)
 
-    # return subgraph
-    return subgraph(graph._replace(nodes=nodes, globals=globals), visited)
+        # return subgraph
+        return subgraph(graph, visited)
+
+
+@jax.jit
+def _move_first(xs, x):
+    return jnp.roll(xs, -jnp.where(xs == x, size=1)[0][0])
+
+
+@partial(jax.jit, static_argnums=(1,))
+def _normalized_bitcount(xs, n: int):
+    assert xs.ndim == 1
+    return jnp.bincount(xs, length=n) / len(xs)
