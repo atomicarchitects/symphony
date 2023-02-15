@@ -28,14 +28,15 @@ import models
 
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
-    loss: metrics.Average.from_output("loss")
-    log_likelihood: metrics.Average.from_output("log_likelihood")
+    total_loss: metrics.Average.from_output("total_loss")
 
 
 @flax.struct.dataclass
 class EvalMetrics(metrics.Collection):
-    loss: metrics.Average.from_output("loss")
-    log_likelihood: metrics.Average.from_output("log_likelihood")
+    total_loss: metrics.Average.from_output("total_loss")
+    focus_loss: metrics.Average.from_output("focus_loss")
+    atom_type_loss: metrics.Average.from_output("atom_type_loss")
+    position_loss: metrics.Average.from_output("position_loss")
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -112,7 +113,12 @@ def generation_loss(
         assert graphs.globals["focus_distribution"] == (num_nodes,)
 
         loss_focus = -preds.focus_logits * graphs.globals["focus_distribution"]
-        loss_focus += (jnp.log(1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)) * graph_mask).sum()
+        loss_focus += (
+            jnp.log(
+                1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
+            )
+            * graph_mask
+        ).sum()
         return jnp.sum(loss_focus * node_mask) / jnp.sum(node_mask)
 
     def atom_type_loss():
@@ -191,10 +197,14 @@ def generation_loss(
         assert loss_positions.shape == (num_graphs,)
         return jnp.sum(loss_positions * graph_mask) / jnp.sum(graph_mask)
 
-    total_loss = focus_loss() + (1 - preds.stop) * correct_focus_probs * (
-        loss_type + correct_type_probs * position_loss()
+    focus_loss_evaluated = focus_loss()
+    atom_type_loss_evaluated = atom_type_loss()
+    position_loss_evaluated = position_loss()
+    return focus_loss_evaluated + atom_type_loss_evaluated + position_loss_evaluated, (
+        focus_loss_evaluated,
+        atom_type_loss_evaluated,
+        position_loss_evaluated,
     )
-    return total_loss
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
@@ -223,14 +233,14 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rngs)
-        loss = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
-        return loss
+        total_loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        return total_loss
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
-    loss, grads = grad_fn(state.params, graphs)
+    total_loss, grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    metrics_update = TrainMetrics.single_from_model_output(loss=loss)
+    metrics_update = TrainMetrics.single_from_model_output(total_loss=total_loss)
     return state, metrics_update
 
 
@@ -243,10 +253,15 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
     preds = get_predictions(state, graphs)
-    loss = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+        preds=preds, graphs=graphs, **loss_kwargs
+    )
 
     return EvalMetrics.single_from_model_output(
-        loss=loss,
+        total_loss=total_loss,
+        focus_loss=focus_loss,
+        atom_type_loss=atom_type_loss,
+        position_loss=position_loss,
     )
 
 
