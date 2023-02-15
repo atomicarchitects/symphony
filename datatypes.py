@@ -5,7 +5,7 @@ NodesInfo = namedtuple(
     "NodesInfo",
     [
         "positions",  # [n_node, 3] float array
-        "atomic_numbers",  # [n_node] int array
+        "species",  # [n_node] int array
     ],
 )
 

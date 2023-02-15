@@ -18,31 +18,45 @@ def dataloader(
     epsilon: float,
     cutoff: float,
 ) -> Iterator[jraph.GraphsTuple]:
-    MAX_N_NODES = 100
-    MAX_N_EDGES = 1000
-    MAX_N_GRAPHS = 10
+    """Dataloader for the generative model.
+    Args:
+        rng: The random number seed.
+        molecules: The molecules to sample from. Each molecule is an ase.Atoms object.
+        atomic_numbers: The atomic numbers of the target species. For example, [1, 8] such that [H, O] maps to [0, 1].
+        epsilon: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
+        cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
+    Returns:
+        An iterator of padded batches of graphs. Each graph is a jraph.GraphsTuple object.
+    """
+    # TODO: Make these configurable.
+    MAX_N_NODES = 128
+    MAX_N_EDGES = 1024
+    MAX_N_GRAPHS = 16
 
     graph_molecules = [
-        ase_atoms_to_jraph_graph(molecule, cutoff) for molecule in molecules
+        ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
+        for molecule in molecules
     ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
     for graphs in dynamically_batch(
-        sample_iterator(rng, graph_molecules, atomic_numbers, epsilon),
+        sample_iterator(rng, graph_molecules, len(atomic_numbers), epsilon),
         MAX_N_NODES,
         MAX_N_EDGES,
         MAX_N_GRAPHS,
     ):
         yield pad_graph_to_nearest_ceil_mantissa(
             graphs,
-            n_mantissa_bits=2,
+            n_mantissa_bits=1,
             n_max_nodes=MAX_N_NODES,
             n_max_edges=MAX_N_EDGES,
+            n_min_graphs=MAX_N_GRAPHS,
             n_max_graphs=MAX_N_GRAPHS,
         )
 
 
-def sample_iterator(rng, graph_molecules, atomic_numbers, epsilon):
+def sample_iterator(rng, graph_molecules, n_species, epsilon):
+    # TODO: Make this configurable.
     SAMPLES_POOL_SIZE = 1024
 
     samples = []
@@ -53,7 +67,7 @@ def sample_iterator(rng, graph_molecules, atomic_numbers, epsilon):
 
             rng, k = jax.random.split(rng)
             samples += list(
-                generative_sequence(k, graph_molecules[i], atomic_numbers, epsilon)
+                generative_sequence(k, graph_molecules[i], n_species, epsilon)
             )
             assert all([isinstance(sample, jraph.GraphsTuple) for sample in samples])
 
