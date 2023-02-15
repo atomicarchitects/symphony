@@ -5,13 +5,11 @@ import haiku as hk
 import jax
 from jax import numpy as jnp
 import jraph
-from mace_jax.data import GraphNodes, GraphEdges, GraphGlobals
 from mace_jax.modules import GeneralMACE
 import optax
 import tqdm
 
 from datatypes import WeightTuple, MaceInput, Predictions
-from util import _loss
 
 
 TYPES = ["H", "C", "N", "O", "F"]
@@ -153,8 +151,10 @@ def train(data_loader, learning_rate=1e-4):
 
 
 @jax.jit
-def _train(w, x, y, state, optim):
-    loss, grad = jax.value_and_grad(loss_fn)(w, x, y)
+def _train(graph, weights, state, optim, res_beta, res_alpha, quadrature, gamma=30):
+    loss, grad = jax.value_and_grad(loss_fn)(
+        graph, weights, res_beta, res_alpha, quadrature, gamma
+    )
     updates, state = optim.update(grad, state, w)
     w = optax.apply_updates(w, updates)
     return w, state
@@ -166,7 +166,7 @@ def loss_fn(graph, weights, res_beta, res_alpha, quadrature, gamma=30):
     return _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
 
 
-def evaluate(weights, data_loader, res_beta, res_alpha, lmax, quadrature):
+def evaluate(weights, data_loader, res_beta, res_alpha, quadrature):
     datapoints_bar = tqdm.tqdm(
         data_loader, desc="Evaluating", total=data_loader.approx_length()
     )

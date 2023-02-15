@@ -43,5 +43,5 @@ class Fragment(jraph.GraphsTuple):
 WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
 MaceInput = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
 Predictions = namedtuple(
-    "Predictions", ["focus_logits", "atom_type_logits", "position_coeffs"]
+    "Predictions", ["focus_logits", "specie_logits", "position_coeffs"]
 )

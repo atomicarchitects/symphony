@@ -18,6 +18,9 @@ def dataloader(
     atomic_numbers: jnp.ndarray,
     epsilon: float,
     cutoff: float,
+    max_n_nodes=128,
+    max_n_edges=1024,
+    max_n_graphs=16,
 ) -> Iterator[Fragment]:
     """Dataloader for the generative model.
     Args:
@@ -26,13 +29,12 @@ def dataloader(
         atomic_numbers: The atomic numbers of the target species. For example, [1, 8] such that [H, O] maps to [0, 1].
         epsilon: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
         cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
+        max_n_nodes:
+        max_n_edges:
+        max_n_graphs:
     Returns:
         An iterator of (batched and padded) fragments.
     """
-    # TODO: Make these configurable.
-    MAX_N_NODES = 128
-    MAX_N_EDGES = 1024
-    MAX_N_GRAPHS = 16
 
     graph_molecules = [
         ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
@@ -42,17 +44,17 @@ def dataloader(
 
     for graphs in dynamically_batch(
         fragments_pool_iterator(rng, graph_molecules, len(atomic_numbers), epsilon),
-        MAX_N_NODES,
-        MAX_N_EDGES,
-        MAX_N_GRAPHS,
+        max_n_nodes,
+        max_n_edges,
+        max_n_graphs,
     ):
         yield pad_graph_to_nearest_ceil_mantissa(
             graphs,
             n_mantissa_bits=1,
-            n_max_nodes=MAX_N_NODES,
-            n_max_edges=MAX_N_EDGES,
-            n_min_graphs=MAX_N_GRAPHS,
-            n_max_graphs=MAX_N_GRAPHS,
+            n_max_nodes=max_n_nodes,
+            n_max_edges=max_n_edges,
+            n_min_graphs=max_n_graphs,
+            n_max_graphs=max_n_graphs,
         )
 
 
