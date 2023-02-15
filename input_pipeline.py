@@ -12,7 +12,7 @@ import numpy as np
 import random
 import tensorflow as tf
 
-from datatypes import NodesInfo, TrainingGlobalsInfo
+from datatypes import NodesInfo, TrainingGlobalsInfo, TrainingNodesInfo
 from qm9 import load_qm9
 
 
@@ -23,7 +23,7 @@ def ase_atoms_to_jraph_graph(atoms: ase.Atoms, cutoff: float) -> jraph.GraphsTup
     )
 
     return jraph.GraphsTuple(
-        nodes=NodesInfo(atoms.positions, atoms.numbers),
+        nodes=TrainingNodesInfo(atoms.positions, atoms.numbers),  # will have a better probability system later
         edges=None,
         globals=None,
         senders=senders,

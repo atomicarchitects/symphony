@@ -10,7 +10,6 @@ import optax
 import tqdm
 
 from datatypes import WeightTuple, MaceInput, Predictions
-from util import _loss
 
 
 TYPES = ["H", "C", "N", "O", "F"]
