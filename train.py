@@ -147,7 +147,6 @@ def generation_loss(
 
         # Integrate the position signal over each sphere to get the probability distribution over the radii.
         position_signal = e3nn.to_s2grid(
-            # TODO: 1x0e+1x0o+1x1o+1x1e+1x2e+1x2o+1x3o+1x3e is not a proper position_coeff irrepsarray
             preds.position_coeffs,
             res_beta,
             res_alpha,
