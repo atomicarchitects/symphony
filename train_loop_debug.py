@@ -1,4 +1,3 @@
-import flax.core
 import sys
 
 sys.path.append("..")
