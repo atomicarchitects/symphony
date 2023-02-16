@@ -217,7 +217,7 @@ class GraphMLP(nn.Module):
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
         specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
-        irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
+        irreps = e3nn.Irreps(e3nn.s2_irreps(self.position_coeffs_lmax))
 
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
