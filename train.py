@@ -96,7 +96,7 @@ def generation_loss(
     """
     num_radii = models.RADII.shape[0]
     num_graphs = graphs.n_node.shape[0]
-    num_nodes = graphs.nodes.shape[0]
+    num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
 
     # We need to ignore the padding nodes and graphs when computing the loss.
@@ -126,20 +126,20 @@ def generation_loss(
         return loss_focus
 
     def atom_type_loss() -> jnp.ndarray:
-        # atom_type_logits is of shape (num_graphs, num_elements)
+        # specie_logits is of shape (num_graphs, num_elements)
         assert (
-            preds.atom_type_logits.shape
-            == graphs.globals.atom_type_distribution.shape
+            preds.specie_logits.shape
+            == graphs.globals.target_species_probability.shape
             == (num_graphs, num_elements)
         )
 
         return optax.softmax_cross_entropy(
-            graphs.globals.atom_type_distribution, preds.atom_type_logits
+            graphs.globals.target_species_probability, preds.specie_logits
         )
 
     def position_loss() -> jnp.ndarray:
         # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
-        assert preds.position_coeffs == (
+        assert preds.position_coeffs.array.shape == (
             num_graphs,
             num_radii,
             preds.position_coeffs.irreps.dim,
@@ -147,6 +147,7 @@ def generation_loss(
 
         # Integrate the position signal over each sphere to get the probability distribution over the radii.
         position_signal = e3nn.to_s2grid(
+            # TODO: 1x0e+1x0o+1x1o+1x1e+1x2e+1x2o+1x3o+1x3e is not a proper position_coeff irrepsarray
             preds.position_coeffs,
             res_beta,
             res_alpha,

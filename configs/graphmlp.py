@@ -27,6 +27,12 @@ def get_config():
     config.max_n_edges = 1024
     config.max_n_graphs = 16
 
+    config.loss_kwargs = {
+        "res_beta": 30,
+        "res_alpha": 51,
+        "radius_rbf_variance": 0.01,  # what is this
+    }
+
     # GNN hyperparameters.
     config.model = "GraphMLP"
     config.latent_size = 256
