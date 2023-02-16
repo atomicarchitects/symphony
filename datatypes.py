@@ -12,7 +12,7 @@ NodesInfo = namedtuple(
 )
 
 FragmentGlobals = namedtuple(
-    "FragmentGlobalsInfo",
+    "FragmentGlobals",
     [
         "stop",  # [n_graph] bool array (only for training)
         "target_positions",  # [n_graph, 3] float array (only for training)
@@ -20,8 +20,9 @@ FragmentGlobals = namedtuple(
         "target_species_probability",  # [n_graph, n_species] float array (only for training)
     ],
 )
+
 FragmentNodes = namedtuple(
-    "FragmentNodesInfo",
+    "FragmentNodes",
     [
         "positions",  # [n_node, 3] float array
         "species",  # [n_node] int array

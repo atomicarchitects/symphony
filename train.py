@@ -221,7 +221,16 @@ def generation_loss(
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     """Replaces the globals attribute with a constant feature for each graph."""
-    return graphs._replace(globals=jnp.ones([graphs.n_node.shape[0], 1]))
+    return graphs._replace(
+        globals=datatypes.FragmentGlobals(
+            stop=jnp.ones([graphs.n_node.shape[0]]),
+            target_positions=jnp.ones([graphs.n_node.shape[0], 3]),
+            target_species=jnp.ones([graphs.n_node.shape[0]], dtype=jnp.int32),
+            target_species_probability=jnp.ones(
+                [graphs.n_node.shape[0], models.NUM_ELEMENTS]
+            ),
+        )
+    )
 
 
 def get_predictions(
@@ -331,6 +340,7 @@ def train_and_evaluate(
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
     molecules = load_qm9("qm9_data")
+    molecules = molecules[:16]  # TODO remove this line
     atomic_numbers = jnp.array([1, 6, 7, 8, 9])
     rng = jax.random.PRNGKey(0)
     # datasets = dataloader(rng, molecules, atomic_numbers, 0.1, 5)
@@ -340,7 +350,7 @@ def train_and_evaluate(
         molecules,
         atomic_numbers,
         0.1,
-        5,
+        5.0,
         config.max_n_nodes,
         config.max_n_edges,
         config.max_n_graphs,

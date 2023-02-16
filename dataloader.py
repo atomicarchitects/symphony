@@ -7,7 +7,7 @@ import jraph
 import numpy as np
 from roundmantissa import ceil_mantissa
 
-from dataset import ase_atoms_to_jraph_graph, generate_fragments
+from input_pipeline import ase_atoms_to_jraph_graph, generate_fragments
 from dynamically_batch import dynamically_batch
 from datatypes import Fragment
 

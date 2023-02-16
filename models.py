@@ -216,7 +216,7 @@ class GraphMLP(nn.Module):
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        atom_type_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
+        specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
         irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
 
         input_for_position_coeffs = jnp.concatenate(
@@ -230,7 +230,7 @@ class GraphMLP(nn.Module):
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
-            atom_type_logits=atom_type_logits,
+            specie_logits=specie_logits,
             position_coeffs=position_coeffs,
         )
 
@@ -330,7 +330,7 @@ class GraphNet(nn.Module):
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        atom_type_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
+        specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
         irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
 
         input_for_position_coeffs = jnp.concatenate(
@@ -344,6 +344,6 @@ class GraphNet(nn.Module):
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
-            atom_type_logits=atom_type_logits,
+            specie_logits=specie_logits,
             position_coeffs=position_coeffs,
         )

@@ -114,63 +114,63 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     )
 
 
-def train(data_loader, learning_rate=1e-4):
-    g = jraph.GraphsTuple(
-        nodes=GraphNodes(
-            jnp.asarray([[0.0, 0, 0], [1.0, 2, 0]]), None, jnp.asarray([1, 4])
-        ),
-        edges=GraphEdges(None),
-        globals=GraphGlobals(None, None, None, None),
-        receivers=jnp.asarray([0, 1]),
-        senders=jnp.asarray([1, 0]),
-        n_node=jnp.asarray([2]),
-        n_edge=jnp.asarray([2]),
-    )
-    vectors = g.nodes.positions[g.receivers] - g.nodes.positions[g.senders]
-    atom_types = g.nodes.species
-    mace_input = MaceInput(vectors, atom_types, g.senders, g.receivers)
+# def train(data_loader, learning_rate=1e-4):
+#     g = jraph.GraphsTuple(
+#         nodes=GraphNodes(
+#             jnp.asarray([[0.0, 0, 0], [1.0, 2, 0]]), None, jnp.asarray([1, 4])
+#         ),
+#         edges=GraphEdges(None),
+#         globals=GraphGlobals(None, None, None, None),
+#         receivers=jnp.asarray([0, 1]),
+#         senders=jnp.asarray([1, 0]),
+#         n_node=jnp.asarray([2]),
+#         n_edge=jnp.asarray([2]),
+#     )
+#     vectors = g.nodes.positions[g.receivers] - g.nodes.positions[g.senders]
+#     atom_types = g.nodes.species
+#     mace_input = MaceInput(vectors, atom_types, g.senders, g.receivers)
 
-    w_mace = mace_fn.init(jax.random.PRNGKey(0), mace_input)
-    w_focus = focus_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
-    w_type = atom_type_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
-    w_position = position_fn.init(
-        jax.random.PRNGKey(0), jnp.zeros((2, 128)), jnp.zeros((2,), dtype=jnp.int32)
-    )
+#     w_mace = mace_fn.init(jax.random.PRNGKey(0), mace_input)
+#     w_focus = focus_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
+#     w_type = atom_type_fn.init(jax.random.PRNGKey(0), jnp.zeros((2, 128)))
+#     w_position = position_fn.init(
+#         jax.random.PRNGKey(0), jnp.zeros((2, 128)), jnp.zeros((2,), dtype=jnp.int32)
+#     )
 
-    weights = WeightTuple(w_mace, w_focus, w_type, w_position)
-    optimizer = optax.adam(learning_rate)
-    opt_state = optimizer.init(weights)
+#     weights = WeightTuple(w_mace, w_focus, w_type, w_position)
+#     optimizer = optax.adam(learning_rate)
+#     opt_state = optimizer.init(weights)
 
-    datapoints_bar = tqdm.tqdm(
-        data_loader, desc="Training", total=data_loader.approx_length()
-    )
-    # for data in datapoints_bar:
-    #     x =
-    #     y =
-    #     weights, opt_state = _train(weights, x, y, opt_state)
-
-
-@jax.jit
-def _train(graph, weights, state, optim, res_beta, res_alpha, quadrature, gamma=30):
-    loss, grad = jax.value_and_grad(loss_fn)(
-        graph, weights, res_beta, res_alpha, quadrature, gamma
-    )
-    updates, state = optim.update(grad, state, w)
-    w = optax.apply_updates(w, updates)
-    return w, state
+#     datapoints_bar = tqdm.tqdm(
+#         data_loader, desc="Training", total=data_loader.approx_length()
+#     )
+#     # for data in datapoints_bar:
+#     #     x =
+#     #     y =
+#     #     weights, opt_state = _train(weights, x, y, opt_state)
 
 
-def loss_fn(graph, weights, res_beta, res_alpha, quadrature, gamma=30):
-    output = model_run(weights, graph)
+# @jax.jit
+# def _train(graph, weights, state, optim, res_beta, res_alpha, quadrature, gamma=30):
+#     loss, grad = jax.value_and_grad(loss_fn)(
+#         graph, weights, res_beta, res_alpha, quadrature, gamma
+#     )
+#     updates, state = optim.update(grad, state, w)
+#     w = optax.apply_updates(w, updates)
+#     return w, state
 
-    return _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
+
+# def loss_fn(graph, weights, res_beta, res_alpha, quadrature, gamma=30):
+#     output = model_run(weights, graph)
+
+#     return _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
 
 
-def evaluate(weights, data_loader, res_beta, res_alpha, quadrature):
-    datapoints_bar = tqdm.tqdm(
-        data_loader, desc="Evaluating", total=data_loader.approx_length()
-    )
-    for data in datapoints_bar:
-        # what format is data in? look at jraph.ipynb
-        output = model_run(jax.random.PRNGKey(0), weights, mace_input)
-        loss = _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
+# def evaluate(weights, data_loader, res_beta, res_alpha, quadrature):
+#     datapoints_bar = tqdm.tqdm(
+#         data_loader, desc="Evaluating", total=data_loader.approx_length()
+#     )
+#     for data in datapoints_bar:
+#         # what format is data in? look at jraph.ipynb
+#         output = model_run(jax.random.PRNGKey(0), weights, mace_input)
+#         loss = _loss(output, graph, res_beta, res_alpha, quadrature, gamma)
