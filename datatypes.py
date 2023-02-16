@@ -20,6 +20,7 @@ FragmentGlobals = namedtuple(
         "target_species_probability",  # [n_graph, n_species] float array (only for training)
     ],
 )
+
 FragmentNodes = namedtuple(
     "FragmentNodes",
     [

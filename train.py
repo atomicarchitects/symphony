@@ -221,7 +221,16 @@ def generation_loss(
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     """Replaces the globals attribute with a constant feature for each graph."""
-    return graphs._replace(globals=jnp.ones([graphs.n_node.shape[0], 1]))
+    return graphs._replace(
+        globals=datatypes.FragmentGlobals(
+            stop=jnp.ones([graphs.n_node.shape[0]]),
+            target_positions=jnp.ones([graphs.n_node.shape[0], 3]),
+            target_species=jnp.ones([graphs.n_node.shape[0]], dtype=jnp.int32),
+            target_species_probability=jnp.ones(
+                [graphs.n_node.shape[0], models.NUM_ELEMENTS]
+            ),
+        )
+    )
 
 
 def get_predictions(

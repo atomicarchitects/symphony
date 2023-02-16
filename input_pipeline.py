@@ -21,7 +21,8 @@ def ase_atoms_to_jraph_graph(
     )
 
     # Get the species indices
-    species = jnp.searchsorted(atomic_numbers, atoms.numbers)
+    species = np.searchsorted(atomic_numbers, atoms.numbers)
+    # species = jnp.searchsorted(atomic_numbers, atoms.numbers)
 
     return jraph.GraphsTuple(
         nodes=NodesInfo(atoms.positions, species),
