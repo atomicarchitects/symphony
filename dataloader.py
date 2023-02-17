@@ -4,16 +4,17 @@ import ase
 import jax
 import jax.numpy as jnp
 import jraph
+import chex
 import numpy as np
-from roundmantissa import ceil_mantissa
+import roundmantissa
 
-from input_pipeline import ase_atoms_to_jraph_graph, generate_fragments
-from dynamically_batch import dynamically_batch
-from datatypes import Fragment
+import datatypes
+import input_pipeline
+import dynamic_batcher
 
 
 def dataloader(
-    rng: jnp.ndarray,
+    rng: chex.PRNGKey,
     molecules: List[ase.Atoms],
     atomic_numbers: jnp.ndarray,
     epsilon: float,
@@ -21,7 +22,7 @@ def dataloader(
     max_n_nodes=128,
     max_n_edges=1024,
     max_n_graphs=16,
-) -> Iterator[Fragment]:
+) -> Iterator[datatypes.Fragment]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
@@ -37,12 +38,12 @@ def dataloader(
     """
 
     graph_molecules = [
-        ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
+        input_pipeline.ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
         for molecule in molecules
     ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
-    for graphs in dynamically_batch(
+    for graphs in dynamic_batcher.dynamically_batch(
         fragments_pool_iterator(rng, graph_molecules, len(atomic_numbers), epsilon),
         max_n_nodes,
         max_n_edges,
@@ -60,7 +61,7 @@ def dataloader(
 
 def fragments_pool_iterator(
     rng, graph_molecules, n_species, epsilon
-) -> Iterator[Fragment]:
+) -> Iterator[datatypes.Fragment]:
     """A pool of fragments that are generated on the fly."""
     # TODO: Make this configurable.
     SAMPLES_POOL_SIZE = 1024
@@ -73,7 +74,9 @@ def fragments_pool_iterator(
 
             rng, k = jax.random.split(rng)
             fragments += list(
-                generate_fragments(k, graph_molecules[i], n_species, epsilon)
+                input_pipeline.generate_fragments(
+                    k, graph_molecules[i], n_species, epsilon
+                )
             )
             assert all([isinstance(sample, jraph.GraphsTuple) for sample in fragments])
 
@@ -115,9 +118,9 @@ def pad_graph_to_nearest_ceil_mantissa(
     n_edges = len(graphs_tuple.senders)
     n_graphs = graphs_tuple.n_node.shape[0]
 
-    pad_nodes_to = ceil_mantissa(n_nodes + 1, n_mantissa_bits)
-    pad_edges_to = ceil_mantissa(n_edges, n_mantissa_bits)
-    pad_graphs_to = ceil_mantissa(n_graphs + 1, n_mantissa_bits)
+    pad_nodes_to = roundmantissa.ceil_mantissa(n_nodes + 1, n_mantissa_bits)
+    pad_edges_to = roundmantissa.ceil_mantissa(n_edges, n_mantissa_bits)
+    pad_graphs_to = roundmantissa.ceil_mantissa(n_graphs + 1, n_mantissa_bits)
 
     pad_nodes_to = np.clip(pad_nodes_to, n_min_nodes, n_max_nodes)
     pad_edges_to = np.clip(pad_edges_to, n_min_edges, n_max_edges)

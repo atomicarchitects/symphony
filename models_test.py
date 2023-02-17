@@ -101,7 +101,7 @@ class ModelsTest(parameterized.TestCase):
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
         self.assertSequenceEqual(
-            output.specie_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+            output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS)
         )
         self.assertSequenceEqual(
             output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
@@ -128,7 +128,7 @@ class ModelsTest(parameterized.TestCase):
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
         self.assertSequenceEqual(
-            output.specie_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+            output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS)
         )
         self.assertSequenceEqual(
             output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
@@ -158,7 +158,7 @@ class ModelsTest(parameterized.TestCase):
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
         self.assertSequenceEqual(
-            output.specie_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+            output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS)
         )
         self.assertSequenceEqual(
             output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])

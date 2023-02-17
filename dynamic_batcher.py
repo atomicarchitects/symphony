@@ -27,7 +27,7 @@
 # limitations under the License.
 """Modified version of jraph.utils.dynamically_batch."""
 
-from typing import Generator, Iterator
+from typing import Generator, Iterator, Tuple
 
 import jraph
 import numpy as np
@@ -35,14 +35,16 @@ import numpy as np
 _NUMBER_FIELDS = ("n_node", "n_edge", "n_graph")
 
 
-def _get_graph_size(graphs_tuple):
-    n_node = np.sum(graphs_tuple.n_node)
-    n_edge = len(graphs_tuple.senders)
-    n_graph = len(graphs_tuple.n_node)
+def _get_graph_size(graph: jraph.GraphsTuple) -> Tuple[int, int, int]:
+    n_node = np.sum(graph.n_node)
+    n_edge = len(graph.senders)
+    n_graph = len(graph.n_node)
     return n_node, n_edge, n_graph
 
 
-def _is_over_batch_size(graph, graph_batch_size):
+def _is_over_batch_size(
+    graph: jraph.GraphsTuple, graph_batch_size: Tuple[int, int, int]
+):
     graph_size = _get_graph_size(graph)
     return any([x > y for x, y in zip(graph_size, graph_batch_size)])
 

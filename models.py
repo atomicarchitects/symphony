@@ -211,7 +211,7 @@ class GraphMLP(nn.Module):
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
+        species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
         input_for_position_coeffs = jnp.concatenate(
@@ -225,7 +225,7 @@ class GraphMLP(nn.Module):
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
-            specie_logits=specie_logits,
+            species_logits=species_logits,
             position_coeffs=position_coeffs,
         )
 
@@ -316,7 +316,7 @@ class GraphNet(nn.Module):
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
+        species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
         input_for_position_coeffs = jnp.concatenate(
@@ -330,7 +330,7 @@ class GraphNet(nn.Module):
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
-            specie_logits=specie_logits,
+            species_logits=species_logits,
             position_coeffs=position_coeffs,
         )
 
@@ -403,7 +403,7 @@ class HaikuGraphMLP(hk.Module):
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
         focus_logits = hk.Linear(1)(node_embeddings).squeeze(axis=-1)
-        specie_logits = hk.Linear(NUM_ELEMENTS)(true_focus_node_embeddings)
+        species_logits = hk.Linear(NUM_ELEMENTS)(true_focus_node_embeddings)
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
         input_for_position_coeffs = jnp.concatenate(
@@ -417,6 +417,6 @@ class HaikuGraphMLP(hk.Module):
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
-            specie_logits=specie_logits,
+            species_logits=species_logits,
             position_coeffs=position_coeffs,
         )
