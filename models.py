@@ -271,9 +271,7 @@ class GraphNet(nn.Module):
         embedder = jraph.GraphMapFeatures(
             embed_node_fn=embed_node_fn,
             embed_edge_fn=lambda _: jnp.ones((num_edges, self.latent_size)),
-            embed_global_fn=lambda _: jnp.ones(
-                (num_graphs, self.latent_size)
-            ),
+            embed_global_fn=lambda _: jnp.ones((num_graphs, self.latent_size)),
         )
         processed_graphs = embedder(graphs)
 
