@@ -10,6 +10,7 @@ from absl.testing import parameterized
 import e3nn_jax as e3nn
 import jax.numpy as jnp
 import scipy
+import ml_collections
 
 import models
 import datatypes
@@ -32,8 +33,8 @@ def update_dummy_config(config):
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
     """Creates dummy data for testing."""
     num_graphs = 2
-    num_elements = models.NUM_ELEMENTS
     num_nodes = 5
+    num_elements = models.NUM_ELEMENTS
     num_radii = models.RADII.shape[0]
     preds = datatypes.Predictions(
         focus_logits=jnp.ones((num_nodes,)),
@@ -121,6 +122,7 @@ class TrainTest(parameterized.TestCase):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
         update_dummy_config(config)
+        config = ml_collections.FrozenConfigDict(config)
 
         # Create a temporary directory where metrics are written.
         workdir = tempfile.mkdtemp()

@@ -334,7 +334,7 @@ def evaluate_model(
 
 
 def train_and_evaluate(
-    config: ml_collections.ConfigDict, workdir: str
+    config: ml_collections.FrozenConfigDict, workdir: str
 ) -> train_state.TrainState:
     """Execute model training and evaluation loop.
 
@@ -411,7 +411,7 @@ def train_and_evaluate(
             state, metrics_update = train_step(
                 state,
                 graphs,
-                loss_kwargs=ml_collections.FrozenConfigDict(config.loss_kwargs),
+                loss_kwargs=config.loss_kwargs,
             )
 
         # Update metrics.
