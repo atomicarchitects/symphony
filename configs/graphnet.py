@@ -28,7 +28,7 @@ def get_config():
     config.loss_kwargs = {
         "res_beta": 30,
         "res_alpha": 51,
-        "radius_rbf_variance": 0.01,  # what is this
+        "radius_rbf_variance": 30,
     }
 
     # GNN hyperparameters.
