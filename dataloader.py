@@ -1,4 +1,4 @@
-from typing import Iterator, List
+from typing import Iterator, Sequence
 
 import ase
 import jax
@@ -15,7 +15,7 @@ import dynamic_batcher
 
 def dataloader(
     rng: chex.PRNGKey,
-    molecules: List[ase.Atoms],
+    molecules: Sequence[ase.Atoms],
     atomic_numbers: jnp.ndarray,
     epsilon: float,
     cutoff: float,
@@ -60,7 +60,10 @@ def dataloader(
 
 
 def fragments_pool_iterator(
-    rng, graph_molecules, n_species, epsilon
+    rng: chex.PRNGKey,
+    graph_molecules: Sequence[jraph.GraphsTuple],
+    n_species: int,
+    epsilon: float,
 ) -> Iterator[datatypes.Fragment]:
     """A pool of fragments that are generated on the fly."""
     # TODO: Make this configurable.
@@ -69,20 +72,18 @@ def fragments_pool_iterator(
     fragments = []
     while True:
         while len(fragments) < SAMPLES_POOL_SIZE:
-            rng, k = jax.random.split(rng)
-            i = jax.random.randint(k, (), 0, len(graph_molecules))
-
-            rng, k = jax.random.split(rng)
+            rng, index_rng, fragment_rng = jax.random.split(rng, num=3)
+            indices = jax.random.randint(index_rng, (), 0, len(graph_molecules))
             fragments += list(
                 input_pipeline.generate_fragments(
-                    k, graph_molecules[i], n_species, epsilon
+                    fragment_rng, graph_molecules[indices], n_species, epsilon
                 )
             )
             assert all([isinstance(sample, jraph.GraphsTuple) for sample in fragments])
 
-        rng, k = jax.random.split(rng)
-        i = jax.random.randint(k, (), 0, len(fragments))
-        yield fragments.pop(i)
+        rng, index_rng = jax.random.split(rng)
+        index = jax.random.randint(index_rng, (), 0, len(fragments))
+        yield fragments.pop(index)
 
 
 def pad_graph_to_nearest_ceil_mantissa(
