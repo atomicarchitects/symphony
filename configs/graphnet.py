@@ -35,7 +35,6 @@ def get_config():
     config.model = "GraphNet"
     config.message_passing_steps = 5
     config.latent_size = 256
-    config.dropout_rate = 0.1
     config.num_mlp_layers = 1
     config.use_edge_model = True
     config.skip_connections = True

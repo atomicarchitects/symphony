@@ -4,7 +4,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 import jax
 import jax.numpy as jnp
-import jraph
+import haiku as hk
 
 import models
 import datatypes
@@ -123,6 +123,36 @@ class ModelsTest(parameterized.TestCase):
             num_mlp_layers=2,
         )
         output, _ = net.init_with_output(self.rngs, graphs)
+
+        # Check that the shapes are all that we expect.
+        self.assertIsInstance(output, datatypes.Predictions)
+        self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
+        self.assertSequenceEqual(
+            output.specie_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+        )
+        self.assertSequenceEqual(
+            output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
+        )
+        self.assertLen(output.position_coeffs.shape, 3)
+
+    @parameterized.parameters(
+        {"latent_size": 15},
+        {"latent_size": 5},
+    )
+    def test_haiku_graph_mlp(self, latent_size: int):
+        graphs = self.graphs
+        num_nodes = jnp.sum(graphs.n_node)
+        num_graphs = graphs.n_node.shape[0]
+
+        # Model definition.
+        net = hk.transform(
+            lambda graphs: models.HaikuGraphMLP(
+                latent_size=latent_size,
+                num_mlp_layers=2,
+            )(graphs)
+        )
+        params = net.init(self.rngs["params"], graphs)
+        output = net.apply(params, None, graphs)
 
         # Check that the shapes are all that we expect.
         self.assertIsInstance(output, datatypes.Predictions)

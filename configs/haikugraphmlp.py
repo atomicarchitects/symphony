@@ -31,7 +31,7 @@ def get_config():
     }
 
     # GNN hyperparameters.
-    config.model = "GraphMLP"
+    config.model = "HaikuGraphMLP"
     config.latent_size = 256
     config.num_mlp_layers = 3
     config.layer_norm = True

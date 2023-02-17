@@ -9,7 +9,9 @@ from clu import checkpoint
 from clu import metric_writers
 from clu import metrics
 from clu import parameter_overview
+from clu import profiler
 from clu import periodic_actions
+import haiku as hk
 import e3nn_jax as e3nn
 import flax
 import flax.core
@@ -46,27 +48,34 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     return {f"{prefix}_{key}": val for key, val in result.items()}
 
 
-def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.Module:
-    """Create a Flax model as specified by the config."""
+def create_model(config: ml_collections.ConfigDict) -> nn.Module:
+    """Create a model as specified by the config."""
     if config.model == "GraphNet":
         return models.GraphNet(
             latent_size=config.latent_size,
             num_mlp_layers=config.num_mlp_layers,
             message_passing_steps=config.message_passing_steps,
-            dropout_rate=config.dropout_rate,
             skip_connections=config.skip_connections,
             layer_norm=config.layer_norm,
             use_edge_model=config.use_edge_model,
-            deterministic=deterministic,
         )
     if config.model == "GraphMLP":
         return models.GraphMLP(
             latent_size=config.latent_size,
             num_mlp_layers=config.num_mlp_layers,
-            dropout_rate=config.dropout_rate,
             layer_norm=config.layer_norm,
-            deterministic=deterministic,
         )
+    if config.model == "HaikuGraphMLP":
+
+        def model_fn(graphs):
+            return models.HaikuGraphMLP(
+                latent_size=config.latent_size,
+                num_mlp_layers=config.num_mlp_layers,
+                layer_norm=config.layer_norm,
+            )(graphs)
+
+        model_fn = hk.transform(model_fn)
+        return hk.without_apply_rng(model_fn)
     if config.model == "MACE":
         # TODO (ameyad): Implement MACE in Flax.
         raise NotImplementedError("MACE is not yet implemented.")
@@ -250,24 +259,22 @@ def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
 def get_predictions(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    rngs: Optional[Dict[str, jnp.ndarray]],
 ) -> datatypes.Predictions:
     """Get predictions from the network for input graphs."""
-    return state.apply_fn(state.params, graphs, rngs=rngs)
+    return state.apply_fn(state.params, graphs)
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    rngs: Dict[str, jnp.ndarray],
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
-        preds = get_predictions(curr_state, graphs, rngs)
+        preds = get_predictions(curr_state, graphs)
         loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
         mask = jraph.get_graph_padding_mask(graphs)
         return jnp.sum(loss * mask) / jnp.sum(mask)
@@ -329,7 +336,7 @@ def evaluate_model(
                 split_metrics = split_metrics.merge(split_metrics_update)
         eval_metrics[split] = split_metrics
 
-    return eval_metrics  # pytype: disable=bad-return-type
+    return eval_metrics
 
 
 def train_and_evaluate(
@@ -375,15 +382,14 @@ def train_and_evaluate(
     rng, init_rng = jax.random.split(rng)
     init_graphs = next(train_iter)
     init_graphs = replace_globals(init_graphs)
-    init_net = create_model(config, deterministic=True)
-    params = jax.jit(init_net.init)(init_rng, init_graphs)
+    net = create_model(config)
+    params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
     # Create the optimizer.
     tx = create_optimizer(config)
 
     # Create the training state.
-    net = create_model(config, deterministic=False)
     state = train_state.TrainState.create(apply_fn=net.apply, params=params, tx=tx)
 
     # Set up checkpointing of the model.
@@ -393,38 +399,34 @@ def train_and_evaluate(
     initial_step = int(state.step) + 1
 
     # Create the evaluation state, corresponding to a deterministic model.
-    eval_net = create_model(config, deterministic=True)
-    eval_state = state.replace(apply_fn=eval_net.apply)
+    eval_state = state.replace(apply_fn=net.apply)
 
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
         num_train_steps=config.num_train_steps, writer=writer
     )
-    profiler = periodic_actions.Profile(num_profile_steps=5, logdir=workdir)
-    hooks = [report_progress, profiler]
+    profile = periodic_actions.Profile(
+        logdir=workdir, num_profile_steps=5, profile_duration_ms=0
+    )
+    hooks = [report_progress, profile]
 
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
     for step in range(initial_step, config.num_train_steps + 1):
-        # Split PRNG key, to ensure different 'randomness' for every step.
-        rng, dropout_rng = jax.random.split(rng)
-
         # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train", step_num=step):
-            graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
-            state, metrics_update = train_step(
-                state,
-                graphs,
-                rngs={"dropout": dropout_rng},
-                loss_kwargs=ml_collections.FrozenConfigDict(config.loss_kwargs),
-            )
+        graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
+        state, metrics_update = train_step(
+            state,
+            graphs,
+            loss_kwargs=ml_collections.FrozenConfigDict(config.loss_kwargs),
+        )
 
-            # Update metrics.
-            if train_metrics is None:
-                train_metrics = metrics_update
-            else:
-                train_metrics = train_metrics.merge(metrics_update)
+        # Update metrics.
+        if train_metrics is None:
+            train_metrics = metrics_update
+        else:
+            train_metrics = train_metrics.merge(metrics_update)
 
         # Quick indication that training is happening.
         logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
@@ -451,9 +453,12 @@ def train_and_evaluate(
         #             step, add_prefix_to_keys(eval_metrics[split].compute(), split)
         #         )
 
-        # # Checkpoint model, if required.
-        # if step % config.checkpoint_every_steps == 0 or is_last_step:
-        #     with report_progress.timed("checkpoint"):
-        #         ckpt.save(state)
+        # Checkpoint model, if required.
+        if step % config.checkpoint_every_steps == 0 or is_last_step:
+            with report_progress.timed("checkpoint"):
+                ckpt.save(state)
+
+    # Stop profiler.
+    profiler.stop()
 
     return state
