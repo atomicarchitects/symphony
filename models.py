@@ -12,7 +12,7 @@ import jraph
 import datatypes
 
 
-RADII = jnp.linspace(0.0, 15.0, 300)
+RADII = jnp.linspace(0.0, 5.0, 100)
 NUM_ELEMENTS = 5
 
 
@@ -213,7 +213,7 @@ class GraphMLP(nn.Module):
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
         species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
 
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
@@ -318,7 +318,7 @@ class GraphNet(nn.Module):
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
         species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
 
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
@@ -405,7 +405,7 @@ class HaikuGraphMLP(hk.Module):
         focus_logits = hk.Linear(1)(node_embeddings).squeeze(axis=-1)
         species_logits = hk.Linear(NUM_ELEMENTS)(true_focus_node_embeddings)
 
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
