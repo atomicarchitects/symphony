@@ -21,13 +21,22 @@ def get_config():
     config.add_undirected_edges = True
     config.add_self_loops = True
 
+    config.max_n_nodes = 128
+    config.max_n_edges = 1024
+    config.max_n_graphs = 16
+
+    config.loss_kwargs = {
+        "res_beta": 30,
+        "res_alpha": 51,
+        "radius_rbf_variance": 30,
+    }
+
     # GNN hyperparameters.
     config.model = "GraphNet"
     config.message_passing_steps = 5
     config.latent_size = 256
     config.dropout_rate = 0.1
     config.num_mlp_layers = 1
-    config.output_nodes_size = 128
     config.use_edge_model = True
     config.skip_connections = True
     config.layer_norm = True

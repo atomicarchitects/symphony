@@ -25,13 +25,13 @@ def update_dummy_config(config):
     config.dataset = "dummy"
     config.batch_size = 10
     config.max_degree = 2
-    config.num_training_steps = 10
+    config.num_train_steps = 10
     config.num_classes = 10
 
 
 class TrainTest(parameterized.TestCase):
     @parameterized.parameters("graphnet", "graphmlp")
-    def test_train_and_evaluate(self, config_name):
+    def test_train_and_evaluate(self, config_name: str):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
         update_dummy_config(config)

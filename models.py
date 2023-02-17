@@ -188,7 +188,7 @@ class GraphMLP(nn.Module):
     dropout_rate: float = 0
     layer_norm: bool = True
     deterministic: bool = True
-    position_coeffs_lmax: int = 3
+    position_coeffs_lmax: int = 2
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
@@ -217,8 +217,8 @@ class GraphMLP(nn.Module):
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
         specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
-        irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
 
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
@@ -266,11 +266,13 @@ class GraphNet(nn.Module):
             )
 
         # We will first linearly project the original features as 'embeddings'.
+        num_graphs = graphs.n_node.shape[0]
+        num_edges = graphs.senders.shape[0]
         embedder = jraph.GraphMapFeatures(
             embed_node_fn=embed_node_fn,
-            embed_edge_fn=nn.Dense(self.latent_size),
+            embed_edge_fn=lambda _: jnp.ones((num_edges, self.latent_size)),
             embed_global_fn=lambda _: jnp.ones(
-                (graphs.n_node.shape[0], self.latent_size)
+                (num_graphs, self.latent_size)
             ),
         )
         processed_graphs = embedder(graphs)
@@ -331,8 +333,8 @@ class GraphNet(nn.Module):
 
         focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
         specie_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
-        irreps = e3nn.Irreps(e3nn.Irrep.iterator(self.position_coeffs_lmax))
 
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )

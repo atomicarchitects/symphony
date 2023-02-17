@@ -22,17 +22,18 @@ class ModelsTest(parameterized.TestCase):
         total_n_node = jnp.sum(n_node)
         total_n_edge = jnp.sum(n_edge)
         n_graph = n_node.shape[0]
-        self.graphs = jraph.GraphsTuple(
+        self.graphs = datatypes.Fragment(
             n_node=n_node,
             n_edge=n_edge,
             senders=jnp.zeros(total_n_edge, dtype=jnp.int32),
             receivers=jnp.ones(total_n_edge, dtype=jnp.int32),
-            nodes=datatypes.NodesInfo(
+            nodes=datatypes.FragmentNodes(
                 positions=jnp.ones((total_n_node, 3)),
                 species=(jnp.arange(total_n_node) % models.NUM_ELEMENTS),
+                focus_probability=jnp.ones(total_n_node) / total_n_node,
             ),
             edges=jnp.zeros((total_n_edge, 10)),
-            globals=datatypes.TrainingGlobalsInfo(
+            globals=datatypes.FragmentGlobals(
                 stop=jnp.zeros((n_graph,)),
                 target_positions=jnp.ones((n_graph, 3)),
                 target_species=jnp.arange(n_graph) % models.NUM_ELEMENTS,
@@ -100,7 +101,7 @@ class ModelsTest(parameterized.TestCase):
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
         self.assertSequenceEqual(
-            output.atom_type_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+            output.specie_logits.shape, (num_graphs, models.NUM_ELEMENTS)
         )
         self.assertSequenceEqual(
             output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
@@ -127,7 +128,7 @@ class ModelsTest(parameterized.TestCase):
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
         self.assertSequenceEqual(
-            output.atom_type_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+            output.specie_logits.shape, (num_graphs, models.NUM_ELEMENTS)
         )
         self.assertSequenceEqual(
             output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])

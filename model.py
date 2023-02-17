@@ -96,8 +96,8 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     focus_true = jnp.concatenate([jnp.array([0]), jnp.cumsum(mace_input.n_node[:-1])])
 
     # get atom type
-    atom_type_logits = atom_type_fn.apply(w.atom_type, features[focus_true])
-    atom_type_dist = jax.nn.softmax(atom_type_logits)
+    specie_logits = atom_type_fn.apply(w.atom_type, features[focus_true])
+    atom_type_dist = jax.nn.softmax(specie_logits)
     key, new_key = jax.random.split(key)
     atom_type = jax.random.choice(new_key, jnp.arange(5), p=atom_type_dist)
 
@@ -109,7 +109,7 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     return Predictions(
         focus_pred == len(focus_probs) - 1,  # stop (global)
         focus_logits,  # focus (node)
-        atom_type_logits,  # atom type (global)
+        specie_logits,  # atom type (global)
         position_coeffs,  # postiion (global)
     )
 
