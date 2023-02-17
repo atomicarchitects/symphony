@@ -3,6 +3,7 @@
 import os
 from typing import Any, Dict, Iterable, Tuple, Optional, Union
 
+import functools
 from absl import logging
 from clu import checkpoint
 from clu import metric_writers
@@ -82,6 +83,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
+@functools.partial(jax.jit, static_argnames=["res_beta", "res_alpha"])
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragment,
@@ -154,18 +156,19 @@ def generation_loss(
             normalization="integral",
         )
 
-        # position_signal is of shape (# of graphs, # of radii, res_beta, res_alpha)
+        # position_signal is of shape (num_graphs, num_radii, res_beta, res_alpha)
         assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
 
         # For numerical stability, we subtract out the maximum value over each sphere before exponentiating.
-        position_max = jnp.max(position_signal, axis=(-3, -2, -1), keepdims=False)
+        position_max = jnp.max(position_signal.grid_values, axis=(-3, -2, -1), keepdims=True)
         sphere_normalizing_factors = position_signal.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
+        sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
 
         # sphere_normalizing_factors is of shape (num_graphs, num_radii)
-        assert position_max.shape == (num_graphs,)
-        assert sphere_normalizing_factors.shape == (num_graphs, num_radii)
+        # assert position_max.shape == (num_graphs,)
+        assert sphere_normalizing_factors.shape == (num_graphs, num_radii), sphere_normalizing_factors.shape
 
         # Compare distance of target relative to focus to target_radius.
         target_positions = graphs.globals.target_positions
@@ -188,10 +191,12 @@ def generation_loss(
         assert radius_weights.shape == (num_graphs, num_radii)
 
         # Compute f(r*, rhat*) which is our model predictions for the target positions.
-        target_positions_logits = e3nn.to_s2point(
-            preds.position_coeffs, target_positions, normalization="integral"
+        target_positions = e3nn.IrrepsArray("1o", target_positions)
+        target_positions_logits = jax.vmap(functools.partial(e3nn.to_s2point, normalization="integral"))(
+            preds.position_coeffs, target_positions
         )
-        assert target_positions_logits.shape == (num_graphs, num_radii)
+        target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
+        assert target_positions_logits.shape == (num_graphs, num_radii), (preds.position_coeffs.shape, target_positions.shape, target_positions_logits.shape)
         return jax.vmap(
             lambda fr, qr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
         )(
@@ -199,15 +204,14 @@ def generation_loss(
             radius_weights,
             sphere_normalizing_factors,
             position_max,
-        )
+        ).squeeze()
 
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
 
-    assert (
-        loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
-    )
+    assert loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
+
 
     total_loss = loss_focus + (loss_atom_type + loss_position) * (
         1 - graphs.globals.stop
@@ -242,7 +246,7 @@ def get_predictions(
     return state.apply_fn(state.params, graphs, rngs=rngs)
 
 
-@jax.jit
+@functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
@@ -250,7 +254,6 @@ def train_step(
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
-
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rngs)
@@ -266,7 +269,7 @@ def train_step(
     return state, metrics_update
 
 
-@jax.jit
+@functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def evaluate_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
@@ -349,11 +352,11 @@ def train_and_evaluate(
         rng,
         molecules,
         atomic_numbers,
-        0.1,
-        5.0,
-        config.max_n_nodes,
-        config.max_n_edges,
-        config.max_n_graphs,
+        epsilon=0.1,
+        cutoff=5.0,
+        max_n_nodes=config.max_n_nodes,
+        max_n_edges=config.max_n_edges,
+        max_n_graphs=config.max_n_graphs,
     )
 
     # Create and initialize the network.
@@ -403,7 +406,7 @@ def train_and_evaluate(
                 state,
                 graphs,
                 rngs={"dropout": dropout_rng},
-                loss_kwargs=config.loss_kwargs.to_dict(),
+                loss_kwargs=ml_collections.FrozenConfigDict(config.loss_kwargs),
             )
 
             # Update metrics.

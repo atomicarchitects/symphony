@@ -20,9 +20,6 @@ def get_config():
     config.add_virtual_node = True
     config.add_undirected_edges = True
     config.add_self_loops = True
-
-    config.num_classes = 128  # temporary
-
     config.max_n_nodes = 128
     config.max_n_edges = 1024
     config.max_n_graphs = 16
@@ -30,7 +27,7 @@ def get_config():
     config.loss_kwargs = {
         "res_beta": 30,
         "res_alpha": 51,
-        "radius_rbf_variance": 0.01,  # what is this
+        "radius_rbf_variance": 30,  # what is this
     }
 
     # GNN hyperparameters.
@@ -38,6 +35,5 @@ def get_config():
     config.latent_size = 256
     config.dropout_rate = 0.1
     config.num_mlp_layers = 3
-    config.output_nodes_size = 128
     config.layer_norm = True
     return config
