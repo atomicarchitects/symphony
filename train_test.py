@@ -12,11 +12,12 @@ import jax.numpy as jnp
 import numpy as np
 
 import train
-from configs import graphmlp, graphnet
+from configs import graphmlp, graphnet, haikugraphmlp
 
 _ALL_CONFIGS = {
     "graphmlp": graphmlp.get_config(),
     "graphnet": graphnet.get_config(),
+    "haikugraphmlp": haikugraphmlp.get_config(),
 }
 
 
@@ -30,7 +31,7 @@ def update_dummy_config(config):
 
 
 class TrainTest(parameterized.TestCase):
-    @parameterized.parameters("graphnet", "graphmlp")
+    @parameterized.parameters("graphnet", "graphmlp", "haikugraphmlp")
     def test_train_and_evaluate(self, config_name: str):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]

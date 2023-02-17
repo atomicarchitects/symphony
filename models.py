@@ -4,6 +4,7 @@ from typing import Callable, Sequence, Union, Optional, Tuple
 
 import e3nn_jax as e3nn
 from flax import linen as nn
+import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
@@ -35,8 +36,6 @@ class MLP(nn.Module):
     """A multi-layer perceptron."""
 
     feature_sizes: Sequence[int]
-    dropout_rate: float = 0
-    deterministic: bool = True
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
     layer_norm: bool = True
 
@@ -46,7 +45,6 @@ class MLP(nn.Module):
         for size in self.feature_sizes:
             x = nn.Dense(features=size)(x)
             x = self.activation(x)
-            x = nn.Dropout(rate=self.dropout_rate, deterministic=self.deterministic)(x)
             if self.layer_norm:
                 x = nn.LayerNorm()(x)
         return x
@@ -185,7 +183,6 @@ class GraphMLP(nn.Module):
     latent_size: int
     num_mlp_layers: int
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
-    dropout_rate: float = 0
     layer_norm: bool = True
     deterministic: bool = True
     position_coeffs_lmax: int = 2
@@ -198,8 +195,6 @@ class GraphMLP(nn.Module):
             species_embedded = species_embedder(nodes.species)
             positions_embedded = MLP(
                 [self.latent_size * self.num_mlp_layers],
-                dropout_rate=self.dropout_rate,
-                deterministic=self.deterministic,
                 activation=self.activation,
                 layer_norm=self.layer_norm,
             )(nodes.positions)
@@ -241,7 +236,6 @@ class GraphNet(nn.Module):
     latent_size: int
     num_mlp_layers: int
     message_passing_steps: int
-    dropout_rate: float = 0
     skip_connections: bool = True
     use_edge_model: bool = True
     layer_norm: bool = True
@@ -256,8 +250,6 @@ class GraphNet(nn.Module):
             species_embedded = species_embedder(nodes.species)
             positions_embedded = MLP(
                 [self.latent_size * self.num_mlp_layers],
-                dropout_rate=self.dropout_rate,
-                deterministic=self.deterministic,
                 activation=jax.nn.relu,
                 layer_norm=self.layer_norm,
             )(nodes.positions)
@@ -282,8 +274,6 @@ class GraphNet(nn.Module):
                 update_edge_fn = jraph.concatenated_args(
                     MLP(
                         mlp_feature_sizes,
-                        dropout_rate=self.dropout_rate,
-                        deterministic=self.deterministic,
                     )
                 )
             else:
@@ -292,15 +282,11 @@ class GraphNet(nn.Module):
             update_node_fn = jraph.concatenated_args(
                 MLP(
                     mlp_feature_sizes,
-                    dropout_rate=self.dropout_rate,
-                    deterministic=self.deterministic,
                 )
             )
             update_global_fn = jraph.concatenated_args(
                 MLP(
                     mlp_feature_sizes,
-                    dropout_rate=self.dropout_rate,
-                    deterministic=self.deterministic,
                 )
             )
 
@@ -337,6 +323,93 @@ class GraphNet(nn.Module):
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
         position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(
+            input_for_position_coeffs
+        )
+        position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
+        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
+
+        return datatypes.Predictions(
+            focus_logits=focus_logits,
+            specie_logits=specie_logits,
+            position_coeffs=position_coeffs,
+        )
+
+
+# Haiku
+class HaikuMLP(hk.Module):
+    """A multi-layer perceptron in Haiku."""
+
+    def __init__(
+        self,
+        feature_sizes: Sequence[int],
+        activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
+        layer_norm: bool = True,
+        name=None,
+    ):
+        super().__init__(name=name)
+        self.feature_sizes = feature_sizes
+        self.activation = activation
+        self.layer_norm = layer_norm
+
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = inputs
+        for size in self.feature_sizes:
+            x = hk.Linear(output_size=size)(x)
+            x = self.activation(x)
+            if self.layer_norm:
+                x = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)(x)
+        return x
+
+
+class HaikuGraphMLP(hk.Module):
+    """Applies an MLP to each node in the graph, with no message-passing."""
+
+    def __init__(
+        self,
+        latent_size: int,
+        num_mlp_layers: int,
+        activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
+        layer_norm: bool = True,
+        position_coeffs_lmax: int = 2,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.latent_size = latent_size
+        self.num_mlp_layers = num_mlp_layers
+        self.activation = activation
+        self.layer_norm = layer_norm
+        self.position_coeffs_lmax = position_coeffs_lmax
+
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
+
+        def embed_node_fn(nodes: datatypes.NodesInfo):
+            species_embedded = species_embedder(nodes.species)
+            positions_embedded = HaikuMLP(
+                [self.latent_size * self.num_mlp_layers],
+                activation=self.activation,
+                layer_norm=self.layer_norm,
+            )(nodes.positions)
+            return hk.Linear(self.latent_size)(
+                jnp.concatenate([species_embedded, positions_embedded], axis=-1)
+            )
+
+        # Embed the nodes.
+        processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
+
+        # Predict the properties.
+        node_embeddings = processed_graphs.nodes
+        true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        target_species_embeddings = species_embedder(graphs.globals.target_species)
+
+        focus_logits = hk.Linear(1)(node_embeddings).squeeze(axis=-1)
+        specie_logits = hk.Linear(NUM_ELEMENTS)(true_focus_node_embeddings)
+
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax)
+        input_for_position_coeffs = jnp.concatenate(
+            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+        )
+        position_coeffs = hk.Linear(RADII.shape[0] * irreps.dim)(
             input_for_position_coeffs
         )
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
