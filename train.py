@@ -99,7 +99,7 @@ def generation_loss(
     res_beta: int,
     res_alpha: int,
     radius_rbf_variance: float,
-):
+) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
         preds (datatypes.Predictions): the model predictions
@@ -109,13 +109,6 @@ def generation_loss(
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
-
-    # We need to ignore the padding nodes and graphs when computing the loss.
-    node_mask, graph_mask = jraph.get_node_padding_mask(
-        graphs
-    ), jraph.get_graph_padding_mask(graphs)
-    assert node_mask.shape == (num_nodes,)
-    assert graph_mask.shape == (num_graphs,)
 
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
@@ -128,11 +121,8 @@ def generation_loss(
         loss_focus = e3nn.scatter_sum(
             -preds.focus_logits * graphs.nodes.focus_probability, nel=graphs.n_node
         )
-        loss_focus += (
-            jnp.log(
-                1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
-            )
-            * graph_mask
+        loss_focus += jnp.log(
+            1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
         )
         return loss_focus
 
@@ -145,7 +135,8 @@ def generation_loss(
         )
 
         return optax.softmax_cross_entropy(
-            graphs.globals.target_species_probability, preds.species_logits
+            logits=preds.species_logits,
+            labels=graphs.globals.target_species_probability,
         )
 
     def position_loss() -> jnp.ndarray:
@@ -163,6 +154,8 @@ def generation_loss(
             res_alpha,
             quadrature="gausslegendre",
             normalization="integral",
+            p_val=1,
+            p_arg=-1,
         )
 
         # position_signal is of shape (num_graphs, num_radii, res_beta, res_alpha)
@@ -172,17 +165,21 @@ def generation_loss(
         position_max = jnp.max(
             position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
         )
+
         sphere_normalizing_factors = position_signal.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
 
         # sphere_normalizing_factors is of shape (num_graphs, num_radii)
-        # assert position_max.shape == (num_graphs,)
         assert sphere_normalizing_factors.shape == (
             num_graphs,
             num_radii,
-        ), sphere_normalizing_factors.shape
+        )
+
+        # position_max is of shape (num_graphs,)
+        position_max = position_max.squeeze(axis=(-3, -2, -1))
+        assert position_max.shape == (num_graphs,)
 
         # Compare distance of target relative to focus to target_radius.
         target_positions = graphs.globals.target_positions
@@ -210,19 +207,16 @@ def generation_loss(
             functools.partial(e3nn.to_s2point, normalization="integral")
         )(preds.position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
-        assert target_positions_logits.shape == (num_graphs, num_radii), (
-            preds.position_coeffs.shape,
-            target_positions.shape,
-            target_positions_logits.shape,
-        )
+        assert target_positions_logits.shape == (num_graphs, num_radii)
+
         return jax.vmap(
-            lambda fr, qr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
+            lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
         )(
-            target_positions_logits,
             radius_weights,
+            target_positions_logits,
             sphere_normalizing_factors,
             position_max,
-        ).squeeze()
+        )
 
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
@@ -412,12 +406,13 @@ def train_and_evaluate(
     train_metrics = None
     for step in range(initial_step, config.num_train_steps + 1):
         # Perform one step of training.
-        graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
-        state, metrics_update = train_step(
-            state,
-            graphs,
-            loss_kwargs=ml_collections.FrozenConfigDict(config.loss_kwargs),
-        )
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+            graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
+            state, metrics_update = train_step(
+                state,
+                graphs,
+                loss_kwargs=ml_collections.FrozenConfigDict(config.loss_kwargs),
+            )
 
         # Update metrics.
         if train_metrics is None:
@@ -452,8 +447,5 @@ def train_and_evaluate(
         if step % config.checkpoint_every_steps == 0 or is_last_step:
             with report_progress.timed("checkpoint"):
                 ckpt.save(state)
-
-    # Stop profiler.
-    profiler.stop()
 
     return state
