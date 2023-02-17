@@ -137,15 +137,15 @@ def generation_loss(
         return loss_focus
 
     def atom_type_loss() -> jnp.ndarray:
-        # specie_logits is of shape (num_graphs, num_elements)
+        # species_logits is of shape (num_graphs, num_elements)
         assert (
-            preds.specie_logits.shape
+            preds.species_logits.shape
             == graphs.globals.target_species_probability.shape
             == (num_graphs, num_elements)
         )
 
         return optax.softmax_cross_entropy(
-            graphs.globals.target_species_probability, preds.specie_logits
+            graphs.globals.target_species_probability, preds.species_logits
         )
 
     def position_loss() -> jnp.ndarray:
@@ -398,9 +398,6 @@ def train_and_evaluate(
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
 
-    # Create the evaluation state, corresponding to a deterministic model.
-    eval_state = state.replace(apply_fn=net.apply)
-
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
         num_train_steps=config.num_train_steps, writer=writer
@@ -443,11 +440,9 @@ def train_and_evaluate(
 
         # # Evaluate on validation and test splits, if required.
         # if step % config.eval_every_steps == 0 or is_last_step:
-        #     eval_state = eval_state.replace(params=state.params)
-
         #     splits = ["validation", "test"]
         #     with report_progress.timed("eval"):
-        #         eval_metrics = evaluate_model(eval_state, datasets, splits=splits)
+        #         eval_metrics = evaluate_model(state, datasets, splits=splits)
         #     for split in splits:
         #         writer.write_scalars(
         #             step, add_prefix_to_keys(eval_metrics[split].compute(), split)
