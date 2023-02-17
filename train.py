@@ -9,7 +9,6 @@ from clu import checkpoint
 from clu import metric_writers
 from clu import metrics
 from clu import parameter_overview
-from clu import profiler
 from clu import periodic_actions
 import haiku as hk
 import e3nn_jax as e3nn
@@ -23,8 +22,8 @@ import jraph
 import ml_collections
 import numpy as np
 import optax
-from dataloader import dataloader
 
+import input_pipeline
 import datatypes
 import models
 from qm9 import load_qm9
@@ -360,7 +359,7 @@ def train_and_evaluate(
     rng = jax.random.PRNGKey(0)
     # datasets = dataloader(rng, molecules, atomic_numbers, 0.1, 5)
     # train_iter = iter(datasets["train"])
-    train_iter = dataloader(
+    train_iter = input_pipeline.dataloader(
         rng,
         molecules,
         atomic_numbers,
