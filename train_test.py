@@ -15,12 +15,13 @@ import ml_collections
 import models
 import datatypes
 import train
-from configs import graphmlp, graphnet, haikugraphmlp
+from configs import graphmlp, graphnet, haikugraphmlp, haikumace
 
 _ALL_CONFIGS = {
     "graphmlp": graphmlp.get_config(),
     "graphnet": graphnet.get_config(),
     "haikugraphmlp": haikugraphmlp.get_config(),
+    "haikumace": haikumace.get_config(),
 }
 
 
@@ -115,7 +116,7 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("graphnet", "graphmlp", "haikugraphmlp")
+    @parameterized.parameters("graphnet", "graphmlp", "haikugraphmlp", "haikumace")
     def test_train_and_evaluate(self, config_name: str):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
