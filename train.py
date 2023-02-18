@@ -26,7 +26,6 @@ import optax
 import input_pipeline
 import datatypes
 import models
-from qm9 import load_qm9
 
 
 @flax.struct.dataclass
@@ -353,22 +352,17 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    molecules = load_qm9("qm9_data")
-    molecules = molecules[:16]  # TODO remove this line
-    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
     rng = jax.random.PRNGKey(0)
-    # datasets = dataloader(rng, molecules, atomic_numbers, 0.1, 5)
-    # train_iter = iter(datasets["train"])
-    train_iter = input_pipeline.dataloader(
+    datasets = input_pipeline.get_datasets(
         rng,
-        molecules,
-        atomic_numbers,
-        epsilon=0.1,
-        cutoff=5.0,
-        max_n_nodes=config.max_n_nodes,
-        max_n_edges=config.max_n_edges,
-        max_n_graphs=config.max_n_graphs,
+        config.root_dir,
+        config.nn_tolerance,
+        config.nn_cutoff,
+        config.max_n_nodes,
+        config.max_n_edges,
+        config.max_n_graphs,
     )
+    train_iter = datasets["train"]
 
     # Create and initialize the network.
     logging.info("Initializing network.")
