@@ -4,6 +4,7 @@ import zipfile
 from functools import cache
 from typing import List
 from urllib.request import urlopen
+from urllib.error import URLError
 
 from ase.atoms import Atoms
 
@@ -20,7 +21,16 @@ def download_url(url: str, root: str) -> str:
     except ImportError:
         progress = False
 
-    data = urlopen(url)
+    try:
+        data = urlopen(url)
+    except URLError:
+        # No internet connection
+        if os.path.exists(file_path):
+            logging.info(f"No internet connection! Using downloaded file: {file_path}")
+            return file_path
+
+        raise
+
     chunk_size = 1024
     total_size = int(data.info()["Content-Length"].strip())
 
