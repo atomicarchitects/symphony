@@ -1,8 +1,9 @@
 """Defines the default training configuration."""
+
 import ml_collections
 
 
-def get_config():
+def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
@@ -14,6 +15,9 @@ def get_config():
     config.checkpoint_every_steps = 10_000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
+    config.num_train_graphs = 50_000
+    config.num_val_graphs = 5_000
+    config.num_test_graphs = 80_000
     config.max_n_nodes = 128
     config.max_n_edges = 1024
     config.max_n_graphs = 16
@@ -22,5 +26,4 @@ def get_config():
         "res_alpha": 51,
         "radius_rbf_variance": 30,
     }
-
     return config

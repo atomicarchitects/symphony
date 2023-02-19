@@ -9,6 +9,7 @@ from absl import flags
 from absl import logging
 from clu import platform
 import jax
+import ml_collections
 from ml_collections import config_flags
 
 import train
@@ -43,7 +44,11 @@ def main(argv):
         platform.ArtifactType.DIRECTORY, FLAGS.workdir, "workdir"
     )
 
-    train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
+    # Freeze config.
+    config = ml_collections.FrozenConfigDict(FLAGS.config)
+
+    # Start training!
+    train.train_and_evaluate(config, FLAGS.workdir)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from typing import Iterator, Sequence, Dict
+from typing import Iterator, Sequence, Dict, Optional
 
 import functools
 import ase
@@ -10,6 +10,7 @@ import matscipy.neighbours
 import numpy as np
 import chex
 import roundmantissa
+import ml_collections
 
 import datatypes
 import dynamic_batcher
@@ -18,42 +19,40 @@ import qm9
 
 def get_datasets(
     rng: chex.PRNGKey,
-    root_dir: str,
-    nn_tolerance: float,
-    nn_cutoff: float,
-    max_n_nodes: int,
-    max_n_edges: int,
-    max_n_graphs: int,
+    config: ml_collections.ConfigDict,
 ) -> Dict[str, Iterator[datatypes.Fragment]]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
-        root_dir: The directory where the QM9 dataset is stored.
-        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
-        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
-        max_n_nodes:
-        max_n_edges:
-        max_n_graphs:
+        config: The configuration.
     Returns:
         An iterator of (batched and padded) fragments.
     """
+    # Load all molecules.
+    all_molecules = qm9.load_qm9(config.root_dir)
+
     # Atomic numbers map to elements H, C, N, O, F.
     atomic_numbers = jnp.array([1, 6, 7, 8, 9])
 
-    all_molecules = qm9.load_qm9(root_dir)
-    rng, rng_shuffle = jax.random.split(rng)
-    indices = jax.random.permutation(rng_shuffle, len(all_molecules))
-
+    # Get different randomness for each split.
     rng, train_rng, val_rng, test_rng = jax.random.split(rng, 4)
     rngs = {
         "train": train_rng,
         "val": val_rng,
         "test": test_rng,
     }
+
+    # Construct partitions of the dataset, to create each split.
+    # Each partition is a list of indices into all_molecules.
+    rng, rng_shuffle = jax.random.split(rng)
+    indices = jax.random.permutation(rng_shuffle, len(all_molecules))
+    graphs_cumsum = np.cumsum(
+        [config.num_train_graphs, config.num_val_graphs, config.num_test_graphs]
+    )
     indices = {
-        "train": indices[:50000],
-        "val": indices[50000:55000],
-        "test": indices[55000:],
+        "train": indices[: graphs_cumsum[0]],
+        "val": indices[graphs_cumsum[0] : graphs_cumsum[1]],
+        "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
     }
     molecules = {
         split: [all_molecules[i] for i in indices[split]]
@@ -64,11 +63,12 @@ def get_datasets(
             rngs[split],
             molecules[split],
             atomic_numbers,
-            nn_tolerance,
-            nn_cutoff,
-            max_n_nodes,
-            max_n_edges,
-            max_n_graphs,
+            config.nn_tolerance,
+            config.nn_cutoff,
+            config.max_n_nodes,
+            config.max_n_edges,
+            config.max_n_graphs,
+            max_iterations=10 if split in ["val", "test"] else None,
         )
         for split in ["train", "val", "test"]
     }
@@ -83,17 +83,18 @@ def dataloader(
     max_n_nodes: int,
     max_n_edges: int,
     max_n_graphs: int,
+    max_iterations: Optional[int] = None,
 ) -> Iterator[datatypes.Fragment]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
         molecules: The molecules to sample from. Each molecule is an ase.Atoms object.
         atomic_numbers: The atomic numbers of the target species. For example, [1, 8] such that [H, O] maps to [0, 1].
-        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
-        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
-        max_n_nodes:
-        max_n_edges:
-        max_n_graphs:
+        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. Only atoms upto (min_nn_dist + nn_tolerance) distance away will be considered as neighbors to the current atom. (Maybe 0.1A or 0.5A is good?)
+        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. Only atoms upto cutoff distance away will be considered as neighbors to the current atom. (Maybe 5A)
+        max_n_nodes: The maximum number of nodes in a batch after padding.
+        max_n_edges: The maximum number of nodes in a batch after padding.
+        max_n_graphs: The maximum number of nodes in a batch after padding.
     Returns:
         An iterator of (batched and padded) fragments.
     """
@@ -104,14 +105,17 @@ def dataloader(
     ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
-    for graphs in dynamic_batcher.dynamically_batch(
+    for iteration, graphs in enumerate(dynamic_batcher.dynamically_batch(
         fragments_pool_iterator(
             rng, graph_molecules, len(atomic_numbers), nn_tolerance
         ),
         max_n_nodes,
         max_n_edges,
         max_n_graphs,
-    ):
+    )):
+        if max_iterations is not None and iteration == max_iterations:
+            break
+
         yield pad_graph_to_nearest_ceil_mantissa(
             graphs,
             n_mantissa_bits=1,
