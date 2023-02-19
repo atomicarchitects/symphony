@@ -2,12 +2,11 @@
 
 import ml_collections
 
-from . import default
-import e3nn_jax as e3nn
+from configs import default
 
 
-def get_config():
-    """Get the hyperparameter configuration for the GraphNetwork model."""
+def get_config() -> ml_collections.ConfigDict:
+    """Get the hyperparameter configuration for the MACE model."""
     config = default.get_config()
 
     # Optimizer.
@@ -15,7 +14,7 @@ def get_config():
     config.learning_rate = 1e-3
 
     # GNN hyperparameters.
-    config.model = "HaikuGraphMLP"
+    config.model = "HaikuMACE"
     config.latent_size = 256
     config.num_mlp_layers = 3
     config.layer_norm = True

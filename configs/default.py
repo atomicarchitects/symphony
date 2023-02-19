@@ -1,8 +1,9 @@
 """Defines the default training configuration."""
+
 import ml_collections
 
 
-def get_config():
+def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
