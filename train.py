@@ -392,20 +392,12 @@ def train_and_evaluate(
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(0)
-    datasets = input_pipeline.get_datasets(
-        rng,
-        config.root_dir,
-        config.nn_tolerance,
-        config.nn_cutoff,
-        config.max_n_nodes,
-        config.max_n_edges,
-        config.max_n_graphs,
-    )
-    train_iter = datasets["train"]
+    datasets = input_pipeline.get_datasets(rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
     rng, init_rng = jax.random.split(rng)
+    train_iter = datasets["train"]
     init_graphs = next(train_iter)
     init_graphs = replace_globals(init_graphs)
     net = create_model(config)
@@ -429,7 +421,8 @@ def train_and_evaluate(
         num_train_steps=config.num_train_steps, writer=writer
     )
     profile = periodic_actions.Profile(
-        logdir=workdir, num_profile_steps=5, profile_duration_ms=0
+        logdir=workdir,
+        num_profile_steps=5,
     )
     hooks = [report_progress, profile]
 

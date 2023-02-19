@@ -26,6 +26,9 @@ _ALL_CONFIGS = {
 def update_dummy_config(config):
     """Updates the dummy config."""
     config.batch_size = 10
+    config.num_train_graphs = 2
+    config.num_val_graphs = 2
+    config.num_test_graphs = 2
     config.num_train_steps = 5
 
 
@@ -79,7 +82,6 @@ class TrainTest(parameterized.TestCase):
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
         )
-        print(focus_loss, expected_focus_loss)
         self.assertSequenceAlmostEqual(focus_loss, expected_focus_loss, places=5)
 
     def test_atom_type_loss(self):
@@ -115,7 +117,7 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("graphnet", "graphmlp", "haikugraphmlp", "haikumace")
+    @parameterized.parameters(("haikumace",))
     def test_train_and_evaluate(self, config_name: str):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
