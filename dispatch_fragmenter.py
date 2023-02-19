@@ -1,6 +1,7 @@
 import argparse
 import os
 import subprocess
+import time
 
 from qm9 import load_qm9
 
@@ -37,6 +38,9 @@ def main(chunk: int = 3000, num_seeds: int = 8):
                 ]
             )
             processes.append(p)
+
+            # wait a bit to avoid overloading the scheduler
+            time.sleep(3.0)
 
     print("Waiting for processes to finish...")
     for p in processes:
