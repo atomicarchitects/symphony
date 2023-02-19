@@ -19,6 +19,7 @@ from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import jraph
+import mace_jax
 import ml_collections
 import numpy as np
 import optax
@@ -26,7 +27,6 @@ import optax
 import input_pipeline
 import datatypes
 import models
-from qm9 import load_qm9
 
 
 @flax.struct.dataclass
@@ -78,6 +78,24 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
     if config.model == "MACE":
         # TODO (ameyad): Implement MACE in Flax.
         raise NotImplementedError("MACE is not yet implemented.")
+    if config.model == "HaikuMACE":
+
+        def model_fn(graphs):
+            return mace_jax.MACE(
+                atomic_inter_scale=config.atomic_inter_scale,
+                atomic_inter_shift=config.atomic_inter_shift,
+                atomic_energies=config.atomic_energies,
+                output_irreps=config.output_irreps,
+                r_max=config.r_max,
+                num_interactions=config.num_interactions,
+                hidden_irreps=config.hidden_irreps,
+                readout_mlp_irreps=config.readout_mlp_irreps,
+                avg_num_neighbors=config.avg_num_neighbors,
+                num_species=config.num_species,
+                radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
+                radial_envelope=e3nn.soft_envelope,
+                max_ell=config.max_ell,
+            )(graphs)
 
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -353,22 +371,17 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    molecules = load_qm9("qm9_data")
-    molecules = molecules[:16]  # TODO remove this line
-    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
     rng = jax.random.PRNGKey(0)
-    # datasets = dataloader(rng, molecules, atomic_numbers, 0.1, 5)
-    # train_iter = iter(datasets["train"])
-    train_iter = input_pipeline.dataloader(
+    datasets = input_pipeline.get_datasets(
         rng,
-        molecules,
-        atomic_numbers,
-        epsilon=0.1,
-        cutoff=5.0,
-        max_n_nodes=config.max_n_nodes,
-        max_n_edges=config.max_n_edges,
-        max_n_graphs=config.max_n_graphs,
+        config.root_dir,
+        config.nn_tolerance,
+        config.nn_cutoff,
+        config.max_n_nodes,
+        config.max_n_edges,
+        config.max_n_graphs,
     )
+    train_iter = datasets["train"]
 
     # Create and initialize the network.
     logging.info("Initializing network.")

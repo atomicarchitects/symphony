@@ -1,4 +1,4 @@
-from typing import Iterator, Sequence
+from typing import Iterator, Sequence, Dict
 
 import functools
 import ase
@@ -13,25 +13,84 @@ import roundmantissa
 
 import datatypes
 import dynamic_batcher
+import qm9
+
+
+def get_datasets(
+    rng: chex.PRNGKey,
+    root_dir: str,
+    nn_tolerance: float,
+    nn_cutoff: float,
+    max_n_nodes: int,
+    max_n_edges: int,
+    max_n_graphs: int,
+) -> Dict[str, Iterator[datatypes.Fragment]]:
+    """Dataloader for the generative model.
+    Args:
+        rng: The random number seed.
+        root_dir: The directory where the QM9 dataset is stored.
+        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
+        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
+        max_n_nodes:
+        max_n_edges:
+        max_n_graphs:
+    Returns:
+        An iterator of (batched and padded) fragments.
+    """
+    # Atomic numbers map to elements H, C, N, O, F.
+    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
+
+    all_molecules = qm9.load_qm9(root_dir)
+    rng, rng_shuffle = jax.random.split(rng)
+    indices = jax.random.permutation(rng_shuffle, len(all_molecules))
+
+    rng, train_rng, val_rng, test_rng = jax.random.split(rng, 4)
+    rngs = {
+        "train": train_rng,
+        "val": val_rng,
+        "test": test_rng,
+    }
+    indices = {
+        "train": indices[:50000],
+        "val": indices[50000:55000],
+        "test": indices[55000:],
+    }
+    molecules = {
+        split: [all_molecules[i] for i in indices[split]]
+        for split in ["train", "val", "test"]
+    }
+    return {
+        split: dataloader(
+            rngs[split],
+            molecules[split],
+            atomic_numbers,
+            nn_tolerance,
+            nn_cutoff,
+            max_n_nodes,
+            max_n_edges,
+            max_n_graphs,
+        )
+        for split in ["train", "val", "test"]
+    }
 
 
 def dataloader(
     rng: chex.PRNGKey,
     molecules: Sequence[ase.Atoms],
     atomic_numbers: jnp.ndarray,
-    epsilon: float,
-    cutoff: float,
-    max_n_nodes: int = 128,
-    max_n_edges: int = 1024,
-    max_n_graphs: int = 16,
+    nn_tolerance: float,
+    nn_cutoff: float,
+    max_n_nodes: int,
+    max_n_edges: int,
+    max_n_graphs: int,
 ) -> Iterator[datatypes.Fragment]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
         molecules: The molecules to sample from. Each molecule is an ase.Atoms object.
         atomic_numbers: The atomic numbers of the target species. For example, [1, 8] such that [H, O] maps to [0, 1].
-        epsilon: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
-        cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
+        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
+        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
         max_n_nodes:
         max_n_edges:
         max_n_graphs:
@@ -40,13 +99,15 @@ def dataloader(
     """
 
     graph_molecules = [
-        ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
+        ase_atoms_to_jraph_graph(molecule, atomic_numbers, nn_cutoff)
         for molecule in molecules
     ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
     for graphs in dynamic_batcher.dynamically_batch(
-        fragments_pool_iterator(rng, graph_molecules, len(atomic_numbers), epsilon),
+        fragments_pool_iterator(
+            rng, graph_molecules, len(atomic_numbers), nn_tolerance
+        ),
         max_n_nodes,
         max_n_edges,
         max_n_graphs,
@@ -65,7 +126,7 @@ def fragments_pool_iterator(
     rng: chex.PRNGKey,
     graph_molecules: Sequence[jraph.GraphsTuple],
     n_species: int,
-    epsilon: float,
+    nn_tolerance: float,
 ) -> Iterator[datatypes.Fragment]:
     """A pool of fragments that are generated on the fly."""
     # TODO: Make this configurable.
@@ -78,7 +139,7 @@ def fragments_pool_iterator(
             indices = jax.random.randint(index_rng, (), 0, len(graph_molecules))
             fragments += list(
                 generate_fragments(
-                    fragment_rng, graph_molecules[indices], n_species, epsilon
+                    fragment_rng, graph_molecules[indices], n_species, nn_tolerance
                 )
             )
             assert all([isinstance(sample, jraph.GraphsTuple) for sample in fragments])
@@ -129,16 +190,15 @@ def pad_graph_to_nearest_ceil_mantissa(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: np.ndarray, cutoff: float
+    atoms: ase.Atoms, atomic_numbers: np.ndarray, nn_cutoff: float
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=cutoff, cell=np.eye(3)
+        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=np.eye(3)
     )
 
     # Get the species indices
     species = np.searchsorted(atomic_numbers, atoms.numbers)
-    # species = jnp.searchsorted(atomic_numbers, atoms.numbers)
 
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(atoms.positions, species),
@@ -186,7 +246,7 @@ def generate_fragments(
     rng: jnp.ndarray,
     graph: jraph.GraphsTuple,
     n_species: int,
-    epsilon: float = 0.01,
+    nn_tolerance: float = 0.01,
 ) -> Iterator[datatypes.Fragment]:
     """Generative sequence for a molecular graph.
 
@@ -194,7 +254,7 @@ def generate_fragments(
         rng: The random number generator.
         graph: The molecular graph.
         atomic_numbers: The atomic numbers of the target species.
-        epsilon: Tolerance for the nearest neighbours.
+        nn_tolerance: Tolerance for the nearest neighbours.
 
     Returns:
         A sequence of fragments.
@@ -213,13 +273,13 @@ def generate_fragments(
     )  # [n_edge]
 
     rng, visited_nodes, frag = _make_first_fragment(
-        rng, graph, dist, n_species, epsilon
+        rng, graph, dist, n_species, nn_tolerance
     )
     yield frag
 
     for _ in range(n - 2):
         rng, visited_nodes, frag = _make_middle_fragment(
-            rng, visited_nodes, graph, dist, n_species, epsilon
+            rng, visited_nodes, graph, dist, n_species, nn_tolerance
         )
         yield frag
 
@@ -228,7 +288,7 @@ def generate_fragments(
     yield _make_last_fragment(graph, n_species)
 
 
-def _make_first_fragment(rng, graph, dist, n_species, epsilon):
+def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance):
     # pick a random initial node
     rng, k = jax.random.split(rng)
     first_node = jax.random.randint(
@@ -237,7 +297,7 @@ def _make_first_fragment(rng, graph, dist, n_species, epsilon):
 
     min_dist = dist[graph.senders == first_node].min()
     targets = graph.receivers[
-        (graph.senders == first_node) & (dist < min_dist + epsilon)
+        (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
     ]
 
     species_probability = _normalized_bitcount(graph.nodes.species[targets], n_species)
@@ -260,14 +320,14 @@ def _make_first_fragment(rng, graph, dist, n_species, epsilon):
     return rng, visited, sample
 
 
-def _make_middle_fragment(rng, visited, graph, dist, n_species, epsilon):
+def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
 
     mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
 
     min_dist = dist[mask].min()
-    mask = mask & (dist < min_dist + epsilon)
+    mask = mask & (dist < min_dist + nn_tolerance)
 
     focus_probability = _normalized_bitcount(senders[mask], n_nodes)
 

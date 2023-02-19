@@ -15,12 +15,13 @@ import ml_collections
 import models
 import datatypes
 import train
-from configs import graphmlp, graphnet, haikugraphmlp
+from configs import graphmlp, graphnet, haikugraphmlp, haikumace
 
 _ALL_CONFIGS = {
     "graphmlp": graphmlp.get_config(),
     "graphnet": graphnet.get_config(),
     "haikugraphmlp": haikugraphmlp.get_config(),
+    "haikumace": haikumace.get_config(),
 }
 
 
@@ -96,7 +97,6 @@ class TrainTest(parameterized.TestCase):
                 -1.3 + scipy.special.logsumexp([1.1, 1.2, 1.3, 1.4, 1.5]),
             ]
         )
-        print(atom_type_loss, expected_atom_type_loss)
         self.assertSequenceAlmostEqual(atom_type_loss, expected_atom_type_loss)
 
     def test_position_loss(self):
@@ -114,10 +114,9 @@ class TrainTest(parameterized.TestCase):
                 -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
             ]
         )
-        print(position_loss, expected_position_loss)
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("graphnet", "graphmlp", "haikugraphmlp")
+    @parameterized.parameters("graphnet", "graphmlp", "haikugraphmlp", "haikumace")
     def test_train_and_evaluate(self, config_name: str):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
