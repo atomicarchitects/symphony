@@ -13,7 +13,7 @@ def main(chunk: int = 3000, num_seeds: int = 8):
     for seed in range(num_seeds):
         for start in range(0, len(qm9), chunk):
             end = start + chunk
-            path = f"fragments_{seed}_{start}_{end}.pkl"
+            path = f"data/fragments_{seed}_{start}_{end}.pkl"
 
             if os.path.exists(path):
                 print(f"Skip {path}")
