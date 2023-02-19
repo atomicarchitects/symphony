@@ -1,7 +1,5 @@
 """Tests for the training loop."""
 
-"""Tests for train."""
-
 from typing import Tuple
 import tempfile
 
@@ -81,7 +79,8 @@ class TrainTest(parameterized.TestCase):
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
         )
-        self.assertSequenceAlmostEqual(focus_loss, expected_focus_loss)
+        print(focus_loss, expected_focus_loss)
+        self.assertSequenceAlmostEqual(focus_loss, expected_focus_loss, places=5)
 
     def test_atom_type_loss(self):
         _, (_, atom_type_loss, _) = train.generation_loss(

@@ -12,7 +12,7 @@ import jraph
 import datatypes
 
 
-RADII = jnp.linspace(0.0, 5.0, 100)
+RADII = jnp.linspace(0.75, 2.02, 0.02)
 NUM_ELEMENTS = 5
 
 
