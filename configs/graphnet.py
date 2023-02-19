@@ -2,10 +2,10 @@
 
 import ml_collections
 
-from . import default
+from configs import default
 
 
-def get_config():
+def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the GraphNetwork model."""
     config = default.get_config()
 
