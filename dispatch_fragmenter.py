@@ -25,7 +25,7 @@ def main(chunk: int = 3000, num_seeds: int = 8):
             p = subprocess.Popen(
                 [
                     "srun",
-                    "--mem=64G",
+                    "--mem=4G",
                     "--ntasks=1",
                     "--cpus-per-task=8",
                     # "--gres=gpu:1",
