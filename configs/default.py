@@ -24,6 +24,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs = {
         "res_beta": 30,
         "res_alpha": 51,
-        "radius_rbf_variance": 30,
+        "radius_rbf_variance": 1e-3,
     }
     return config
