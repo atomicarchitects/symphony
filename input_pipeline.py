@@ -160,23 +160,17 @@ def pad_graph_to_nearest_ceil_mantissa(
     n_max_edges: int = np.iinfo(np.int32).max,
     n_max_graphs: int = np.iinfo(np.int32).max,
 ) -> jraph.GraphsTuple:
-    """Pads a batched `GraphsTuple` to the nearest power of two.
+    """Pads a batched graph to a rounded number of nodes, edges, and graphs.
 
-    For example, if a `GraphsTuple` has 7 nodes, 5 edges and 3 graphs, this method
-    would pad the `GraphsTuple` nodes and edges:
-        7 nodes --> 8 nodes (2^3)
-        5 edges --> 8 edges (2^3)
-
-    And since padding is accomplished using `jraph.pad_with_graphs`, an extra
-    graph and node is added:
-        8 nodes --> 9 nodes
-        3 graphs --> 4 graphs
+    The roundind is done in the mantissa, see `roundmantissa.ceil_mantissa`.
+    After rounding, the number of nodes, edges, and graphs is clipped to the
+    specified min and max values.
 
     Args:
-        graphs_tuple: a batched `GraphsTuple` (can be batch size 1).
+        graphs_tuple: a batched `jraph.GraphsTuple`
 
     Returns:
-        A graphs_tuple batched to the nearest power of two.
+        A padded `jraph.GraphsTuple`.
     """
     n_nodes = graphs_tuple.n_node.sum()
     n_edges = len(graphs_tuple.senders)

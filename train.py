@@ -19,6 +19,7 @@ from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import jraph
+import mace_jax
 import ml_collections
 import numpy as np
 import optax
@@ -77,6 +78,24 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
     if config.model == "MACE":
         # TODO (ameyad): Implement MACE in Flax.
         raise NotImplementedError("MACE is not yet implemented.")
+    if config.model == "HaikuMACE":
+
+        def model_fn(graphs):
+            return mace_jax.MACE(
+                atomic_inter_scale=config.atomic_inter_scale,
+                atomic_inter_shift=config.atomic_inter_shift,
+                atomic_energies=config.atomic_energies,
+                output_irreps=config.output_irreps,
+                r_max=config.r_max,
+                num_interactions=config.num_interactions,
+                hidden_irreps=config.hidden_irreps,
+                readout_mlp_irreps=config.readout_mlp_irreps,
+                avg_num_neighbors=config.avg_num_neighbors,
+                num_species=config.num_species,
+                radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
+                radial_envelope=e3nn.soft_envelope,
+                max_ell=config.max_ell,
+            )(graphs)
 
     raise ValueError(f"Unsupported model: {config.model}.")
 
