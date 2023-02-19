@@ -7,6 +7,7 @@ from qm9 import load_qm9
 
 def main(chunk: int = 3000, num_seeds: int = 8):
     qm9 = load_qm9("qm9_data")
+    processes = []
 
     for seed in range(num_seeds):
         for start in range(0, len(qm9), chunk):
@@ -18,7 +19,9 @@ def main(chunk: int = 3000, num_seeds: int = 8):
                 continue
 
             print(f"Dispatching {path}")
-            subprocess.run(
+
+            # run non-blocking
+            p = subprocess.Popen(
                 [
                     "srun",
                     "python",
@@ -33,6 +36,11 @@ def main(chunk: int = 3000, num_seeds: int = 8):
                     path,
                 ]
             )
+            processes.append(p)
+
+    print("Waiting for processes to finish...")
+    for p in processes:
+        p.wait()
 
 
 if __name__ == "__main__":
