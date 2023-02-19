@@ -1,7 +1,7 @@
 """Library file for executing training and evaluation of generative model."""
 
 import os
-from typing import Any, Dict, Iterable, Tuple, Optional, Union
+from typing import Any, Dict, Iterable, Tuple, Iterator, Union
 
 import functools
 from absl import logging
@@ -116,12 +116,27 @@ def generation_loss(
             == (num_nodes,)
         )
 
+        n_node = graphs.n_node
+        focus_logits = preds.focus_logits
+
+        # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
         loss_focus = e3nn.scatter_sum(
-            -preds.focus_logits * graphs.nodes.focus_probability, nel=graphs.n_node
+            -graphs.nodes.focus_probability * focus_logits, nel=n_node
         )
-        loss_focus += jnp.log(
-            1 + e3nn.scatter_sum(jnp.exp(preds.focus_logits), nel=graphs.n_node)
+
+        # This is basically log(1 + sum(exp(fv))) for each graph.
+        # But we subtract out the maximum fv per graph for numerical stability.
+        focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node)
+        focus_logits_max_expanded = e3nn.scatter_max(
+            focus_logits, nel=n_node, map_back=True
         )
+        focus_logits -= focus_logits_max_expanded
+        loss_focus += focus_logits_max + jnp.log(
+            jnp.exp(-focus_logits_max)
+            + e3nn.scatter_sum(jnp.exp(focus_logits), nel=n_node)
+        )
+
+        assert loss_focus.shape == (num_graphs,)
         return loss_focus
 
     def atom_type_loss() -> jnp.ndarray:
@@ -132,10 +147,13 @@ def generation_loss(
             == (num_graphs, num_elements)
         )
 
-        return optax.softmax_cross_entropy(
+        loss_atom_type = optax.softmax_cross_entropy(
             logits=preds.species_logits,
             labels=graphs.globals.target_species_probability,
         )
+
+        assert loss_atom_type.shape == (num_graphs,)
+        return loss_atom_type
 
     def position_loss() -> jnp.ndarray:
         # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
@@ -159,7 +177,7 @@ def generation_loss(
         # position_signal is of shape (num_graphs, num_radii, res_beta, res_alpha)
         assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
 
-        # For numerical stability, we subtract out the maximum value over each sphere before exponentiating.
+        # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_max = jnp.max(
             position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
         )
@@ -207,7 +225,7 @@ def generation_loss(
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
-        return jax.vmap(
+        loss_position = jax.vmap(
             lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
         )(
             radius_weights,
@@ -216,13 +234,12 @@ def generation_loss(
             position_max,
         )
 
+        assert loss_position.shape == (num_graphs,)
+        return loss_position
+
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
-
-    assert (
-        loss_focus.shape == loss_atom_type.shape == loss_position.shape == (num_graphs,)
-    )
 
     total_loss = loss_focus + (loss_atom_type + loss_position) * (
         1 - graphs.globals.stop
@@ -308,7 +325,10 @@ def evaluate_step(
 
 
 def evaluate_model(
-    state: train_state.TrainState, datasets, splits: Iterable[str]
+    state: train_state.TrainState,
+    datasets: Iterator[datatypes.Fragment],
+    splits: Iterable[str],
+    loss_kwargs: Dict[str, Union[float, int]],
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -318,8 +338,8 @@ def evaluate_model(
         split_metrics = None
 
         # Loop over graphs.
-        for graphs in datasets[split].as_numpy_iterator():
-            split_metrics_update = evaluate_step(state, graphs)
+        for graphs in datasets[split]:
+            split_metrics_update = evaluate_step(state, graphs, loss_kwargs)
 
             # Update metrics.
             if split_metrics is None:
@@ -426,15 +446,17 @@ def train_and_evaluate(
             )
             train_metrics = None
 
-        # # Evaluate on validation and test splits, if required.
-        # if step % config.eval_every_steps == 0 or is_last_step:
-        #     splits = ["validation", "test"]
-        #     with report_progress.timed("eval"):
-        #         eval_metrics = evaluate_model(state, datasets, splits=splits)
-        #     for split in splits:
-        #         writer.write_scalars(
-        #             step, add_prefix_to_keys(eval_metrics[split].compute(), split)
-        #         )
+        # Evaluate on validation and test splits, if required.
+        if step % config.eval_every_steps == 0 or is_last_step:
+            splits = ["val", "test"]
+            with report_progress.timed("eval"):
+                eval_metrics = evaluate_model(
+                    state, datasets, splits, config.loss_kwargs
+                )
+            for split in splits:
+                writer.write_scalars(
+                    step, add_prefix_to_keys(eval_metrics[split].compute(), split)
+                )
 
         # Checkpoint model, if required.
         if step % config.checkpoint_every_steps == 0 or is_last_step:

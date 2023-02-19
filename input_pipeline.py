@@ -29,10 +29,10 @@ def get_datasets(
     Args:
         rng: The random number seed.
         root_dir: The directory where the QM9 dataset is stored.
-        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
-        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
-        max_n_nodes:
-        max_n_edges:
+        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. Only atoms upto (min_nn_dist + nn_tolerance) distance away will be considered as neighbors to the current atom. (Maybe 0.1A or 0.5A is good?)
+        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. Only atoms upto cutoff distance away will be considered as neighbors to the current atom. (Maybe 5A)
+        max_n_nodes: The maximum number of nodes in a batch before padding.
+        max_n_edges: The m
         max_n_graphs:
     Returns:
         An iterator of (batched and padded) fragments.
@@ -89,8 +89,8 @@ def dataloader(
         rng: The random number seed.
         molecules: The molecules to sample from. Each molecule is an ase.Atoms object.
         atomic_numbers: The atomic numbers of the target species. For example, [1, 8] such that [H, O] maps to [0, 1].
-        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. (Maybe 0.1A or 0.5A is good?)
-        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. (Maybe 5A)
+        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. Only atoms upto (min_nn_dist + nn_tolerance) distance away will be considered as neighbors to the current atom. (Maybe 0.1A or 0.5A is good?)
+        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. Only atoms upto cutoff distance away will be considered as neighbors to the current atom. (Maybe 5A)
         max_n_nodes:
         max_n_edges:
         max_n_graphs:
