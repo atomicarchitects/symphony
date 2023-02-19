@@ -25,7 +25,10 @@ def main(chunk: int = 3000, num_seeds: int = 8):
             p = subprocess.Popen(
                 [
                     "srun",
-                    "--cpu_bind=cores",
+                    "--mem=64G",
+                    "--ntasks=1",
+                    "--cpus-per-task=8",
+                    # "--gres=gpu:1",
                     "python",
                     "fragmenter.py",
                     "--seed",
