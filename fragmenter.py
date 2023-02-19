@@ -1,4 +1,5 @@
 import argparse
+import logging
 import pickle
 
 import jax
@@ -43,6 +44,8 @@ def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragment
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--start", type=int, default=0)
