@@ -36,7 +36,9 @@ def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragment
         "target_species_probability": tf.TensorSpec(
             shape=(1, len(atomic_numbers)), dtype=tf.float32
         ),
-        # n_node and n_edge can be inferred from the shape of the positions and senders
+        # n_node and n_edge
+        "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
+        "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
     }
 
     def generator():
@@ -74,6 +76,8 @@ def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragment
                     "target_species_probability": frag.globals.target_species_probability.astype(
                         np.float32
                     ),
+                    "n_node": frag.n_node.astype(np.int32),
+                    "n_edge": frag.n_edge.astype(np.int32),
                 }
 
     dataset = tf.data.Dataset.from_generator(generator, output_signature=signature)
