@@ -44,7 +44,7 @@ def main(chunk: int = 3000, num_seeds: int = 8, root_dir: str = "data"):
             processes.append(p)
 
             # wait a bit to avoid overloading the scheduler
-            time.sleep(3.0)
+            time.sleep(10.0)
 
     print("Waiting for processes to finish...")
     for p in processes:
