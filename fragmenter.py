@@ -14,7 +14,10 @@ from qm9 import load_qm9
 
 def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragments.pkl"):
     seed = jax.random.PRNGKey(seed)
-    molecules = load_qm9("qm9_data")[start:end]
+    molecules = load_qm9("qm9_data")
+
+    if start is not None and end is not None:
+        molecules = molecules[start:end]
 
     atomic_numbers = jnp.array([1, 6, 7, 8, 9])
     epsilon = 0.125  # Angstroms
@@ -91,8 +94,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--start", type=int, default=0)
-    parser.add_argument("--end", type=int, default=3000)
+    parser.add_argument("--start", type=int, default=None)
+    parser.add_argument("--end", type=int, default=None)
     parser.add_argument("--output", type=str, default="fragments")
     args = parser.parse_args()
     main(**vars(args))
