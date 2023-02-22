@@ -442,7 +442,7 @@ class HaikuMACE(hk.Module):
     ):
         super().__init__(name=name)
         self.latent_size = latent_size
-        self.output_irreps = output_irreps
+        self.output_irreps = e3nn.Irreps(output_irreps)
         self.r_max = r_max
         self.num_interactions = num_interactions
         self.hidden_irreps = hidden_irreps
@@ -474,32 +474,34 @@ class HaikuMACE(hk.Module):
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
         )(vectors, species, graphs.senders, graphs.receivers)
+        assert node_embeddings.shape == (
+            len(species),
+            self.num_interactions,
+            self.output_irreps.dim,
+        )
+        node_embeddings: e3nn.IrrepsArray
+        node_embeddings = node_embeddings.axis_to_mul(1)
 
         # Predict the properties.
         # node_embeddings = processed_graphs.nodes
         true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
-        focus_logits = e3nn.haiku.Linear("64x0e")(node_embeddings)
-        # focus_logits = focus_logits.squeeze(axis=-1)
+        focus_logits = e3nn.haiku.Linear("0e")(node_embeddings)
+        focus_logits = focus_logits.array.squeeze(axis=-1)
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[128, 128, 128, 128, 128, 128, NUM_ELEMENTS],
             act=jax.nn.softplus,
-        )(true_focus_node_embeddings)
+        )(true_focus_node_embeddings.filter(keep="0e")).array
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        # TODO: I don't think this is the correct way to handle reshaping
-        target_species_embeddings = target_species_embeddings.reshape(
-            true_focus_node_embeddings.shape
-        )
         input_for_position_coeffs = e3nn.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
-        position_coeffs = e3nn.haiku.Linear(
-            f"{RADII.shape[0] * irreps.dim}x0e+{RADII.shape[0] * irreps.dim}x1o"
-        )(input_for_position_coeffs)
-        position_coeffs = position_coeffs.reshape((-1, RADII.shape[0], irreps.dim))
-        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
+        position_coeffs = e3nn.haiku.Linear(irreps * len(RADII))(
+            input_for_position_coeffs
+        )
+        position_coeffs = position_coeffs.mul_to_axis(len(RADII))
 
         return datatypes.Predictions(
             focus_logits=focus_logits,

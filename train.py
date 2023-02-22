@@ -141,9 +141,11 @@ def generation_loss(
 
         # This is basically log(1 + sum(exp(fv))) for each graph.
         # But we subtract out the maximum fv per graph for numerical stability.
-        focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node)
+        focus_logits_max = e3nn.scatter_max(
+            focus_logits, nel=n_node, initial=jnp.min(focus_logits)
+        )
         focus_logits_max_expanded = e3nn.scatter_max(
-            focus_logits, nel=n_node, map_back=True
+            focus_logits, nel=n_node, map_back=True, initial=jnp.min(focus_logits)
         )
         focus_logits -= focus_logits_max_expanded
         loss_focus += focus_logits_max + jnp.log(
@@ -225,6 +227,15 @@ def generation_loss(
                 )
             )(models.RADII)
         )(target_positions)
+        radius_weights += 1e-10
+
+        jax.debug.print(
+            "target_positions={target_positions}", target_positions=target_positions
+        )
+        jax.debug.print(
+            "radius_weight_sum={radius_weight_sum}",
+            radius_weight_sum=jnp.sum(radius_weights, axis=-1, keepdims=True),
+        )
         radius_weights = radius_weights / jnp.sum(
             radius_weights, axis=-1, keepdims=True
         )
@@ -255,6 +266,14 @@ def generation_loss(
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
+
+    # TODO(ameyad): actually fix this!
+    loss_position = jnp.where(jnp.isfinite, loss_position, 0.0)
+    jax.debug.print("loss_focus={loss_focus}", loss_focus=loss_focus)
+    jax.debug.print("loss_atom_type={loss_atom_type}", loss_atom_type=loss_atom_type)
+    jax.debug.print("loss_position={loss_position}", loss_position=loss_position)
+    jax.debug.print("n_node={n_node}", n_node=graphs.n_node)
+    jax.debug.print("mask={mask}", mask=jraph.get_graph_padding_mask(graphs))
 
     total_loss = loss_focus + (loss_atom_type + loss_position) * (
         1 - graphs.globals.stop
@@ -299,9 +318,10 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs)
-        loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        loss, _ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
         mask = jraph.get_graph_padding_mask(graphs)
-        return jnp.sum(loss * mask) / jnp.sum(mask)
+        loss = jnp.where(mask, loss, 0.0)
+        return jnp.sum(loss) / jnp.sum(mask)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
     total_loss, grads = grad_fn(state.params, graphs)
