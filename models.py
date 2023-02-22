@@ -8,6 +8,7 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
+import mace_jax
 
 import datatypes
 
@@ -413,6 +414,91 @@ class HaikuGraphMLP(hk.Module):
             input_for_position_coeffs
         )
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
+        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
+
+        return datatypes.Predictions(
+            focus_logits=focus_logits,
+            species_logits=species_logits,
+            position_coeffs=position_coeffs,
+        )
+
+
+class HaikuMACE(hk.Module):
+    """Wrapper class for the haiku version of MACE."""
+
+    def __init__(
+        self,
+        latent_size: int,
+        output_irreps: str,
+        r_max: int | float,
+        num_interactions: int,
+        hidden_irreps: str,
+        readout_mlp_irreps: str,
+        avg_num_neighbors: int,
+        num_species: int,
+        max_ell,
+        position_coeffs_lmax: int = 2,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.latent_size = latent_size
+        self.output_irreps = output_irreps
+        self.r_max = r_max
+        self.num_interactions = num_interactions
+        self.hidden_irreps = hidden_irreps
+        self.readout_mlp_irreps = readout_mlp_irreps
+        self.avg_num_neighbors = avg_num_neighbors
+        self.num_species = num_species
+        self.max_ell = max_ell
+        self.position_coeffs_lmax = position_coeffs_lmax
+
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
+
+        vectors = (
+            graphs.nodes.positions[graphs.receivers]
+            - graphs.nodes.positions[graphs.senders]
+        )
+        species = graphs.nodes.species
+
+        # Predict the properties.
+        node_embeddings = mace_jax.modules.MACE(
+            output_irreps=self.output_irreps,
+            r_max=self.r_max,
+            num_interactions=self.num_interactions,
+            hidden_irreps=self.hidden_irreps,
+            readout_mlp_irreps=self.readout_mlp_irreps,
+            avg_num_neighbors=self.avg_num_neighbors,
+            num_species=self.num_species,
+            radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
+            radial_envelope=e3nn.soft_envelope,
+            max_ell=self.max_ell,
+        )(vectors, species, graphs.senders, graphs.receivers)
+
+        # Predict the properties.
+        # node_embeddings = processed_graphs.nodes
+        true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        target_species_embeddings = species_embedder(graphs.globals.target_species)
+
+        focus_logits = e3nn.haiku.Linear("64x0e")(node_embeddings)
+        # focus_logits = focus_logits.squeeze(axis=-1)
+        species_logits = e3nn.haiku.MultiLayerPerceptron(
+            list_neurons=[128, 128, 128, 128, 128, 128, NUM_ELEMENTS],
+            act=jax.nn.softplus,
+        )(true_focus_node_embeddings)
+
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
+        # TODO: I don't think this is the correct way to handle reshaping
+        target_species_embeddings = target_species_embeddings.reshape(
+            true_focus_node_embeddings.shape
+        )
+        input_for_position_coeffs = e3nn.concatenate(
+            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+        )
+        position_coeffs = e3nn.haiku.Linear(
+            f"{RADII.shape[0] * irreps.dim}x0e+{RADII.shape[0] * irreps.dim}x1o"
+        )(input_for_position_coeffs)
+        position_coeffs = position_coeffs.reshape((-1, RADII.shape[0], irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
 
         return datatypes.Predictions(

@@ -19,7 +19,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_mlp_layers = 3
     config.layer_norm = True
 
-    config.output_irreps = "128x0e + 32x1o + 32x2e + 32x3o + 32x4e + 32x5o"
+    config.output_irreps = "128x0e"
+    # config.output_irreps = "128x0e + 32x1o + 32x2e + 32x3o + 32x4e + 32x5o"
     config.r_max = 5
     config.num_interactions = 2
     config.hidden_irreps = "128x0e + 128x1o + 128x2e"
