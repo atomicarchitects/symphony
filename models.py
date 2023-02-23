@@ -484,6 +484,14 @@ class HaikuMACE(hk.Module):
 
         true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
         target_species_embeddings = species_embedder(graphs.globals.target_species)
+        target_species_embeddings = hk.Linear(
+            true_focus_node_embeddings.irreps.num_irreps
+        )(target_species_embeddings)
+
+        assert (
+            target_species_embeddings.shape[-1]
+            == true_focus_node_embeddings.irreps.num_irreps
+        )
 
         focus_logits = e3nn.haiku.Linear("0e")(node_embeddings)
         focus_logits = focus_logits.array.squeeze(axis=-1)
@@ -496,8 +504,8 @@ class HaikuMACE(hk.Module):
         input_for_position_coeffs = e3nn.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
-        position_coeffs = e3nn.haiku.Linear(irreps * len(RADII))(
-            input_for_position_coeffs
+        position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(
+            target_species_embeddings * true_focus_node_embeddings
         )
         position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
 
