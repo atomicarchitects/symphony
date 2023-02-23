@@ -15,6 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # GNN hyperparameters.
     config.model = "HaikuMACE"
+    config.latent_size = 128
     config.output_irreps = "128x0e"
     config.r_max = 5
     config.num_interactions = 1
