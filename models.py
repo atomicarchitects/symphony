@@ -462,7 +462,7 @@ class HaikuMACE(hk.Module):
         species = graphs.nodes.species
 
         # Predict the properties.
-        node_embeddings = mace_jax.modules.MACE(
+        node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
             output_irreps=self.output_irreps,
             r_max=self.r_max,
             num_interactions=self.num_interactions,
@@ -474,16 +474,14 @@ class HaikuMACE(hk.Module):
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
         )(vectors, species, graphs.senders, graphs.receivers)
+
         assert node_embeddings.shape == (
             len(species),
             self.num_interactions,
             self.output_irreps.dim,
         )
-        node_embeddings: e3nn.IrrepsArray
-        node_embeddings = node_embeddings.axis_to_mul(1)
+        node_embeddings = node_embeddings.axis_to_mul(axis=1)
 
-        # Predict the properties.
-        # node_embeddings = processed_graphs.nodes
         true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
         target_species_embeddings = species_embedder(graphs.globals.target_species)
 
@@ -501,7 +499,7 @@ class HaikuMACE(hk.Module):
         position_coeffs = e3nn.haiku.Linear(irreps * len(RADII))(
             input_for_position_coeffs
         )
-        position_coeffs = position_coeffs.mul_to_axis(len(RADII))
+        position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
