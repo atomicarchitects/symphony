@@ -267,8 +267,6 @@ def generation_loss(
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
 
-    # TODO(ameyad): actually fix this!
-    loss_position = jnp.where(jnp.isfinite, loss_position, 0.0)
     jax.debug.print("loss_focus={loss_focus}", loss_focus=loss_focus)
     jax.debug.print("loss_atom_type={loss_atom_type}", loss_atom_type=loss_atom_type)
     jax.debug.print("loss_position={loss_position}", loss_position=loss_position)

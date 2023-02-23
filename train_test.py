@@ -30,7 +30,7 @@ def update_dummy_config(config):
     config.num_train_graphs = 2
     config.num_val_graphs = 2
     config.num_test_graphs = 2
-    config.num_train_steps = 1
+    config.num_train_steps = 10
 
 
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
@@ -123,8 +123,10 @@ class TrainTest(parameterized.TestCase):
     @parameterized.parameters(["haikumace"])
     # @parameterized.parameters("haikumace", "graphmlp")
     def test_train_and_evaluate(self, config_name: str):
-        # jax.config.update("jax_debug_nans", True)
-        # jax.config.update("jax_debug_infs", True)
+        # Ensure NaNs and Infs are detected.
+        jax.config.update("jax_debug_nans", True)
+        jax.config.update("jax_debug_infs", True)
+
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
         update_dummy_config(config)
