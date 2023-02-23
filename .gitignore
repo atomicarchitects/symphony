@@ -162,3 +162,5 @@ cython_debug/
 graphmlp
 graphnet
 qm9_data
+*.pb
+*.metadata
