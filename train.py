@@ -78,10 +78,8 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
     if config.model == "HaikuMACE":
 
         def model_fn(graphs):
-            return mace_jax.modules.MACE(
-                atomic_inter_scale=config.atomic_inter_scale,
-                atomic_inter_shift=config.atomic_inter_shift,
-                atomic_energies=config.atomic_energies,
+            return models.HaikuMACE(
+                latent_size=config.latent_size,
                 output_irreps=config.output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
@@ -89,10 +87,9 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
                 readout_mlp_irreps=config.readout_mlp_irreps,
                 avg_num_neighbors=config.avg_num_neighbors,
                 num_species=config.num_species,
-                radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
-                radial_envelope=e3nn.soft_envelope,
                 max_ell=config.max_ell,
             )(graphs)
+
         model_fn = hk.transform(model_fn)
         return hk.without_apply_rng(model_fn)
 
@@ -144,9 +141,11 @@ def generation_loss(
 
         # This is basically log(1 + sum(exp(fv))) for each graph.
         # But we subtract out the maximum fv per graph for numerical stability.
-        focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node)
+        focus_logits_max = e3nn.scatter_max(
+            focus_logits, nel=n_node, initial=jnp.min(focus_logits)
+        )
         focus_logits_max_expanded = e3nn.scatter_max(
-            focus_logits, nel=n_node, map_back=True
+            focus_logits, nel=n_node, map_back=True, initial=jnp.min(focus_logits)
         )
         focus_logits -= focus_logits_max_expanded
         loss_focus += focus_logits_max + jnp.log(
@@ -228,6 +227,15 @@ def generation_loss(
                 )
             )(models.RADII)
         )(target_positions)
+        radius_weights += 1e-10
+
+        jax.debug.print(
+            "target_positions={target_positions}", target_positions=target_positions
+        )
+        jax.debug.print(
+            "radius_weight_sum={radius_weight_sum}",
+            radius_weight_sum=jnp.sum(radius_weights, axis=-1, keepdims=True),
+        )
         radius_weights = radius_weights / jnp.sum(
             radius_weights, axis=-1, keepdims=True
         )
@@ -258,6 +266,12 @@ def generation_loss(
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
+
+    jax.debug.print("loss_focus={loss_focus}", loss_focus=loss_focus)
+    jax.debug.print("loss_atom_type={loss_atom_type}", loss_atom_type=loss_atom_type)
+    jax.debug.print("loss_position={loss_position}", loss_position=loss_position)
+    jax.debug.print("n_node={n_node}", n_node=graphs.n_node)
+    jax.debug.print("mask={mask}", mask=jraph.get_graph_padding_mask(graphs))
 
     total_loss = loss_focus + (loss_atom_type + loss_position) * (
         1 - graphs.globals.stop
@@ -302,9 +316,10 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs)
-        loss, *_ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        loss, _ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
         mask = jraph.get_graph_padding_mask(graphs)
-        return jnp.sum(loss * mask) / jnp.sum(mask)
+        loss = jnp.where(mask, loss, 0.0)
+        return jnp.sum(loss) / jnp.sum(mask)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
     total_loss, grads = grad_fn(state.params, graphs)
