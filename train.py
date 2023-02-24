@@ -1,28 +1,31 @@
 """Library file for executing training and evaluation of generative model."""
 
-import os
-from typing import Any, Dict, Iterable, Tuple, Iterator, Union
-
 import functools
-from absl import logging
-from clu import checkpoint
-from clu import metric_writers
-from clu import metrics
-from clu import parameter_overview
-from clu import periodic_actions
-import haiku as hk
+import os
+from typing import Any, Dict, Iterable, Iterator, Tuple, Union
+
 import e3nn_jax as e3nn
 import flax
 import flax.core
 import flax.linen as nn
-from flax.training import train_state
+import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
 import numpy as np
 import optax
+from absl import logging
+from clu import (
+    checkpoint,
+    metric_writers,
+    metrics,
+    parameter_overview,
+    periodic_actions,
+)
+from flax.training import train_state
 
+import datatypes
 import input_pipeline
 import input_pipeline_tf
 import datatypes
@@ -128,32 +131,21 @@ def generation_loss(
 
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
-        assert (
-            preds.focus_logits.shape
-            == graphs.nodes.focus_probability.shape
-            == (num_nodes,)
-        )
+        assert preds.focus_logits.shape == graphs.nodes.focus_probability.shape == (num_nodes,)
 
         n_node = graphs.n_node
         focus_logits = preds.focus_logits
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
-        loss_focus = e3nn.scatter_sum(
-            -graphs.nodes.focus_probability * focus_logits, nel=n_node
-        )
+        loss_focus = e3nn.scatter_sum(-graphs.nodes.focus_probability * focus_logits, nel=n_node)
 
         # This is basically log(1 + sum(exp(fv))) for each graph.
         # But we subtract out the maximum fv per graph for numerical stability.
-        focus_logits_max = e3nn.scatter_max(
-            focus_logits, nel=n_node, initial=jnp.min(focus_logits)
-        )
-        focus_logits_max_expanded = e3nn.scatter_max(
-            focus_logits, nel=n_node, map_back=True, initial=jnp.min(focus_logits)
-        )
+        focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node, initial=0.0)
+        focus_logits_max_expanded = e3nn.scatter_max(focus_logits, nel=n_node, map_back=True, initial=0.0)
         focus_logits -= focus_logits_max_expanded
         loss_focus += focus_logits_max + jnp.log(
-            jnp.exp(-focus_logits_max)
-            + e3nn.scatter_sum(jnp.exp(focus_logits), nel=n_node)
+            jnp.exp(-focus_logits_max) + e3nn.scatter_sum(jnp.exp(focus_logits), nel=n_node)
         )
 
         assert loss_focus.shape == (num_graphs,)
@@ -161,11 +153,7 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # species_logits is of shape (num_graphs, num_elements)
-        assert (
-            preds.species_logits.shape
-            == graphs.globals.target_species_probability.shape
-            == (num_graphs, num_elements)
-        )
+        assert preds.species_logits.shape == graphs.globals.target_species_probability.shape == (num_graphs, num_elements)
 
         loss_atom_type = optax.softmax_cross_entropy(
             logits=preds.species_logits,
@@ -198,13 +186,9 @@ def generation_loss(
         assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
 
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_max = jnp.max(
-            position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
-        )
+        position_max = jnp.max(position_signal.grid_values, axis=(-3, -2, -1), keepdims=True)
 
-        sphere_normalizing_factors = position_signal.apply(
-            lambda pos: jnp.exp(pos - position_max)
-        ).integrate()
+        sphere_normalizing_factors = position_signal.apply(lambda pos: jnp.exp(pos - position_max)).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
 
         # sphere_normalizing_factors is of shape (num_graphs, num_radii)
@@ -224,10 +208,7 @@ def generation_loss(
         # Get radius weights from the true distribution, described by a RBF kernel around the target positions.
         radius_weights = jax.vmap(
             lambda target_position: jax.vmap(
-                lambda radius: jnp.exp(
-                    -((radius - jnp.linalg.norm(target_position)) ** 2)
-                    / (2 * radius_rbf_variance)
-                )
+                lambda radius: jnp.exp(-((radius - jnp.linalg.norm(target_position)) ** 2) / (2 * radius_rbf_variance))
             )(models.RADII)
         )(target_positions)
         radius_weights += 1e-10
@@ -241,15 +222,13 @@ def generation_loss(
 
         # Compute f(r*, rhat*) which is our model predictions for the target positions.
         target_positions = e3nn.IrrepsArray("1o", target_positions)
-        target_positions_logits = jax.vmap(
-            functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.position_coeffs, target_positions)
+        target_positions_logits = jax.vmap(functools.partial(e3nn.to_s2point, normalization="integral"))(
+            preds.position_coeffs, target_positions
+        )
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
-        loss_position = jax.vmap(
-            lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
-        )(
+        loss_position = jax.vmap(lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c)(
             radius_weights,
             target_positions_logits,
             sphere_normalizing_factors,
@@ -314,9 +293,7 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
     preds = get_predictions(state, graphs)
-    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
-        preds=preds, graphs=graphs, **loss_kwargs
-    )
+    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
 
     # Take mean over valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
@@ -362,9 +339,7 @@ def evaluate_model(
     return eval_metrics
 
 
-def train_and_evaluate(
-    config: ml_collections.FrozenConfigDict, workdir: str
-) -> train_state.TrainState:
+def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) -> train_state.TrainState:
     """Execute model training and evaluation loop.
 
     Args:
@@ -409,9 +384,7 @@ def train_and_evaluate(
     initial_step = int(state.step) + 1
 
     # Hooks called periodically during training.
-    report_progress = periodic_actions.ReportProgress(
-        num_train_steps=config.num_train_steps, writer=writer
-    )
+    report_progress = periodic_actions.ReportProgress(num_train_steps=config.num_train_steps, writer=writer)
     profile = periodic_actions.Profile(
         logdir=workdir,
         num_profile_steps=5,
@@ -446,22 +419,16 @@ def train_and_evaluate(
         # Log, if required.
         is_last_step = step == config.num_train_steps
         if step % config.log_every_steps == 0 or is_last_step:
-            writer.write_scalars(
-                step, add_prefix_to_keys(train_metrics.compute(), "train")
-            )
+            writer.write_scalars(step, add_prefix_to_keys(train_metrics.compute(), "train"))
             train_metrics = None
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             splits = ["val", "test"]
             with report_progress.timed("eval"):
-                eval_metrics = evaluate_model(
-                    state, datasets, splits, config.loss_kwargs
-                )
+                eval_metrics = evaluate_model(state, datasets, splits, config.loss_kwargs)
             for split in splits:
-                writer.write_scalars(
-                    step, add_prefix_to_keys(eval_metrics[split].compute(), split)
-                )
+                writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split].compute(), split))
 
         # Checkpoint model, if required.
         if step % config.checkpoint_every_steps == 0 or is_last_step:
