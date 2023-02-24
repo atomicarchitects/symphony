@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
+import flax.linen as nn
 
 import datatypes
 

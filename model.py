@@ -59,9 +59,7 @@ def atom_type_fn(x):
     # choosing element type for the next atom
     # inputs: atom feature vectors
     # outputs: P(H), P(C), P(N), P(O), P(F)
-    return e3nn.haiku.MultiLayerPerceptron(
-        list_neurons=[128, 128, 128, 128, 128, 128, 5], act=jax.nn.softplus
-    )(x)
+    return e3nn.haiku.MultiLayerPerceptron(list_neurons=[128, 128, 128, 128, 128, 128, 5], act=jax.nn.softplus)(x)
 
 
 @hk.without_apply_rng
@@ -75,9 +73,7 @@ def position_fn(x, z):
     # get atom type embedding
     z = hk.Embed(5, 128)(z)  # (128)
     # radial/angular distribution
-    return e3nn.haiku.Linear(Irreps("64x0e+64x1o"))(
-        x * z
-    )  # this architecture is temporary
+    return e3nn.haiku.Linear(Irreps("64x0e+64x1o"))(x * z)  # this architecture is temporary
 
 
 def model_run(w: WeightTuple, mace_input: MaceInput):
@@ -87,9 +83,7 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     features = mace_apply(w.mace, mace_input)  # (atoms, irreps)
 
     # get focus
-    focus_logits = jnp.concatenate(
-        [focus_fn.apply(w.focus, features), jnp.array([0])]  # (atoms)
-    )
+    focus_logits = jnp.concatenate([focus_fn.apply(w.focus, features), jnp.array([0])])  # (atoms)
     focus_probs = jax.nn.softmax(focus_logits)
     key, new_key = jax.random.split(key)
     focus_pred = jax.random.choice(new_key, jnp.arange(len(focus_probs)), p=focus_probs)
@@ -102,9 +96,7 @@ def model_run(w: WeightTuple, mace_input: MaceInput):
     atom_type = jax.random.choice(new_key, jnp.arange(5), p=atom_type_dist)
 
     # get position distribution
-    position_coeffs = position_fn.apply(
-        w.position, features[focus_true], atom_type
-    )  # IrrepsArray (300, irreps)
+    position_coeffs = position_fn.apply(w.position, features[focus_true], atom_type)  # IrrepsArray (300, irreps)
 
     return Predictions(
         focus_pred == len(focus_probs) - 1,  # stop (global)

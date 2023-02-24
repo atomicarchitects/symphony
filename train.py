@@ -213,9 +213,7 @@ def generation_loss(
         )(target_positions)
         radius_weights += 1e-10
 
-        radius_weights = radius_weights / jnp.sum(
-            radius_weights, axis=-1, keepdims=True
-        )
+        radius_weights = radius_weights / jnp.sum(radius_weights, axis=-1, keepdims=True)
 
         # radius_weights is of shape (num_graphs, num_radii)
         assert radius_weights.shape == (num_graphs, num_radii)
@@ -242,9 +240,7 @@ def generation_loss(
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
 
-    total_loss = loss_focus + (loss_atom_type + loss_position) * (
-        1 - graphs.globals.stop
-    )
+    total_loss = loss_focus + (loss_atom_type + loss_position) * (1 - graphs.globals.stop)
     return total_loss, (
         loss_focus,
         loss_atom_type,
@@ -315,7 +311,7 @@ def evaluate_model(
     datasets: Iterator[datatypes.Fragment],
     splits: Iterable[str],
     loss_kwargs: Dict[str, Union[float, int]],
-    num_eval_steps: int = 100,
+    num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -426,7 +422,7 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
         if step % config.eval_every_steps == 0 or is_last_step:
             splits = ["val", "test"]
             with report_progress.timed("eval"):
-                eval_metrics = evaluate_model(state, datasets, splits, config.loss_kwargs)
+                eval_metrics = evaluate_model(state, datasets, splits, config.loss_kwargs, config.num_eval_steps)
             for split in splits:
                 writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split].compute(), split))
 
