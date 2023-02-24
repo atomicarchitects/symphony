@@ -105,14 +105,16 @@ def dataloader(
     ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
-    for iteration, graphs in enumerate(dynamic_batcher.dynamically_batch(
-        fragments_pool_iterator(
-            rng, graph_molecules, len(atomic_numbers), nn_tolerance
-        ),
-        max_n_nodes,
-        max_n_edges,
-        max_n_graphs,
-    )):
+    for iteration, graphs in enumerate(
+        dynamic_batcher.dynamically_batch(
+            fragments_pool_iterator(
+                rng, graph_molecules, len(atomic_numbers), nn_tolerance
+            ),
+            max_n_nodes,
+            max_n_edges,
+            max_n_graphs,
+        )
+    ):
         if max_iterations is not None and iteration == max_iterations:
             break
 

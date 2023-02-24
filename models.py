@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax
+import mace_jax.modules
 
 import datatypes
 
@@ -183,10 +184,9 @@ class GraphMLP(nn.Module):
 
     latent_size: int
     num_mlp_layers: int
+    position_coeffs_lmax: int
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
     layer_norm: bool = True
-    deterministic: bool = True
-    position_coeffs_lmax: int = 2
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
@@ -237,11 +237,10 @@ class GraphNet(nn.Module):
     latent_size: int
     num_mlp_layers: int
     message_passing_steps: int
+    position_coeffs_lmax: int
+    use_edge_model: bool
     skip_connections: bool = True
-    use_edge_model: bool = True
     layer_norm: bool = True
-    deterministic: bool = True
-    position_coeffs_lmax: int = 3
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
@@ -369,9 +368,9 @@ class HaikuGraphMLP(hk.Module):
         self,
         latent_size: int,
         num_mlp_layers: int,
+        position_coeffs_lmax: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
         layer_norm: bool = True,
-        position_coeffs_lmax: int = 2,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -428,7 +427,7 @@ class HaikuMACE(hk.Module):
 
     def __init__(
         self,
-        latent_size: int,
+        species_embedding_dims: int,
         output_irreps: str,
         r_max: int | float,
         num_interactions: int,
@@ -437,11 +436,11 @@ class HaikuMACE(hk.Module):
         avg_num_neighbors: int,
         num_species: int,
         max_ell,
-        position_coeffs_lmax: int = 2,
+        position_coeffs_lmax: int,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
-        self.latent_size = latent_size
+        self.species_embedding_dims = species_embedding_dims
         self.output_irreps = e3nn.Irreps(output_irreps)
         self.r_max = r_max
         self.num_interactions = num_interactions
@@ -453,7 +452,7 @@ class HaikuMACE(hk.Module):
         self.position_coeffs_lmax = position_coeffs_lmax
 
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
-        species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
+        species_embedder = hk.Embed(NUM_ELEMENTS, self.species_embedding_dims)
 
         vectors = (
             graphs.nodes.positions[graphs.receivers]
