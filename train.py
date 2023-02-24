@@ -1,31 +1,32 @@
 """Library file for executing training and evaluation of generative model."""
 
-import os
-from typing import Any, Dict, Iterable, Tuple, Iterator, Union
-
 import functools
-from absl import logging
-from clu import checkpoint
-from clu import metric_writers
-from clu import metrics
-from clu import parameter_overview
-from clu import periodic_actions
-import haiku as hk
+import os
+from typing import Any, Dict, Iterable, Iterator, Tuple, Union
+
 import e3nn_jax as e3nn
 import flax
 import flax.core
 import flax.linen as nn
-from flax.training import train_state
+import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
-import mace_jax.modules
 import ml_collections
 import numpy as np
 import optax
+from absl import logging
+from clu import (
+    checkpoint,
+    metric_writers,
+    metrics,
+    parameter_overview,
+    periodic_actions,
+)
+from flax.training import train_state
 
-import input_pipeline
 import datatypes
+import input_pipeline
 import models
 
 

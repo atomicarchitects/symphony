@@ -452,9 +452,13 @@ class HaikuMACE(hk.Module):
         self.max_ell = max_ell
         self.position_coeffs_lmax = position_coeffs_lmax
 
-    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
-        species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
-
+    def embeddings(self, graphs: jraph.GraphsTuple) -> e3nn.IrrepsArray:
+        """Inputs:
+        - graphs.nodes.positions
+        - graphs.nodes.species
+        - graphs.senders
+        - graphs.receivers
+        """
         vectors = (
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
@@ -481,33 +485,64 @@ class HaikuMACE(hk.Module):
             self.output_irreps.dim,
         )
         node_embeddings = node_embeddings.axis_to_mul(axis=1)
+        return node_embeddings
 
-        true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
-        target_species_embeddings = species_embedder(graphs.globals.target_species)
-        target_species_embeddings = hk.Linear(
-            true_focus_node_embeddings.irreps.num_irreps
-        )(target_species_embeddings)
-
-        assert (
-            target_species_embeddings.shape[-1]
-            == true_focus_node_embeddings.irreps.num_irreps
-        )
-
+    def focus(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         focus_logits = e3nn.haiku.Linear("0e")(node_embeddings)
         focus_logits = focus_logits.array.squeeze(axis=-1)
+
+        assert focus_logits.shape == (len(node_embeddings),)
+        return focus_logits
+
+    def target_specie(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[128, 128, 128, 128, 128, 128, NUM_ELEMENTS],
             act=jax.nn.softplus,
-        )(true_focus_node_embeddings.filter(keep="0e")).array
+        )(focus_node_embeddings.filter(keep="0e")).array
+
+        assert species_logits.shape == (len(focus_node_embeddings), NUM_ELEMENTS)
+        return species_logits
+
+    def target_position(
+        self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
+    ) -> e3nn.IrrepsArray:
+        assert focus_node_embeddings.shape == (
+            len(focus_node_embeddings),
+            focus_node_embeddings.irreps.dim,
+        )
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        input_for_position_coeffs = e3nn.concatenate(
-            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+
+        target_species_embeddings = hk.Embed(
+            NUM_ELEMENTS, focus_node_embeddings.irreps.num_irreps
+        )(target_species)
+
+        assert target_species_embeddings.shape == (
+            len(focus_node_embeddings),
+            focus_node_embeddings.irreps.num_irreps,
         )
+
         position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(
-            target_species_embeddings * true_focus_node_embeddings
+            target_species_embeddings * focus_node_embeddings
         )
         position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
+
+        assert position_coeffs.shape == (
+            len(focus_node_embeddings),
+            len(RADII),
+            irreps.dim,
+        )
+
+        return position_coeffs
+
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        node_embeddings = self.embeddings(graphs)
+        focus_logits = self.focus(node_embeddings)
+        true_focus_node_embeddings = node_embeddings[get_focus_node_indices(graphs)]
+        species_logits = self.target_specie(true_focus_node_embeddings)
+        position_coeffs = self.target_position(
+            true_focus_node_embeddings, graphs.globals.target_species
+        )
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
