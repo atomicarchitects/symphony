@@ -27,6 +27,8 @@ from flax.training import train_state
 
 import datatypes
 import input_pipeline
+import input_pipeline_tf
+import datatypes
 import models
 
 
@@ -58,15 +60,18 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
             skip_connections=config.skip_connections,
             layer_norm=config.layer_norm,
             use_edge_model=config.use_edge_model,
+            position_coeffs_lmax=config.position_coeffs_lmax,
         )
     if config.model == "GraphMLP":
         return models.GraphMLP(
             latent_size=config.latent_size,
             num_mlp_layers=config.num_mlp_layers,
             layer_norm=config.layer_norm,
+            position_coeffs_lmax=config.position_coeffs_lmax,
         )
     if config.model == "HaikuGraphMLP":
 
+        @hk.transform
         def model_fn(graphs):
             return models.HaikuGraphMLP(
                 latent_size=config.latent_size,
@@ -74,13 +79,13 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
                 layer_norm=config.layer_norm,
             )(graphs)
 
-        model_fn = hk.transform(model_fn)
         return hk.without_apply_rng(model_fn)
     if config.model == "HaikuMACE":
 
+        @hk.transform
         def model_fn(graphs):
             return models.HaikuMACE(
-                latent_size=config.latent_size,
+                species_embedding_dims=config.species_embedding_dims,
                 output_irreps=config.output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
@@ -89,9 +94,9 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
                 avg_num_neighbors=config.avg_num_neighbors,
                 num_species=config.num_species,
                 max_ell=config.max_ell,
+                position_coeffs_lmax=config.position_coeffs_lmax,
             )(graphs)
 
-        model_fn = hk.transform(model_fn)
         return hk.without_apply_rng(model_fn)
 
     raise ValueError(f"Unsupported model: {config.model}.")
@@ -208,11 +213,6 @@ def generation_loss(
         )(target_positions)
         radius_weights += 1e-10
 
-        jax.debug.print("target_positions={target_positions}", target_positions=target_positions)
-        jax.debug.print(
-            "radius_weight_sum={radius_weight_sum}",
-            radius_weight_sum=jnp.sum(radius_weights, axis=-1, keepdims=True),
-        )
         radius_weights = radius_weights / jnp.sum(radius_weights, axis=-1, keepdims=True)
 
         # radius_weights is of shape (num_graphs, num_radii)
@@ -240,29 +240,11 @@ def generation_loss(
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
 
-    jax.debug.print("loss_focus={loss_focus}", loss_focus=loss_focus)
-    jax.debug.print("loss_atom_type={loss_atom_type}", loss_atom_type=loss_atom_type)
-    jax.debug.print("loss_position={loss_position}", loss_position=loss_position)
-    jax.debug.print("n_node={n_node}", n_node=graphs.n_node)
-    jax.debug.print("mask={mask}", mask=jraph.get_graph_padding_mask(graphs))
-
     total_loss = loss_focus + (loss_atom_type + loss_position) * (1 - graphs.globals.stop)
     return total_loss, (
         loss_focus,
         loss_atom_type,
         loss_position,
-    )
-
-
-def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
-    """Replaces the globals attribute with a constant feature for each graph."""
-    return graphs._replace(
-        globals=datatypes.FragmentGlobals(
-            stop=jnp.ones([graphs.n_node.shape[0]]),
-            target_positions=jnp.ones([graphs.n_node.shape[0], 3]),
-            target_species=jnp.ones([graphs.n_node.shape[0]], dtype=jnp.int32),
-            target_species_probability=jnp.ones([graphs.n_node.shape[0], models.NUM_ELEMENTS]),
-        )
     )
 
 
@@ -329,6 +311,7 @@ def evaluate_model(
     datasets: Iterator[datatypes.Fragment],
     splits: Iterable[str],
     loss_kwargs: Dict[str, Union[float, int]],
+    num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -338,7 +321,8 @@ def evaluate_model(
         split_metrics = None
 
         # Loop over graphs.
-        for graphs in datasets[split]:
+        for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
+            graphs = datatypes.Fragment.from_graphstuple(graphs)
             split_metrics_update = evaluate_step(state, graphs, loss_kwargs)
 
             # Update metrics.
@@ -371,14 +355,14 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(0)
-    datasets = input_pipeline.get_datasets(rng, config)
+    # datasets = input_pipeline.get_datasets(rng, config)
+    datasets = input_pipeline_tf.get_datasets(rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
     rng, init_rng = jax.random.split(rng)
-    train_iter = datasets["train"]
+    train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    init_graphs = replace_globals(init_graphs)
     net = create_model(config)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
@@ -409,7 +393,8 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
     for step in range(initial_step, config.num_train_steps + 1):
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-            graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
+            graphs = next(train_iter)
+            graphs = datatypes.Fragment.from_graphstuple(graphs)
             state, metrics_update = train_step(
                 state,
                 graphs,
@@ -437,7 +422,7 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
         if step % config.eval_every_steps == 0 or is_last_step:
             splits = ["val", "test"]
             with report_progress.timed("eval"):
-                eval_metrics = evaluate_model(state, datasets, splits, config.loss_kwargs)
+                eval_metrics = evaluate_model(state, datasets, splits, config.loss_kwargs, config.num_eval_steps)
             for split in splits:
                 writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split].compute(), split))
 

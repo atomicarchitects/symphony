@@ -18,4 +18,5 @@ def get_config() -> ml_collections.ConfigDict:
     config.latent_size = 256
     config.num_mlp_layers = 3
     config.layer_norm = True
+    config.position_coeffs_lmax = 2
     return config

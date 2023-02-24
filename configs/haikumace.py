@@ -15,7 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # GNN hyperparameters.
     config.model = "HaikuMACE"
-    config.latent_size = 128
+    config.species_embedding_dims = 32
     config.output_irreps = "128x0e"
     config.r_max = 5
     config.num_interactions = 1
@@ -24,4 +24,5 @@ def get_config() -> ml_collections.ConfigDict:
     config.avg_num_neighbors = 3
     config.num_species = 5
     config.max_ell = 2
+    config.position_coeffs_lmax = 2
     return config

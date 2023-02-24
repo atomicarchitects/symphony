@@ -25,12 +25,23 @@ class FragmentNodes(NamedTuple):
 
 class Fragment(jraph.GraphsTuple):
     nodes: FragmentNodes
-    edges: Optional[jnp.ndarray] = None
+    edges: Optional[jnp.ndarray]
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
     globals: FragmentGlobals
     n_node: jnp.ndarray  # with integer dtype
     n_edge: jnp.ndarray  # with integer dtype
+
+    def from_graphstuple(graphs: jraph.GraphsTuple) -> "Fragment":
+        return Fragment(
+            nodes=graphs.nodes,
+            edges=graphs.edges,
+            receivers=graphs.receivers,
+            senders=graphs.senders,
+            globals=graphs.globals,
+            n_node=graphs.n_node,
+            n_edge=graphs.n_edge,
+        )
 
 
 class Predictions(NamedTuple):
