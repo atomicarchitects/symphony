@@ -11,7 +11,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Optimizer.
     config.optimizer = "adam"
-    config.learning_rate = 1e-3
+    config.learning_rate = 5e-4
 
     # GNN hyperparameters.
     config.model = "HaikuMACE"
@@ -24,5 +24,5 @@ def get_config() -> ml_collections.ConfigDict:
     config.avg_num_neighbors = 3
     config.num_species = 5
     config.max_ell = 2
-    config.position_coeffs_lmax = 2
+    config.position_coeffs_lmax = 3
     return config

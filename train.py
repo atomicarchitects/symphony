@@ -35,6 +35,9 @@ import models
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
+    focus_loss: metrics.Average.from_output("focus_loss")
+    atom_type_loss: metrics.Average.from_output("atom_type_loss")
+    position_loss: metrics.Average.from_output("position_loss")
 
 
 @flax.struct.dataclass
@@ -293,16 +296,27 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs)
-        loss, _ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+            preds=preds, graphs=graphs, **loss_kwargs
+        )
         mask = jraph.get_graph_padding_mask(graphs)
-        loss = jnp.where(mask, loss, 0.0)
-        return jnp.sum(loss) / jnp.sum(mask)
+        mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
+        return mean_loss, (total_loss, focus_loss, atom_type_loss, position_loss, mask)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
-    total_loss, grads = grad_fn(state.params, graphs)
+    (
+        mean_loss,
+        (total_loss, focus_loss, atom_type_loss, position_loss, mask),
+    ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    metrics_update = TrainMetrics.single_from_model_output(total_loss=total_loss)
+    metrics_update = TrainMetrics.single_from_model_output(
+        total_loss=total_loss,
+        focus_loss=focus_loss,
+        atom_type_loss=atom_type_loss,
+        position_loss=position_loss,
+        mask=mask,
+    )
     return state, metrics_update
 
 
