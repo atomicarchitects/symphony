@@ -36,7 +36,7 @@ def main(argv):
     # it unavailable to JAX.
     tf.config.experimental.set_visible_devices([], 'GPU')
 
-    # We only supportsingle-host training on a single device.
+    # We only support single-host training on a single device.
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging.info("JAX local devices: %r", jax.local_devices())
 
