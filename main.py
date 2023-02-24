@@ -34,7 +34,7 @@ def main(argv):
 
     # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
     # it unavailable to JAX.
-    tf.config.experimental.set_visible_devices([], 'GPU')
+    tf.config.experimental.set_visible_devices([], "GPU")
 
     # We only support single-host training on a single device.
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
@@ -42,8 +42,13 @@ def main(argv):
 
     # Add a note so that we can tell which task is which JAX host.
     # (Depending on the platform task 0 is not guaranteed to be host 0)
-    platform.work_unit().set_task_status(f"process_index: {jax.process_index()}, " f"process_count: {jax.process_count()}")
-    platform.work_unit().create_artifact(platform.ArtifactType.DIRECTORY, FLAGS.workdir, "workdir")
+    platform.work_unit().set_task_status(
+        f"process_index: {jax.process_index()}, "
+        f"process_count: {jax.process_count()}"
+    )
+    platform.work_unit().create_artifact(
+        platform.ArtifactType.DIRECTORY, FLAGS.workdir, "workdir"
+    )
 
     # Freeze config.
     config = ml_collections.FrozenConfigDict(FLAGS.config)

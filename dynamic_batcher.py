@@ -42,7 +42,9 @@ def _get_graph_size(graph: jraph.GraphsTuple) -> Tuple[int, int, int]:
     return n_node, n_edge, n_graph
 
 
-def _is_over_batch_size(graph: jraph.GraphsTuple, graph_batch_size: Tuple[int, int, int]):
+def _is_over_batch_size(
+    graph: jraph.GraphsTuple, graph_batch_size: Tuple[int, int, int]
+):
     graph_size = _get_graph_size(graph)
     return any([x > y for x, y in zip(graph_size, graph_batch_size)])
 
@@ -82,7 +84,8 @@ def dynamically_batch(
     """
     if n_graph < 2:
         raise ValueError(
-            "The number of graphs in a batch size must be greater or " f"equal to `2` for padding with graphs, got {n_graph}."
+            "The number of graphs in a batch size must be greater or "
+            f"equal to `2` for padding with graphs, got {n_graph}."
         )
     valid_batch_size = (n_node - 1, n_edge, n_graph - 1)
     accumulated_graphs = []
@@ -101,7 +104,8 @@ def dynamically_batch(
             graph_size = {k: v for k, v in zip(_NUMBER_FIELDS, graph_size)}
             batch_size = {k: v for k, v in zip(_NUMBER_FIELDS, valid_batch_size)}
             raise RuntimeError(
-                "Found graph bigger than batch size. Valid Batch " f"Size: {batch_size}, Graph Size: {graph_size}"
+                "Found graph bigger than batch size. Valid Batch "
+                f"Size: {batch_size}, Graph Size: {graph_size}"
             )
 
         # If this is the first element of the batch, set it and continue.
