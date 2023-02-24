@@ -11,6 +11,8 @@ from clu import platform
 import jax
 import ml_collections
 from ml_collections import config_flags
+import tensorflow as tf
+
 
 import train
 
@@ -30,7 +32,11 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
-    # This example only supports single-host training on a single device.
+    # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
+    # it unavailable to JAX.
+    tf.config.experimental.set_visible_devices([], 'GPU')
+
+    # We only supportsingle-host training on a single device.
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging.info("JAX local devices: %r", jax.local_devices())
 
