@@ -142,11 +142,9 @@ def generation_loss(
 
         # This is basically log(1 + sum(exp(fv))) for each graph.
         # But we subtract out the maximum fv per graph for numerical stability.
-        focus_logits_max = e3nn.scatter_max(
-            focus_logits, nel=n_node, initial=jnp.min(focus_logits)
-        )
+        focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node, initial=0.0)
         focus_logits_max_expanded = e3nn.scatter_max(
-            focus_logits, nel=n_node, map_back=True, initial=jnp.min(focus_logits)
+            focus_logits, nel=n_node, map_back=True, initial=0.0
         )
         focus_logits -= focus_logits_max_expanded
         loss_focus += focus_logits_max + jnp.log(
