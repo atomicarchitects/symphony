@@ -46,13 +46,18 @@ def get_datasets(
     # Each partition is a list of indices into all_molecules.
     rng, rng_shuffle = jax.random.split(rng)
     indices = jax.random.permutation(rng_shuffle, len(all_molecules))
-    graphs_cumsum = np.cumsum([config.num_train_graphs, config.num_val_graphs, config.num_test_graphs])
+    graphs_cumsum = np.cumsum(
+        [config.num_train_graphs, config.num_val_graphs, config.num_test_graphs]
+    )
     indices = {
         "train": indices[: graphs_cumsum[0]],
         "val": indices[graphs_cumsum[0] : graphs_cumsum[1]],
         "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
     }
-    molecules = {split: [all_molecules[i] for i in indices[split]] for split in ["train", "val", "test"]}
+    molecules = {
+        split: [all_molecules[i] for i in indices[split]]
+        for split in ["train", "val", "test"]
+    }
     return {
         split: dataloader(
             rngs[split],
@@ -94,12 +99,17 @@ def dataloader(
         An iterator of (batched and padded) fragments.
     """
 
-    graph_molecules = [ase_atoms_to_jraph_graph(molecule, atomic_numbers, nn_cutoff) for molecule in molecules]
+    graph_molecules = [
+        ase_atoms_to_jraph_graph(molecule, atomic_numbers, nn_cutoff)
+        for molecule in molecules
+    ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
     for iteration, graphs in enumerate(
         dynamic_batcher.dynamically_batch(
-            fragments_pool_iterator(rng, graph_molecules, len(atomic_numbers), nn_tolerance),
+            fragments_pool_iterator(
+                rng, graph_molecules, len(atomic_numbers), nn_tolerance
+            ),
             max_n_nodes,
             max_n_edges,
             max_n_graphs,
@@ -133,7 +143,11 @@ def fragments_pool_iterator(
         while len(fragments) < SAMPLES_POOL_SIZE:
             rng, index_rng, fragment_rng = jax.random.split(rng, num=3)
             indices = jax.random.randint(index_rng, (), 0, len(graph_molecules))
-            fragments += list(generate_fragments(fragment_rng, graph_molecules[indices], n_species, nn_tolerance))
+            fragments += list(
+                generate_fragments(
+                    fragment_rng, graph_molecules[indices], n_species, nn_tolerance
+                )
+            )
             assert all([isinstance(sample, jraph.GraphsTuple) for sample in fragments])
 
         rng, index_rng = jax.random.split(rng)
@@ -176,10 +190,14 @@ def pad_graph_to_nearest_ceil_mantissa(
     pad_edges_to = np.clip(pad_edges_to, n_min_edges, n_max_edges)
     pad_graphs_to = np.clip(pad_graphs_to, n_min_graphs, n_max_graphs)
 
-    return jraph.pad_with_graphs(graphs_tuple, pad_nodes_to, pad_edges_to, pad_graphs_to)
+    return jraph.pad_with_graphs(
+        graphs_tuple, pad_nodes_to, pad_edges_to, pad_graphs_to
+    )
 
 
-def ase_atoms_to_jraph_graph(atoms: ase.Atoms, atomic_numbers: np.ndarray, nn_cutoff: float) -> jraph.GraphsTuple:
+def ase_atoms_to_jraph_graph(
+    atoms: ase.Atoms, atomic_numbers: np.ndarray, nn_cutoff: float
+) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
         quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=np.eye(3)
@@ -209,7 +227,9 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
     Returns:
         The subgraph.
     """
-    assert len(graph.n_edge) == 1 and len(graph.n_node) == 1, "Only single graphs supported."
+    assert (
+        len(graph.n_edge) == 1 and len(graph.n_node) == 1
+    ), "Only single graphs supported."
 
     # Find all edges that connect to the nodes.
     edges = np.isin(graph.senders, nodes) & np.isin(graph.receivers, nodes)
@@ -247,7 +267,9 @@ def generate_fragments(
     """
     n = len(graph.nodes.positions)
 
-    assert len(graph.n_edge) == 1 and len(graph.n_node) == 1, "Only single graphs supported."
+    assert (
+        len(graph.n_edge) == 1 and len(graph.n_node) == 1
+    ), "Only single graphs supported."
     assert n >= 2, "Graph must have at least two nodes."
 
     # compute edge distances
@@ -256,11 +278,15 @@ def generate_fragments(
         axis=1,
     )  # [n_edge]
 
-    rng, visited_nodes, frag = _make_first_fragment(rng, graph, dist, n_species, nn_tolerance)
+    rng, visited_nodes, frag = _make_first_fragment(
+        rng, graph, dist, n_species, nn_tolerance
+    )
     yield frag
 
     for _ in range(n - 2):
-        rng, visited_nodes, frag = _make_middle_fragment(rng, visited_nodes, graph, dist, n_species, nn_tolerance)
+        rng, visited_nodes, frag = _make_middle_fragment(
+            rng, visited_nodes, graph, dist, n_species, nn_tolerance
+        )
         yield frag
 
     assert len(visited_nodes) == n
@@ -271,10 +297,14 @@ def generate_fragments(
 def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance):
     # pick a random initial node
     rng, k = jax.random.split(rng)
-    first_node = jax.random.randint(k, shape=(), minval=0, maxval=len(graph.nodes.positions))
+    first_node = jax.random.randint(
+        k, shape=(), minval=0, maxval=len(graph.nodes.positions)
+    )
 
     min_dist = dist[graph.senders == first_node].min()
-    targets = graph.receivers[(graph.senders == first_node) & (dist < min_dist + nn_tolerance)]
+    targets = graph.receivers[
+        (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
+    ]
 
     species_probability = _normalized_bitcount(graph.nodes.species[targets], n_species)
 
@@ -313,7 +343,9 @@ def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
 
     # target_species_probability
     targets = receivers[(senders == focus_node) & mask]
-    target_species_probability = _normalized_bitcount(graph.nodes.species[targets], n_species)
+    target_species_probability = _normalized_bitcount(
+        graph.nodes.species[targets], n_species
+    )
 
     # pick a random target
     rng, k = jax.random.split(rng)
@@ -364,7 +396,11 @@ def _into_fragment(
         stop=jnp.array([stop], dtype=bool),  # [1]
         target_species_probability=target_species_probability[None],  # [1, n_species]
         target_species=graph.nodes.species[target_node][None],  # [1]
-        target_positions=(graph.nodes.positions[target_node] - graph.nodes.positions[focus_node])[None],  # [1, 3]
+        target_positions=(
+            graph.nodes.positions[target_node] - graph.nodes.positions[focus_node]
+        )[
+            None
+        ],  # [1, 3]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 

@@ -36,7 +36,8 @@ class ModelsTest(parameterized.TestCase):
                 stop=jnp.zeros((n_graph,)),
                 target_positions=jnp.ones((n_graph, 3)),
                 target_species=jnp.arange(n_graph) % models.NUM_ELEMENTS,
-                target_species_probability=jnp.ones((n_graph, models.NUM_ELEMENTS)) / models.NUM_ELEMENTS,
+                target_species_probability=jnp.ones((n_graph, models.NUM_ELEMENTS))
+                / models.NUM_ELEMENTS,
             ),
         )
 
@@ -69,9 +70,13 @@ class ModelsTest(parameterized.TestCase):
         # Check that the shapes are all that we expect.
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
-        self.assertSequenceEqual(output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS))
+        self.assertSequenceEqual(
+            output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+        )
         self.assertLen(output.position_coeffs.shape, 3)
-        self.assertSequenceEqual(output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0]))
+        self.assertSequenceEqual(
+            output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
+        )
 
     @parameterized.parameters(
         {"latent_size": 15},
@@ -93,8 +98,12 @@ class ModelsTest(parameterized.TestCase):
         # Check that the shapes are all that we expect.
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
-        self.assertSequenceEqual(output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS))
-        self.assertSequenceEqual(output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0]))
+        self.assertSequenceEqual(
+            output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+        )
+        self.assertSequenceEqual(
+            output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
+        )
         self.assertLen(output.position_coeffs.shape, 3)
 
     @parameterized.parameters(
@@ -120,8 +129,12 @@ class ModelsTest(parameterized.TestCase):
         # Check that the shapes are all that we expect.
         self.assertIsInstance(output, datatypes.Predictions)
         self.assertSequenceEqual(output.focus_logits.shape, (num_nodes,))
-        self.assertSequenceEqual(output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS))
-        self.assertSequenceEqual(output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0]))
+        self.assertSequenceEqual(
+            output.species_logits.shape, (num_graphs, models.NUM_ELEMENTS)
+        )
+        self.assertSequenceEqual(
+            output.position_coeffs.shape[:2], (num_graphs, models.RADII.shape[0])
+        )
         self.assertLen(output.position_coeffs.shape, 3)
 
 

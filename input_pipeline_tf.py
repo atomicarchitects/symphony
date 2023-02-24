@@ -13,7 +13,9 @@ import ml_collections
 import datatypes
 
 
-def get_datasets(rng: chex.PRNGKey, config: ml_collections.ConfigDict) -> Dict[str, tf.data.Dataset]:
+def get_datasets(
+    rng: chex.PRNGKey, config: ml_collections.ConfigDict
+) -> Dict[str, tf.data.Dataset]:
     """Loads and preprocesses the QM9 dataset as tf.data.Datasets for each split."""
 
     # Get the raw datasets.
@@ -41,7 +43,9 @@ def get_datasets(rng: chex.PRNGKey, config: ml_collections.ConfigDict) -> Dict[s
         config.max_n_edges,
         config.max_n_graphs,
     )
-    example_padded_graph = jraph.pad_with_graphs(example_graph, n_node=max_n_nodes, n_edge=max_n_edges, n_graph=max_n_graphs)
+    example_padded_graph = jraph.pad_with_graphs(
+        example_graph, n_node=max_n_nodes, n_edge=max_n_edges, n_graph=max_n_graphs
+    )
     padded_graphs_spec = _specs_from_graphs_tuple(example_padded_graph)
 
     # Batch and pad each split separately.
@@ -53,7 +57,9 @@ def get_datasets(rng: chex.PRNGKey, config: ml_collections.ConfigDict) -> Dict[s
             n_edge=max_n_edges,
             n_graph=max_n_graphs,
         )
-        datasets[split] = tf.data.Dataset.from_generator(batching_fn, output_signature=padded_graphs_spec)
+        datasets[split] = tf.data.Dataset.from_generator(
+            batching_fn, output_signature=padded_graphs_spec
+        )
 
     return datasets
 
@@ -115,7 +121,9 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
             stop=get_tensor_spec(graph.globals.stop),
             target_positions=get_tensor_spec(graph.globals.target_positions),
             target_species=get_tensor_spec(graph.globals.target_species),
-            target_species_probability=get_tensor_spec(graph.globals.target_species_probability),
+            target_species_probability=get_tensor_spec(
+                graph.globals.target_species_probability
+            ),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -141,7 +149,9 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     target_species_probability = graph["target_species_probability"]
 
     return jraph.GraphsTuple(
-        nodes=datatypes.FragmentNodes(positions=positions, species=species, focus_probability=focus_probability),
+        nodes=datatypes.FragmentNodes(
+            positions=positions, species=species, focus_probability=focus_probability
+        ),
         edges=edges,
         receivers=receivers,
         senders=senders,
