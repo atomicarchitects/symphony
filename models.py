@@ -425,7 +425,6 @@ class HaikuMACE(hk.Module):
 
     def __init__(
         self,
-        species_embedding_dims: int,
         output_irreps: str,
         r_max: int | float,
         num_interactions: int,
@@ -438,7 +437,6 @@ class HaikuMACE(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
-        self.species_embedding_dims = species_embedding_dims
         self.output_irreps = e3nn.Irreps(output_irreps)
         self.r_max = r_max
         self.num_interactions = num_interactions

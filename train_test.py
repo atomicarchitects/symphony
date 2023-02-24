@@ -16,6 +16,11 @@ import datatypes
 import train
 from configs import graphmlp, graphnet, haikugraphmlp, haikumace
 
+import profile_nn_jax
+import logging
+logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
+
+
 _ALL_CONFIGS = {
     "graphmlp": graphmlp.get_config(),
     "graphnet": graphnet.get_config(),
@@ -26,11 +31,7 @@ _ALL_CONFIGS = {
 
 def update_dummy_config(config):
     """Updates the dummy config."""
-    config.batch_size = 10
-    config.num_train_graphs = 2
-    config.num_val_graphs = 2
-    config.num_test_graphs = 2
-    config.num_train_steps = 10
+    config.num_train_steps = 100
 
 
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
@@ -122,6 +123,9 @@ class TrainTest(parameterized.TestCase):
 
     @parameterized.parameters("haikumace", "graphmlp")
     def test_train_and_evaluate(self, config_name: str):
+        # Enable profiling.
+        # profile_nn_jax.enable()
+
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
         jax.config.update("jax_debug_infs", True)

@@ -89,7 +89,6 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
         @hk.transform
         def model_fn(graphs):
             return models.HaikuMACE(
-                species_embedding_dims=config.species_embedding_dims,
                 output_irreps=config.output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
@@ -417,7 +416,7 @@ def train_and_evaluate(
     tx = create_optimizer(config)
 
     # Create the training state.
-    state = train_state.TrainState.create(apply_fn=net.apply, params=params, tx=tx)
+    state = train_state.TrainState.create(apply_fn=jax.jit(net.apply), params=params, tx=tx)
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
