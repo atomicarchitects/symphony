@@ -7,6 +7,7 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
+    config.rng_seed = 0
     config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/"
     config.num_train_files = 1
     config.num_val_files = 1

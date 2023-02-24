@@ -24,6 +24,7 @@ from clu import (
     periodic_actions,
 )
 from flax.training import train_state
+import yaml
 
 import datatypes
 import input_pipeline
@@ -303,9 +304,9 @@ def train_step(
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (total_loss, focus_loss, atom_type_loss, position_loss, mask)
 
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
-        mean_loss,
+        _,
         (total_loss, focus_loss, atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
@@ -398,7 +399,8 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.PRNGKey(config.rng_seed)
+    rng, dataset_rng = jax.random.split(rng)
     # datasets = input_pipeline.get_datasets(rng, config)
     datasets = input_pipeline_tf.get_datasets(rng, config)
 
@@ -419,9 +421,14 @@ def train_and_evaluate(
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
-    ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=2)
+    ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
+
+    # Save the config for reproducibility.
+    config_path = os.path.join(workdir, "config.yml")
+    with open(config_path, "w") as f:
+        yaml.dump(config, f)
 
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
@@ -432,6 +439,10 @@ def train_and_evaluate(
         num_profile_steps=5,
     )
     hooks = [report_progress, profile]
+
+    # We will record the best model seen during training.
+    best_state = state
+    min_val_loss = jnp.inf
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -474,13 +485,23 @@ def train_and_evaluate(
                     state, datasets, splits, config.loss_kwargs, config.num_eval_steps
                 )
             for split in splits:
+                eval_metrics[split] = eval_metrics[split].compute()
                 writer.write_scalars(
-                    step, add_prefix_to_keys(eval_metrics[split].compute(), split)
+                    step, add_prefix_to_keys(eval_metrics[split], split)
                 )
 
-        # Checkpoint model, if required.
-        if step % config.checkpoint_every_steps == 0 or is_last_step:
-            with report_progress.timed("checkpoint"):
-                ckpt.save(state)
+            # Note best state seen so far.
+            # Best state is defined as the state with the lowest validation loss.
+            if eval_metrics["val"]["total_loss"] < min_val_loss:
+                min_val_loss = eval_metrics["val"]["total_loss"]
+                best_state = state
+                metrics_for_best_state = eval_metrics
 
-    return state
+    # Checkpoint the best state and corresponding metrics seen during training.
+    with report_progress.timed("checkpoint"):
+        ckpt.save({
+            "best_state": best_state,
+            "metrics_for_best_state": metrics_for_best_state,
+        })
+
+    return best_state
