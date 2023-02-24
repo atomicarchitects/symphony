@@ -1,17 +1,16 @@
 """Definition of the generative models."""
 
-from typing import Callable, Sequence, Union, Optional, Tuple
+from typing import Callable, Optional, Sequence, Tuple, Union
 
 import e3nn_jax as e3nn
-from flax import linen as nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
-import mace_jax
+from flax import linen as nn
+from mace_jax import modules
 
 import datatypes
-
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
 NUM_ELEMENTS = 5
@@ -466,7 +465,7 @@ class HaikuMACE(hk.Module):
         species = graphs.nodes.species
 
         # Predict the properties.
-        node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
+        node_embeddings: e3nn.IrrepsArray = modules.MACE(
             output_irreps=self.output_irreps,
             r_max=self.r_max,
             num_interactions=self.num_interactions,
