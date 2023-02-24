@@ -28,7 +28,6 @@ def main(chunk: int = 3000, num_seeds: int = 8, root_dir: str = "data"):
                     "--mem=4G",
                     "--ntasks=1",
                     "--cpus-per-task=8",
-                    # "--gres=gpu:1",
                     "python",
                     "fragmenter.py",
                     "--seed",
