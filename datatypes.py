@@ -1,39 +1,31 @@
 from collections import namedtuple
+from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
 import jraph
 
-NodesInfo = namedtuple(
-    "NodesInfo",
-    [
-        "positions",  # [n_node, 3] float array
-        "species",  # [n_node] int array
-    ],
-)
 
-FragmentGlobals = namedtuple(
-    "FragmentGlobals",
-    [
-        "stop",  # [n_graph] bool array (only for training)
-        "target_positions",  # [n_graph, 3] float array (only for training)
-        "target_species",  # [n_graph] int array (only for training)
-        "target_species_probability",  # [n_graph, n_species] float array (only for training)
-    ],
-)
+class NodesInfo(NamedTuple):
+    positions: jnp.ndarray  # [n_node, 3] float array
+    species: jnp.ndarray  # [n_node] int array
 
-FragmentNodes = namedtuple(
-    "FragmentNodes",
-    [
-        "positions",  # [n_node, 3] float array
-        "species",  # [n_node] int array
-        "focus_probability",  # [n_node] float array (only for training)
-    ],
-)
+
+class FragmentGlobals(NamedTuple):
+    stop: jnp.ndarray  # [n_graph] bool array (only for training)
+    target_positions: jnp.ndarray  # [n_graph, 3] float array (only for training)
+    target_species: jnp.ndarray  # [n_graph] int array (only for training)
+    target_species_probability: jnp.ndarray  # [n_graph, n_species] float array (only for training)
+
+
+class FragmentNodes(NamedTuple):
+    positions: jnp.ndarray  # [n_node, 3] float array
+    species: jnp.ndarray  # [n_node] int array
+    focus_probability: jnp.ndarray  # [n_node] float array (only for training)
 
 
 class Fragment(jraph.GraphsTuple):
     nodes: FragmentNodes
-    edges: None
+    edges: Optional[jnp.ndarray] = None
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
     globals: FragmentGlobals
@@ -41,8 +33,7 @@ class Fragment(jraph.GraphsTuple):
     n_edge: jnp.ndarray  # with integer dtype
 
 
-WeightTuple = namedtuple("WeightTuple", ["mace", "focus", "atom_type", "position"])
-MaceInput = namedtuple("MACEinput", ["vectors", "atom_types", "senders", "receivers"])
-Predictions = namedtuple(
-    "Predictions", ["focus_logits", "species_logits", "position_coeffs"]
-)
+class Predictions(NamedTuple):
+    focus_logits: jnp.ndarray  # [n_node] float array
+    species_logits: jnp.ndarray  # [n_graph, n_species] float array
+    position_coeffs: jnp.ndarray  # [n_graph, n_radii, ...] float array
