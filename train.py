@@ -263,7 +263,7 @@ def generation_loss(
         assert loss_position.shape == (num_graphs,)
         return loss_position
 
-    # If we do not have to predict 
+    # If this is the last step in the generation process, we do not have to predict atom type and position.
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss() * (1 - graphs.globals.stop)
     loss_position = position_loss() * (1 - graphs.globals.stop)
@@ -332,18 +332,14 @@ def evaluate_step(
         preds=preds, graphs=graphs, **loss_kwargs
     )
 
-    # Take mean over valid graphs.
+    # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
-    total_loss, (focus_loss, atom_type_loss, position_loss) = jax.tree_map(
-        lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
-        (total_loss, (focus_loss, atom_type_loss, position_loss)),
-    )
-
     return EvalMetrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
         position_loss=position_loss,
+        mask=mask,
     )
 
 
