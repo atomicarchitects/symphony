@@ -1,10 +1,9 @@
 """Defines the default hyperparameters and training configuration for the MACE model."""
 
 import ml_collections
+import e3nn_jax as e3nn
 
 from configs import default
-
-import e3nn_jax as e3nn
 
 
 def get_config() -> ml_collections.ConfigDict:
