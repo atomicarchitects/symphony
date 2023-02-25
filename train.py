@@ -24,15 +24,21 @@ from clu import (
     periodic_actions,
 )
 from flax.training import train_state
+import yaml
 
 import datatypes
 import input_pipeline
+import input_pipeline_tf
+import datatypes
 import models
 
 
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
+    focus_loss: metrics.Average.from_output("focus_loss")
+    atom_type_loss: metrics.Average.from_output("atom_type_loss")
+    position_loss: metrics.Average.from_output("position_loss")
 
 
 @flax.struct.dataclass
@@ -58,15 +64,18 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
             skip_connections=config.skip_connections,
             layer_norm=config.layer_norm,
             use_edge_model=config.use_edge_model,
+            position_coeffs_lmax=config.position_coeffs_lmax,
         )
     if config.model == "GraphMLP":
         return models.GraphMLP(
             latent_size=config.latent_size,
             num_mlp_layers=config.num_mlp_layers,
             layer_norm=config.layer_norm,
+            position_coeffs_lmax=config.position_coeffs_lmax,
         )
     if config.model == "HaikuGraphMLP":
 
+        @hk.transform
         def model_fn(graphs):
             return models.HaikuGraphMLP(
                 latent_size=config.latent_size,
@@ -74,13 +83,12 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
                 layer_norm=config.layer_norm,
             )(graphs)
 
-        model_fn = hk.transform(model_fn)
         return hk.without_apply_rng(model_fn)
     if config.model == "HaikuMACE":
 
+        @hk.transform
         def model_fn(graphs):
             return models.HaikuMACE(
-                latent_size=config.latent_size,
                 output_irreps=config.output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
@@ -89,9 +97,9 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
                 avg_num_neighbors=config.avg_num_neighbors,
                 num_species=config.num_species,
                 max_ell=config.max_ell,
+                position_coeffs_lmax=config.position_coeffs_lmax,
             )(graphs)
 
-        model_fn = hk.transform(model_fn)
         return hk.without_apply_rng(model_fn)
 
     raise ValueError(f"Unsupported model: {config.model}.")
@@ -126,21 +134,30 @@ def generation_loss(
 
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
-        assert preds.focus_logits.shape == graphs.nodes.focus_probability.shape == (num_nodes,)
+        assert (
+            preds.focus_logits.shape
+            == graphs.nodes.focus_probability.shape
+            == (num_nodes,)
+        )
 
         n_node = graphs.n_node
         focus_logits = preds.focus_logits
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
-        loss_focus = e3nn.scatter_sum(-graphs.nodes.focus_probability * focus_logits, nel=n_node)
+        loss_focus = e3nn.scatter_sum(
+            -graphs.nodes.focus_probability * focus_logits, nel=n_node
+        )
 
         # This is basically log(1 + sum(exp(fv))) for each graph.
         # But we subtract out the maximum fv per graph for numerical stability.
         focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node, initial=0.0)
-        focus_logits_max_expanded = e3nn.scatter_max(focus_logits, nel=n_node, map_back=True, initial=0.0)
+        focus_logits_max_expanded = e3nn.scatter_max(
+            focus_logits, nel=n_node, map_back=True, initial=0.0
+        )
         focus_logits -= focus_logits_max_expanded
         loss_focus += focus_logits_max + jnp.log(
-            jnp.exp(-focus_logits_max) + e3nn.scatter_sum(jnp.exp(focus_logits), nel=n_node)
+            jnp.exp(-focus_logits_max)
+            + e3nn.scatter_sum(jnp.exp(focus_logits), nel=n_node)
         )
 
         assert loss_focus.shape == (num_graphs,)
@@ -148,7 +165,11 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # species_logits is of shape (num_graphs, num_elements)
-        assert preds.species_logits.shape == graphs.globals.target_species_probability.shape == (num_graphs, num_elements)
+        assert (
+            preds.species_logits.shape
+            == graphs.globals.target_species_probability.shape
+            == (num_graphs, num_elements)
+        )
 
         loss_atom_type = optax.softmax_cross_entropy(
             logits=preds.species_logits,
@@ -181,9 +202,13 @@ def generation_loss(
         assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
 
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_max = jnp.max(position_signal.grid_values, axis=(-3, -2, -1), keepdims=True)
+        position_max = jnp.max(
+            position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
+        )
 
-        sphere_normalizing_factors = position_signal.apply(lambda pos: jnp.exp(pos - position_max)).integrate()
+        sphere_normalizing_factors = position_signal.apply(
+            lambda pos: jnp.exp(pos - position_max)
+        ).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
 
         # sphere_normalizing_factors is of shape (num_graphs, num_radii)
@@ -203,30 +228,32 @@ def generation_loss(
         # Get radius weights from the true distribution, described by a RBF kernel around the target positions.
         radius_weights = jax.vmap(
             lambda target_position: jax.vmap(
-                lambda radius: jnp.exp(-((radius - jnp.linalg.norm(target_position)) ** 2) / (2 * radius_rbf_variance))
+                lambda radius: jnp.exp(
+                    -((radius - jnp.linalg.norm(target_position)) ** 2)
+                    / (2 * radius_rbf_variance)
+                )
             )(models.RADII)
         )(target_positions)
         radius_weights += 1e-10
 
-        jax.debug.print("target_positions={target_positions}", target_positions=target_positions)
-        jax.debug.print(
-            "radius_weight_sum={radius_weight_sum}",
-            radius_weight_sum=jnp.sum(radius_weights, axis=-1, keepdims=True),
+        radius_weights = radius_weights / jnp.sum(
+            radius_weights, axis=-1, keepdims=True
         )
-        radius_weights = radius_weights / jnp.sum(radius_weights, axis=-1, keepdims=True)
 
         # radius_weights is of shape (num_graphs, num_radii)
         assert radius_weights.shape == (num_graphs, num_radii)
 
         # Compute f(r*, rhat*) which is our model predictions for the target positions.
         target_positions = e3nn.IrrepsArray("1o", target_positions)
-        target_positions_logits = jax.vmap(functools.partial(e3nn.to_s2point, normalization="integral"))(
-            preds.position_coeffs, target_positions
-        )
+        target_positions_logits = jax.vmap(
+            functools.partial(e3nn.to_s2point, normalization="integral")
+        )(preds.position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
-        loss_position = jax.vmap(lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c)(
+        loss_position = jax.vmap(
+            lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
+        )(
             radius_weights,
             target_positions_logits,
             sphere_normalizing_factors,
@@ -240,29 +267,13 @@ def generation_loss(
     loss_atom_type = atom_type_loss()
     loss_position = position_loss()
 
-    jax.debug.print("loss_focus={loss_focus}", loss_focus=loss_focus)
-    jax.debug.print("loss_atom_type={loss_atom_type}", loss_atom_type=loss_atom_type)
-    jax.debug.print("loss_position={loss_position}", loss_position=loss_position)
-    jax.debug.print("n_node={n_node}", n_node=graphs.n_node)
-    jax.debug.print("mask={mask}", mask=jraph.get_graph_padding_mask(graphs))
-
-    total_loss = loss_focus + (loss_atom_type + loss_position) * (1 - graphs.globals.stop)
+    total_loss = loss_focus + (loss_atom_type + loss_position) * (
+        1 - graphs.globals.stop
+    )
     return total_loss, (
         loss_focus,
         loss_atom_type,
         loss_position,
-    )
-
-
-def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
-    """Replaces the globals attribute with a constant feature for each graph."""
-    return graphs._replace(
-        globals=datatypes.FragmentGlobals(
-            stop=jnp.ones([graphs.n_node.shape[0]]),
-            target_positions=jnp.ones([graphs.n_node.shape[0], 3]),
-            target_species=jnp.ones([graphs.n_node.shape[0]], dtype=jnp.int32),
-            target_species_probability=jnp.ones([graphs.n_node.shape[0], models.NUM_ELEMENTS]),
-        )
     )
 
 
@@ -285,16 +296,27 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs)
-        loss, _ = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+        total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+            preds=preds, graphs=graphs, **loss_kwargs
+        )
         mask = jraph.get_graph_padding_mask(graphs)
-        loss = jnp.where(mask, loss, 0.0)
-        return jnp.sum(loss) / jnp.sum(mask)
+        mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
+        return mean_loss, (total_loss, focus_loss, atom_type_loss, position_loss, mask)
 
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
-    total_loss, grads = grad_fn(state.params, graphs)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    (
+        _,
+        (total_loss, focus_loss, atom_type_loss, position_loss, mask),
+    ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    metrics_update = TrainMetrics.single_from_model_output(total_loss=total_loss)
+    metrics_update = TrainMetrics.single_from_model_output(
+        total_loss=total_loss,
+        focus_loss=focus_loss,
+        atom_type_loss=atom_type_loss,
+        position_loss=position_loss,
+        mask=mask,
+    )
     return state, metrics_update
 
 
@@ -307,7 +329,9 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
     preds = get_predictions(state, graphs)
-    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+        preds=preds, graphs=graphs, **loss_kwargs
+    )
 
     # Take mean over valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
@@ -329,6 +353,7 @@ def evaluate_model(
     datasets: Iterator[datatypes.Fragment],
     splits: Iterable[str],
     loss_kwargs: Dict[str, Union[float, int]],
+    num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -338,7 +363,8 @@ def evaluate_model(
         split_metrics = None
 
         # Loop over graphs.
-        for graphs in datasets[split]:
+        for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
+            graphs = datatypes.Fragment.from_graphstuple(graphs)
             split_metrics_update = evaluate_step(state, graphs, loss_kwargs)
 
             # Update metrics.
@@ -351,7 +377,9 @@ def evaluate_model(
     return eval_metrics
 
 
-def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) -> train_state.TrainState:
+def train_and_evaluate(
+    config: ml_collections.FrozenConfigDict, workdir: str
+) -> train_state.TrainState:
     """Execute model training and evaluation loop.
 
     Args:
@@ -370,15 +398,16 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    rng = jax.random.PRNGKey(0)
-    datasets = input_pipeline.get_datasets(rng, config)
+    rng = jax.random.PRNGKey(config.rng_seed)
+    rng, dataset_rng = jax.random.split(rng)
+    # datasets = input_pipeline.get_datasets(rng, config)
+    datasets = input_pipeline_tf.get_datasets(rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
     rng, init_rng = jax.random.split(rng)
-    train_iter = datasets["train"]
+    train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    init_graphs = replace_globals(init_graphs)
     net = create_model(config)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
@@ -387,21 +416,32 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
     tx = create_optimizer(config)
 
     # Create the training state.
-    state = train_state.TrainState.create(apply_fn=net.apply, params=params, tx=tx)
+    state = train_state.TrainState.create(apply_fn=jax.jit(net.apply), params=params, tx=tx)
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
-    ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=2)
+    ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
 
+    # Save the config for reproducibility.
+    config_path = os.path.join(workdir, "config.yml")
+    with open(config_path, "w") as f:
+        yaml.dump(config, f)
+
     # Hooks called periodically during training.
-    report_progress = periodic_actions.ReportProgress(num_train_steps=config.num_train_steps, writer=writer)
+    report_progress = periodic_actions.ReportProgress(
+        num_train_steps=config.num_train_steps, writer=writer
+    )
     profile = periodic_actions.Profile(
         logdir=workdir,
         num_profile_steps=5,
     )
     hooks = [report_progress, profile]
+
+    # We will record the best model seen during training.
+    best_state = state
+    min_val_loss = jnp.inf
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -409,7 +449,8 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
     for step in range(initial_step, config.num_train_steps + 1):
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-            graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
+            graphs = next(train_iter)
+            graphs = datatypes.Fragment.from_graphstuple(graphs)
             state, metrics_update = train_step(
                 state,
                 graphs,
@@ -430,20 +471,36 @@ def train_and_evaluate(config: ml_collections.FrozenConfigDict, workdir: str) ->
         # Log, if required.
         is_last_step = step == config.num_train_steps
         if step % config.log_every_steps == 0 or is_last_step:
-            writer.write_scalars(step, add_prefix_to_keys(train_metrics.compute(), "train"))
+            writer.write_scalars(
+                step, add_prefix_to_keys(train_metrics.compute(), "train")
+            )
             train_metrics = None
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             splits = ["val", "test"]
             with report_progress.timed("eval"):
-                eval_metrics = evaluate_model(state, datasets, splits, config.loss_kwargs)
+                eval_metrics = evaluate_model(
+                    state, datasets, splits, config.loss_kwargs, config.num_eval_steps
+                )
             for split in splits:
-                writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split].compute(), split))
+                eval_metrics[split] = eval_metrics[split].compute()
+                writer.write_scalars(
+                    step, add_prefix_to_keys(eval_metrics[split], split)
+                )
 
-        # Checkpoint model, if required.
-        if step % config.checkpoint_every_steps == 0 or is_last_step:
-            with report_progress.timed("checkpoint"):
-                ckpt.save(state)
+            # Note best state seen so far.
+            # Best state is defined as the state with the lowest validation loss.
+            if eval_metrics["val"]["total_loss"] < min_val_loss:
+                min_val_loss = eval_metrics["val"]["total_loss"]
+                best_state = state
+                metrics_for_best_state = eval_metrics
 
-    return state
+    # Checkpoint the best state and corresponding metrics seen during training.
+    with report_progress.timed("checkpoint"):
+        ckpt.save({
+            "best_state": best_state,
+            "metrics_for_best_state": metrics_for_best_state,
+        })
+
+    return best_state

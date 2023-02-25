@@ -21,4 +21,5 @@ def get_config() -> ml_collections.ConfigDict:
     config.use_edge_model = True
     config.skip_connections = True
     config.layer_norm = True
+    config.position_coeffs_lmax = 2
     return config

@@ -16,6 +16,11 @@ import datatypes
 import train
 from configs import graphmlp, graphnet, haikugraphmlp, haikumace
 
+import profile_nn_jax
+import logging
+logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
+
+
 _ALL_CONFIGS = {
     "graphmlp": graphmlp.get_config(),
     "graphnet": graphnet.get_config(),
@@ -26,11 +31,7 @@ _ALL_CONFIGS = {
 
 def update_dummy_config(config):
     """Updates the dummy config."""
-    config.batch_size = 10
-    config.num_train_graphs = 2
-    config.num_val_graphs = 2
-    config.num_test_graphs = 2
-    config.num_train_steps = 10
+    config.num_train_steps = 100
 
 
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
@@ -41,7 +42,9 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
     num_radii = models.RADII.shape[0]
     preds = datatypes.Predictions(
         focus_logits=jnp.ones((num_nodes,)),
-        species_logits=jnp.asarray([[0.1, 0.2, 0.3, 0.4, 0.5], [1.1, 1.2, 1.3, 1.4, 1.5]]),
+        species_logits=jnp.asarray(
+            [[0.1, 0.2, 0.3, 0.4, 0.5], [1.1, 1.2, 1.3, 1.4, 1.5]]
+        ),
         position_coeffs=e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1))),
     )
     graphs = datatypes.Fragment(
@@ -54,7 +57,8 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
             stop=jnp.asarray([0, 1]),
             target_species=jnp.zeros((num_graphs,)),
             target_positions=jnp.zeros((num_graphs, 3)),
-            target_species_probability=jnp.ones((num_graphs, num_elements)) / num_elements,
+            target_species_probability=jnp.ones((num_graphs, num_elements))
+            / num_elements,
         ),
         edges=None,
         senders=None,
@@ -77,7 +81,9 @@ class TrainTest(parameterized.TestCase):
             res_alpha=9,
             radius_rbf_variance=30,
         )
-        expected_focus_loss = jnp.asarray([-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)])
+        expected_focus_loss = jnp.asarray(
+            [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
+        )
         self.assertSequenceAlmostEqual(focus_loss, expected_focus_loss, places=5)
 
     def test_atom_type_loss(self):
@@ -94,7 +100,9 @@ class TrainTest(parameterized.TestCase):
                 -1.3 + scipy.special.logsumexp([1.1, 1.2, 1.3, 1.4, 1.5]),
             ]
         )
-        self.assertSequenceAlmostEqual(atom_type_loss, expected_atom_type_loss, places=5)
+        self.assertSequenceAlmostEqual(
+            atom_type_loss, expected_atom_type_loss, places=5
+        )
 
     def test_position_loss(self):
         _, (_, _, position_loss) = train.generation_loss(
@@ -113,9 +121,11 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters(["haikumace"])
-    # @parameterized.parameters("haikumace", "graphmlp")
+    @parameterized.parameters("haikumace", "graphmlp")
     def test_train_and_evaluate(self, config_name: str):
+        # Enable profiling.
+        # profile_nn_jax.enable()
+
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
         jax.config.update("jax_debug_infs", True)

@@ -7,8 +7,8 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
-from flax import linen as nn
-from mace_jax import modules
+import mace_jax.modules
+import flax.linen as nn
 
 import datatypes
 
@@ -21,7 +21,9 @@ def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
 
 
-def add_graphs_tuples(graphs: jraph.GraphsTuple, other_graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
+def add_graphs_tuples(
+    graphs: jraph.GraphsTuple, other_graphs: jraph.GraphsTuple
+) -> jraph.GraphsTuple:
     """Adds the nodes, edges and global features from other_graphs to graphs."""
     return graphs._replace(
         nodes=graphs.nodes + other_graphs.nodes,
@@ -58,7 +60,9 @@ class S2Activation(nn.Module):
     layer_norm: bool = True
 
     @staticmethod
-    def _complete_lmax_and_res(lmax: Optional[int], res_beta: Optional[int], res_alpha: Optional[int]) -> Tuple[int, int, int]:
+    def _complete_lmax_and_res(
+        lmax: Optional[int], res_beta: Optional[int], res_alpha: Optional[int]
+    ) -> Tuple[int, int, int]:
         """Fills in the missing values for lmax, res_beta and res_alpha for e3nn.to_s2grid().
 
         To use FFT accurately, we would want:
@@ -84,7 +88,9 @@ class S2Activation(nn.Module):
                 res_alpha = res_beta - 1
 
         if lmax is None:
-            lmax = min(res_beta // 2 - 1, (res_alpha - 1) // 2)  # maximum possible to go on sphere and back
+            lmax = min(
+                res_beta // 2 - 1, (res_alpha - 1) // 2
+            )  # maximum possible to go on sphere and back
 
         assert res_beta % 2 == 0
         assert lmax + 1 <= res_beta // 2
@@ -108,7 +114,9 @@ class S2Activation(nn.Module):
         try:
             lmax, res_beta, res_alpha = self._complete_lmax_and_res(lmax, *self.res)
         except TypeError:
-            lmax, res_beta, res_alpha = self._complete_lmax_and_res(lmax, self.res, None)
+            lmax, res_beta, res_alpha = self._complete_lmax_and_res(
+                lmax, self.res, None
+            )
 
         return lmax, res_beta, res_alpha, lmax_out
 
@@ -153,9 +161,13 @@ class S2MLP(nn.Module):
             next_inputs = e3nn.flax.Linear(irreps_out)(inputs)
 
             # Apply activation.
-            all_irreps = e3nn.Irreps([(1, (l, -1)) for l in range(1 + next_inputs.irreps.lmax)])
+            all_irreps = e3nn.Irreps(
+                [(1, (l, -1)) for l in range(1 + next_inputs.irreps.lmax)]
+            )
             next_inputs = e3nn.flax.Linear(all_irreps)(next_inputs)
-            next_inputs = S2Activation(next_inputs.irreps, self.activation, self.s2_grid_resolution)(next_inputs)
+            next_inputs = S2Activation(
+                next_inputs.irreps, self.activation, self.s2_grid_resolution
+            )(next_inputs)
 
             # Add skip connection.
             if self.skip_connections:
@@ -170,10 +182,9 @@ class GraphMLP(nn.Module):
 
     latent_size: int
     num_mlp_layers: int
+    position_coeffs_lmax: int
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
     layer_norm: bool = True
-    deterministic: bool = True
-    position_coeffs_lmax: int = 2
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
@@ -186,7 +197,9 @@ class GraphMLP(nn.Module):
                 activation=self.activation,
                 layer_norm=self.layer_norm,
             )(nodes.positions)
-            return nn.Dense(self.latent_size)(jnp.concatenate([species_embedded, positions_embedded], axis=-1))
+            return nn.Dense(self.latent_size)(
+                jnp.concatenate([species_embedded, positions_embedded], axis=-1)
+            )
 
         # Embed the nodes.
         processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
@@ -200,8 +213,12 @@ class GraphMLP(nn.Module):
         species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        input_for_position_coeffs = jnp.concatenate((true_focus_node_embeddings, target_species_embeddings), axis=-1)
-        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
+        input_for_position_coeffs = jnp.concatenate(
+            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+        )
+        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(
+            input_for_position_coeffs
+        )
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
 
@@ -218,11 +235,10 @@ class GraphNet(nn.Module):
     latent_size: int
     num_mlp_layers: int
     message_passing_steps: int
+    position_coeffs_lmax: int
+    use_edge_model: bool
     skip_connections: bool = True
-    use_edge_model: bool = True
     layer_norm: bool = True
-    deterministic: bool = True
-    position_coeffs_lmax: int = 3
 
     @nn.compact
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
@@ -235,7 +251,9 @@ class GraphNet(nn.Module):
                 activation=jax.nn.relu,
                 layer_norm=self.layer_norm,
             )(nodes.positions)
-            return nn.Dense(self.latent_size)(jnp.concatenate([species_embedded, positions_embedded], axis=-1))
+            return nn.Dense(self.latent_size)(
+                jnp.concatenate([species_embedded, positions_embedded], axis=-1)
+            )
 
         # We will first linearly project the original features as 'embeddings'.
         num_graphs = graphs.n_node.shape[0]
@@ -277,7 +295,9 @@ class GraphNet(nn.Module):
             )
 
             if self.skip_connections:
-                processed_graphs = add_graphs_tuples(graph_net(processed_graphs), processed_graphs)
+                processed_graphs = add_graphs_tuples(
+                    graph_net(processed_graphs), processed_graphs
+                )
             else:
                 processed_graphs = graph_net(processed_graphs)
 
@@ -297,8 +317,12 @@ class GraphNet(nn.Module):
         species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        input_for_position_coeffs = jnp.concatenate((true_focus_node_embeddings, target_species_embeddings), axis=-1)
-        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
+        input_for_position_coeffs = jnp.concatenate(
+            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+        )
+        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(
+            input_for_position_coeffs
+        )
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
 
@@ -342,9 +366,9 @@ class HaikuGraphMLP(hk.Module):
         self,
         latent_size: int,
         num_mlp_layers: int,
+        position_coeffs_lmax: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
         layer_norm: bool = True,
-        position_coeffs_lmax: int = 2,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -364,7 +388,9 @@ class HaikuGraphMLP(hk.Module):
                 activation=self.activation,
                 layer_norm=self.layer_norm,
             )(nodes.positions)
-            return hk.Linear(self.latent_size)(jnp.concatenate([species_embedded, positions_embedded], axis=-1))
+            return hk.Linear(self.latent_size)(
+                jnp.concatenate([species_embedded, positions_embedded], axis=-1)
+            )
 
         # Embed the nodes.
         processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
@@ -378,8 +404,12 @@ class HaikuGraphMLP(hk.Module):
         species_logits = hk.Linear(NUM_ELEMENTS)(true_focus_node_embeddings)
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        input_for_position_coeffs = jnp.concatenate((true_focus_node_embeddings, target_species_embeddings), axis=-1)
-        position_coeffs = hk.Linear(RADII.shape[0] * irreps.dim)(input_for_position_coeffs)
+        input_for_position_coeffs = jnp.concatenate(
+            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+        )
+        position_coeffs = hk.Linear(RADII.shape[0] * irreps.dim)(
+            input_for_position_coeffs
+        )
         position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
 
@@ -395,7 +425,6 @@ class HaikuMACE(hk.Module):
 
     def __init__(
         self,
-        latent_size: int,
         output_irreps: str,
         r_max: int | float,
         num_interactions: int,
@@ -404,11 +433,10 @@ class HaikuMACE(hk.Module):
         avg_num_neighbors: int,
         num_species: int,
         max_ell,
-        position_coeffs_lmax: int = 2,
+        position_coeffs_lmax: int,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
-        self.latent_size = latent_size
         self.output_irreps = e3nn.Irreps(output_irreps)
         self.r_max = r_max
         self.num_interactions = num_interactions
@@ -419,18 +447,22 @@ class HaikuMACE(hk.Module):
         self.max_ell = max_ell
         self.position_coeffs_lmax = position_coeffs_lmax
 
-    def embeddings(self, graphs: jraph.GraphsTuple) -> e3nn.IrrepsArray:
+    def embeddings(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
         """Inputs:
         - graphs.nodes.positions
         - graphs.nodes.species
         - graphs.senders
         - graphs.receivers
         """
-        vectors = graphs.nodes.positions[graphs.receivers] - graphs.nodes.positions[graphs.senders]
+        vectors = (
+            graphs.nodes.positions[graphs.receivers]
+            - graphs.nodes.positions[graphs.senders]
+        )
         species = graphs.nodes.species
+        num_nodes = species.shape[0]
 
         # Predict the properties.
-        node_embeddings: e3nn.IrrepsArray = modules.MACE(
+        node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
             output_irreps=self.output_irreps,
             r_max=self.r_max,
             num_interactions=self.num_interactions,
@@ -444,7 +476,7 @@ class HaikuMACE(hk.Module):
         )(vectors, species, graphs.senders, graphs.receivers)
 
         assert node_embeddings.shape == (
-            len(species),
+            num_nodes,
             self.num_interactions,
             self.output_irreps.dim,
         )
@@ -455,39 +487,48 @@ class HaikuMACE(hk.Module):
         focus_logits = e3nn.haiku.Linear("0e")(node_embeddings)
         focus_logits = focus_logits.array.squeeze(axis=-1)
 
-        assert focus_logits.shape == (len(node_embeddings),)
+        num_nodes = node_embeddings.shape[0]
+        assert focus_logits.shape == (num_nodes,)
         return focus_logits
 
-    def target_specie(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+    def target_species(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[128, 128, 128, 128, 128, 128, NUM_ELEMENTS],
             act=jax.nn.softplus,
         )(focus_node_embeddings.filter(keep="0e")).array
 
-        assert species_logits.shape == (len(focus_node_embeddings), NUM_ELEMENTS)
+        num_graphs = focus_node_embeddings.shape[0]
+        assert species_logits.shape == (num_graphs, NUM_ELEMENTS)
         return species_logits
 
-    def target_position(self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray) -> e3nn.IrrepsArray:
+    def target_position(
+        self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
+    ) -> e3nn.IrrepsArray:
+        num_graphs = focus_node_embeddings.shape[0]
         assert focus_node_embeddings.shape == (
-            len(focus_node_embeddings),
+            num_graphs,
             focus_node_embeddings.irreps.dim,
         )
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-
-        target_species_embeddings = hk.Embed(NUM_ELEMENTS, focus_node_embeddings.irreps.num_irreps)(target_species)
+        target_species_embeddings = hk.Embed(
+            NUM_ELEMENTS, focus_node_embeddings.irreps.num_irreps
+        )(target_species)
 
         assert target_species_embeddings.shape == (
-            len(focus_node_embeddings),
+            num_graphs,
             focus_node_embeddings.irreps.num_irreps,
         )
 
-        position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(target_species_embeddings * focus_node_embeddings)
+        position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(
+            target_species_embeddings * focus_node_embeddings
+        )
         position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
 
+        num_radii = RADII.shape[0]
         assert position_coeffs.shape == (
-            len(focus_node_embeddings),
-            len(RADII),
+            num_graphs,
+            num_radii,
             irreps.dim,
         )
 
@@ -500,12 +541,15 @@ class HaikuMACE(hk.Module):
         # Get the focus logits.
         focus_logits = self.focus(node_embeddings)
 
-        # Get the embeddings of the focus nodes. These are the first nodes during training.
+        # Get the embeddings of the focus nodes.
+        # These are the first nodes in each graph during training.
         true_focus_node_embeddings = node_embeddings[get_first_node_indices(graphs)]
 
         # Get the species logits.
-        species_logits = self.target_specie(true_focus_node_embeddings)
+        species_logits = self.target_species(true_focus_node_embeddings)
 
         # Get the position coefficients.
-        position_coeffs = self.target_position(true_focus_node_embeddings, graphs.globals.target_species)
+        position_coeffs = self.target_position(
+            true_focus_node_embeddings, graphs.globals.target_species
+        )
         return datatypes.Predictions(focus_logits, species_logits, position_coeffs)
