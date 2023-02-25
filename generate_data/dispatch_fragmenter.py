@@ -1,6 +1,9 @@
 import argparse
 import os
 import subprocess
+import sys
+
+sys.path.append("..")
 
 from qm9 import load_qm9
 
