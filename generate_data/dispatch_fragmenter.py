@@ -14,7 +14,7 @@ def main(chunk: int, num_seeds: int, root_dir: str):
     for seed in range(num_seeds):
         for start in range(0, len(qm9), chunk):
             end = start + chunk
-            path = f"{root_dir}/fragments_{seed:02d}_{start:06d}_{end:06d}"
+            path = f"{root_dir}/fragments_seed{seed:02d}_from{start:06d}_to{end:06d}"
 
             if os.path.exists(path):
                 print(f"Skip {path}")
