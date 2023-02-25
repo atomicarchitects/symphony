@@ -1,12 +1,13 @@
 import argparse
 import os
 import subprocess
-import time
 
 from qm9 import load_qm9
 
+os.environ["OMP_NUM_THREADS"] = 8
 
-def main(chunk: int = 3000, num_seeds: int = 8, root_dir: str = "data"):
+
+def main(chunk: int, num_seeds: int, root_dir: str):
     qm9 = load_qm9("qm9_data")
     processes = []
 
@@ -42,17 +43,14 @@ def main(chunk: int = 3000, num_seeds: int = 8, root_dir: str = "data"):
             )
             processes.append(p)
 
-            # wait a bit to avoid overloading the scheduler
-            time.sleep(10.0)
-
-    print("Waiting for processes to finish...")
-    for p in processes:
-        p.wait()
+            print("Waiting for processes to finish...")
+            for p in processes:
+                p.wait()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chunk", type=int, default=3000)
+    parser.add_argument("--chunk", type=int, default=2976)
     parser.add_argument("--num_seeds", type=int, default=8)
     parser.add_argument("--root_dir", type=str, default="data")
     args = parser.parse_args()
