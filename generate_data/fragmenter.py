@@ -3,11 +3,25 @@ import logging
 import os
 import sys
 
-import jax
-import jax.numpy as jnp
-import numpy as np
-import tensorflow as tf
 import tqdm
+
+n = int(os.environ["OMP_NUM_THREADS"])
+
+os.environ["OPENBLAS_NUM_THREADS"] = str(n)
+os.environ["MKL_NUM_THREADS"] = str(n)
+
+os.environ[
+    "XLA_FLAGS"
+] = f"--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads={n} inter_op_parallelism_threads={n}"
+
+import tensorflow as tf  # noqa: E402
+
+tf.config.threading.set_inter_op_parallelism_threads(n)
+tf.config.threading.set_intra_op_parallelism_threads(n)
+
+import jax  # noqa: E402
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
 
 sys.path += ["/home/gridsan/mgeiger/git/spherical-harmonic-net"]
 
