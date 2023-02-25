@@ -23,7 +23,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_interactions = 1
     config.hidden_irreps = config.output_irreps
     config.readout_mlp_irreps = config.output_irreps
-    config.avg_num_neighbors = 15.
+    config.avg_num_neighbors = 15.0
     config.num_species = 5
     config.max_ell = config.position_coeffs_lmax
     return config

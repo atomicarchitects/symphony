@@ -18,6 +18,7 @@ from flax.training import train_state
 import input_pipeline_tf
 import train
 
+
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
     """Returns a dictionary with string keys converted to integers, wherever possible."""
     casted_dictionary = {}
@@ -38,9 +39,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 def load_from_workdir(
     workdir: str,
-) -> Tuple[
-    ml_collections.ConfigDict, train_state.TrainState, Dict[Any, Any]
-]:
+) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, Dict[Any, Any]]:
     """Loads the scaler, model and auxiliary data from the supplied workdir."""
 
     if not os.path.exists(workdir):
@@ -72,14 +71,14 @@ def load_from_workdir(
     net = train.create_model(config)
     params = jax.jit(net.init)(init_rng, init_graphs)
     tx = train.create_optimizer(config)
-    dummy_state = train_state.TrainState.create(apply_fn=net.apply, params=params, tx=tx)
+    dummy_state = train_state.TrainState.create(
+        apply_fn=net.apply, params=params, tx=tx
+    )
 
     # Load the actual values.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
-    data = ckpt.restore(
-        {"best_state": dummy_state, "metrics_for_best_state": None}
-    )
+    data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
 
     return (
         config,

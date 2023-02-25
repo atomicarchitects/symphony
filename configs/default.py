@@ -13,7 +13,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_val_files = 1
     config.num_test_files = 1
 
-    config.num_train_steps = 100_000
+    config.num_train_steps = 10_000
     config.num_eval_steps = 100
     config.log_every_steps = 100
     config.eval_every_steps = 500

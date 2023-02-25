@@ -18,6 +18,7 @@ from configs import graphmlp, graphnet, haikugraphmlp, haikumace
 
 import profile_nn_jax
 import logging
+
 logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
 
 
