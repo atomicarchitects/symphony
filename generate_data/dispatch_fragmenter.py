@@ -5,9 +5,9 @@ import sys
 
 sys.path.append("..")
 
-from qm9 import load_qm9
+from qm9 import load_qm9  # noqa: E402
 
-os.environ["OMP_NUM_THREADS"] = 8
+os.environ["OMP_NUM_THREADS"] = "8"
 
 
 def main(chunk: int, num_seeds: int, root_dir: str):
