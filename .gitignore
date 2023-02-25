@@ -164,3 +164,4 @@ graphnet
 qm9_data
 *.pb
 *.metadata
+notebooks
