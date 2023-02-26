@@ -263,13 +263,12 @@ def generation_loss(
         assert loss_position.shape == (num_graphs,)
         return loss_position
 
+    # If this is the last step in the generation process, we do not have to predict atom type and position.
     loss_focus = focus_loss()
-    loss_atom_type = atom_type_loss()
-    loss_position = position_loss()
+    loss_atom_type = atom_type_loss() * (1 - graphs.globals.stop)
+    loss_position = position_loss() * (1 - graphs.globals.stop)
 
-    total_loss = loss_focus + (loss_atom_type + loss_position) * (
-        1 - graphs.globals.stop
-    )
+    total_loss = loss_focus + loss_atom_type + loss_position
     return total_loss, (
         loss_focus,
         loss_atom_type,
@@ -333,18 +332,14 @@ def evaluate_step(
         preds=preds, graphs=graphs, **loss_kwargs
     )
 
-    # Take mean over valid graphs.
+    # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
-    total_loss, (focus_loss, atom_type_loss, position_loss) = jax.tree_map(
-        lambda arr: jnp.sum(arr * mask) / jnp.sum(mask),
-        (total_loss, (focus_loss, atom_type_loss, position_loss)),
-    )
-
     return EvalMetrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
         position_loss=position_loss,
+        mask=mask,
     )
 
 
@@ -416,7 +411,9 @@ def train_and_evaluate(
     tx = create_optimizer(config)
 
     # Create the training state.
-    state = train_state.TrainState.create(apply_fn=jax.jit(net.apply), params=params, tx=tx)
+    state = train_state.TrainState.create(
+        apply_fn=jax.jit(net.apply), params=params, tx=tx
+    )
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
@@ -496,11 +493,22 @@ def train_and_evaluate(
                 best_state = state
                 metrics_for_best_state = eval_metrics
 
-    # Checkpoint the best state and corresponding metrics seen during training.
+                # Checkpoint the best state and corresponding metrics seen during training.
+                with report_progress.timed("checkpoint"):
+                    ckpt.save(
+                        {
+                            "best_state": best_state,
+                            "metrics_for_best_state": metrics_for_best_state,
+                        }
+                    )
+
+    # Checkpoint the best state and corresponding metrics seen after training is complete.
     with report_progress.timed("checkpoint"):
-        ckpt.save({
-            "best_state": best_state,
-            "metrics_for_best_state": metrics_for_best_state,
-        })
+        ckpt.save(
+            {
+                "best_state": best_state,
+                "metrics_for_best_state": metrics_for_best_state,
+            }
+        )
 
     return best_state
