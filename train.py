@@ -13,8 +13,8 @@ import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
-import numpy as np
 import optax
+import yaml
 from absl import logging
 from clu import (
     checkpoint,
@@ -24,12 +24,9 @@ from clu import (
     periodic_actions,
 )
 from flax.training import train_state
-import yaml
 
 import datatypes
-import input_pipeline
 import input_pipeline_tf
-import datatypes
 import models
 
 
