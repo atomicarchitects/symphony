@@ -8,7 +8,7 @@ def get_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     config.rng_seed = 0
-    config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/"
+    config.root_dir = "/home/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/"
     config.num_train_files = 1
     config.num_val_files = 1
     config.num_test_files = 1
