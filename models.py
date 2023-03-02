@@ -493,7 +493,7 @@ class HaikuMACE(hk.Module):
 
     def target_species(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         species_logits = e3nn.haiku.MultiLayerPerceptron(
-            list_neurons=[128, 128, 128, 128, 128, 128, NUM_ELEMENTS],
+            list_neurons=[128, NUM_ELEMENTS],
             act=jax.nn.softplus,
         )(focus_node_embeddings.filter(keep="0e")).array
 
