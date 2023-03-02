@@ -395,15 +395,16 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-    # datasets = input_pipeline.get_datasets(rng, config)
-    datasets = input_pipeline_tf.get_datasets(rng, config)
+    # datasets = input_pipeline.get_datasets(dataset_rng, config)
+    datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    rng, init_rng = jax.random.split(rng)
     train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
     net = create_model(config)
+    
+    rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
