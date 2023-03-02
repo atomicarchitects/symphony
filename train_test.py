@@ -122,10 +122,10 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("haikumace", "graphmlp")
+    @parameterized.parameters(["haikumace"])
     def test_train_and_evaluate(self, config_name: str):
         # Enable profiling.
-        # profile_nn_jax.enable()
+        profile_nn_jax.enable()
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)

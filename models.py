@@ -460,6 +460,7 @@ class HaikuMACE(hk.Module):
         )
         species = graphs.nodes.species
         num_nodes = species.shape[0]
+        node_mask = jraph.get_node_padding_mask(graphs)
 
         # Predict the properties.
         node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
@@ -473,7 +474,8 @@ class HaikuMACE(hk.Module):
             radial_basis=lambda x, x_max: e3nn.bessel(x, 8, x_max),
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
-        )(vectors, species, graphs.senders, graphs.receivers)
+            correlation=3,
+        )(vectors, species, graphs.senders, graphs.receivers, node_mask)
 
         assert node_embeddings.shape == (
             num_nodes,
@@ -537,6 +539,10 @@ class HaikuMACE(hk.Module):
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
         # Get the node embeddings.
         node_embeddings = self.embeddings(graphs)
+
+        import profile_nn_jax
+
+        node_embeddings = profile_nn_jax.profile("node_embeddings", node_embeddings)
 
         # Get the focus logits.
         focus_logits = self.focus(node_embeddings)

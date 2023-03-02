@@ -89,9 +89,14 @@ def dataloader(
     Args:
         rng: The random number seed.
         molecules: The molecules to sample from. Each molecule is an ase.Atoms object.
-        atomic_numbers: The atomic numbers of the target species. For example, [1, 8] such that [H, O] maps to [0, 1].
-        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search. Only atoms upto (min_nn_dist + nn_tolerance) distance away will be considered as neighbors to the current atom. (Maybe 0.1A or 0.5A is good?)
-        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search. Only atoms upto cutoff distance away will be considered as neighbors to the current atom. (Maybe 5A)
+        atomic_numbers: The atomic numbers of the target species.
+            For example, [1, 8] such that [H, O] maps to [0, 1].
+        nn_tolerance: The tolerance in Angstroms for the nearest neighbor search.
+            Only atoms upto (min_nn_dist + nn_tolerance) distance away will be considered
+            as neighbors to the current atom. (Maybe 0.1A or 0.5A is good?)
+        nn_cutoff: The cutoff in Angstroms for the nearest neighbor search.
+            Only atoms upto cutoff distance away will be considered as neighbors
+            to the current atom. (Maybe 5A)
         max_n_nodes: The maximum number of nodes in a batch after padding.
         max_n_edges: The maximum number of nodes in a batch after padding.
         max_n_graphs: The maximum number of nodes in a batch after padding.
@@ -121,7 +126,9 @@ def dataloader(
         yield pad_graph_to_nearest_ceil_mantissa(
             graphs,
             n_mantissa_bits=1,
+            n_min_nodes=max_n_nodes,
             n_max_nodes=max_n_nodes,
+            n_min_edges=max_n_edges,
             n_max_edges=max_n_edges,
             n_min_graphs=max_n_graphs,
             n_max_graphs=max_n_graphs,
@@ -143,11 +150,21 @@ def fragments_pool_iterator(
         while len(fragments) < SAMPLES_POOL_SIZE:
             rng, index_rng, fragment_rng = jax.random.split(rng, num=3)
             indices = jax.random.randint(index_rng, (), 0, len(graph_molecules))
-            fragments += list(
+            frags = list(
                 generate_fragments(
                     fragment_rng, graph_molecules[indices], n_species, nn_tolerance
                 )
             )
+
+            skip = False
+            for frag in frags:
+                if np.linalg.norm(frag.globals.target_positions) > 2.0:
+                    skip = True
+
+            if skip:
+                continue
+
+            fragments += frags
             assert all([isinstance(sample, jraph.GraphsTuple) for sample in fragments])
 
         rng, index_rng = jax.random.split(rng)

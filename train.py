@@ -281,11 +281,15 @@ def get_predictions(
     return state.apply_fn(state.params, graphs)
 
 
-@functools.partial(jax.jit, static_argnames=["loss_kwargs"])
+@functools.partial(
+    jax.jit, static_argnames=["res_beta", "res_alpha", "radius_rbf_variance"]
+)
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    loss_kwargs: Dict[str, Union[float, int]],
+    res_beta: int = 60,
+    res_alpha: int = 99,
+    radius_rbf_variance: float = (0.015) ** 2,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
@@ -293,17 +297,24 @@ def train_step(
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs)
         total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
-            preds=preds, graphs=graphs, **loss_kwargs
+            preds=preds,
+            graphs=graphs,
+            res_beta=res_beta,
+            res_alpha=res_alpha,
+            radius_rbf_variance=radius_rbf_variance,
         )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (total_loss, focus_loss, atom_type_loss, position_loss, mask)
 
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (
-        _,
-        (total_loss, focus_loss, atom_type_loss, position_loss, mask),
-    ), grads = grad_fn(state.params, graphs)
+    grad_fn = jax.grad(loss_fn, has_aux=True)
+    grads, (
+        total_loss,
+        focus_loss,
+        atom_type_loss,
+        position_loss,
+        mask,
+    ) = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
     metrics_update = TrainMetrics.single_from_model_output(
@@ -313,7 +324,19 @@ def train_step(
         position_loss=position_loss,
         mask=mask,
     )
-    return state, metrics_update
+    grads_amp = jnp.max(
+        jnp.array([jnp.max(jnp.abs(g)) for g in jax.tree_util.tree_leaves(grads)])
+    )
+    grads_std = (
+        jnp.mean(
+            jnp.array(
+                [jnp.mean(jnp.square(g)) for g in jax.tree_util.tree_leaves(grads)]
+            )
+        )
+        ** 0.5
+    )
+
+    return state, metrics_update, grads_amp, grads_std
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])

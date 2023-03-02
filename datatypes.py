@@ -1,4 +1,3 @@
-from collections import namedtuple
 from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
