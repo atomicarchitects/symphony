@@ -2,8 +2,6 @@
 
 ### Instructions
 
-#### On MIT SuperCloud
-
 Clone the repository:
 
 ```shell
@@ -11,26 +9,10 @@ git clone git@github.com:atomicarchitects/spherical-harmonic-net.git
 cd spherical-harmonic-net
 ```
 
-```shell
-module load anaconda/2023a
-pip install -r supercloud_requirements.txt
-```
+Are you using MIT SuperCloud? If so, follow the instructions in the section ["MIT SuperCloud Setup"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#mit-supercloud-setup).
+Otherwise, continue with ["Default Setup"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#default-setup).
 
-Check that installation suceeded by running a short test:
-
-```shell
-python -m train_test
-```
-
-#### Everywhere Else
-
-Clone the repository:
-
-```shell
-git clone git@github.com:atomicarchitects/spherical-harmonic-net.git
-cd spherical-harmonic-net
-```
-
+#### Default Setup
 Create and activate a virtual environment:
 
 ```shell
@@ -43,12 +25,25 @@ Install dependencies with:
 pip install --upgrade pip && pip install -r requirements.txt
 ```
 
+Continue to ["Checking Installation"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#checking-installation).
+
+#### MIT SuperCloud Setup
+
+```shell
+module load anaconda/2023a
+pip install -r supercloud_requirements.txt
+```
+
+Continue to ["Checking Installation"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#checking-installation).
+
+#### Checking Installation
 Check that installation suceeded by running a short test:
 
 ```shell
 python -m train_test
 ```
 
+#### Start a Training Run 
 Start training with a configuration defined
 under `configs/`:
 
@@ -66,13 +61,6 @@ steps, the batch size and the dataset:
 ```shell
 python main.py --workdir=./workdirs --config=configs/graphnet.py \
 --config.num_training_steps=10 --config.batch_size=50
-```
-
-If you just want to test training without any dataset downloads,
-you can also run the end-to-end training test on the dummy dataset:
-
-```shell
-python -m train_test
 ```
 
 For more extensive changes, you can directly edit the configuration files,
