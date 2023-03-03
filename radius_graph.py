@@ -41,10 +41,10 @@ def create_radius_graph(
     return jax.pure_callback(
         _create_radius_graph,
         (
-            jnp.empty(n_edge, dtype=jnp.int32),
-            jnp.empty(n_edge, dtype=jnp.int32),
-            jnp.empty(n_edge, dtype=jnp.int32),
-            jnp.empty((), dtype=jnp.bool_),
+            jnp.empty(n_edge, dtype=jnp.int32),  # senders
+            jnp.empty(n_edge, dtype=jnp.int32),  # receivers
+            jnp.empty(n_node.shape, dtype=jnp.int32),  # n_edge
+            jnp.empty((), dtype=jnp.bool_),  # ok
         ),
         jax.lax.stop_gradient(positions),
         n_node,
