@@ -33,6 +33,7 @@ _ALL_CONFIGS = {
 def update_dummy_config(config):
     """Updates the dummy config."""
     config.num_train_steps = 100
+    config.num_eval_steps = 10
 
 
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
@@ -55,7 +56,7 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
             focus_probability=jnp.asarray([0.5, 0.5, 0.1, 0.1, 0.1]),
         ),
         globals=datatypes.FragmentGlobals(
-            stop=jnp.asarray([0, 1]),
+            stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,)),
             target_positions=jnp.zeros((num_graphs, 3)),
             target_species_probability=jnp.ones((num_graphs, num_elements))
