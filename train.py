@@ -305,7 +305,14 @@ def train_step(
         )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
-        return mean_loss, (total_loss, focus_loss, atom_type_loss, position_loss, mask)
+        return mean_loss, (
+            total_loss,
+            focus_loss,
+            atom_type_loss,
+            position_loss,
+            mask,
+            preds,
+        )
 
     grad_fn = jax.grad(loss_fn, has_aux=True)
     grads, (
@@ -314,6 +321,7 @@ def train_step(
         atom_type_loss,
         position_loss,
         mask,
+        preds,
     ) = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
@@ -324,19 +332,19 @@ def train_step(
         position_loss=position_loss,
         mask=mask,
     )
-    grads_amp = jnp.max(
-        jnp.array([jnp.max(jnp.abs(g)) for g in jax.tree_util.tree_leaves(grads)])
-    )
-    grads_std = (
-        jnp.mean(
-            jnp.array(
-                [jnp.mean(jnp.square(g)) for g in jax.tree_util.tree_leaves(grads)]
-            )
-        )
-        ** 0.5
-    )
 
-    return state, metrics_update, grads_amp, grads_std
+    g = jnp.concatenate(
+        [jnp.reshape(g, (-1,)) for g in jax.tree_util.tree_leaves(grads)]
+    )
+    grads_amp = jnp.max(jnp.abs(g))
+    grads_std = jnp.std(g)
+
+    mask = jraph.get_node_padding_mask(graphs)
+    emb = jnp.where(mask[:, None], preds.node_embeddings.array, 0.0)
+    emb_amp = jnp.max(jnp.abs(emb))
+    emb_std = jnp.sqrt(jnp.sum(emb**2) / jnp.sum(mask))
+
+    return state, metrics_update, grads_amp, grads_std, emb_amp, emb_std
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])

@@ -1,19 +1,21 @@
 import logging
+import pickle
 
 import e3nn_jax as e3nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
-import jraph
 import matplotlib.pyplot as plt
 import optax
-import profile_nn_jax
+
+# import profile_nn_jax
 from flax.training import train_state
 
 import input_pipeline
 import models
 import qm9
 import train
+import os
 
 cutoff = 5.0  # Angstroms
 
@@ -39,6 +41,8 @@ def net(graphs):
 def main():
     logging.basicConfig(level=logging.INFO)
     # profile_nn_jax.enable()
+    jax.config.update("jax_debug_nans", True)
+    # jax.config.update("jax_debug_infs", True)
 
     atomic_numbers = jnp.array([1, 6, 7, 8, 9])
 
@@ -53,44 +57,76 @@ def main():
         nn_cutoff=cutoff,
         max_n_nodes=512,
         max_n_edges=1024,
-        max_n_graphs=64,
+        max_n_graphs=2,
     )
-    print("Initialize model...")
-    params = jax.jit(net.init)(jax.random.PRNGKey(1), next(dataset))
+    if os.path.exists("params.pkl"):
+        print("Loading model...")
+        with open("params.pkl", "rb") as f:
+            params = pickle.load(f)
+    else:
+        print("Initialize model...")
+        params = jax.jit(net.init)(jax.random.PRNGKey(1), next(dataset))
+        with open("params.pkl", "wb") as f:
+            pickle.dump(params, f)
+
     apply_fn = jax.jit(net.apply)
 
     tx = optax.adam(learning_rate=0.001)
     state = train_state.TrainState.create(apply_fn=apply_fn, params=params, tx=tx)
 
-    n_nodes = []
-    n_edges = []
-    norms = []
+    params_amps = []
+    params_stds = []
+    grads_amps = []
+    grads_stds = []
+    emb_amps = []
+    emb_stds = []
 
     print("Training...")
     for i in range(200):
         graphs = next(dataset)
-        state, _metrics, grads_amp, grads_std = train.train_step(
+
+        # if i in [0]:
+        #     print(f"skip step {i}")
+        #     continue
+
+        state, metrics, grads_amp, grads_std, emb_amp, emb_std = train.train_step(
             state,
             graphs,
             res_beta=60,
             res_alpha=99,
             radius_rbf_variance=(0.015) ** 2,
         )
-        print(f"grads amp: {grads_amp:.2e} std: {grads_std:.2e}")
-        # emb = apply_fn(params, graphs)
-        # emb = emb.array[jraph.get_node_padding_mask(graphs), :]
-        # graphs = jraph.unpad_with_graphs(graphs)
-        # print(
-        #     f"{graphs.n_node} {graphs.n_edge} "
-        #     f"pred: [{emb.min():.2e}, {emb.max():.2e}] {jnp.linalg.norm(emb):.2e}"
-        # )
-        # n_nodes.append(graphs.n_node[0])
-        # n_edges.append(graphs.n_edge[0])
-        # norms.append(jnp.linalg.norm(emb))
+        w = jnp.concatenate(
+            [p.flatten() for p in jax.tree_util.tree_leaves(state.params)]
+        )
+        params_amp = jnp.max(jnp.abs(w))
+        params_std = jnp.std(w)
+        print(
+            f"step {i}"
+            f" grads amp: {grads_amp:.2e} std: {grads_std:.2e}"
+            f" params amp: {params_amp:.2e} std: {params_std:.2e}"
+            f" emb amp: {emb_amp:.2e} std: {emb_std:.2e}"
+            f" loss: {metrics.total_loss}"
+        )
 
-    plt.plot(n_nodes, norms, "o")
-    plt.xscale("log")
-    plt.yscale("log")
+        if jnp.isnan(params_amp):
+            break
+
+        params_amps.append(params_amp)
+        params_stds.append(params_std)
+        grads_amps.append(grads_amp)
+        grads_stds.append(grads_std)
+        emb_amps.append(emb_amp)
+        emb_stds.append(emb_std)
+
+    print(graphs)
+
+    plt.plot(params_amps, label="params amp")
+    plt.plot(params_stds, label="params std")
+    plt.plot(grads_amps, label="grads amp")
+    plt.plot(grads_stds, label="grads std")
+    plt.plot(emb_amps, label="emb amp")
+    plt.plot(emb_stds, label="emb std")
     plt.show()
 
 

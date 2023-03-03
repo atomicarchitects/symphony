@@ -47,3 +47,4 @@ class Predictions(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
     species_logits: jnp.ndarray  # [n_graph, n_species] float array
     position_coeffs: jnp.ndarray  # [n_graph, n_radii, ...] float array
+    node_embeddings: jnp.ndarray  # [n_node, irreps] float array

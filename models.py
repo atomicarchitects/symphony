@@ -558,4 +558,6 @@ class HaikuMACE(hk.Module):
         position_coeffs = self.target_position(
             true_focus_node_embeddings, graphs.globals.target_species
         )
-        return datatypes.Predictions(focus_logits, species_logits, position_coeffs)
+        return datatypes.Predictions(
+            focus_logits, species_logits, position_coeffs, node_embeddings
+        )
