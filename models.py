@@ -564,28 +564,7 @@ class HaikuMACE(hk.Module):
         self, graphs: jraph.GraphsTuple
     ) -> datatypes.Predictions:
         """Returns the predictions on these graphs during evaluation, when we do not have access to the true focus and target species."""
-        # Get the node embeddings.
-        node_embeddings = self.embeddings(graphs)
-
-        # Get the focus logits.
-        focus_logits = self.focus(node_embeddings)
-
-        # Reshape focus logits to be per-graph.
-        focus_logits = focus_logits.reshape(graphs.n_node)
-
-        # Get the embeddings of the focus nodes.
-        # This the per-graph maximum of the predicted focus logits.
-        focus_node_indices = get_first_node_indices(graphs)
-        true_focus_node_embeddings = node_embeddings[focus_node_indices]
-
-        # Get the species logits.
-        species_logits = self.target_species(true_focus_node_embeddings)
-
-        # Get the position coefficients.
-        position_coeffs = self.target_position(
-            true_focus_node_embeddings, graphs.globals.target_species
-        )
-        return datatypes.Predictions(focus_logits, species_logits, position_coeffs)
+        raise NotImplementedError
 
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
         return self.get_training_predictions(graphs)
