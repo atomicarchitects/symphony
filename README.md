@@ -2,6 +2,28 @@
 
 ### Instructions
 
+#### On MIT SuperCloud
+
+Clone the repository:
+
+```shell
+git clone git@github.com:atomicarchitects/spherical-harmonic-net.git
+cd spherical-harmonic-net
+```
+
+```shell
+module load anaconda/2023a
+pip install -r supercloud_requirements.txt
+```
+
+Check that installation suceeded by running a short test:
+
+```shell
+python -m train_test
+```
+
+#### Everywhere Else
+
 Clone the repository:
 
 ```shell
@@ -21,17 +43,17 @@ Install dependencies with:
 pip install --upgrade pip && pip install -r requirements.txt
 ```
 
-Download a dataset (QM9 shown below) with our script:
+Check that installation suceeded by running a short test:
 
 ```shell
-python download_datasets.py --dataset_name=qm9
+python -m train_test
 ```
 
 Start training with a configuration defined
 under `configs/`:
 
 ```shell
-python main.py --workdir=./workdirs --config=configs/graphnet.py
+python -m main --workdir=./workdirs --config=configs/graphnet.py
 ```
 
 #### Changing Hyperparameters
