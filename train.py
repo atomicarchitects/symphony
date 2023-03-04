@@ -54,7 +54,7 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     return {f"{prefix}_{key}": val for key, val in result.items()}
 
 
-def create_model(config: ml_collections.ConfigDict) -> nn.Module:
+def create_model(config: ml_collections.ConfigDict, evaluation_mode: bool) -> nn.Module:
     """Create a model as specified by the config."""
     if config.model == "GraphNet":
         return models.GraphNet(
@@ -98,6 +98,7 @@ def create_model(config: ml_collections.ConfigDict) -> nn.Module:
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 position_coeffs_lmax=config.position_coeffs_lmax,
+                evaluation_mode=evaluation_mode,
             )(graphs)
 
         return hk.without_apply_rng(model_fn)
@@ -187,7 +188,7 @@ def generation_loss(
             preds.position_coeffs.irreps.dim,
         )
 
-        # Integrate the position signal over each sphere to get the probability distribution over the radii.
+        # Compute the position signal projected to a spherical grid for each radius.
         position_signal = e3nn.to_s2grid(
             preds.position_coeffs,
             res_beta,
@@ -201,11 +202,11 @@ def generation_loss(
         # position_signal is of shape (num_graphs, num_radii, res_beta, res_alpha)
         assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
 
+        # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_max = jnp.max(
             position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-
         sphere_normalizing_factors = position_signal.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
@@ -221,12 +222,14 @@ def generation_loss(
         position_max = position_max.squeeze(axis=(-3, -2, -1))
         assert position_max.shape == (num_graphs,)
 
-        # Compare distance of target relative to focus to target_radius.
+        # These are the target positions for each graph.
+        # We need to compare these predicted positions to the target positions.
         target_positions = graphs.globals.target_positions
         assert target_positions.shape == (num_graphs, 3)
 
-        # Get radius weights from the true distribution, described by a RBF kernel around the target positions.
-        radius_weights = jax.vmap(
+        # Get radius weights from the true distribution,
+        # described by a RBF kernel around the target positions.
+        true_radius_weights = jax.vmap(
             lambda target_position: jax.vmap(
                 lambda radius: jnp.exp(
                     -((radius - jnp.linalg.norm(target_position)) ** 2)
@@ -234,14 +237,15 @@ def generation_loss(
                 )
             )(models.RADII)
         )(target_positions)
-        radius_weights += 1e-10
 
-        radius_weights = radius_weights / jnp.sum(
-            radius_weights, axis=-1, keepdims=True
+        # Normalize to get a probability distribution.
+        true_radius_weights += 1e-10
+        true_radius_weights = true_radius_weights / jnp.sum(
+            true_radius_weights, axis=-1, keepdims=True
         )
 
-        # radius_weights is of shape (num_graphs, num_radii)
-        assert radius_weights.shape == (num_graphs, num_radii)
+        # true_radius_weights is of shape (num_graphs, num_radii)
+        assert true_radius_weights.shape == (num_graphs, num_radii)
 
         # Compute f(r*, rhat*) which is our model predictions for the target positions.
         target_positions = e3nn.IrrepsArray("1o", target_positions)
@@ -254,7 +258,7 @@ def generation_loss(
         loss_position = jax.vmap(
             lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
         )(
-            radius_weights,
+            true_radius_weights,
             target_positions_logits,
             sphere_normalizing_factors,
             position_max,
@@ -309,14 +313,14 @@ def train_step(
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    metrics_update = TrainMetrics.single_from_model_output(
+    batch_metrics = TrainMetrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
         position_loss=position_loss,
         mask=mask,
     )
-    return state, metrics_update
+    return state, batch_metrics
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
@@ -360,13 +364,13 @@ def evaluate_model(
         # Loop over graphs.
         for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
             graphs = datatypes.Fragment.from_graphstuple(graphs)
-            split_metrics_update = evaluate_step(state, graphs, loss_kwargs)
+            batch_metrics = evaluate_step(state, graphs, loss_kwargs)
 
             # Update metrics.
             if split_metrics is None:
-                split_metrics = split_metrics_update
+                split_metrics = batch_metrics
             else:
-                split_metrics = split_metrics.merge(split_metrics_update)
+                split_metrics = split_metrics.merge(batch_metrics)
         eval_metrics[split] = split_metrics
 
     return eval_metrics
@@ -395,15 +399,16 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-    # datasets = input_pipeline.get_datasets(rng, config)
-    datasets = input_pipeline_tf.get_datasets(rng, config)
+    # datasets = input_pipeline.get_datasets(dataset_rng, config)
+    datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    rng, init_rng = jax.random.split(rng)
     train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    net = create_model(config)
+    net = create_model(config, evaluation_mode=False)
+
+    rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
@@ -414,6 +419,10 @@ def train_and_evaluate(
     state = train_state.TrainState.create(
         apply_fn=jax.jit(net.apply), params=params, tx=tx
     )
+
+    # Create a corresponding evaluation state.
+    eval_net = create_model(config, evaluation_mode=True)
+    eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
@@ -448,7 +457,7 @@ def train_and_evaluate(
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             graphs = next(train_iter)
             graphs = datatypes.Fragment.from_graphstuple(graphs)
-            state, metrics_update = train_step(
+            state, batch_metrics = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
@@ -456,9 +465,9 @@ def train_and_evaluate(
 
         # Update metrics.
         if train_metrics is None:
-            train_metrics = metrics_update
+            train_metrics = batch_metrics
         else:
-            train_metrics = train_metrics.merge(metrics_update)
+            train_metrics = train_metrics.merge(batch_metrics)
 
         # Quick indication that training is happening.
         logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
@@ -475,10 +484,17 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
+            # Evaluate with the current set of parameters.
+            eval_state = eval_state.replace(params=state.params)
+
             splits = ["val", "test"]
             with report_progress.timed("eval"):
                 eval_metrics = evaluate_model(
-                    state, datasets, splits, config.loss_kwargs, config.num_eval_steps
+                    eval_state,
+                    datasets,
+                    splits,
+                    config.loss_kwargs,
+                    config.num_eval_steps,
                 )
             for split in splits:
                 eval_metrics[split] = eval_metrics[split].compute()

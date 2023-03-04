@@ -16,7 +16,11 @@ import datatypes
 import train
 from configs import graphmlp, graphnet, haikugraphmlp, haikumace
 
-import profile_nn_jax
+try:
+    import profile_nn_jax
+except ImportError:
+    profile_nn_jax = None
+
 import logging
 
 logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
@@ -33,6 +37,7 @@ _ALL_CONFIGS = {
 def update_dummy_config(config):
     """Updates the dummy config."""
     config.num_train_steps = 100
+    config.num_eval_steps = 10
 
 
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
@@ -55,7 +60,7 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
             focus_probability=jnp.asarray([0.5, 0.5, 0.1, 0.1, 0.1]),
         ),
         globals=datatypes.FragmentGlobals(
-            stop=jnp.asarray([0, 1]),
+            stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,)),
             target_positions=jnp.zeros((num_graphs, 3)),
             target_species_probability=jnp.ones((num_graphs, num_elements))
@@ -124,8 +129,9 @@ class TrainTest(parameterized.TestCase):
 
     @parameterized.parameters("haikumace", "graphmlp")
     def test_train_and_evaluate(self, config_name: str):
-        # Enable profiling.
-        # profile_nn_jax.enable()
+        # Enable profiling, if available.
+        if profile_nn_jax is not None:
+            profile_nn_jax.enable()
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)

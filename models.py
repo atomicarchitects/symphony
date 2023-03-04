@@ -426,14 +426,15 @@ class HaikuMACE(hk.Module):
     def __init__(
         self,
         output_irreps: str,
-        r_max: int | float,
+        r_max: float,
         num_interactions: int,
         hidden_irreps: str,
         readout_mlp_irreps: str,
         avg_num_neighbors: int,
         num_species: int,
-        max_ell,
+        max_ell: int,
         position_coeffs_lmax: int,
+        evaluation_mode: bool,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -446,6 +447,7 @@ class HaikuMACE(hk.Module):
         self.num_species = num_species
         self.max_ell = max_ell
         self.position_coeffs_lmax = position_coeffs_lmax
+        self.evaluation_mode = evaluation_mode
 
     def embeddings(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
         """Inputs:
@@ -493,7 +495,7 @@ class HaikuMACE(hk.Module):
 
     def target_species(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         species_logits = e3nn.haiku.MultiLayerPerceptron(
-            list_neurons=[128, 128, 128, 128, 128, 128, NUM_ELEMENTS],
+            list_neurons=[128, NUM_ELEMENTS],
             act=jax.nn.softplus,
         )(focus_node_embeddings.filter(keep="0e")).array
 
@@ -534,7 +536,10 @@ class HaikuMACE(hk.Module):
 
         return position_coeffs
 
-    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+    def get_training_predictions(
+        self, graphs: jraph.GraphsTuple
+    ) -> datatypes.Predictions:
+        """Returns the predictions on these graphs during training, when we have access to the true focus and target species."""
         # Get the node embeddings.
         node_embeddings = self.embeddings(graphs)
 
@@ -543,7 +548,8 @@ class HaikuMACE(hk.Module):
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
-        true_focus_node_embeddings = node_embeddings[get_first_node_indices(graphs)]
+        focus_node_indices = get_first_node_indices(graphs)
+        true_focus_node_embeddings = node_embeddings[focus_node_indices]
 
         # Get the species logits.
         species_logits = self.target_species(true_focus_node_embeddings)
@@ -553,3 +559,12 @@ class HaikuMACE(hk.Module):
             true_focus_node_embeddings, graphs.globals.target_species
         )
         return datatypes.Predictions(focus_logits, species_logits, position_coeffs)
+
+    def get_evaluation_predictions(
+        self, graphs: jraph.GraphsTuple
+    ) -> datatypes.Predictions:
+        """Returns the predictions on these graphs during evaluation, when we do not have access to the true focus and target species."""
+        raise NotImplementedError
+
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        return self.get_training_predictions(graphs)

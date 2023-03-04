@@ -8,6 +8,10 @@ from urllib.error import URLError
 
 from ase.atoms import Atoms
 
+QM9_URL = (
+    "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip"
+)
+
 
 def download_url(url: str, root: str) -> str:
     """Download if file does not exist in root already. Returns path to file."""
@@ -111,12 +115,10 @@ def read_sdf(f):
 
 @cache
 def load_qm9(root_dir: str) -> List[Atoms]:
-    raw_url = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip"
-
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
 
-    path = download_url(raw_url, root_dir)
+    path = download_url(QM9_URL, root_dir)
     extract_zip(path, root_dir)
 
     with open(os.path.join(root_dir, "gdb9.sdf")) as f:
