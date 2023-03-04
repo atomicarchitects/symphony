@@ -2,8 +2,9 @@
 
 import functools
 import os
-from typing import Any, Dict, Iterable, Iterator, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, Tuple, Union, Optional
 
+import chex
 import e3nn_jax as e3nn
 import flax
 import flax.core
@@ -54,7 +55,9 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     return {f"{prefix}_{key}": val for key, val in result.items()}
 
 
-def create_model(config: ml_collections.ConfigDict, evaluation_mode: bool) -> nn.Module:
+def create_model(
+    config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
+) -> nn.Module:
     """Create a model as specified by the config."""
     if config.model == "GraphNet":
         return models.GraphNet(
@@ -98,10 +101,10 @@ def create_model(config: ml_collections.ConfigDict, evaluation_mode: bool) -> nn
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 position_coeffs_lmax=config.position_coeffs_lmax,
-                evaluation_mode=evaluation_mode,
+                run_in_evaluation_mode=run_in_evaluation_mode,
             )(graphs)
 
-        return hk.without_apply_rng(model_fn)
+        return model_fn
 
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -165,15 +168,16 @@ def generation_loss(
         return loss_focus
 
     def atom_type_loss() -> jnp.ndarray:
-        # species_logits is of shape (num_graphs, num_elements)
+        # target_species_logits is of shape (num_graphs, num_elements)
+        print(preds.target_species_logits.shape)
         assert (
-            preds.species_logits.shape
+            preds.target_species_logits.shape
             == graphs.globals.target_species_probability.shape
             == (num_graphs, num_elements)
         )
 
         loss_atom_type = optax.softmax_cross_entropy(
-            logits=preds.species_logits,
+            logits=preds.target_species_logits,
             labels=graphs.globals.target_species_probability,
         )
 
@@ -283,9 +287,10 @@ def generation_loss(
 def get_predictions(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
+    rng: Optional[chex.Array],
 ) -> datatypes.Predictions:
     """Get predictions from the network for input graphs."""
-    return state.apply_fn(state.params, graphs)
+    return state.apply_fn(state.params, rng, graphs)
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
@@ -298,7 +303,7 @@ def train_step(
 
     def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
         curr_state = state.replace(params=params)
-        preds = get_predictions(curr_state, graphs)
+        preds = get_predictions(curr_state, graphs, rng=None)
         total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
             preds=preds, graphs=graphs, **loss_kwargs
         )
@@ -327,11 +332,12 @@ def train_step(
 def evaluate_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
+    rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
-    preds = get_predictions(state, graphs)
+    preds = get_predictions(state, graphs, rng)
     total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
         preds=preds, graphs=graphs, **loss_kwargs
     )
@@ -351,6 +357,7 @@ def evaluate_model(
     state: train_state.TrainState,
     datasets: Iterator[datatypes.Fragment],
     splits: Iterable[str],
+    rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
     num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
@@ -364,7 +371,11 @@ def evaluate_model(
         # Loop over graphs.
         for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
             graphs = datatypes.Fragment.from_graphstuple(graphs)
-            batch_metrics = evaluate_step(state, graphs, loss_kwargs)
+
+            # Get the PRNG key for this step.
+            step_rng, rng = jax.random.split(rng)
+            graphs = jraph.unbatch(graphs)[0]
+            batch_metrics = evaluate_step(state, graphs, step_rng, loss_kwargs)
 
             # Update metrics.
             if split_metrics is None:
@@ -406,7 +417,7 @@ def train_and_evaluate(
     logging.info("Initializing network.")
     train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    net = create_model(config, evaluation_mode=False)
+    net = create_model(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
@@ -421,7 +432,7 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, evaluation_mode=True)
+    eval_net = create_model(config, run_in_evaluation_mode=True)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
@@ -489,10 +500,12 @@ def train_and_evaluate(
 
             splits = ["val", "test"]
             with report_progress.timed("eval"):
+                rng, eval_rng = jax.random.split(rng)
                 eval_metrics = evaluate_model(
                     eval_state,
                     datasets,
                     splits,
+                    eval_rng,
                     config.loss_kwargs,
                     config.num_eval_steps,
                 )
