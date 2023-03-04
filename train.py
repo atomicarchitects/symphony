@@ -330,14 +330,14 @@ def train_step(
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def evaluate_step(
-    state: train_state.TrainState,
+    eval_state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
-    preds = get_predictions(state, graphs, rng)
+    preds = get_predictions(eval_state, graphs, rng)
     total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
         preds=preds, graphs=graphs, **loss_kwargs
     )
@@ -354,7 +354,7 @@ def evaluate_step(
 
 
 def evaluate_model(
-    state: train_state.TrainState,
+    eval_state: train_state.TrainState,
     datasets: Iterator[datatypes.Fragment],
     splits: Iterable[str],
     rng: chex.PRNGKey,
@@ -374,8 +374,7 @@ def evaluate_model(
 
             # Get the PRNG key for this step.
             step_rng, rng = jax.random.split(rng)
-            graphs = jraph.unbatch(graphs)[0]
-            batch_metrics = evaluate_step(state, graphs, step_rng, loss_kwargs)
+            batch_metrics = evaluate_step(eval_state, graphs, step_rng, loss_kwargs)
 
             # Update metrics.
             if split_metrics is None:
@@ -432,7 +431,7 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, run_in_evaluation_mode=True)
+    eval_net = create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.

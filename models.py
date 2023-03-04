@@ -334,7 +334,7 @@ class GraphNet(nn.Module):
         )
 
 
-# Haiku
+# Haiku implementations of the models.
 class HaikuMLP(hk.Module):
     """A multi-layer perceptron in Haiku."""
 
@@ -360,41 +360,44 @@ class HaikuMLP(hk.Module):
         return x
 
 
-class HaikuGraphMLP(hk.Module):
-    """Applies an MLP to each node in the graph, with no message-passing."""
+def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
+    """A softplus function that is shifted so that shifted_softplus(0) = 0."""
+    return jax.nn.softplus(x) - jnp.log(2.0)
+
+
+class HaikuSchNet(hk.Module):
+    """A Haiku implementation of SchNet."""
 
     def __init__(
         self,
         latent_size: int,
-        num_mlp_layers: int,
-        position_coeffs_lmax: int,
-        activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
-        layer_norm: bool = True,
+        num_interactions: int,
+        activation: Callable[[jnp.ndarray], jnp.ndarray] = shifted_softplus,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
         self.latent_size = latent_size
-        self.num_mlp_layers = num_mlp_layers
+        self.num_interactions = num_interactions
         self.activation = activation
-        self.layer_norm = layer_norm
-        self.position_coeffs_lmax = position_coeffs_lmax
+
 
     def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
         species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
 
         def embed_node_fn(nodes: datatypes.NodesInfo):
-            species_embedded = species_embedder(nodes.species)
-            positions_embedded = HaikuMLP(
-                [self.latent_size * self.num_mlp_layers],
-                activation=self.activation,
-                layer_norm=self.layer_norm,
-            )(nodes.positions)
-            return hk.Linear(self.latent_size)(
-                jnp.concatenate([species_embedded, positions_embedded], axis=-1)
-            )
+            return species_embedder(nodes.species)
 
         # Embed the nodes.
         processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
+        
+        # Apply interactions, which involves message-passing over the graph.
+        for _ in range(self.num_interactions):
+            processed_graphs = SchNetInteraction(processed_graphs)
+
+        # Apply atom-wise MLP.
+        processed_graphs = jraph.GraphMapFeatures(
+            embed_node_fn=HaikuMLP([32, 1], activation=self.activation)
+        )
 
         # Predict the properties.
         node_embeddings = processed_graphs.nodes
@@ -422,7 +425,7 @@ class HaikuGraphMLP(hk.Module):
 
 
 class HaikuMACE(hk.Module):
-    """Wrapper class for the haiku version of MACE."""
+    """Wrapper class for the Haiku version of MACE."""
 
     def __init__(
         self,
@@ -593,20 +596,17 @@ class HaikuMACE(hk.Module):
 
         # Get the embeddings of the focus node.
         focus_node_embeddings = node_embeddings[focus_index]
-        print("done focus_node_embeddings")
+
         # Get the species logits.
         target_species_logits = self.target_species_logits(focus_node_embeddings)
         target_species_probs = jax.nn.softmax(target_species_logits)
-        print("target_species_probs", target_species_probs)
 
         # Sample the target species.
         rng, species_rng = jax.random.split(rng)
-        print(jnp.arange(NUM_ELEMENTS)[None, :].shape, target_species_probs.shape)
         target_species_index = jax.random.choice(
             species_rng, NUM_ELEMENTS, shape=(1,), p=target_species_probs[0]
         )
 
-        print(target_species_index)
         # Get the position coefficients.
         position_coeffs = self.target_position(
             focus_node_embeddings, target_species_index
