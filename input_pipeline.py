@@ -196,7 +196,7 @@ def pad_graph_to_nearest_ceil_mantissa(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: np.ndarray, nn_cutoff: float
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
@@ -207,17 +207,17 @@ def ase_atoms_to_jraph_graph(
     species = np.searchsorted(atomic_numbers, atoms.numbers)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(atoms.positions, species),
+        nodes=datatypes.NodesInfo(jnp.asarray(atoms.positions), jnp.asarray(species)),
         edges=None,
         globals=None,
-        senders=senders,
-        receivers=receivers,
-        n_node=np.array([len(atoms)]),
-        n_edge=np.array([len(senders)]),
+        senders=jnp.asarray(senders),
+        receivers=jnp.asarray(receivers),
+        n_node=jnp.array([len(atoms)]),
+        n_edge=jnp.array([len(senders)]),
     )
 
 
-def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
+def subgraph(graph: jraph.GraphsTuple, nodes: jnp.ndarray) -> jraph.GraphsTuple:
     """Extract a subgraph from a graph.
 
     Args:
@@ -232,10 +232,11 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
     ), "Only single graphs supported."
 
     # Find all edges that connect to the nodes.
-    edges = np.isin(graph.senders, nodes) & np.isin(graph.receivers, nodes)
+    edges = jnp.isin(graph.senders, nodes) & jnp.isin(graph.receivers, nodes)
 
-    new_node_indices = -np.ones(graph.n_node[0], dtype=int)
-    new_node_indices[nodes] = np.arange(len(nodes))
+    new_node_indices = -jnp.ones(graph.n_node[0], dtype=int)
+    new_node_indices = new_node_indices.at[nodes].set(jnp.arange(len(nodes)))
+    # new_node_indices[nodes] = jnp.arange(len(nodes))
 
     return jraph.GraphsTuple(
         nodes=jax.tree_util.tree_map(lambda x: x[nodes], graph.nodes),
@@ -243,8 +244,8 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
         globals=graph.globals,
         senders=new_node_indices[graph.senders[edges]],
         receivers=new_node_indices[graph.receivers[edges]],
-        n_node=np.array([len(nodes)]),
-        n_edge=np.array([np.sum(edges)]),
+        n_node=jnp.array([len(nodes)]),
+        n_edge=jnp.array([jnp.sum(edges)]),
     )
 
 
@@ -273,7 +274,7 @@ def generate_fragments(
     assert n >= 2, "Graph must have at least two nodes."
 
     # compute edge distances
-    dist = np.linalg.norm(
+    dist = jnp.linalg.norm(
         graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
         axis=1,
     )  # [n_edge]

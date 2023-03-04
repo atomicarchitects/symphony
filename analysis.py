@@ -68,7 +68,7 @@ def load_from_workdir(
 
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
-    net = train.create_model(config)
+    net = train.create_model(config, config.evaluation_mode)
     params = jax.jit(net.init)(init_rng, init_graphs)
     tx = train.create_optimizer(config)
     dummy_state = train_state.TrainState.create(
