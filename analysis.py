@@ -79,9 +79,10 @@ def load_from_workdir(
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
+    best_state = jax.tree_map(jnp.asarray, data["best_state"])
 
     return (
         config,
-        data["best_state"],
+        best_state,
         cast_keys_as_int(data["metrics_for_best_state"]),
     )
