@@ -68,7 +68,7 @@ def load_from_workdir(
 
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
-    net = train.create_model(config)
+    net = train.create_model(config, run_in_evaluation_mode=False)
     params = jax.jit(net.init)(init_rng, init_graphs)
     tx = train.create_optimizer(config)
     dummy_state = train_state.TrainState.create(
@@ -79,9 +79,10 @@ def load_from_workdir(
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
+    best_state = jax.tree_map(jnp.asarray, data["best_state"])
 
     return (
         config,
-        data["best_state"],
+        best_state,
         cast_keys_as_int(data["metrics_for_best_state"]),
     )
