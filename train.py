@@ -91,7 +91,7 @@ def create_model(
 
         @hk.transform
         def model_fn(graphs):
-            return models.HaikuMACE(
+            return models.MACE(
                 output_irreps=config.output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,

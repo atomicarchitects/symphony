@@ -44,6 +44,12 @@ class Fragment(jraph.GraphsTuple):
         )
 
 
+class TriangulationPredictions(NamedTuple):
+    target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
+    distance_logits: jnp.ndarray  # [n_node, n_radii, ...] float array
+
+
+
 class Predictions(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
     target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
