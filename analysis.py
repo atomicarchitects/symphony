@@ -1,6 +1,7 @@
 """Loads the model from a workdir to perform analysis."""
 
 import os
+import pickle
 import time
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
@@ -15,8 +16,12 @@ from absl import logging
 from clu import checkpoint
 from flax.training import train_state
 
+import datatypes
 import input_pipeline_tf
 import train
+
+
+ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -86,3 +91,37 @@ def load_from_workdir(
         best_state,
         cast_keys_as_int(data["metrics_for_best_state"]),
     )
+
+
+def to_mol_dict(generated_frag: datatypes.Fragment, modelpath, file_name):
+    first_index = np.asarray(jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)]))
+    positions = np.asarray(generated_frag.nodes.positions)
+    species = np.asarray(list(map(lambda z: ATOMIC_NUMBERS[z], generated_frag.nodes.species.tolist())))
+    
+    generated = {}
+    for i in range(len(first_index) - 1):
+        gen_list = generated.setdefault(first_index[i+1] - first_index[i], [])
+        gen_list.append({
+            "_positions": positions[first_index[i]:first_index[i+1]],
+            "_atomic_numbers": species[first_index[i]:first_index[i+1]]
+        })
+
+    gen_path = os.path.join(modelpath, 'generated/')
+    if not os.path.exists(gen_path):
+        os.makedirs(gen_path)
+    # get untaken filename and store results
+    file_name = os.path.join(gen_path, file_name)
+    if os.path.isfile(file_name + '.mol_dict'):
+        expand = 0
+        while True:
+            expand += 1
+            new_file_name = file_name + '_' + str(expand)
+            if os.path.isfile(new_file_name + '.mol_dict'):
+                continue
+            else:
+                file_name = new_file_name
+                break
+    with open(file_name + '.mol_dict', 'wb') as f:
+        pickle.dump(generated, f)
+
+    return generated
