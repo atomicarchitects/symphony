@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import jraph
 import mace_jax.modules
 import flax.linen as nn
+import chex
 
 import datatypes
 
@@ -216,10 +217,10 @@ class GraphMLP(nn.Module):
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
-        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(
+        position_coeffs = nn.Dense(len(RADII) * irreps.dim)(
             input_for_position_coeffs
         )
-        position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
+        position_coeffs = jnp.reshape(position_coeffs, (-1, len(RADII), irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
 
         return datatypes.Predictions(
@@ -320,10 +321,10 @@ class GraphNet(nn.Module):
         input_for_position_coeffs = jnp.concatenate(
             (true_focus_node_embeddings, target_species_embeddings), axis=-1
         )
-        position_coeffs = nn.Dense(RADII.shape[0] * irreps.dim)(
+        position_coeffs = nn.Dense(len(RADII) * irreps.dim)(
             input_for_position_coeffs
         )
-        position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
+        position_coeffs = jnp.reshape(position_coeffs, (-1, len(RADII), irreps.dim))
         position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
 
         return datatypes.Predictions(
@@ -333,95 +334,121 @@ class GraphNet(nn.Module):
         )
 
 
-# Haiku
-class HaikuMLP(hk.Module):
-    """A multi-layer perceptron in Haiku."""
+# Haiku implementations of the models.
+def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
+    """A softplus function that is shifted so that shifted_softplus(0) = 0."""
+    return jax.nn.softplus(x) - jnp.log(2.0)
 
-    def __init__(
-        self,
-        feature_sizes: Sequence[int],
-        activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
-        layer_norm: bool = True,
-        name=None,
-    ):
-        super().__init__(name=name)
-        self.feature_sizes = feature_sizes
+
+class GSchNetContinuousFilterConvolution(hk.Module):
+    """A continuous filter convolution as defined by GSchNet."""
+    def __init__(self, latent_size: int, activation: Callable[[jnp.ndarray], jnp.ndarray], name: Optional[str] = None):
+        super().__init__(name)
+        self.latent_size = latent_size
         self.activation = activation
-        self.layer_norm = layer_norm
 
-    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        x = inputs
-        for size in self.feature_sizes:
-            x = hk.Linear(output_size=size)(x)
-            x = self.activation(x)
-            if self.layer_norm:
-                x = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)(x)
-        return x
+    def __call__(self, graphs: datatypes.Fragment) -> jraph.GraphsTuple:
+        """Returns the updated graphs after a single interaction block."""
+        def embed_distance(distances: jnp.ndarray) -> jnp.ndarray:
+            centers = jnp.linspace(0, 10, 100)
+            gamma = 1.0
+            return jax.vmap(lambda center: jnp.exp(-gamma * jnp.square(distances - center)))(centers)
+        
+        def compute_embedded_distance(edge_features: jnp.ndarray, sender_features: jnp.ndarray, receiver_features: jnp.ndarray, globals: jnp.ndarray) -> jnp.ndarray:
+            """Computes the distance between the two nodes connected by the edge."""
+            del edge_features, globals
+            distances = jnp.linalg.norm(sender_features - receiver_features)
+            distances = embed_distance(distances)
+            distances = hk.nets.MLP([self.latent_size, self.latent_size], activation=self.activation)(distances)
+            return distances
+
+        return jraph.GraphNetwork(
+            update_edge_fn=compute_embedded_distance,
+        )(graphs)
 
 
-class HaikuGraphMLP(hk.Module):
-    """Applies an MLP to each node in the graph, with no message-passing."""
+class GSchNetInteractionBlock(hk.Module):
+    """A single interaction block as defined by GSchNet."""
+    def __init__(self, latent_size: int, activation: Callable[[jnp.ndarray], jnp.ndarray], name: Optional[str] = None):
+        super().__init__(name)
+        self.latent_size = latent_size
+        self.activation = activation
+
+    def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
+        """Returns the updated graphs after a single interaction block."""
+        processed_graphs = GSchNetContinuousFilterConvolution(self.latent_size, self.activation)(graphs)
+        return jraph.GraphMapFeatures(embed_node_fn=lambda nodes: hk.nets.MLP([self.latent_size, self.latent_size, self.latent_size], activation=self.activation)(nodes))(processed_graphs)
+
+
+
+class GSchNet(hk.Module):
+    """A Haiku implementation of GSchNet."""
 
     def __init__(
         self,
         latent_size: int,
-        num_mlp_layers: int,
-        position_coeffs_lmax: int,
-        activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu,
-        layer_norm: bool = True,
+        num_interactions: int,
+        activation: Callable[[jnp.ndarray], jnp.ndarray] = shifted_softplus,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
         self.latent_size = latent_size
-        self.num_mlp_layers = num_mlp_layers
+        self.num_interactions = num_interactions
         self.activation = activation
-        self.layer_norm = layer_norm
-        self.position_coeffs_lmax = position_coeffs_lmax
+        self.species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
 
-    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
-        species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
 
-        def embed_node_fn(nodes: datatypes.NodesInfo):
-            species_embedded = species_embedder(nodes.species)
-            positions_embedded = HaikuMLP(
-                [self.latent_size * self.num_mlp_layers],
-                activation=self.activation,
-                layer_norm=self.layer_norm,
-            )(nodes.positions)
-            return hk.Linear(self.latent_size)(
-                jnp.concatenate([species_embedded, positions_embedded], axis=-1)
-            )
-
+    def node_embeddings(self, graphs: jraph.GraphsTuple) -> jnp.ndarray:
+        """Returns the node embeddings for the given graphs."""
         # Embed the nodes.
-        processed_graphs = jraph.GraphMapFeatures(embed_node_fn=embed_node_fn)(graphs)
+        processed_graphs = jraph.GraphMapFeatures(embed_node_fn=lambda nodes: self.species_embedder(nodes.species))(graphs)
+        
+        # Apply interactions, which involves message-passing over the graph.
+        for _ in range(self.num_interactions):
+            processed_graphs = GSchNetInteractionBlock(self.latent_size, self.activation)(processed_graphs)
 
         # Predict the properties.
-        node_embeddings = processed_graphs.nodes
-        true_focus_node_embeddings = node_embeddings[get_first_node_indices(graphs)]
-        target_species_embeddings = species_embedder(graphs.globals.target_species)
+        return processed_graphs.nodes
 
-        focus_logits = hk.Linear(1)(node_embeddings).squeeze(axis=-1)
-        species_logits = hk.Linear(NUM_ELEMENTS)(true_focus_node_embeddings)
+    def target_species_logits(self, node_embeddings: jnp.ndarray, n_node: jnp.ndarray) -> jnp.ndarray:
+        """Returns the logits for the target species conditioned on all node embeddings."""
+        num_nodes = node_embeddings.shape[0]
+        num_graphs = n_node.shape[0]
 
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        input_for_position_coeffs = jnp.concatenate(
-            (true_focus_node_embeddings, target_species_embeddings), axis=-1
+        all_species_embeddings = self.species_embedder(jnp.arange(NUM_ELEMENTS))
+        node_and_species_embeddings = jax.vmap(lambda node_embedding: jnp.multiply(node_embedding, all_species_embeddings))(node_embeddings)
+        target_species_logits = hk.nets.MLP([self.latent_size, self.latent_size, NUM_ELEMENTS], activation=self.activation)(node_and_species_embeddings)
+        
+        # Aggregate the target species logits per-graph.
+        assert target_species_logits.shape == (num_nodes, NUM_ELEMENTS)
+        target_species_logits = e3nn.scatter_sum(target_species_logits, n_node)
+        assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
+
+
+    def distance_logits(self, node_embeddings: jnp.ndarray, target_species: jnp.ndarray):
+        num_nodes = node_embeddings.shape[0]
+
+        target_species_embeddings = self.species_embedder(target_species)
+        node_and_target_species_embeddings = jax.vmap(lambda node_embedding: jnp.multiply(node_embedding, target_species_embeddings))(node_embeddings)
+        distance_logits = hk.nets.MLP([self.latent_size, self.latent_size, len(RADII)], activation=self.activation)(node_and_target_species_embeddings)
+    
+        assert distance_logits.shape == (num_nodes, len(RADII))
+        return distance_logits
+
+
+    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        node_embeddings = self.node_embeddings(graphs)
+        target_species_logits = self.target_species_logits(node_embeddings, graphs.n_node)
+        distance_logits = self.distance_logits(node_embeddings, graphs.target_species)
+
+        return datatypes.TriangulationPredictions(
+            target_species_logits=target_species_logits,
+            distance_logits=distance_logits,
         )
-        position_coeffs = hk.Linear(RADII.shape[0] * irreps.dim)(
-            input_for_position_coeffs
-        )
-        position_coeffs = jnp.reshape(position_coeffs, (-1, RADII.shape[0], irreps.dim))
-        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
-
-        return datatypes.Predictions(
-            focus_logits=focus_logits,
-            species_logits=species_logits,
-            position_coeffs=position_coeffs,
-        )
 
 
-class HaikuMACE(hk.Module):
-    """Wrapper class for the haiku version of MACE."""
+class MACE(hk.Module):
+    """Wrapper class for the Haiku version of MACE."""
 
     def __init__(
         self,
@@ -434,7 +461,7 @@ class HaikuMACE(hk.Module):
         num_species: int,
         max_ell: int,
         position_coeffs_lmax: int,
-        evaluation_mode: bool,
+        run_in_evaluation_mode: bool,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -447,14 +474,17 @@ class HaikuMACE(hk.Module):
         self.num_species = num_species
         self.max_ell = max_ell
         self.position_coeffs_lmax = position_coeffs_lmax
-        self.evaluation_mode = evaluation_mode
+        self.run_in_evaluation_mode = run_in_evaluation_mode
 
-    def embeddings(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
-        """Inputs:
-        - graphs.nodes.positions
-        - graphs.nodes.species
-        - graphs.senders
-        - graphs.receivers
+    def node_embeddings(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
+        """Returns node embeddings for these graphs.
+        Inputs:
+            graphs: a jraph.GraphsTuple with the following fields:
+            - nodes.positions
+            - nodes.species
+            - senders
+            - receivers
+        
         """
         vectors = (
             graphs.nodes.positions[graphs.receivers]
@@ -485,7 +515,9 @@ class HaikuMACE(hk.Module):
         node_embeddings = node_embeddings.axis_to_mul(axis=1)
         return node_embeddings
 
-    def focus(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+    def focus_logits(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+        """Returns the logits for the focus node."""
+
         focus_logits = e3nn.haiku.Linear("0e")(node_embeddings)
         focus_logits = focus_logits.array.squeeze(axis=-1)
 
@@ -493,19 +525,22 @@ class HaikuMACE(hk.Module):
         assert focus_logits.shape == (num_nodes,)
         return focus_logits
 
-    def target_species(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+    def target_species_logits(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+        """Returns the logits for the target species conditioned on only focus node embeddings."""
+        num_graphs = focus_node_embeddings.shape[0]
+
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[128, NUM_ELEMENTS],
             act=jax.nn.softplus,
         )(focus_node_embeddings.filter(keep="0e")).array
-
-        num_graphs = focus_node_embeddings.shape[0]
         assert species_logits.shape == (num_graphs, NUM_ELEMENTS)
+
         return species_logits
 
     def target_position(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
     ) -> e3nn.IrrepsArray:
+        """Returns the position coefficients for the target species."""
         num_graphs = focus_node_embeddings.shape[0]
         assert focus_node_embeddings.shape == (
             num_graphs,
@@ -527,7 +562,7 @@ class HaikuMACE(hk.Module):
         )
         position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
 
-        num_radii = RADII.shape[0]
+        num_radii = len(RADII)
         assert position_coeffs.shape == (
             num_graphs,
             num_radii,
@@ -537,14 +572,14 @@ class HaikuMACE(hk.Module):
         return position_coeffs
 
     def get_training_predictions(
-        self, graphs: jraph.GraphsTuple
+        self,  graphs: datatypes.Fragment
     ) -> datatypes.Predictions:
         """Returns the predictions on these graphs during training, when we have access to the true focus and target species."""
         # Get the node embeddings.
-        node_embeddings = self.embeddings(graphs)
+        node_embeddings = self.node_embeddings(graphs)
 
         # Get the focus logits.
-        focus_logits = self.focus(node_embeddings)
+        focus_logits = self.focus_logits(node_embeddings)
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
@@ -552,19 +587,62 @@ class HaikuMACE(hk.Module):
         true_focus_node_embeddings = node_embeddings[focus_node_indices]
 
         # Get the species logits.
-        species_logits = self.target_species(true_focus_node_embeddings)
+        target_species_logits = self.target_species_logits(true_focus_node_embeddings)
 
         # Get the position coefficients.
         position_coeffs = self.target_position(
             true_focus_node_embeddings, graphs.globals.target_species
         )
-        return datatypes.Predictions(focus_logits, species_logits, position_coeffs)
+        return datatypes.Predictions(
+            focus_logits=focus_logits,
+            target_species_logits=target_species_logits,
+            position_coeffs=position_coeffs,
+        )
 
     def get_evaluation_predictions(
-        self, graphs: jraph.GraphsTuple
-    ) -> datatypes.Predictions:
-        """Returns the predictions on these graphs during evaluation, when we do not have access to the true focus and target species."""
-        raise NotImplementedError
+        self, graphs: datatypes.Fragment
+    ) -> datatypes.EvaluationPredictions:
+        """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
+        # Get the PRNG key.
+        rng = hk.next_rng_key()
 
-    def __call__(self, graphs: jraph.GraphsTuple) -> datatypes.Predictions:
+        # Get the node embeddings, and corresponding focus probabilities.
+        node_embeddings = self.node_embeddings(graphs)
+        focus_logits = self.focus_logits(node_embeddings)
+        focus_probs = jax.nn.softmax(focus_logits)
+
+        # Sample the focus node.
+        rng, focus_rng = jax.random.split(rng)
+        num_nodes = graphs.nodes.positions.shape[0]
+        focus_index = jax.random.choice(focus_rng, num_nodes, shape=(1,), p=focus_probs)
+
+        # Get the embeddings of the focus node.
+        focus_node_embeddings = node_embeddings[focus_index]
+
+        # Get the species logits.
+        target_species_logits = self.target_species_logits(focus_node_embeddings)
+        target_species_probs = jax.nn.softmax(target_species_logits)
+
+        # Sample the target species.
+        rng, species_rng = jax.random.split(rng)
+        target_species_index = jax.random.choice(
+            species_rng, NUM_ELEMENTS, shape=(1,), p=target_species_probs[0]
+        )
+
+        # Get the position coefficients.
+        position_coeffs = self.target_position(
+            focus_node_embeddings, target_species_index
+        )
+
+        return datatypes.EvaluationPredictions(
+            focus_logits=focus_logits,
+            focus_index=focus_index,
+            target_species_logits=target_species_logits,
+            position_coeffs=position_coeffs,
+            target_species_index=target_species_index,
+        )
+
+    def __call__(self, graphs: datatypes.Fragment) -> datatypes.Predictions:
+        if self.run_in_evaluation_mode:
+            return self.get_evaluation_predictions(graphs)
         return self.get_training_predictions(graphs)
