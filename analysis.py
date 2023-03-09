@@ -93,18 +93,33 @@ def load_from_workdir(
     )
 
 
+def to_db(generated_frag: datatypes.Fragment, modelpath, file_name):
+    pass
+
+
 def to_mol_dict(generated_frag: datatypes.Fragment, modelpath, file_name):
     first_index = np.asarray(jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)]))
     positions = np.asarray(generated_frag.nodes.positions)
     species = np.asarray(list(map(lambda z: ATOMIC_NUMBERS[z], generated_frag.nodes.species.tolist())))
     
-    generated = {}
+    generated = {}  # G-SchNet seems to expect this to be a dictionary with int keys and dictionary values
+    # is this supposed to be one sequence of generated fragments at a time, or can multiple mols be considered?
     for i in range(len(first_index) - 1):
-        gen_list = generated.setdefault(first_index[i+1] - first_index[i], [])
-        gen_list.append({
-            "_positions": positions[first_index[i]:first_index[i+1]],
-            "_atomic_numbers": species[first_index[i]:first_index[i+1]]
-        })
+        k = int(first_index[i+1] - first_index[i])
+        if k not in generated:
+            generated[k] = {
+                "_positions": np.array([positions[first_index[i]:first_index[i+1]]]),
+                "_atomic_numbers": np.array([species[first_index[i]:first_index[i+1]]])
+            }
+        else:
+            generated[k]["_positions"] = np.append(
+                generated[k]["_positions"],
+                [positions[first_index[i]:first_index[i+1]]],
+                0)
+            generated[k]["_atomic_numbers"] = np.append(
+                generated[k]["_atomic_numbers"],
+                [species[first_index[i]:first_index[i+1]]],
+                0)
 
     gen_path = os.path.join(modelpath, 'generated/')
     if not os.path.exists(gen_path):
