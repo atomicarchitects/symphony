@@ -540,9 +540,9 @@ class HaikuMACE(hk.Module):
         # Get the node embeddings.
         node_embeddings = self.embeddings(graphs)
 
-        import profile_nn_jax
+        # import profile_nn_jax
 
-        node_embeddings = profile_nn_jax.profile("node_embeddings", node_embeddings)
+        # node_embeddings = profile_nn_jax.profile("node_embeddings", node_embeddings)
 
         # Get the focus logits.
         focus_logits = self.focus(node_embeddings)

@@ -28,7 +28,7 @@ def net(graphs):
     return models.HaikuMACE(
         output_irreps=output_irreps,
         r_max=cutoff,
-        num_interactions=2,
+        num_interactions=3,
         hidden_irreps=output_irreps,
         readout_mlp_irreps=output_irreps,
         avg_num_neighbors=25.0,

@@ -129,6 +129,8 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
 
+    graph_mask = jraph.get_graph_padding_mask(graphs)
+
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
         assert (
@@ -139,6 +141,9 @@ def generation_loss(
 
         n_node = graphs.n_node
         focus_logits = preds.focus_logits
+
+        node_mask = jraph.get_node_padding_mask(graphs)
+        focus_logits = jnp.where(node_mask, focus_logits, 0)
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
         loss_focus = e3nn.scatter_sum(
@@ -168,8 +173,11 @@ def generation_loss(
             == (num_graphs, num_elements)
         )
 
+        species_logits = jnp.where(graph_mask[:, None], preds.species_logits, 0)
+
         loss_atom_type = optax.softmax_cross_entropy(
-            logits=preds.species_logits,
+            logits=species_logits,
+            # logits=preds.species_logits,
             labels=graphs.globals.target_species_probability,
         )
 
@@ -184,9 +192,13 @@ def generation_loss(
             preds.position_coeffs.irreps.dim,
         )
 
+        position_coeffs_arr = jnp.where(graph_mask[:, None, None], preds.position_coeffs.array, 0)
+        position_coeffs = e3nn.IrrepsArray(preds.position_coeffs.irreps, position_coeffs_arr)
+
         # Integrate the position signal over each sphere to get the probability distribution over the radii.
         position_signal = e3nn.to_s2grid(
-            preds.position_coeffs,
+            position_coeffs,
+            # preds.position_coeffs,
             res_beta,
             res_alpha,
             quadrature="gausslegendre",
@@ -202,6 +214,7 @@ def generation_loss(
         position_max = jnp.max(
             position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
         )
+        jax.debug.print('position_max={position_max}', position_max=position_max)
 
         sphere_normalizing_factors = position_signal.apply(
             lambda pos: jnp.exp(pos - position_max)
@@ -244,7 +257,8 @@ def generation_loss(
         target_positions = e3nn.IrrepsArray("1o", target_positions)
         target_positions_logits = jax.vmap(
             functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.position_coeffs, target_positions)
+        )(position_coeffs, target_positions)
+        # )(preds.position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
@@ -304,7 +318,9 @@ def train_step(
             radius_rbf_variance=radius_rbf_variance,
         )
         mask = jraph.get_graph_padding_mask(graphs)
+        jax.debug.print("total_loss={total_loss}", total_loss=total_loss)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
+        jax.debug.print("total_loss_masked={total_loss}", total_loss=jnp.where(mask, total_loss, 0.0))
         return mean_loss, (
             total_loss,
             focus_loss,
