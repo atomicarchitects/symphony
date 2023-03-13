@@ -169,7 +169,6 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # target_species_logits is of shape (num_graphs, num_elements)
-        print(preds.target_species_logits.shape)
         assert (
             preds.target_species_logits.shape
             == graphs.globals.target_species_probability.shape
@@ -372,7 +371,7 @@ def evaluate_model(
         for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
             graphs = datatypes.Fragment.from_graphstuple(graphs)
 
-            # Get the PRNG key for this step.
+            # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             batch_metrics = evaluate_step(eval_state, graphs, step_rng, loss_kwargs)
 
@@ -431,7 +430,9 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, run_in_evaluation_mode=False)
+    # Currently, run_in_evaluation_mode is False because evaluation is expensive.
+    # We might change this later.
+    eval_net = create_model(config, run_in_evaluation_mode=True)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.

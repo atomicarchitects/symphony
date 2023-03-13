@@ -58,7 +58,7 @@ class Predictions(NamedTuple):
 
 class EvaluationPredictions(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
-    focus_index: jnp.ndarray  # [1,] int array
+    focus_indices: jnp.ndarray  # [1,] int array
     target_species_logits: jnp.ndarray  # [1, n_species] float array
-    target_species_index: jnp.ndarray  # [1,] int array
+    target_species: jnp.ndarray  # [1,] int array
     position_coeffs: jnp.ndarray  # [1, n_radii, ...] float array

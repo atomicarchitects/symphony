@@ -10,6 +10,7 @@ import jraph
 import mace_jax.modules
 import flax.linen as nn
 import chex
+import functools
 
 import datatypes
 
@@ -20,6 +21,25 @@ NUM_ELEMENTS = 5
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     """Returns the indices of the focus nodes in each graph."""
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
+
+
+@functools.partial(jax.jit, static_argnames="num_segments")
+def segment_sample(probabilities: jnp.ndarray, segment_ids: jnp.ndarray, num_segments: int, rng: chex.PRNGKey):
+    """Sample indices from a categorical distribution across each segment.
+    Args:
+        probabilities: A 1D array of probabilities.
+        segment_ids: A 1D array of segment ids.
+        num_segments: The number of segments.
+        rng: A PRNG key.
+    Returns:
+        A 1D array of sampled indices.
+    """
+    def sample_for_segment(rng, i):
+        return jax.random.choice(rng, node_indices, p=jnp.where(i == segment_ids, probabilities, 0.))
+    
+    node_indices = jnp.arange(len(segment_ids))
+    rngs = jax.random.split(rng, num_segments)
+    return jax.vmap(sample_for_segment)(rngs, jnp.arange(num_segments))
 
 
 def add_graphs_tuples(
@@ -606,18 +626,26 @@ class MACE(hk.Module):
         # Get the PRNG key.
         rng = hk.next_rng_key()
 
+        # Get the number of graphs and nodes.
+        num_nodes = graphs.nodes.positions.shape[0]
+        num_graphs = graphs.n_node.shape[0]
+
         # Get the node embeddings, and corresponding focus probabilities.
         node_embeddings = self.node_embeddings(graphs)
         focus_logits = self.focus_logits(node_embeddings)
-        focus_probs = jax.nn.softmax(focus_logits)
+        focus_probs = jraph.partition_softmax(focus_logits, graphs.n_node, num_nodes)
 
         # Sample the focus node.
         rng, focus_rng = jax.random.split(rng)
-        num_nodes = graphs.nodes.positions.shape[0]
-        focus_index = jax.random.choice(focus_rng, num_nodes, shape=(1,), p=focus_probs)
+        segment_ids = jnp.repeat(
+            jnp.arange(num_graphs),
+            graphs.n_node,
+            axis=0,
+            total_repeat_length=num_nodes)
+        focus_indices = segment_sample(focus_probs, segment_ids, num_graphs, focus_rng)
 
         # Get the embeddings of the focus node.
-        focus_node_embeddings = node_embeddings[focus_index]
+        focus_node_embeddings = node_embeddings[focus_indices]
 
         # Get the species logits.
         target_species_logits = self.target_species_logits(focus_node_embeddings)
@@ -625,21 +653,21 @@ class MACE(hk.Module):
 
         # Sample the target species.
         rng, species_rng = jax.random.split(rng)
-        target_species_index = jax.random.choice(
-            species_rng, NUM_ELEMENTS, shape=(1,), p=target_species_probs[0]
-        )
+        species_rngs = jax.random.split(species_rng, num_graphs)
+        target_species = jax.vmap(lambda key, p: jax.random.choice(
+            key, NUM_ELEMENTS, p=p))(species_rngs, target_species_probs)
 
         # Get the position coefficients.
         position_coeffs = self.target_position(
-            focus_node_embeddings, target_species_index
+            focus_node_embeddings, target_species
         )
 
         return datatypes.EvaluationPredictions(
             focus_logits=focus_logits,
-            focus_index=focus_index,
+            focus_indices=focus_indices,
             target_species_logits=target_species_logits,
             position_coeffs=position_coeffs,
-            target_species_index=target_species_index,
+            target_species=target_species,
         )
 
     def __call__(self, graphs: datatypes.Fragment) -> datatypes.Predictions:
