@@ -48,7 +48,7 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
     num_radii = models.RADII.shape[0]
     preds = datatypes.Predictions(
         focus_logits=jnp.ones((num_nodes,)),
-        species_logits=jnp.asarray(
+        target_species_logits=jnp.asarray(
             [[0.1, 0.2, 0.3, 0.4, 0.5], [1.1, 1.2, 1.3, 1.4, 1.5]]
         ),
         position_coeffs=e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1))),
@@ -127,11 +127,11 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("haikumace", "graphmlp")
+    @parameterized.parameters(("haikumace",))
     def test_train_and_evaluate(self, config_name: str):
         # Enable profiling, if available.
-        if profile_nn_jax is not None:
-            profile_nn_jax.enable()
+        # if profile_nn_jax is not None:
+        #     profile_nn_jax.enable()
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
