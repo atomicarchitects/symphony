@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import scipy
 import ml_collections
+import logging
 
 import models
 import datatypes
@@ -21,10 +22,7 @@ try:
 except ImportError:
     profile_nn_jax = None
 
-import logging
-
 logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
-
 
 _ALL_CONFIGS = {
     "e3schnet": e3schnet.get_config(),
