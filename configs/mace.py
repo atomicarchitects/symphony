@@ -16,15 +16,12 @@ def get_config() -> ml_collections.ConfigDict:
 
     # GNN hyperparameters.
     config.model = "MACE"
-    config.position_coeffs_lmax = 3
-    config.output_irreps = str(50 * e3nn.s2_irreps(config.position_coeffs_lmax))
+    config.num_channels = 50
     config.r_max = 5
     config.num_interactions = 1
-    config.hidden_irreps = config.output_irreps
-    config.readout_mlp_irreps = config.output_irreps
     config.avg_num_neighbors = 15.0
     config.num_species = 5
-    config.max_ell = config.position_coeffs_lmax
+    config.max_ell = 3
     config.num_basis_fns = 8
     config.activation = "softplus"
 

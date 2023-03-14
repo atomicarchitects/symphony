@@ -249,14 +249,13 @@ class MACE(hk.Module):
     def __init__(
         self,
         output_irreps: str,
-        r_max: float,
-        num_interactions: int,
         hidden_irreps: str,
         readout_mlp_irreps: str,
+        r_max: float,
+        num_interactions: int,
         avg_num_neighbors: int,
         num_species: int,
         max_ell: int,
-        position_coeffs_lmax: int,
         num_basis_fns: int,
         name: Optional[str] = None,
     ):
@@ -269,7 +268,6 @@ class MACE(hk.Module):
         self.avg_num_neighbors = avg_num_neighbors
         self.num_species = num_species
         self.max_ell = max_ell
-        self.position_coeffs_lmax = position_coeffs_lmax
         self.num_basis_fns = num_basis_fns
 
     def __call__(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:

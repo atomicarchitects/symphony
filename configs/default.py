@@ -10,9 +10,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.rng_seed = 0
     config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/"
     config.root_dir = "/home/ameyad/qm9_data_tf/data_tf2"
-    config.num_train_files = 1
-    config.num_val_files = 1
-    config.num_test_files = 1
+    config.train_molecules = (0, 47616)
+    config.val_molecules =  (47616, 53568)
+    config.test_molecules = (53568, 133920)
 
     config.num_train_steps = 10_000
     config.num_eval_steps = 100
@@ -40,5 +40,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_species_predictor.num_layers = 2
 
     config.target_positions_predictor = ml_collections.ConfigDict()
-    config.target_positions_predictor.position_coeffs_lmax = 3
     return config

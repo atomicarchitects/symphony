@@ -67,17 +67,18 @@ def create_model(
             activation = getattr(jax.nn, config.activation)
 
         if config.model == "MACE":
+            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+
             node_embedder = models.MACE(
-                output_irreps=config.output_irreps,
+                output_irreps=output_irreps,
+                hidden_irreps=output_irreps,
+                readout_mlp_irreps=output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
-                hidden_irreps=config.hidden_irreps,
-                readout_mlp_irreps=config.readout_mlp_irreps,
                 avg_num_neighbors=config.avg_num_neighbors,
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 num_basis_fns=config.num_basis_fns,
-                position_coeffs_lmax=config.position_coeffs_lmax,
             )
         elif config.model == "E3SchNet":
             node_embedder = models.E3SchNet(
@@ -103,7 +104,7 @@ def create_model(
             activation=activation,
         )
         target_position_predictor = models.TargetPositionPredictor(
-            position_coeffs_lmax=config.position_coeffs_lmax
+            position_coeffs_lmax=config.max_ell
         )
         return models.Predictor(
             node_embedder=node_embedder,
