@@ -14,7 +14,7 @@ import ml_collections
 import models
 import datatypes
 import train
-from configs import graphmlp, graphnet, haikugraphmlp, haikumace
+from configs import mace, e3schnet
 
 try:
     import profile_nn_jax
@@ -27,10 +27,8 @@ logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
 
 
 _ALL_CONFIGS = {
-    "graphmlp": graphmlp.get_config(),
-    "graphnet": graphnet.get_config(),
-    "haikugraphmlp": haikugraphmlp.get_config(),
-    "haikumace": haikumace.get_config(),
+    "e3schnet": e3schnet.get_config(),
+    "mace": mace.get_config(),
 }
 
 
@@ -127,11 +125,9 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters(("haikumace",))
+    @parameterized.parameters("mace", "e3schnet")
     def test_train_and_evaluate(self, config_name: str):
-        # Enable profiling, if available.
-        # if profile_nn_jax is not None:
-        #     profile_nn_jax.enable()
+        """Tests that training and evaluation runs without errors."""
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)

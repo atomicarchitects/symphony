@@ -59,39 +59,15 @@ def create_model(
     config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
 ) -> nn.Module:
     """Create a model as specified by the config."""
-    if config.model == "GraphNet":
-        return models.GraphNet(
-            latent_size=config.latent_size,
-            num_mlp_layers=config.num_mlp_layers,
-            message_passing_steps=config.message_passing_steps,
-            skip_connections=config.skip_connections,
-            layer_norm=config.layer_norm,
-            use_edge_model=config.use_edge_model,
-            position_coeffs_lmax=config.position_coeffs_lmax,
-        )
-    if config.model == "GraphMLP":
-        return models.GraphMLP(
-            latent_size=config.latent_size,
-            num_mlp_layers=config.num_mlp_layers,
-            layer_norm=config.layer_norm,
-            position_coeffs_lmax=config.position_coeffs_lmax,
-        )
-    if config.model == "HaikuGraphMLP":
 
-        @hk.transform
-        def model_fn(graphs):
-            return models.HaikuGraphMLP(
-                latent_size=config.latent_size,
-                num_mlp_layers=config.num_mlp_layers,
-                layer_norm=config.layer_norm,
-            )(graphs)
+    def model_fn(graphs):
+        if config.activation == "shifted_softplus":
+            activation = models.shifted_softplus
+        else:
+            activation = getattr(jax.nn, config.activation)
 
-        return hk.without_apply_rng(model_fn)
-    if config.model == "HaikuMACE":
-
-        @hk.transform
-        def model_fn(graphs):
-            return models.MACE(
+        if config.model == "MACE":
+            node_embedder = models.MACE(
                 output_irreps=config.output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
@@ -100,13 +76,44 @@ def create_model(
                 avg_num_neighbors=config.avg_num_neighbors,
                 num_species=config.num_species,
                 max_ell=config.max_ell,
+                num_basis_fns=config.num_basis_fns,
                 position_coeffs_lmax=config.position_coeffs_lmax,
-                run_in_evaluation_mode=run_in_evaluation_mode,
-            )(graphs)
+            )
+        elif config.model == "E3SchNet":
+            node_embedder = models.E3SchNet(
+                n_atom_basis=config.n_atom_basis,
+                n_interactions=config.n_interactions,
+                n_filters=config.n_filters,
+                n_rbf=config.n_rbf,
+                activation=activation,
+                cutoff=config.cutoff,
+                max_ell=config.max_ell,
+            )
+        else:
+            raise ValueError(f"Unsupported model: {config.model}.")
 
-        return model_fn
+        focus_predictor = models.FocusPredictor(
+            latent_size=config.focus_predictor.latent_size,
+            num_layers=config.focus_predictor.num_layers,
+            activation=activation,
+        )
+        target_species_predictor = models.TargetSpeciesPredictor(
+            latent_size=config.target_species_predictor.latent_size,
+            num_layers=config.target_species_predictor.num_layers,
+            activation=activation,
+        )
+        target_position_predictor = models.TargetPositionPredictor(
+            position_coeffs_lmax=config.position_coeffs_lmax
+        )
+        return models.Predictor(
+            node_embedder=node_embedder,
+            focus_predictor=focus_predictor,
+            target_species_predictor=target_species_predictor,
+            target_position_predictor=target_position_predictor,
+            run_in_evaluation_mode=run_in_evaluation_mode,
+        )(graphs)
 
-    raise ValueError(f"Unsupported model: {config.model}.")
+    return hk.transform(model_fn)
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
@@ -430,8 +437,6 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    # Currently, run_in_evaluation_mode is False because evaluation is expensive.
-    # We might change this later.
     eval_net = create_model(config, run_in_evaluation_mode=True)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
