@@ -16,12 +16,11 @@ def get_config() -> ml_collections.ConfigDict:
 
     # GNN hyperparameters.
     config.model = "E3SchNet"
-    config.position_coeffs_lmax = 3
     config.cutoff = 10
     config.n_interactions = 3
     config.n_rbf = 25
     config.n_atom_basis = 128
     config.n_filters = 128
-    config.max_ell = config.position_coeffs_lmax
+    config.max_ell = 3
     config.activation = "shifted_softplus"
     return config

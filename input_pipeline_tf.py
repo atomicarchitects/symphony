@@ -1,9 +1,11 @@
 """Input pipeline for the QM9 dataset with the tf.data API."""
 
 import functools
-from typing import Dict
-import tensorflow as tf
+from typing import Dict, List, Sequence, Tuple
+import re
 import os
+
+import tensorflow as tf
 import chex
 import jax
 import numpy as np
@@ -17,14 +19,14 @@ def get_datasets(
     rng: chex.PRNGKey, config: ml_collections.ConfigDict
 ) -> Dict[str, tf.data.Dataset]:
     """Loads and preprocesses the QM9 dataset as tf.data.Datasets for each split."""
+    del rng
 
     # Get the raw datasets.
     datasets = get_raw_qm9_datasets(
-        rng,
         config.root_dir,
-        config.num_train_files,
-        config.num_val_files,
-        config.num_test_files,
+        config.train_molecules,
+        config.val_molecules,
+        config.test_molecules,
     )
 
     # Convert to jraph.GraphsTuple.
@@ -64,7 +66,7 @@ def get_datasets(
     return datasets
 
 
-def get_raw_qm9_datasets(
+def _deprecated_get_raw_qm9_datasets(
     rng: chex.PRNGKey,
     root_dir: str,
     num_train_files: int,
@@ -101,6 +103,47 @@ def get_raw_qm9_datasets(
 
         datasets[split] = dataset_split
     return datasets
+
+
+def get_raw_qm9_datasets(
+    root_dir: str,
+    train_molecules: Tuple[int, int],
+    val_molecules: Tuple[int, int],
+    test_molecules: Tuple[int, int],
+    seed: int = 0,
+) -> Dict[str, tf.data.Dataset]:
+    """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
+    # Root directory of the dataset.
+    filenames = os.listdir(root_dir)
+    filenames = [os.path.join(root_dir, f) for f in filenames if f.startswith("fragments_seed")]
+
+    # Partition the filenames into train, val, and test.
+    def filter_by_molecule_number(filenames: Sequence[str], start: int, end: int) -> List[str]:
+        def filter_file(filename: str, start: int, end: int) -> bool:
+            filename = os.path.basename(filename)
+            _, file_start, file_end = [int(val) for val in re.findall(r'\d+', filename)]
+            return start <= file_start and file_end < end
+        return [f for f in filenames if filter_file(f, start, end)]
+
+    files_by_split = {
+        "train": filter_by_molecule_number(filenames, *train_molecules),
+        "val": filter_by_molecule_number(filenames, *val_molecules),
+        "test": filter_by_molecule_number(filenames, *test_molecules),
+    }
+
+    element_spec = tf.data.Dataset.load(filenames[0]).element_spec
+    datasets = {}
+    for split, files_split in files_by_split.items():
+        dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
+        dataset_split = dataset_split.interleave(
+            lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
+        dataset_split = dataset_split.shuffle(1000, seed=seed)
+        datasets[split] = dataset_split
+    return datasets
+
 
 
 def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
