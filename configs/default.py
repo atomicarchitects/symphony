@@ -28,4 +28,16 @@ def get_config() -> ml_collections.ConfigDict:
         "res_alpha": 51,
         "radius_rbf_variance": 1e-3,
     }
+
+    # Prediction heads.
+    config.focus_predictor = ml_collections.ConfigDict()
+    config.focus_predictor.latent_size = 128
+    config.focus_predictor.num_layers = 2
+
+    config.target_species_predictor = ml_collections.ConfigDict()
+    config.target_species_predictor.latent_size = 128
+    config.target_species_predictor.num_layers = 2
+
+    config.target_positions_predictor = ml_collections.ConfigDict()
+    config.target_positions_predictor.position_coeffs_lmax = 3
     return config
