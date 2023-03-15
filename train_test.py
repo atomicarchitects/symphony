@@ -15,11 +15,7 @@ import logging
 import models
 import datatypes
 import train
-<<<<<<< HEAD
-from configs import graphmlp, graphnet, haikugraphmlp, haikumace, nequip
-=======
-from configs import mace, e3schnet
->>>>>>> 28bfaf379ff3ccb5aee2cb40847b2eb14b9a312b
+from configs import mace, e3schnet, nequip
 
 try:
     import profile_nn_jax
@@ -29,16 +25,9 @@ except ImportError:
 logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
 
 _ALL_CONFIGS = {
-<<<<<<< HEAD
-    "graphmlp": graphmlp.get_config(),
-    "graphnet": graphnet.get_config(),
-    "haikugraphmlp": haikugraphmlp.get_config(),
-    "haikumace": haikumace.get_config(),
-    "nequip": nequip.get_config(),
-=======
     "e3schnet": e3schnet.get_config(),
     "mace": mace.get_config(),
->>>>>>> 28bfaf379ff3ccb5aee2cb40847b2eb14b9a312b
+    "nequip": nequip.get_config(),
 }
 
 

@@ -113,8 +113,6 @@ def create_model(
             target_position_predictor=target_position_predictor,
             run_in_evaluation_mode=run_in_evaluation_mode,
         )(graphs)
-
-    return hk.transform(model_fn)
     
     if config.model == "NequIP":
         return models.NequIP(
@@ -129,6 +127,8 @@ def create_model(
             mlp_n_layers = config.mlp_n_layers,
             n_radial_basis = config.n_radial_basis
         )
+
+    return hk.transform(model_fn)
         
 
 

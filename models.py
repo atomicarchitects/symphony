@@ -285,6 +285,7 @@ class MACE(hk.Module):
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
         )
+        relative_positions = e3nn.IrrepsArray(e3nn.Irreps('1o'), relative_positions)
         species = graphs.nodes.species
         num_nodes = species.shape[0]
 
@@ -542,6 +543,7 @@ class NequIP(nn.Module):
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
         )
+        vectors = e3nn.IrrepsArray(e3nn.Irreps('1o'), vectors)
         species = graphs.nodes.species
         n_nodes = graphs.nodes.positions.shape[0]
         node_feats = nn.Embed(n_nodes, self.latent_size)(species)
