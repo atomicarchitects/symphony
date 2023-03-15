@@ -10,28 +10,35 @@ import jax
 import jax.numpy as jnp
 import scipy
 import ml_collections
+import logging
 
 import models
 import datatypes
 import train
+<<<<<<< HEAD
 from configs import graphmlp, graphnet, haikugraphmlp, haikumace, nequip
+=======
+from configs import mace, e3schnet
+>>>>>>> 28bfaf379ff3ccb5aee2cb40847b2eb14b9a312b
 
 try:
     import profile_nn_jax
 except ImportError:
     profile_nn_jax = None
 
-import logging
-
 logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
 
-
 _ALL_CONFIGS = {
+<<<<<<< HEAD
     "graphmlp": graphmlp.get_config(),
     "graphnet": graphnet.get_config(),
     "haikugraphmlp": haikugraphmlp.get_config(),
     "haikumace": haikumace.get_config(),
     "nequip": nequip.get_config(),
+=======
+    "e3schnet": e3schnet.get_config(),
+    "mace": mace.get_config(),
+>>>>>>> 28bfaf379ff3ccb5aee2cb40847b2eb14b9a312b
 }
 
 
@@ -130,9 +137,7 @@ class TrainTest(parameterized.TestCase):
 
     @parameterized.parameters(("nequip",))
     def test_train_and_evaluate(self, config_name: str):
-        # Enable profiling, if available.
-        # if profile_nn_jax is not None:
-        #     profile_nn_jax.enable()
+        """Tests that training and evaluation runs without errors."""
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)

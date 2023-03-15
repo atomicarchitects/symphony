@@ -59,52 +59,63 @@ def create_model(
     config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
 ) -> nn.Module:
     """Create a model as specified by the config."""
-    if config.model == "GraphNet":
-        return models.GraphNet(
-            latent_size=config.latent_size,
-            num_mlp_layers=config.num_mlp_layers,
-            message_passing_steps=config.message_passing_steps,
-            skip_connections=config.skip_connections,
-            layer_norm=config.layer_norm,
-            use_edge_model=config.use_edge_model,
-            position_coeffs_lmax=config.position_coeffs_lmax,
-        )
-    if config.model == "GraphMLP":
-        return models.GraphMLP(
-            latent_size=config.latent_size,
-            num_mlp_layers=config.num_mlp_layers,
-            layer_norm=config.layer_norm,
-            position_coeffs_lmax=config.position_coeffs_lmax,
-        )
-    if config.model == "HaikuGraphMLP":
 
-        @hk.transform
-        def model_fn(graphs):
-            return models.HaikuGraphMLP(
-                latent_size=config.latent_size,
-                num_mlp_layers=config.num_mlp_layers,
-                layer_norm=config.layer_norm,
-            )(graphs)
+    def model_fn(graphs):
+        if config.activation == "shifted_softplus":
+            activation = models.shifted_softplus
+        else:
+            activation = getattr(jax.nn, config.activation)
 
-        return hk.without_apply_rng(model_fn)
-    if config.model == "MACE":
+        if config.model == "MACE":
+            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
 
-        @hk.transform
-        def model_fn(graphs):
-            return models.MACE(
-                output_irreps=config.output_irreps,
+            node_embedder = models.MACE(
+                output_irreps=output_irreps,
+                hidden_irreps=output_irreps,
+                readout_mlp_irreps=output_irreps,
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
-                hidden_irreps=config.hidden_irreps,
-                readout_mlp_irreps=config.readout_mlp_irreps,
                 avg_num_neighbors=config.avg_num_neighbors,
                 num_species=config.num_species,
                 max_ell=config.max_ell,
-                position_coeffs_lmax=config.position_coeffs_lmax,
-                run_in_evaluation_mode=run_in_evaluation_mode,
-            )(graphs)
+                num_basis_fns=config.num_basis_fns,
+            )
+        elif config.model == "E3SchNet":
+            node_embedder = models.E3SchNet(
+                n_atom_basis=config.n_atom_basis,
+                n_interactions=config.n_interactions,
+                n_filters=config.n_filters,
+                n_rbf=config.n_rbf,
+                activation=activation,
+                cutoff=config.cutoff,
+                max_ell=config.max_ell,
+            )
+        else:
+            raise ValueError(f"Unsupported model: {config.model}.")
+        
+        focus_predictor = models.FocusPredictor(
+            latent_size=config.focus_predictor.latent_size,
+            num_layers=config.focus_predictor.num_layers,
+            activation=activation,
+        )
+        target_species_predictor = models.TargetSpeciesPredictor(
+            latent_size=config.target_species_predictor.latent_size,
+            num_layers=config.target_species_predictor.num_layers,
+            activation=activation,
+        )
+        target_position_predictor = models.TargetPositionPredictor(
+            position_coeffs_lmax=config.max_ell
+        )
+        return models.Predictor(
+            node_embedder=node_embedder,
+            focus_predictor=focus_predictor,
+            target_species_predictor=target_species_predictor,
+            target_position_predictor=target_position_predictor,
+            run_in_evaluation_mode=run_in_evaluation_mode,
+        )(graphs)
 
-        return model_fn
+    return hk.transform(model_fn)
+    
     if config.model == "NequIP":
         return models.NequIP(
             latent_size = config.latent_size,
@@ -118,8 +129,7 @@ def create_model(
             mlp_n_layers = config.mlp_n_layers,
             n_radial_basis = config.n_radial_basis
         )
-
-    raise ValueError(f"Unsupported model: {config.model}.")
+        
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
@@ -187,7 +197,6 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         # target_species_logits is of shape (num_graphs, num_elements)
-        print(preds.target_species_logits.shape)
         assert (
             preds.target_species_logits.shape
             == graphs.globals.target_species_probability.shape
@@ -399,7 +408,7 @@ def evaluate_model(
         for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
             graphs = datatypes.Fragment.from_graphstuple(graphs)
 
-            # Get the PRNG key for this step.
+            # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             batch_metrics = evaluate_step(eval_state, graphs, step_rng, loss_kwargs)
 
@@ -458,7 +467,7 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, run_in_evaluation_mode=False)
+    eval_net = create_model(config, run_in_evaluation_mode=True)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
