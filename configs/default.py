@@ -2,6 +2,8 @@
 
 import ml_collections
 import os
+
+
 def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
@@ -12,7 +14,7 @@ def get_config() -> ml_collections.ConfigDict:
     else:
         config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2/"
     config.train_molecules = (0, 47616)
-    config.val_molecules =  (47616, 53568)
+    config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
 
     config.num_train_steps = 100_000
