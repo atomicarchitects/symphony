@@ -8,7 +8,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     config.rng_seed = 0
     if os.uname()[1] == "potato.mit.edu":
-        config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2/"
+        config.root_dir = "/home/ameyad/qm9_data_tf/data_tf2"
     else:
         config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2/"
     config.train_molecules = (0, 47616)
