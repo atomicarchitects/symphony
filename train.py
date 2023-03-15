@@ -123,7 +123,6 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-@functools.partial(jax.jit, static_argnames=["res_beta", "res_alpha"])
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragment,
