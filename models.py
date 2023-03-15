@@ -1,15 +1,15 @@
 """Definition of the generative models."""
 
+import functools
 from typing import Callable, Optional
 
+import chex
 import e3nn_jax as e3nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
-import chex
-import functools
 
 import datatypes
 
