@@ -1,6 +1,6 @@
 """Definition of the generative models."""
 
-from typing import Callable, Optional, Sequence, Tuple, Union
+from typing import Callable, Optional
 
 import e3nn_jax as e3nn
 import haiku as hk
@@ -8,7 +8,6 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
-import flax.linen as nn
 import chex
 import functools
 
