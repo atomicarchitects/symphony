@@ -14,7 +14,7 @@ import ml_collections
 import models
 import datatypes
 import train
-from configs import graphmlp, graphnet, haikugraphmlp, haikumace
+from configs import graphmlp, graphnet, haikugraphmlp, haikumace, nequip
 
 try:
     import profile_nn_jax
@@ -31,6 +31,7 @@ _ALL_CONFIGS = {
     "graphnet": graphnet.get_config(),
     "haikugraphmlp": haikugraphmlp.get_config(),
     "haikumace": haikumace.get_config(),
+    "nequip": nequip.get_config(),
 }
 
 
@@ -127,7 +128,7 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters(("haikumace",))
+    @parameterized.parameters(("nequip",))
     def test_train_and_evaluate(self, config_name: str):
         # Enable profiling, if available.
         # if profile_nn_jax is not None:

@@ -87,7 +87,7 @@ def create_model(
             )(graphs)
 
         return hk.without_apply_rng(model_fn)
-    if config.model == "HaikuMACE":
+    if config.model == "MACE":
 
         @hk.transform
         def model_fn(graphs):
@@ -105,6 +105,19 @@ def create_model(
             )(graphs)
 
         return model_fn
+    if config.model == "NequIP":
+        return models.NequIP(
+            latent_size = config.latent_size,
+            avg_num_neighbors = config.avg_num_neighbors,
+            sh_lmax = config.sh_lmax,
+            target_irreps = config.target_irreps,
+            even_activation = config.even_activation,
+            odd_activation = config.odd_activation,
+            mlp_activation = config.mlp_activation,
+            mlp_n_hidden = config.mlp_n_hidden,
+            mlp_n_layers = config.mlp_n_layers,
+            n_radial_basis = config.n_radial_basis
+        )
 
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -136,6 +149,8 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
 
+    graph_mask = jraph.get_graph_padding_mask(graphs)
+
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
         assert (
@@ -146,6 +161,9 @@ def generation_loss(
 
         n_node = graphs.n_node
         focus_logits = preds.focus_logits
+
+        node_mask = jraph.get_node_padding_mask(graphs)
+        focus_logits = jnp.where(node_mask, focus_logits, 0)
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
         loss_focus = e3nn.scatter_sum(
@@ -176,8 +194,10 @@ def generation_loss(
             == (num_graphs, num_elements)
         )
 
+        species_logits = jnp.where(graph_mask[:, None], preds.species_logits, 0)
+
         loss_atom_type = optax.softmax_cross_entropy(
-            logits=preds.target_species_logits,
+            logits=species_logits,
             labels=graphs.globals.target_species_probability,
         )
 
@@ -192,9 +212,16 @@ def generation_loss(
             preds.position_coeffs.irreps.dim,
         )
 
+        position_coeffs_arr = jnp.where(
+            graph_mask[:, None, None], preds.position_coeffs.array, 0
+        )
+        position_coeffs = e3nn.IrrepsArray(
+            preds.position_coeffs.irreps, position_coeffs_arr
+        )
+
         # Compute the position signal projected to a spherical grid for each radius.
         position_signal = e3nn.to_s2grid(
-            preds.position_coeffs,
+            position_coeffs,
             res_beta,
             res_alpha,
             quadrature="gausslegendre",
@@ -255,7 +282,7 @@ def generation_loss(
         target_positions = e3nn.IrrepsArray("1o", target_positions)
         target_positions_logits = jax.vmap(
             functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.position_coeffs, target_positions)
+        )(position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 

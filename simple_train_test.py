@@ -24,7 +24,7 @@ cutoff = 5.0  # Angstroms
 def net(graphs):
     lmax = 3
     output_irreps = 32 * e3nn.s2_irreps(lmax)
-    return models.HaikuMACE(
+    return models.MACE(
         output_irreps=output_irreps,
         r_max=cutoff,
         num_interactions=3,
@@ -34,6 +34,7 @@ def net(graphs):
         num_species=5,
         max_ell=3,
         position_coeffs_lmax=lmax,
+        run_in_evaluation_mode=False
     )(graphs)
 
 
