@@ -1,19 +1,25 @@
 """Defines the default training configuration."""
 
 import ml_collections
+import os
 
 
 def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
+    hostname = os.uname()[1]
+    if hostname == "potato.mit.edu":
+        config.root_dir = "/home/ameyad/qm9_data_tf/data_tf2"
+    else:
+        config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2/"
+
     config.rng_seed = 0
-    config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2/"
     config.train_molecules = (0, 47616)
-    config.val_molecules =  (47616, 53568)
+    config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
 
-    config.num_train_steps = 10_000
+    config.num_train_steps = 100_000
     config.num_eval_steps = 100
     config.log_every_steps = 100
     config.eval_every_steps = 500

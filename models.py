@@ -192,8 +192,6 @@ class E3SchNet(hk.Module):
         self.max_ell = max_ell
 
     def __call__(self, graphs: jraph.GraphsTuple) -> jnp.ndarray:
-        """Compute output of E3SchNet with equivariant interaction blocks."""
-
         # 'species' are actually atomic numbers mapped to [0, NUM_ELEMENTS).
         # But we keep the same name for consistency with SchNetPack.
         atomic_numbers = graphs.nodes.species
