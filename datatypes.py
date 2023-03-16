@@ -1,6 +1,6 @@
-from collections import namedtuple
 from typing import NamedTuple, Optional
 
+import e3nn_jax as e3nn
 import jax.numpy as jnp
 import jraph
 
@@ -48,6 +48,7 @@ class Predictions(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
     target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
     position_coeffs: jnp.ndarray  # [n_graph, n_radii, ...] float array
+    position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
 
 
 class EvaluationPredictions(NamedTuple):
@@ -56,3 +57,4 @@ class EvaluationPredictions(NamedTuple):
     target_species_logits: jnp.ndarray  # [1, n_species] float array
     target_species: jnp.ndarray  # [1,] int array
     position_coeffs: jnp.ndarray  # [1, n_radii, ...] float array
+    position_logits: e3nn.SphericalSignal  # [1, n_radii, beta, alpha] float array

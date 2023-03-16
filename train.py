@@ -123,12 +123,9 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-@functools.partial(jax.jit, static_argnames=["res_beta", "res_alpha"])
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragment,
-    res_beta: int,
-    res_alpha: int,
     radius_rbf_variance: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
@@ -196,26 +193,12 @@ def generation_loss(
             preds.position_coeffs.irreps.dim,
         )
 
-        # Compute the position signal projected to a spherical grid for each radius.
-        position_signal = e3nn.to_s2grid(
-            preds.position_coeffs,
-            res_beta,
-            res_alpha,
-            quadrature="gausslegendre",
-            normalization="integral",
-            p_val=1,
-            p_arg=-1,
-        )
-
-        # position_signal is of shape (num_graphs, num_radii, res_beta, res_alpha)
-        assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
-
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_max = jnp.max(
-            position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
+            preds.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        sphere_normalizing_factors = position_signal.apply(
+        sphere_normalizing_factors = preds.position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)

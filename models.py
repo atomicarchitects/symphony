@@ -1,7 +1,7 @@
 """Definition of the generative models."""
 
 import functools
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 
 import chex
 import e3nn_jax as e3nn
@@ -361,14 +361,24 @@ class TargetPositionPredictor(hk.Module):
     """Predicts the position coefficients for the target species."""
 
     position_coeffs_lmax: int
+    res_beta: int
+    res_alpha: int
 
-    def __init__(self, position_coeffs_lmax: int, name: Optional[str] = None):
+    def __init__(
+        self,
+        position_coeffs_lmax: int,
+        res_beta: int,
+        res_alpha: int,
+        name: Optional[str] = None,
+    ):
         super().__init__(name)
         self.position_coeffs_lmax = position_coeffs_lmax
+        self.res_beta = res_beta
+        self.res_alpha = res_alpha
 
     def __call__(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
-    ) -> e3nn.IrrepsArray:
+    ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
         num_graphs = focus_node_embeddings.shape[0]
 
         assert focus_node_embeddings.shape == (
@@ -391,7 +401,18 @@ class TargetPositionPredictor(hk.Module):
             target_species_embeddings * focus_node_embeddings
         )
         position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
-        return position_coeffs
+
+        # Compute the position signal projected to a spherical grid for each radius.
+        position_logits = e3nn.to_s2grid(
+            position_coeffs,
+            self.res_beta,
+            self.res_alpha,
+            quadrature="gausslegendre",
+            normalization="integral",
+            p_val=1,
+            p_arg=-1,
+        )
+        return position_coeffs, position_logits
 
 
 class Predictor(hk.Module):
@@ -442,7 +463,7 @@ class Predictor(hk.Module):
         )
 
         # Get the position coefficients.
-        position_coeffs = self.target_position_predictor(
+        position_coeffs, position_logits = self.target_position_predictor(
             true_focus_node_embeddings, graphs.globals.target_species
         )
 
@@ -450,11 +471,13 @@ class Predictor(hk.Module):
         assert focus_logits.shape == (num_nodes,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
         assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
+        assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
         return datatypes.Predictions(
             focus_logits=focus_logits,
             target_species_logits=target_species_logits,
             position_coeffs=position_coeffs,
+            position_logits=position_logits,
         )
 
     def get_evaluation_predictions(
@@ -497,9 +520,53 @@ class Predictor(hk.Module):
         )(species_rngs, target_species_probs)
 
         # Get the position coefficients.
-        position_coeffs = self.target_position_predictor(
+        position_coeffs, position_logits = self.target_position_predictor(
             focus_node_embeddings, target_species
         )
+
+        # Integrate the position signal over each sphere to get the normalizing factors for the radii.
+        # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
+        position_max = jnp.max(
+            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+        )
+        position_probs = position_logits.apply(
+            lambda pos: jnp.exp(pos - position_max)
+        )  # [num_graphs, num_radii, res_beta, res_alpha]
+
+        radii_probs = position_probs.integrate().array.squeeze(
+            axis=-1
+        )  # [num_graphs, num_radii]
+
+        # Sample the radius.
+        rng, radius_rng = jax.random.split(rng)
+        radius_rngs = jax.random.split(radius_rng, num_graphs)
+        radius_indices = jax.vmap(
+            lambda key, p: jax.random.choice(key, len(RADII), p=p)
+        )(
+            radius_rngs, radii_probs
+        )  # [num_graphs]
+
+        angular_probs = jax.tree_util.tree_map(
+            lambda x: x[jnp.arange(num_graphs), radius_indices], position_probs
+        )  # [num_graphs, res_beta, res_alpha]
+
+        rng, angular_rng = jax.random.split(rng)
+        angular_rngs = jax.random.split(angular_rng, num_graphs)
+        beta_indices, alpha_indices = jax.vmap(lambda key, p: p.sample(key))(
+            angular_rngs, angular_probs
+        )
+
+        position_vectors = jax.vmap(
+            lambda r, b, a: RADII[r] * angular_probs.grid_vectors[b, a]
+        )(radius_indices, beta_indices, alpha_indices)
+
+        # Check the shapes.
+        assert focus_logits.shape == (num_nodes,)
+        assert focus_indices.shape == (num_graphs,)
+        assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
+        assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
+        assert position_logits.shape[:2] == (num_graphs, len(RADII))
+        assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.EvaluationPredictions(
             focus_logits=focus_logits,
@@ -507,6 +574,8 @@ class Predictor(hk.Module):
             target_species_logits=target_species_logits,
             position_coeffs=position_coeffs,
             target_species=target_species,
+            position_logits=position_logits,
+            position_vectors=position_vectors,
         )
 
     def __call__(self, graphs: datatypes.Fragment) -> datatypes.Predictions:
