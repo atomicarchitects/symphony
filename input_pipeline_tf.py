@@ -10,8 +10,8 @@ import chex
 import jax
 import numpy as np
 import jraph
-
 import ml_collections
+
 import datatypes
 
 

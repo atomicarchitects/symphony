@@ -16,10 +16,14 @@ from absl import logging
 from clu import checkpoint
 from flax.training import train_state
 
+import sys
+sys.path.append('..')
+
 import datatypes
 import input_pipeline_tf
 import train
 import models
+from configs import default
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -40,12 +44,10 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
     return casted_dictionary
 
 
-def load_from_workdir(
+def load_metrics_from_workdir(
     workdir: str,
-    load_pickled_params: bool = True,
-    init_graphs: Optional[jraph.GraphsTuple] = None,
 ) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, train_state.TrainState, Dict[Any, Any]]:
-    """Loads the scaler, model and auxiliary data from the supplied workdir."""
+    """Loads only the config and the metrics for the best model."""
 
     if not os.path.exists(workdir):
         raise FileNotFoundError(f"{workdir} does not exist.")
@@ -60,8 +62,40 @@ def load_from_workdir(
         config = yaml.unsafe_load(config_file)
 
     # Check that the config was loaded correctly.
-    config = ml_collections.ConfigDict(config)
     assert config is not None
+    config = ml_collections.ConfigDict(config)
+    config.root_dir = default.get_root_dir()
+
+    checkpoint_dir = os.path.join(workdir, "checkpoints")
+    ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
+    data = ckpt.restore({"metrics_for_best_state": None})
+
+    return config, cast_keys_as_int(data["metrics_for_best_state"])
+
+
+def load_from_workdir(
+    workdir: str,
+    load_pickled_params: bool = True,
+    init_graphs: Optional[jraph.GraphsTuple] = None,
+) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, train_state.TrainState, Dict[Any, Any]]:
+    """Loads the config, best model (in train mode), best model (in eval mode) and metrics for the best model."""
+
+    if not os.path.exists(workdir):
+        raise FileNotFoundError(f"{workdir} does not exist.")
+
+    # Load config.
+    saved_config_path = os.path.join(workdir, "config.yml")
+    if not os.path.exists(saved_config_path):
+        raise FileNotFoundError(f"No saved config found at {workdir}")
+
+    logging.info("Saved config found at %s", saved_config_path)
+    with open(saved_config_path, "r") as config_file:
+        config = yaml.unsafe_load(config_file)
+
+    # Check that the config was loaded correctly.
+    assert config is not None
+    config = ml_collections.ConfigDict(config)
+    config.root_dir = default.get_root_dir()
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
@@ -117,7 +151,6 @@ def load_from_workdir(
         best_state,
         best_state_in_eval_mode,
         cast_keys_as_int(data["metrics_for_best_state"]),
-        datasets,
     )
 
 

@@ -1,25 +1,29 @@
 """Defines the default training configuration."""
 
+from typing import Optional
 import ml_collections
 import os
+
+
+def get_root_dir() -> Optional[str]:
+    """Get the root directory for the QM9 dataset."""
+    hostname, username = os.uname()[1], os.environ.get("USER")
+    if hostname == "potato.mit.edu":
+        return "/home/ameyad/qm9_data_tf/data_tf2"
+    elif username == "ameyad":
+        return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
+    elif username == "songk":
+        return (
+            "/home/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
+        )
+    return None
 
 
 def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
-    hostname, username = os.uname()[1], os.environ.get("USER")
-    if hostname == "potato.mit.edu":
-        config.root_dir = "/home/ameyad/qm9_data_tf/data_tf2"
-    elif username == "ameyad":
-        config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
-    elif username == "songk":
-        config.root_dir = (
-            "/home/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
-        )
-    else:
-        raise ValueError(f"Unknown username: {username}")
-
+    config.root_dir = get_root_dir()
     config.rng_seed = 0
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
