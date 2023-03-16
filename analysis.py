@@ -39,7 +39,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 def load_from_workdir(
     workdir: str, load_pickled_params: bool = True, init_graphs: Optional[jraph.GraphsTuple] = None
-) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, Dict[Any, Any]]:
+) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, train_state.TrainState, Dict[Any, Any]]:
     """Loads the scaler, model and auxiliary data from the supplied workdir."""
 
     if not os.path.exists(workdir):
@@ -62,12 +62,6 @@ def load_from_workdir(
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
 
-    # Obtain graphs.
-    if init_graphs is None:
-        datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
-        train_iter = datasets["train"].as_numpy_iterator()
-        init_graphs = next(train_iter)
-
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
     net = train.create_model(config, run_in_evaluation_mode=False)
@@ -89,6 +83,9 @@ def load_from_workdir(
     else:
         if init_graphs is None:
             logging.info("Initializing dummy model with init_graphs from dataloader")
+            datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
+            train_iter = datasets["train"].as_numpy_iterator()
+            init_graphs = next(train_iter)
         else:
             logging.info("Initializing dummy model with provided init_graphs")
 
