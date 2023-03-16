@@ -21,9 +21,9 @@ def get_config() -> ml_collections.ConfigDict:
 
     config.num_train_steps = 20_000
     config.num_eval_steps = 100
-    config.log_every_steps = 100
-    config.eval_every_steps = 500
-    config.checkpoint_every_steps = 500
+    config.log_every_steps = 1000
+    config.eval_every_steps = 1000
+    config.checkpoint_every_steps = 1000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.max_n_nodes = 512
