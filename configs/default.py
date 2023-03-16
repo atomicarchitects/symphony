@@ -19,7 +19,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
 
-    config.num_train_steps = 100_000
+    config.num_train_steps = 20_000
     config.num_eval_steps = 100
     config.log_every_steps = 100
     config.eval_every_steps = 500
