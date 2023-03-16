@@ -2,8 +2,9 @@
 
 import functools
 import os
-from typing import Any, Dict, Iterable, Iterator, Tuple, Union, Optional
+from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
 
+import pickle
 import chex
 import e3nn_jax as e3nn
 import flax
@@ -14,8 +15,8 @@ import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
-import numpy as np
 import optax
+import yaml
 from absl import logging
 from clu import (
     checkpoint,
@@ -25,12 +26,9 @@ from clu import (
     periodic_actions,
 )
 from flax.training import train_state
-import yaml
 
 import datatypes
-import input_pipeline
 import input_pipeline_tf
-import datatypes
 import models
 
 
@@ -104,7 +102,9 @@ def create_model(
             activation=activation,
         )
         target_position_predictor = models.TargetPositionPredictor(
-            position_coeffs_lmax=config.max_ell
+            position_coeffs_lmax=config.max_ell,
+            res_beta=config.target_position_predictor.res_beta,
+            res_alpha=config.target_position_predictor.res_alpha,
         )
         return models.Predictor(
             node_embedder=node_embedder,
@@ -141,12 +141,9 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-@functools.partial(jax.jit, static_argnames=["res_beta", "res_alpha"])
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragment,
-    res_beta: int,
-    res_alpha: int,
     radius_rbf_variance: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
@@ -221,33 +218,12 @@ def generation_loss(
             preds.position_coeffs.irreps.dim,
         )
 
-        position_coeffs_arr = jnp.where(
-            graph_mask[:, None, None], preds.position_coeffs.array, 0
-        )
-        position_coeffs = e3nn.IrrepsArray(
-            preds.position_coeffs.irreps, position_coeffs_arr
-        )
-
-        # Compute the position signal projected to a spherical grid for each radius.
-        position_signal = e3nn.to_s2grid(
-            position_coeffs,
-            res_beta,
-            res_alpha,
-            quadrature="gausslegendre",
-            normalization="integral",
-            p_val=1,
-            p_arg=-1,
-        )
-
-        # position_signal is of shape (num_graphs, num_radii, res_beta, res_alpha)
-        assert position_signal.shape == (num_graphs, num_radii, res_beta, res_alpha)
-
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_max = jnp.max(
-            position_signal.grid_values, axis=(-3, -2, -1), keepdims=True
+            preds.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        sphere_normalizing_factors = position_signal.apply(
+        sphere_normalizing_factors = preds.position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
@@ -467,11 +443,14 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, run_in_evaluation_mode=True)
+    # We run with run_in_evaluation_mode as False,
+    # because we want to evaluate how the model performs on unseen data.
+    eval_net = create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
+    pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
@@ -558,21 +537,15 @@ def train_and_evaluate(
                 metrics_for_best_state = eval_metrics
 
                 # Checkpoint the best state and corresponding metrics seen during training.
+                # Save pickled parameters for easy access during evaluation.
                 with report_progress.timed("checkpoint"):
+                    with open(pickled_params_file, "wb") as f:
+                        pickle.dump(best_state.params, f)
                     ckpt.save(
                         {
                             "best_state": best_state,
                             "metrics_for_best_state": metrics_for_best_state,
                         }
                     )
-
-    # Checkpoint the best state and corresponding metrics seen after training is complete.
-    with report_progress.timed("checkpoint"):
-        ckpt.save(
-            {
-                "best_state": best_state,
-                "metrics_for_best_state": metrics_for_best_state,
-            }
-        )
 
     return best_state

@@ -5,7 +5,7 @@ import pickle
 import time
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
-import chex
+import jraph
 import jax
 import jax.numpy as jnp
 import ml_collections
@@ -43,7 +43,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 
 def load_from_workdir(
-    workdir: str,
+    workdir: str, init_graphs: Optional[jraph.GraphsTuple] = None
 ) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, Dict[Any, Any]]:
     """Loads the scaler, model and auxiliary data from the supplied workdir."""
 
@@ -60,6 +60,7 @@ def load_from_workdir(
         config = yaml.unsafe_load(config_file)
 
     # Check that the config was loaded correctly.
+    config = ml_collections.ConfigDict(config)
     assert config is not None
 
     # Mimic what we do in train.py.
@@ -67,12 +68,14 @@ def load_from_workdir(
     rng, dataset_rng = jax.random.split(rng)
 
     # Obtain graphs.
-    datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
-    train_iter = datasets["train"].as_numpy_iterator()
-    init_graphs = next(train_iter)
+    if init_graphs is None:
+        datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
+        train_iter = datasets["train"].as_numpy_iterator()
+        init_graphs = next(train_iter)
 
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
+    net = train.create_model(config, run_in_evaluation_mode=True)
     net = train.create_model(config, run_in_evaluation_mode=True)
     params = jax.jit(net.init)(init_rng, init_graphs)
     tx = train.create_optimizer(config)

@@ -43,12 +43,21 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
     num_nodes = 5
     num_elements = models.NUM_ELEMENTS
     num_radii = models.RADII.shape[0]
+    position_coeffs = e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1)))
     preds = datatypes.Predictions(
         focus_logits=jnp.ones((num_nodes,)),
         target_species_logits=jnp.asarray(
             [[0.1, 0.2, 0.3, 0.4, 0.5], [1.1, 1.2, 1.3, 1.4, 1.5]]
         ),
-        position_coeffs=e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1))),
+        position_coeffs=position_coeffs,
+        position_logits=e3nn.to_s2grid(
+            position_coeffs,
+            res_beta=10,
+            res_alpha=9,
+            quadrature="gausslegendre",
+            p_val=1,
+            p_arg=-1,
+        ),
     )
     graphs = datatypes.Fragment(
         nodes=datatypes.FragmentNodes(
@@ -80,8 +89,6 @@ class TrainTest(parameterized.TestCase):
         _, (focus_loss, _, _) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
-            res_beta=10,
-            res_alpha=9,
             radius_rbf_variance=30,
         )
         expected_focus_loss = jnp.asarray(
@@ -93,8 +100,6 @@ class TrainTest(parameterized.TestCase):
         _, (_, atom_type_loss, _) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
-            res_beta=10,
-            res_alpha=9,
             radius_rbf_variance=30,
         )
         expected_atom_type_loss = jnp.asarray(
@@ -111,8 +116,6 @@ class TrainTest(parameterized.TestCase):
         _, (_, _, position_loss) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
-            res_beta=10,
-            res_alpha=9,
             radius_rbf_variance=30,
         )
         num_radii = models.RADII.shape[0]
