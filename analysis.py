@@ -1,10 +1,10 @@
 """Loads the model from a workdir to perform analysis."""
 
 import os
-import pickle
-import time
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
+from typing import Any, Dict, Optional, Tuple
+
+import pickle
 import jraph
 import jax
 import jax.numpy as jnp
@@ -43,7 +43,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 
 def load_from_workdir(
-    workdir: str, init_graphs: Optional[jraph.GraphsTuple] = None
+    workdir: str, load_pickled_params: bool = True, init_graphs: Optional[jraph.GraphsTuple] = None
 ) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, Dict[Any, Any]]:
     """Loads the scaler, model and auxiliary data from the supplied workdir."""
 
@@ -75,9 +75,31 @@ def load_from_workdir(
 
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
-    net = train.create_model(config, run_in_evaluation_mode=True)
-    net = train.create_model(config, run_in_evaluation_mode=True)
-    params = jax.jit(net.init)(init_rng, init_graphs)
+
+    net = train.create_model(config, run_in_evaluation_mode=False)
+    eval_net = train.create_model(config, run_in_evaluation_mode=True)
+
+    # If we have pickled parameters already, we don't need init_graphs to initialize the model.
+    # Note that we restore the model parameters from the checkpoint anyways.
+    # We only use the pickled parameters to initialize the model, so only the keys of the pickled parameters are important.
+    if load_pickled_params:
+        checkpoint_dir = os.path.join(workdir, "checkpoints")
+        pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
+        if not os.path.exists(pickled_params_file):
+            raise FileNotFoundError(f"No pickled params found at {pickled_params_file}")
+        
+        logging.info("Initializing dummy model with pickled params found at %s", pickled_params_file)
+
+        with open(pickled_params_file, "rb") as f:
+            params = jax.tree_map(np.array, pickle.load(f))
+    else:
+        if init_graphs is None:
+            logging.info("Initializing dummy model with init_graphs from dataloader")
+        else:
+            logging.info("Initializing dummy model with provided init_graphs")
+
+        params = jax.jit(net.init)(init_rng, init_graphs)
+
     tx = train.create_optimizer(config)
     dummy_state = train_state.TrainState.create(
         apply_fn=net.apply, params=params, tx=tx
@@ -88,10 +110,12 @@ def load_from_workdir(
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
     best_state = jax.tree_map(jnp.asarray, data["best_state"])
+    best_state_in_eval_mode = best_state.replace(apply_fn=eval_net.apply)
 
     return (
         config,
         best_state,
+        best_state_in_eval_mode,
         cast_keys_as_int(data["metrics_for_best_state"]),
         datasets
     )
