@@ -4,6 +4,7 @@ import functools
 import os
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
 
+import pickle
 import chex
 import e3nn_jax as e3nn
 import flax
@@ -418,11 +419,14 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, run_in_evaluation_mode=True)
+    # We run with run_in_evaluation_mode as False,
+    # because we want to evaluate how the model performs on unseen data.
+    eval_net = create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
+    pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
@@ -509,21 +513,15 @@ def train_and_evaluate(
                 metrics_for_best_state = eval_metrics
 
                 # Checkpoint the best state and corresponding metrics seen during training.
+                # Save pickled parameters for easy access during evaluation.
                 with report_progress.timed("checkpoint"):
+                    with open(pickled_params_file, "wb") as f:
+                        pickle.dump(best_state.params, f)
                     ckpt.save(
                         {
                             "best_state": best_state,
                             "metrics_for_best_state": metrics_for_best_state,
                         }
                     )
-
-    # Checkpoint the best state and corresponding metrics seen after training is complete.
-    with report_progress.timed("checkpoint"):
-        ckpt.save(
-            {
-                "best_state": best_state,
-                "metrics_for_best_state": metrics_for_best_state,
-            }
-        )
 
     return best_state

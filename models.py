@@ -283,6 +283,7 @@ class MACE(hk.Module):
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
         )
+        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
         species = graphs.nodes.species
         num_nodes = species.shape[0]
 
