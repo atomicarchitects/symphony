@@ -7,9 +7,12 @@ from absl import logging
 import jax
 import jax.numpy as jnp
 
-import analysis
+import sys
+sys.path.append('..')
+
+import analyses.analysis as analysis
 import datatypes
-from input_pipeline_tf import get_datasets
+import input_pipeline_tf
 
 FLAGS = flags.FLAGS
 
@@ -32,7 +35,7 @@ def main(argv):
     key = jax.random.PRNGKey(0)
     epsilon = 1e-4
 
-    qm9_datasets = get_datasets(key, config)
+    qm9_datasets = input_pipeline_tf.get_datasets(key, config)
     example_graph = next(qm9_datasets["test"].as_numpy_iterator())
     frag = datatypes.Fragment.from_graphstuple(example_graph)
     frag = jax.tree_map(jnp.asarray, frag)

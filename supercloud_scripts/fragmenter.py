@@ -8,13 +8,13 @@ import numpy as np
 import tensorflow as tf
 import tqdm
 
-from input_pipeline import ase_atoms_to_jraph_graph, generate_fragments
-from qm9 import load_qm9
+from .. import input_pipeline
+from .. import qm9
 
 
 def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragments.pkl"):
     seed = jax.random.PRNGKey(seed)
-    molecules = load_qm9("qm9_data")
+    molecules = qm9.load_qm9("qm9_data")
 
     if start is not None and end is not None:
         molecules = molecules[start:end]
@@ -46,8 +46,8 @@ def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragment
 
     def generator():
         for molecule in tqdm.tqdm(molecules):
-            graph = ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
-            frags = generate_fragments(seed, graph, len(atomic_numbers), epsilon)
+            graph = input_pipeline.ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
+            frags = input_pipeline.generate_fragments(seed, graph, len(atomic_numbers), epsilon)
             frags = list(frags)
 
             skip = False
