@@ -438,7 +438,7 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = create_model(config, run_in_evaluation_mode=True)
+    eval_net = create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
