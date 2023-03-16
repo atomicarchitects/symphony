@@ -19,9 +19,7 @@ from flax.training import train_state
 import datatypes
 import input_pipeline_tf
 import train
-
-
-ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
+import models
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -46,7 +44,7 @@ def load_from_workdir(
     workdir: str,
     load_pickled_params: bool = True,
     init_graphs: Optional[jraph.GraphsTuple] = None,
-) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, Dict[Any, Any]]:
+) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, train_state.TrainState, Dict[Any, Any]]:
     """Loads the scaler, model and auxiliary data from the supplied workdir."""
 
     if not os.path.exists(workdir):
@@ -68,12 +66,6 @@ def load_from_workdir(
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-
-    # Obtain graphs.
-    if init_graphs is None:
-        datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
-        train_iter = datasets["train"].as_numpy_iterator()
-        init_graphs = next(train_iter)
 
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
@@ -100,6 +92,9 @@ def load_from_workdir(
     else:
         if init_graphs is None:
             logging.info("Initializing dummy model with init_graphs from dataloader")
+            datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
+            train_iter = datasets["train"].as_numpy_iterator()
+            init_graphs = next(train_iter)
         else:
             logging.info("Initializing dummy model with provided init_graphs")
 
@@ -126,17 +121,17 @@ def load_from_workdir(
     )
 
 
-def to_db(generated_frag: datatypes.Fragment, modelpath, file_name):
-    pass
+def to_db(generated_frag: datatypes.Fragment, model_path: str, file_name: str):
+    raise NotImplementedError("to_db() is not implemented yet.")
 
 
-def to_mol_dict(generated_frag: datatypes.Fragment, modelpath, file_name):
+def to_mol_dict(generated_frag: datatypes.Fragment, model_path: str, file_name: str):
     first_index = np.asarray(
         jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)])
     )
     positions = np.asarray(generated_frag.nodes.positions)
     species = np.asarray(
-        list(map(lambda z: ATOMIC_NUMBERS[z], generated_frag.nodes.species.tolist()))
+        list(map(lambda z: models.ATOMIC_NUMBERS[z], generated_frag.nodes.species.tolist()))
     )
 
     generated = (
@@ -166,7 +161,7 @@ def to_mol_dict(generated_frag: datatypes.Fragment, modelpath, file_name):
                 0,
             )
 
-    gen_path = os.path.join(modelpath, "generated/")
+    gen_path = os.path.join(model_path, "generated/")
     if not os.path.exists(gen_path):
         os.makedirs(gen_path)
     # get untaken filename and store results

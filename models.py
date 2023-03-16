@@ -18,7 +18,9 @@ import functools
 import datatypes
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
-NUM_ELEMENTS = 5
+ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
+NUM_ELEMENTS = len(ATOMIC_NUMBERS)
+
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
