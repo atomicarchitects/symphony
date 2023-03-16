@@ -15,7 +15,7 @@ import logging
 import models
 import datatypes
 import train
-from configs import mace, e3schnet
+from configs import mace, e3schnet, nequip
 
 try:
     import profile_nn_jax
@@ -27,6 +27,7 @@ logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
 _ALL_CONFIGS = {
     "e3schnet": e3schnet.get_config(),
     "mace": mace.get_config(),
+    "nequip": nequip.get_config(),
 }
 
 
@@ -126,7 +127,7 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("mace", "e3schnet")
+    @parameterized.parameters(("mace", "e3schnet"))
     def test_train_and_evaluate(self, config_name: str):
         """Tests that training and evaluation runs without errors."""
 

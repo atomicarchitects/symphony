@@ -114,6 +114,21 @@ def create_model(
             run_in_evaluation_mode=run_in_evaluation_mode,
         )(graphs)
 
+    if config.model == "NequIP":
+        raise NotImplementedError("NequIP is not ready yet.")
+        return models.NequIP(
+            latent_size=config.latent_size,
+            avg_num_neighbors=config.avg_num_neighbors,
+            sh_lmax=config.sh_lmax,
+            target_irreps=config.target_irreps,
+            even_activation=config.even_activation,
+            odd_activation=config.odd_activation,
+            mlp_activation=config.mlp_activation,
+            mlp_n_hidden=config.mlp_n_hidden,
+            mlp_n_layers=config.mlp_n_layers,
+            n_radial_basis=config.n_radial_basis,
+        )
+
     return hk.transform(model_fn)
 
 

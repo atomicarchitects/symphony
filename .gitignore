@@ -161,8 +161,12 @@ cython_debug/
 
 .DS_Store
 workdirs
+potato_workdirs
 graphmlp
 graphnet
 qm9_data
+qm9_data_tf
 *.pb
 *.metadata
+
+*.pkl

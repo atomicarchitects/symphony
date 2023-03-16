@@ -8,11 +8,17 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
-    hostname = os.uname()[1]
+    hostname, username = os.uname()[1], os.environ.get("USER")
     if hostname == "potato.mit.edu":
         config.root_dir = "/home/ameyad/qm9_data_tf/data_tf2"
+    elif username == "ameyad":
+        config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
+    elif username == "songk":
+        config.root_dir = (
+            "/home/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
+        )
     else:
-        config.root_dir = "/Users/ameyad/Documents/qm9_data_tf/data_tf2/"
+        raise ValueError(f"Unknown username: {username}")
 
     config.rng_seed = 0
     config.train_molecules = (0, 47616)
