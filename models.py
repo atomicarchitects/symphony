@@ -10,7 +10,8 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
-#import nequip_jax
+
+# import nequip_jax
 import chex
 import functools
 
@@ -312,7 +313,6 @@ class MACE(hk.Module):
         return node_embeddings
 
 
-
 class NequIP(hk.Module):
     """Wrapper class for NequIP."""
 
@@ -338,12 +338,12 @@ class NequIP(hk.Module):
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
         )
-        vectors = e3nn.IrrepsArray(e3nn.Irreps('1o'), vectors)
+        vectors = e3nn.IrrepsArray(e3nn.Irreps("1o"), vectors)
         species = graphs.nodes.species
         n_nodes = graphs.nodes.positions.shape[0]
         node_feats = nn.Embed(n_nodes, self.latent_size)(species)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
-        
+
         node_embeddings = nequip_jax.NEQUIPLayer(
             avg_num_neighbors=self.avg_num_neighbors,
             num_species=NUM_ELEMENTS,
@@ -355,13 +355,8 @@ class NequIP(hk.Module):
             mlp_n_hidden=self.mlp_n_hidden,
             mlp_n_layers=self.mlp_n_layers,
             n_radial_basis=self.n_radial_basis,
-        )(
-            vectors,
-            node_feats,
-            species,
-            graphs.senders,
-            graphs.receivers
-        )
+        )(vectors, node_feats, species, graphs.senders, graphs.receivers)
+
 
 class FocusPredictor(hk.Module):
     """Predicts focus logits for each node."""
@@ -621,8 +616,11 @@ class Predictor(hk.Module):
 
         # Check the shapes.
         irreps = e3nn.s2_irreps(self.target_position_predictor.position_coeffs_lmax)
-        res_beta, res_alpha = self.target_position_predictor.res_beta, self.target_position_predictor.res_alpha
-    
+        res_beta, res_alpha = (
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
+        )
+
         assert focus_logits.shape == (num_nodes,)
         assert focus_indices.shape == (num_graphs,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)

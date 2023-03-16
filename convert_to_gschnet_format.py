@@ -15,12 +15,18 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Directory where model data was stored.")
 
+
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
     # Load model.
-    config, best_state, best_state_in_eval_mode, metrics_for_best_state = analysis.load_from_workdir(FLAGS.workdir)
+    (
+        config,
+        best_state,
+        best_state_in_eval_mode,
+        metrics_for_best_state,
+    ) = analysis.load_from_workdir(FLAGS.workdir)
 
     cutoff = 5.0
     key = jax.random.PRNGKey(0)
