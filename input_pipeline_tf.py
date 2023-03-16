@@ -74,6 +74,7 @@ def _deprecated_get_raw_qm9_datasets(
     num_test_files: int,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
+    print(root_dir)
     # Root directory of the dataset.
     filenames = os.listdir(root_dir)
     filenames = [os.path.join(root_dir, f) for f in filenames if "dataset_tf" in f]

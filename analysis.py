@@ -1,6 +1,7 @@
 """Loads the model from a workdir to perform analysis."""
 
 import os
+
 from typing import Any, Dict, Optional, Tuple
 
 import pickle
@@ -15,8 +16,12 @@ from absl import logging
 from clu import checkpoint
 from flax.training import train_state
 
+import datatypes
 import input_pipeline_tf
 import train
+
+
+ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -70,6 +75,7 @@ def load_from_workdir(
 
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
+
     net = train.create_model(config, run_in_evaluation_mode=False)
     eval_net = train.create_model(config, run_in_evaluation_mode=True)
 
@@ -111,4 +117,54 @@ def load_from_workdir(
         best_state,
         best_state_in_eval_mode,
         cast_keys_as_int(data["metrics_for_best_state"]),
+        datasets
     )
+
+
+def to_db(generated_frag: datatypes.Fragment, modelpath, file_name):
+    pass
+
+
+def to_mol_dict(generated_frag: datatypes.Fragment, modelpath, file_name):
+    first_index = np.asarray(jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)]))
+    positions = np.asarray(generated_frag.nodes.positions)
+    species = np.asarray(list(map(lambda z: ATOMIC_NUMBERS[z], generated_frag.nodes.species.tolist())))
+    
+    generated = {}  # G-SchNet seems to expect this to be a dictionary with int keys and dictionary values
+    # is this supposed to be one sequence of generated fragments at a time, or can multiple mols be considered?
+    for i in range(len(first_index) - 1):
+        k = int(first_index[i+1] - first_index[i])
+        if k not in generated:
+            generated[k] = {
+                "_positions": np.array([positions[first_index[i]:first_index[i+1]]]),
+                "_atomic_numbers": np.array([species[first_index[i]:first_index[i+1]]])
+            }
+        else:
+            generated[k]["_positions"] = np.append(
+                generated[k]["_positions"],
+                [positions[first_index[i]:first_index[i+1]]],
+                0)
+            generated[k]["_atomic_numbers"] = np.append(
+                generated[k]["_atomic_numbers"],
+                [species[first_index[i]:first_index[i+1]]],
+                0)
+
+    gen_path = os.path.join(modelpath, 'generated/')
+    if not os.path.exists(gen_path):
+        os.makedirs(gen_path)
+    # get untaken filename and store results
+    file_name = os.path.join(gen_path, file_name)
+    if os.path.isfile(file_name + '.mol_dict'):
+        expand = 0
+        while True:
+            expand += 1
+            new_file_name = file_name + '_' + str(expand)
+            if os.path.isfile(new_file_name + '.mol_dict'):
+                continue
+            else:
+                file_name = new_file_name
+                break
+    with open(file_name + '.mol_dict', 'wb') as f:
+        pickle.dump(generated, f)
+
+    return generated
