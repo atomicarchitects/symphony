@@ -544,15 +544,4 @@ def train_and_evaluate(
                         }
                     )
 
-    # Checkpoint the best state and corresponding metrics seen after training is complete.
-    with report_progress.timed("checkpoint"):
-        with open(pickled_params_file, "wb") as f:
-            pickle.dump(best_state.params, f)
-        ckpt.save(
-            {
-                "best_state": best_state,
-                "metrics_for_best_state": metrics_for_best_state,
-            }
-        )
-
     return best_state
