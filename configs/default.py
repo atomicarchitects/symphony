@@ -30,8 +30,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 1024
     config.max_n_graphs = 64
     config.loss_kwargs = {
-        "res_beta": 30,
-        "res_alpha": 51,
         "radius_rbf_variance": 1e-3,
     }
 
@@ -44,5 +42,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_species_predictor.latent_size = 128
     config.target_species_predictor.num_layers = 2
 
-    config.target_positions_predictor = ml_collections.ConfigDict()
+    config.target_position_predictor = ml_collections.ConfigDict()
+    config.target_position_predictor.res_beta = 30
+    config.target_position_predictor.res_alpha = 51
+
     return config

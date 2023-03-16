@@ -102,7 +102,9 @@ def create_model(
             activation=activation,
         )
         target_position_predictor = models.TargetPositionPredictor(
-            position_coeffs_lmax=config.max_ell
+            position_coeffs_lmax=config.max_ell,
+            res_beta=config.target_position_predictor.res_beta,
+            res_alpha=config.target_position_predictor.res_alpha,
         )
         return models.Predictor(
             node_embedder=node_embedder,
