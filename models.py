@@ -417,10 +417,12 @@ class TargetPositionPredictor(hk.Module):
 
 
 class Predictor(hk.Module):
+    """A convenient wrapper for an entire prediction model."""
+
     node_embedder: hk.Module
-    focus_predictor: hk.Module
-    target_species_predictor: hk.Module
-    target_position_predictor: hk.Module
+    focus_predictor: FocusPredictor
+    target_species_predictor: TargetSpeciesPredictor
+    target_position_predictor: TargetPositionPredictor
     run_in_evaluation_mode: bool
 
     def __init__(
@@ -562,11 +564,14 @@ class Predictor(hk.Module):
         )(radius_indices, beta_indices, alpha_indices)
 
         # Check the shapes.
+        irreps = e3nn.s2_irreps(self.target_position_predictor.position_coeffs_lmax)
+        res_beta, res_alpha = self.target_position_predictor.res_beta, self.target_position_predictor.res_alpha
+    
         assert focus_logits.shape == (num_nodes,)
         assert focus_indices.shape == (num_graphs,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
-        assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
-        assert position_logits.shape[:2] == (num_graphs, len(RADII))
+        assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
+        assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.EvaluationPredictions(

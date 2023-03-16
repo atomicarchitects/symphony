@@ -115,14 +115,19 @@ def get_raw_qm9_datasets(
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
     # Root directory of the dataset.
     filenames = os.listdir(root_dir)
-    filenames = [os.path.join(root_dir, f) for f in filenames if f.startswith("fragments_seed")]
+    filenames = [
+        os.path.join(root_dir, f) for f in filenames if f.startswith("fragments_seed")
+    ]
 
     # Partition the filenames into train, val, and test.
-    def filter_by_molecule_number(filenames: Sequence[str], start: int, end: int) -> List[str]:
+    def filter_by_molecule_number(
+        filenames: Sequence[str], start: int, end: int
+    ) -> List[str]:
         def filter_file(filename: str, start: int, end: int) -> bool:
             filename = os.path.basename(filename)
-            _, file_start, file_end = [int(val) for val in re.findall(r'\d+', filename)]
+            _, file_start, file_end = [int(val) for val in re.findall(r"\d+", filename)]
             return start <= file_start and file_end < end
+
         return [f for f in filenames if filter_file(f, start, end)]
 
     files_by_split = {
@@ -143,7 +148,6 @@ def get_raw_qm9_datasets(
         dataset_split = dataset_split.shuffle(1000, seed=seed)
         datasets[split] = dataset_split
     return datasets
-
 
 
 def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
