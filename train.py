@@ -115,6 +115,7 @@ def create_model(
         )(graphs)
     
     if config.model == "NequIP":
+        raise NotImplementedError("NequIP is not ready yet.")
         return models.NequIP(
             latent_size = config.latent_size,
             avg_num_neighbors = config.avg_num_neighbors,
@@ -156,8 +157,6 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
 
-    graph_mask = jraph.get_graph_padding_mask(graphs)
-
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
         assert (
@@ -168,9 +167,6 @@ def generation_loss(
 
         n_node = graphs.n_node
         focus_logits = preds.focus_logits
-
-        node_mask = jraph.get_node_padding_mask(graphs)
-        focus_logits = jnp.where(node_mask, focus_logits, 0)
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
         loss_focus = e3nn.scatter_sum(
@@ -200,10 +196,8 @@ def generation_loss(
             == (num_graphs, num_elements)
         )
 
-        species_logits = jnp.where(graph_mask[:, None], preds.species_logits, 0)
-
         loss_atom_type = optax.softmax_cross_entropy(
-            logits=species_logits,
+            logits=preds.target_species_logits,
             labels=graphs.globals.target_species_probability,
         )
 
@@ -267,7 +261,7 @@ def generation_loss(
         target_positions = e3nn.IrrepsArray("1o", target_positions)
         target_positions_logits = jax.vmap(
             functools.partial(e3nn.to_s2point, normalization="integral")
-        )(position_coeffs, target_positions)
+        )(preds.position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 

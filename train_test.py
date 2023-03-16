@@ -127,7 +127,7 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters(("nequip",))
+    @parameterized.parameters(("mace", "e3schnet"))
     def test_train_and_evaluate(self, config_name: str):
         """Tests that training and evaluation runs without errors."""
 
