@@ -2,7 +2,7 @@
 
 import os
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Sequence
 
 import pickle
 import jraph
@@ -11,6 +11,8 @@ import jax.numpy as jnp
 import ml_collections
 import numpy as np
 import yaml
+import pandas as pd
+import glob
 
 from absl import logging
 from clu import checkpoint
@@ -42,6 +44,46 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
         finally:
             casted_dictionary[key] = val
     return casted_dictionary
+
+
+def get_results_as_dataframe(model: str, metrics: Sequence[str], basedir: str) -> Dict[str, pd.DataFrame]:
+    """Returns the results for the given model as a pandas dataframe for each split."""
+
+    def extract_hyperparameters(config: ml_collections.ConfigDict) -> Tuple[int, int, int]:
+        """Returns the hyperparameters extracted from the config."""
+
+        if "num_interactions" in config:
+            num_interactions = config.num_interactions
+        else:
+            num_interactions = config.n_interactions
+
+        max_l = config.max_ell
+
+        if "num_channels" in config:
+            num_channels = config.num_channels
+        else:
+            num_channels = config.n_atom_basis
+            assert num_channels == config.n_filters
+        
+        return num_interactions, max_l, num_channels
+
+    results = {"val": [], "test": []}
+    for config_file_path in glob.glob(os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True):
+        workdir = os.path.dirname(config_file_path)
+
+        config, metrics_for_best_state = load_metrics_from_workdir(workdir)
+        num_interactions, max_l, num_channels = extract_hyperparameters(config)
+
+        for split in results:
+            metrics_for_split = [metrics_for_best_state[split][metric] for metric in metrics]
+            results[split].append([num_interactions, max_l, num_channels] + metrics_for_split)
+    
+    for split in results:
+        results[split] = np.array(results[split])
+        results[split] = pd.DataFrame(results[split], columns=["num_interactions", "max_l", "num_channels"] + metrics)
+        results[split] = results[split].astype({"num_interactions": int, "max_l": int, "num_channels": int, **{metric: float for metric in metrics}})
+    
+    return results
 
 
 def load_metrics_from_workdir(
