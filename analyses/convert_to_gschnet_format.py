@@ -8,7 +8,8 @@ import jax
 import jax.numpy as jnp
 
 import sys
-sys.path.append('..')
+
+sys.path.append("..")
 
 import analyses.analysis as analysis
 import datatypes

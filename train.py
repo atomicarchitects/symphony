@@ -80,10 +80,10 @@ def create_model(
             )
         elif config.model == "E3SchNet":
             node_embedder = models.E3SchNet(
-                n_atom_basis=config.n_atom_basis,
-                n_interactions=config.n_interactions,
-                n_filters=config.n_filters,
-                n_rbf=config.n_rbf,
+                n_atom_basis=config.num_channels,
+                n_interactions=config.num_interactions,
+                n_filters=config.num_channels,
+                n_rbf=config.num_basis_fns,
                 activation=activation,
                 cutoff=config.cutoff,
                 max_ell=config.max_ell,
@@ -436,7 +436,7 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    # We run with run_in_evaluation_mode as False,
+    # We set run_in_evaluation_mode as False,
     # because we want to evaluate how the model performs on unseen data.
     eval_net = create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))

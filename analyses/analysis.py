@@ -2,7 +2,7 @@
 
 import os
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Sequence
 
 import pickle
 import jraph
@@ -11,13 +11,16 @@ import jax.numpy as jnp
 import ml_collections
 import numpy as np
 import yaml
+import pandas as pd
+import glob
 
 from absl import logging
 from clu import checkpoint
 from flax.training import train_state
 
 import sys
-sys.path.append('..')
+
+sys.path.append("..")
 
 import datatypes
 import input_pipeline_tf
@@ -44,9 +47,77 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
     return casted_dictionary
 
 
+def get_results_as_dataframe(
+    model: str, metrics: Sequence[str], basedir: str
+) -> Dict[str, pd.DataFrame]:
+    """Returns the results for the given model as a pandas dataframe for each split."""
+
+    def extract_hyperparameters(
+        config: ml_collections.ConfigDict,
+    ) -> Tuple[int, int, int]:
+        """Returns the hyperparameters extracted from the config."""
+
+        if "num_interactions" in config:
+            num_interactions = config.num_interactions
+        else:
+            num_interactions = config.n_interactions
+
+        max_l = config.max_ell
+
+        if "num_channels" in config:
+            num_channels = config.num_channels
+        else:
+            num_channels = config.n_atom_basis
+            assert num_channels == config.n_filters
+
+        return num_interactions, max_l, num_channels
+
+    results = {"val": [], "test": []}
+    for config_file_path in glob.glob(
+        os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
+    ):
+        workdir = os.path.dirname(config_file_path)
+
+        config, best_state, _, metrics_for_best_state = load_from_workdir(workdir)
+        num_params = sum(jax.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
+        num_interactions, max_l, num_channels = extract_hyperparameters(config)
+
+        for split in results:
+            metrics_for_split = [
+                metrics_for_best_state[split][metric] for metric in metrics
+            ]
+            results[split].append(
+                [num_interactions, max_l, num_channels, num_params] + metrics_for_split
+            )
+
+    for split in results:
+        results[split] = np.array(results[split])
+        results[split] = pd.DataFrame(
+            results[split],
+            columns=["num_interactions", "max_l", "num_channels", "num_params"]
+            + metrics,
+        )
+        results[split] = results[split].astype(
+            {
+                "num_interactions": int,
+                "max_l": int,
+                "num_channels": int,
+                "num_params": int,
+                **{metric: float for metric in metrics},
+            }
+        )
+
+    return results
+
+
 def load_metrics_from_workdir(
     workdir: str,
-) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, train_state.TrainState, Dict[Any, Any]]:
+) -> Tuple[
+    ml_collections.ConfigDict,
+    train_state.TrainState,
+    train_state.TrainState,
+    Dict[Any, Any],
+]:
     """Loads only the config and the metrics for the best model."""
 
     if not os.path.exists(workdir):
@@ -77,7 +148,12 @@ def load_from_workdir(
     workdir: str,
     load_pickled_params: bool = True,
     init_graphs: Optional[jraph.GraphsTuple] = None,
-) -> Tuple[ml_collections.ConfigDict, train_state.TrainState, train_state.TrainState, Dict[Any, Any]]:
+) -> Tuple[
+    ml_collections.ConfigDict,
+    train_state.TrainState,
+    train_state.TrainState,
+    Dict[Any, Any],
+]:
     """Loads the config, best model (in train mode), best model (in eval mode) and metrics for the best model."""
 
     if not os.path.exists(workdir):
@@ -164,7 +240,12 @@ def to_mol_dict(generated_frag: datatypes.Fragment, model_path: str, file_name: 
     )
     positions = np.asarray(generated_frag.nodes.positions)
     species = np.asarray(
-        list(map(lambda z: models.ATOMIC_NUMBERS[z], generated_frag.nodes.species.tolist()))
+        list(
+            map(
+                lambda z: models.ATOMIC_NUMBERS[z],
+                generated_frag.nodes.species.tolist(),
+            )
+        )
     )
 
     generated = (
