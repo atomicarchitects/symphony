@@ -2,7 +2,7 @@
 
 for l in 0 1 2 3 4 5
 do
-   for c in 64
+   for c in 32 64
    do
       for i in 1 2 3 4
       do
