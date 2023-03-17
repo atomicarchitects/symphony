@@ -35,6 +35,8 @@ def update_dummy_config(config):
     """Updates the dummy config."""
     config.num_train_steps = 100
     config.num_eval_steps = 10
+    config.num_eval_steps_at_end_of_training = 10
+    config.eval_every_steps = 50
 
 
 def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
