@@ -10,15 +10,17 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
-import nequip_jax
-import flax.linen as nn
+
+# import nequip_jax
 import chex
 import functools
 
 import datatypes
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
-NUM_ELEMENTS = 5
+ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
+NUM_ELEMENTS = len(ATOMIC_NUMBERS)
+
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
@@ -261,7 +263,7 @@ class MACE(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
-        self.output_irreps = e3nn.Irreps(output_irreps)
+        self.output_irreps = output_irreps
         self.r_max = r_max
         self.num_interactions = num_interactions
         self.hidden_irreps = hidden_irreps
@@ -311,6 +313,51 @@ class MACE(hk.Module):
         )
         node_embeddings = node_embeddings.axis_to_mul(axis=1)
         return node_embeddings
+
+
+class NequIP(hk.Module):
+    """Wrapper class for NequIP."""
+
+    latent_size: int
+    avg_num_neighbors: float
+    sh_lmax: int
+    target_irreps: e3nn.Irreps
+    even_activation: Callable[[jnp.ndarray], jnp.ndarray]
+    odd_activation: Callable[[jnp.ndarray], jnp.ndarray]
+    mlp_activation: Callable[[jnp.ndarray], jnp.ndarray]
+    mlp_n_hidden: int
+    mlp_n_layers: int
+    n_radial_basis: int
+
+    def __call__(
+        self,
+        graphs: datatypes.Fragment,
+    ):
+        species_embedder = hk.Embed(NUM_ELEMENTS, self.latent_size)
+
+        # Predict the properties.
+        vectors = (
+            graphs.nodes.positions[graphs.receivers]
+            - graphs.nodes.positions[graphs.senders]
+        )
+        vectors = e3nn.IrrepsArray(e3nn.Irreps("1o"), vectors)
+        species = graphs.nodes.species
+        n_nodes = graphs.nodes.positions.shape[0]
+        node_feats = nn.Embed(n_nodes, self.latent_size)(species)
+        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
+
+        node_embeddings = nequip_jax.NEQUIPLayer(
+            avg_num_neighbors=self.avg_num_neighbors,
+            num_species=NUM_ELEMENTS,
+            sh_lmax=self.sh_lmax,
+            target_irreps=self.target_irreps,
+            even_activation=self.even_activation,
+            odd_activation=self.odd_activation,
+            mlp_activation=self.mlp_activation,
+            mlp_n_hidden=self.mlp_n_hidden,
+            mlp_n_layers=self.mlp_n_layers,
+            n_radial_basis=self.n_radial_basis,
+        )(vectors, node_feats, species, graphs.senders, graphs.receivers)
 
 
 class FocusPredictor(hk.Module):
@@ -557,20 +604,25 @@ class Predictor(hk.Module):
             lambda x: x[jnp.arange(num_graphs), radius_indices], position_probs
         )  # [num_graphs, res_beta, res_alpha]
 
+        # Sample angles.
         rng, angular_rng = jax.random.split(rng)
         angular_rngs = jax.random.split(angular_rng, num_graphs)
         beta_indices, alpha_indices = jax.vmap(lambda key, p: p.sample(key))(
             angular_rngs, angular_probs
         )
 
+        # Combine the radius and angles to get the position vectors.
         position_vectors = jax.vmap(
             lambda r, b, a: RADII[r] * angular_probs.grid_vectors[b, a]
         )(radius_indices, beta_indices, alpha_indices)
 
         # Check the shapes.
         irreps = e3nn.s2_irreps(self.target_position_predictor.position_coeffs_lmax)
-        res_beta, res_alpha = self.target_position_predictor.res_beta, self.target_position_predictor.res_alpha
-    
+        res_beta, res_alpha = (
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
+        )
+
         assert focus_logits.shape == (num_nodes,)
         assert focus_indices.shape == (num_graphs,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
@@ -592,75 +644,3 @@ class Predictor(hk.Module):
         if self.run_in_evaluation_mode:
             return self.get_evaluation_predictions(graphs)
         return self.get_training_predictions(graphs)
-
-class NequIP(nn.Module):
-    """Wrapper class for NequIP."""
-
-    latent_size: int
-    avg_num_neighbors: float
-    sh_lmax: int
-    target_irreps: e3nn.Irreps
-    even_activation: Callable[[jnp.ndarray], jnp.ndarray]
-    odd_activation: Callable[[jnp.ndarray], jnp.ndarray]
-    mlp_activation: Callable[[jnp.ndarray], jnp.ndarray]
-    mlp_n_hidden: int
-    mlp_n_layers: int
-    n_radial_basis: int
-
-    @nn.compact
-    def __call__(
-        self,
-        graphs: datatypes.Fragment,
-    ):
-        species_embedder = nn.Embed(NUM_ELEMENTS, self.latent_size)
-
-        # Predict the properties.
-        vectors = (
-            graphs.nodes.positions[graphs.receivers]
-            - graphs.nodes.positions[graphs.senders]
-        )
-        vectors = e3nn.IrrepsArray(e3nn.Irreps('1o'), vectors)
-        species = graphs.nodes.species
-        n_nodes = graphs.nodes.positions.shape[0]
-        node_feats = nn.Embed(n_nodes, self.latent_size)(species)
-        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
-        
-        node_embeddings = nequip_jax.NEQUIPLayer(
-            avg_num_neighbors=self.avg_num_neighbors,
-            num_species=NUM_ELEMENTS,
-            sh_lmax=self.sh_lmax,
-            target_irreps=self.target_irreps,
-            even_activation=self.even_activation,
-            odd_activation=self.odd_activation,
-            mlp_activation=self.mlp_activation,
-            mlp_n_hidden=self.mlp_n_hidden,
-            mlp_n_layers=self.mlp_n_layers,
-            n_radial_basis=self.n_radial_basis,
-        )(
-            vectors,
-            node_feats,
-            species,
-            graphs.senders,
-            graphs.receivers
-        )
-        true_focus_node_embeddings = node_embeddings[get_first_node_indices(graphs)]
-        target_species_embeddings = species_embedder(graphs.globals.target_species)
-
-        focus_logits = nn.Dense(1)(node_embeddings).squeeze(axis=-1)
-        species_logits = nn.Dense(NUM_ELEMENTS)(true_focus_node_embeddings)
-
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        input_for_position_coeffs = jnp.concatenate(
-            (true_focus_node_embeddings, target_species_embeddings), axis=-1
-        )
-        position_coeffs = nn.Dense(len(RADII) * irreps.dim)(
-            input_for_position_coeffs
-        )
-        position_coeffs = jnp.reshape(position_coeffs, (-1, len(RADII), irreps.dim))
-        position_coeffs = e3nn.IrrepsArray(irreps=irreps, array=position_coeffs)
-
-        return datatypes.Predictions(
-            focus_logits=focus_logits,
-            species_logits=species_logits,
-            position_coeffs=position_coeffs,
-        )

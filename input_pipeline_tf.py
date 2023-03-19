@@ -10,8 +10,8 @@ import chex
 import jax
 import numpy as np
 import jraph
-
 import ml_collections
+
 import datatypes
 
 
@@ -127,7 +127,7 @@ def get_raw_qm9_datasets(
         def filter_file(filename: str, start: int, end: int) -> bool:
             filename = os.path.basename(filename)
             _, file_start, file_end = [int(val) for val in re.findall(r"\d+", filename)]
-            return start <= file_start and file_end < end
+            return start <= file_start and file_end <= end
 
         return [f for f in filenames if filter_file(f, start, end)]
 
