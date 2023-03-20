@@ -15,6 +15,8 @@ import mace_jax.modules
 import chex
 import functools
 
+import nequip_jax
+
 import datatypes
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
