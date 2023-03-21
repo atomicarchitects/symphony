@@ -1,0 +1,47 @@
+molecule 0:
+total loss = 43.261287689208984
+focus loss = 1.0119590759277344
+species loss = 3.0459582805633545
+position loss = 39.203369140625
+
+molecule 1:
+total loss = 7.426380157470703
+focus loss = 0.0017323493957519531
+species loss = 0.7347402572631836
+position loss = 6.689907550811768
+
+molecule 2:
+total loss = 12.652941703796387
+focus loss = 0.03167915344238281
+species loss = 0.19089896976947784
+position loss = 12.430363655090332
+
+molecule 3:
+total loss = 115.90589141845703
+focus loss = 1.3130474090576172
+species loss = 0.03550373390316963
+position loss = 114.55734252929688
+
+molecule 4:
+total loss = 3.0910425186157227
+focus loss = 3.0910425186157227
+species loss = -0.0
+position loss = 0.0
+
+molecule 5:
+total loss = 35.71971893310547
+focus loss = 0.0010762214660644531
+species loss = 0.787137508392334
+position loss = 34.93150329589844
+
+molecule 6:
+total loss = -1.9362472295761108
+focus loss = 2.288818359375e-05
+species loss = 0.004647880792617798
+position loss = -1.94091796875
+
+molecule 7:
+total loss = 85.88677215576172
+focus loss = 1.9849462509155273
+species loss = 0.021685278043150902
+position loss = 83.88014221191406

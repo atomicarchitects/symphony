@@ -49,6 +49,7 @@ class Predictions(NamedTuple):
     target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
     position_coeffs: jnp.ndarray  # [n_graph, n_radii, ...] float array
     position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
+    position_probs: e3nn.SphericalSignal
 
 
 class EvaluationPredictions(NamedTuple):
@@ -58,4 +59,5 @@ class EvaluationPredictions(NamedTuple):
     target_species: jnp.ndarray  # [1,] int array
     position_coeffs: jnp.ndarray  # [1, n_radii, ...] float array
     position_logits: e3nn.SphericalSignal  # [1, n_radii, beta, alpha] float array
+    position_probs: e3nn.SphericalSignal
     position_vectors: jnp.ndarray
