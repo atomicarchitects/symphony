@@ -380,6 +380,7 @@ class FocusPredictor(hk.Module):
         focus_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1) + [1],
             act=self.activation,
+            output_activation=False
         )(node_scalars)
         focus_logits = focus_logits.array.squeeze(axis=-1)
         return focus_logits
@@ -405,6 +406,7 @@ class TargetSpeciesPredictor(hk.Module):
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1) + [NUM_ELEMENTS],
             act=self.activation,
+            output_activation=False
         )(focus_node_scalars).array
         return species_logits
 
