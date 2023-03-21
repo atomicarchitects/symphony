@@ -2,12 +2,9 @@
 
 from typing import Sequence, Dict
 
-import ml_collections
 from absl import app
 from absl import flags
-from absl import logging
 import os
-import glob
 import pandas as pd
 import numpy as np
 import jax
@@ -27,11 +24,9 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("basedir", None, "Directory where all workdirs are stored.")
 flags.DEFINE_string(
     "outputdir",
-    os.path.join(os.getcwd(), "analyses", "outputs"),
+    os.path.join(os.getcwd(), "analyses", "outputs", "v2"),
     "Directory where plots should be saved.",
 )
-flags.DEFINE_string("model", None, "Model to analyze.")
-
 
 def get_title_for_model(model: str) -> str:
     """Returns the title for the given model."""
@@ -52,23 +47,26 @@ def get_title_for_split(split):
 
 
 def plot_performance_for_parameters(
-    model: str, metrics: Sequence[str], results: Dict[str, pd.DataFrame], outputdir: str
+    metrics: Sequence[str], results: Dict[str, pd.DataFrame], outputdir: str
 ) -> None:
     """Creates a line plot for each metric as a function of number of parameters."""
 
-    def plot_metric(metric: str, split: str):
+    def plot_metric(model: str, metric: str, split: str):
         # Set style.
         sns.set_theme(style="darkgrid")
 
+        # Get all values of num_interactions in this split.
+        split_num_interactions = results[split]["num_interactions"].drop_duplicates().sort_values().values
+
         # One figure for each value of num_interactions.
-        fig, axs = plt.subplots(ncols=2, figsize=(12, 6), sharey=True)
+        fig, axs = plt.subplots(ncols=len(split_num_interactions), figsize=(len(split_num_interactions) * 4, 6), sharey=True)
         fig.suptitle(get_title_for_model(model) + " on " + get_title_for_split(split) + " Set")
 
         for ax, num_interactions in zip(
-            axs, results[split]["num_interactions"].drop_duplicates().sort_values()
+            axs, split_num_interactions
         ):
-            # Choose the subset of data based on the number of interactions.
-            df = results[split]
+            # Choose the subset of data based on the number of interactions and model.
+            df = results[split][results[split]["model"] == model]
             df_subset = df[df["num_interactions"] == num_interactions]
 
             # Lineplot.
@@ -85,11 +83,7 @@ def plot_performance_for_parameters(
             )
 
             # Customizing different axes.
-            if num_interactions == 1:
-                ax.legend().remove()
-                ax.set_ylabel(" ".join(ax.get_ylabel().split("_")).title())
-
-            if num_interactions == 2:
+            if num_interactions == split_num_interactions[-1]:
                 ax.legend(
                     title="Max L",
                     loc="center left",
@@ -99,15 +93,19 @@ def plot_performance_for_parameters(
                     shadow=False,
                 )
                 ax.set_ylabel("")
+            else:
+                ax.legend().remove()
+                ax.set_ylabel(" ".join(ax.get_ylabel().split("_")).title())
 
             # Axes limits.
-            min_y = min(results[split][metric].min() for split in results)
-            max_y = max(results[split][metric].max() for split in results)
+            min_y = results[split][metric].min()
+            max_y = results[split][metric].max()
             ax.set_ylim(min_y - 0.2, max_y + 0.2)
-
+        
             # Labels and titles.
-            ax.set_xlabel("Number of Parameters")
             ax.set_title(f"{num_interactions} Interactions")
+            ax.set_xlabel("Number of Parameters")
+            ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 
             # Add jitter to the points.
             np.random.seed(0)
@@ -131,29 +129,34 @@ def plot_performance_for_parameters(
         plt.savefig(outputfile, bbox_inches="tight")
         plt.close()
 
-    for split in results:
-        for metric in metrics:
-            plot_metric(metric, split)
+    models = results["val"]["model"].drop_duplicates().sort_values().values
+    for model in models:
+        for split in results:
+            for metric in metrics:
+                plot_metric(model, metric, split)
 
 
 def plot_performance_for_max_ell(
-    model: str, metrics: Sequence[str], results: Dict[str, pd.DataFrame], outputdir: str
+    metrics: Sequence[str], results: Dict[str, pd.DataFrame], outputdir: str
 ) -> None:
     """Creates a scatter plot for each metric, grouped by max_ell."""
 
-    def plot_metric(metric: str, split: str):
+    def plot_metric(model: str, metric: str, split: str):
         # Set style.
         sns.set_theme(style="darkgrid")
 
+        # Get all values of num_interactions in this split.
+        split_num_interactions = results[split]["num_interactions"].drop_duplicates().sort_values().values
+
         # One figure for each value of num_interactions.
-        fig, axs = plt.subplots(ncols=2, figsize=(12, 6), sharey=True)
+        fig, axs = plt.subplots(ncols=len(split_num_interactions), figsize=(len(split_num_interactions) * 4, 6), sharey=True)
         fig.suptitle(get_title_for_model(model) + " on " + get_title_for_split(split) + " Set")
 
         for ax, num_interactions in zip(
-            axs, results[split]["num_interactions"].drop_duplicates().sort_values()
+            axs, split_num_interactions
         ):
             # Choose the subset of data based on the number of interactions.
-            df = results[split]
+            df = results[split][results[split]["model"] == model]
             df_subset = df[df["num_interactions"] == num_interactions]
 
             # Scatterplot.
@@ -168,11 +171,7 @@ def plot_performance_for_max_ell(
             )
 
             # Customizing different axes.
-            if num_interactions == 1:
-                ax.legend().remove()
-                ax.set_ylabel(" ".join(ax.get_ylabel().split("_")).title())
-
-            if num_interactions == 2:
+            if num_interactions == split_num_interactions[-1]:
                 ax.legend(
                     title="Number of Channels",
                     loc="center left",
@@ -182,10 +181,13 @@ def plot_performance_for_max_ell(
                     shadow=False,
                 )
                 ax.set_ylabel("")
+            else:
+                ax.legend().remove()
+                ax.set_ylabel(" ".join(ax.get_ylabel().split("_")).title())
 
             # Axes limits.
-            min_y = min(results[split][metric].min() for split in results)
-            max_y = max(results[split][metric].max() for split in results)
+            min_y = results[split][metric].min()
+            max_y = results[split][metric].max()
             ax.set_ylim(min_y - 0.2, max_y + 0.2)
 
             # Labels and titles.
@@ -213,9 +215,11 @@ def plot_performance_for_max_ell(
         plt.savefig(outputfile, bbox_inches="tight")
         plt.close()
 
-    for split in results:
-        for metric in metrics:
-            plot_metric(metric, split)
+    models = results["val"]["model"].drop_duplicates().sort_values().values
+    for model in models:
+        for split in results:
+            for metric in metrics:
+                plot_metric(model, metric, split)
 
 
 def main(argv):
@@ -223,18 +227,19 @@ def main(argv):
         raise app.UsageError("Too many command-line arguments.")
 
     basedir = os.path.abspath(FLAGS.basedir)
-    model = FLAGS.model
     outputdir = os.path.abspath(FLAGS.outputdir)
+
     metrics = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
+    models = ["mace", "e3schnet"]
 
     # Get results.
-    results = analysis.get_results_as_dataframe(model, metrics, basedir)
+    results = analysis.get_results_as_dataframe(models, metrics, basedir)
 
     # Make plots.
-    plot_performance_for_max_ell(model, metrics, results, outputdir)
-    plot_performance_for_parameters(model, metrics, results, outputdir)
+    plot_performance_for_max_ell(metrics, results, outputdir)
+    plot_performance_for_parameters(metrics, results, outputdir)
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["basedir", "model"])
+    flags.mark_flags_as_required(["basedir"])
     app.run(main)
