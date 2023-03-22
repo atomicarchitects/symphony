@@ -55,6 +55,7 @@ class Predictions(NamedTuple):
 class EvaluationPredictions(NamedTuple):
     stop: jnp.ndarray  # [n_graph] bool array
     focus_logits: jnp.ndarray  # [n_node] float array
+    focus_probs: jnp.ndarray  # [n_node] float array
     focus_indices: jnp.ndarray  # [n_graph] int array
     target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
     target_species: jnp.ndarray  # [n_graph,] int array

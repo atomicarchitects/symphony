@@ -683,7 +683,9 @@ class Predictor(hk.Module):
             self.target_position_predictor.res_alpha,
         )
 
+        assert stop.shape == (num_graphs,)
         assert focus_logits.shape == (num_nodes,)
+        assert focus_probs.shape == (num_nodes,)
         assert focus_indices.shape == (num_graphs,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
         assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
@@ -693,6 +695,7 @@ class Predictor(hk.Module):
         return datatypes.EvaluationPredictions(
             stop=stop,
             focus_logits=focus_logits,
+            focus_probs=focus_probs,
             focus_indices=focus_indices,
             target_species_logits=target_species_logits,
             position_coeffs=position_coeffs,
