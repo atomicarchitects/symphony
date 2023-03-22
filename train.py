@@ -62,13 +62,13 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
 
 def generation_loss(
-    preds: datatypes.Predictions,
+    preds: jraph.GraphsTuple,
     graphs: datatypes.Fragment,
     radius_rbf_variance: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
-        preds (datatypes.Predictions): the model predictions
+        preds (jraph.GraphsTuple): the model predictions
         graphs (jraph.GraphsTuple): a batch of graphs representing the current molecules
     """
     num_radii = models.RADII.shape[0]
@@ -79,13 +79,13 @@ def generation_loss(
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
         assert (
-            preds.focus_logits.shape
+            preds.nodes.focus_logits.shape
             == graphs.nodes.focus_probability.shape
             == (num_nodes,)
         )
 
         n_node = graphs.n_node
-        focus_logits = preds.focus_logits
+        focus_logits = preds.nodes.focus_logits
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
         loss_focus = e3nn.scatter_sum(
@@ -110,13 +110,13 @@ def generation_loss(
     def atom_type_loss() -> jnp.ndarray:
         # target_species_logits is of shape (num_graphs, num_elements)
         assert (
-            preds.target_species_logits.shape
+            preds.globals.target_species_logits.shape
             == graphs.globals.target_species_probability.shape
             == (num_graphs, num_elements)
         )
 
         loss_atom_type = optax.softmax_cross_entropy(
-            logits=preds.target_species_logits,
+            logits=preds.globals.target_species_logits,
             labels=graphs.globals.target_species_probability,
         )
 
@@ -125,18 +125,18 @@ def generation_loss(
 
     def position_loss() -> jnp.ndarray:
         # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
-        assert preds.position_coeffs.array.shape == (
+        assert preds.globals.position_coeffs.array.shape == (
             num_graphs,
             num_radii,
-            preds.position_coeffs.irreps.dim,
+            preds.globals.position_coeffs.irreps.dim,
         )
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_max = jnp.max(
-            preds.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+            preds.globals.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        sphere_normalizing_factors = preds.position_logits.apply(
+        sphere_normalizing_factors = preds.globals.position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
@@ -180,7 +180,7 @@ def generation_loss(
         target_positions = e3nn.IrrepsArray("1o", target_positions)
         target_positions_logits = jax.vmap(
             functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.position_coeffs, target_positions)
+        )(preds.globals.position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
@@ -213,7 +213,7 @@ def get_predictions(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rng: Optional[chex.Array],
-) -> datatypes.Predictions:
+) -> jraph.GraphsTuple:
     """Get predictions from the network for input graphs."""
     return state.apply_fn(state.params, rng, graphs)
 
