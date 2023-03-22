@@ -86,6 +86,7 @@ def create_model(
                 max_ell=config.max_ell,
                 init_embedding_dims=config.num_channels,
                 output_irreps=output_irreps,
+                num_interactions=config.num_interactions,
                 even_activation=getattr(jax.nn, config.even_activation),
                 odd_activation=getattr(jax.nn, config.odd_activation),
                 mlp_activation=getattr(jax.nn, config.mlp_activation),

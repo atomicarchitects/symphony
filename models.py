@@ -358,6 +358,7 @@ class NequIP(hk.Module):
         max_ell: int,
         init_embedding_dims: int,
         output_irreps: str,
+        num_interactions: int,
         even_activation: Callable[[jnp.ndarray], jnp.ndarray],
         odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
         mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
@@ -371,6 +372,7 @@ class NequIP(hk.Module):
         self.max_ell = max_ell
         self.init_embedding_dims = init_embedding_dims
         self.output_irreps = output_irreps
+        self.num_interactions = num_interactions
         self.even_activation = even_activation
         self.odd_activation = odd_activation
         self.mlp_activation = mlp_activation
@@ -392,18 +394,20 @@ class NequIP(hk.Module):
         node_feats = hk.Embed(NUM_ELEMENTS, self.init_embedding_dims)(species)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
-        return nequip_jax.NEQUIPLayerHaiku(
-            avg_num_neighbors=self.avg_num_neighbors,
-            num_species=NUM_ELEMENTS,
-            max_ell=self.max_ell,
-            output_irreps=self.output_irreps,
-            even_activation=self.even_activation,
-            odd_activation=self.odd_activation,
-            mlp_activation=self.mlp_activation,
-            mlp_n_hidden=self.mlp_n_hidden,
-            mlp_n_layers=self.mlp_n_layers,
-            n_radial_basis=self.n_radial_basis,
-        )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+        for _ in range(self.num_interactions):
+            node_feats = nequip_jax.NEQUIPLayerHaiku(
+                avg_num_neighbors=self.avg_num_neighbors,
+                num_species=NUM_ELEMENTS,
+                max_ell=self.max_ell,
+                output_irreps=self.output_irreps,
+                even_activation=self.even_activation,
+                odd_activation=self.odd_activation,
+                mlp_activation=self.mlp_activation,
+                mlp_n_hidden=self.mlp_n_hidden,
+                mlp_n_layers=self.mlp_n_layers,
+                n_radial_basis=self.n_radial_basis,
+            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+        return node_feats
 
 
 class FocusPredictor(hk.Module):

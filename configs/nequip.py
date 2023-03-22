@@ -17,6 +17,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.model = "NequIP"
     config.num_channels = 128
     config.avg_num_neighbors = 15.0
+    config.num_interactions = 1
     config.max_ell = 3
     config.even_activation = "swish"
     config.odd_activation = "tanh"
