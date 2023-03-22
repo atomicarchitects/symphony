@@ -3,8 +3,6 @@
 import ml_collections
 
 from configs import default
-import e3nn_jax as e3nn
-import jax
 
 
 def get_config() -> ml_collections.ConfigDict:
