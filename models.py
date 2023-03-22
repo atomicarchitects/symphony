@@ -10,17 +10,17 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
-
 import nequip_jax
+
 import chex
 import functools
 
 import datatypes
 
+
 RADII = jnp.arange(0.75, 2.03, 0.02)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
-
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
@@ -426,7 +426,7 @@ class FocusPredictor(hk.Module):
         focus_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1) + [1],
             act=self.activation,
-            output_activation=False,
+            output_activation=False
         )(node_scalars)
         focus_logits = focus_logits.array.squeeze(axis=-1)
         return focus_logits
@@ -452,7 +452,7 @@ class TargetSpeciesPredictor(hk.Module):
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1) + [NUM_ELEMENTS],
             act=self.activation,
-            output_activation=False,
+            output_activation=False
         )(focus_node_scalars).array
         return species_logits
 
@@ -569,6 +569,15 @@ class Predictor(hk.Module):
             true_focus_node_embeddings, graphs.globals.target_species
         )
 
+        # Integrate the position signal over each sphere to get the normalizing factors for the radii.
+        # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
+        position_max = jnp.max(
+            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+        )
+        position_probs = position_logits.apply(
+            lambda pos: jnp.exp(pos - position_max)
+        )  # [num_graphs, num_radii, res_beta, res_alpha]
+
         # Check the shapes.
         assert focus_logits.shape == (num_nodes,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
@@ -580,6 +589,7 @@ class Predictor(hk.Module):
             target_species_logits=target_species_logits,
             position_coeffs=position_coeffs,
             position_logits=position_logits,
+            position_probs=position_probs
         )
 
     def get_evaluation_predictions(
@@ -688,6 +698,7 @@ class Predictor(hk.Module):
             position_coeffs=position_coeffs,
             target_species=target_species,
             position_logits=position_logits,
+            position_probs=position_probs,
             position_vectors=position_vectors,
         )
 
