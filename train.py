@@ -58,7 +58,9 @@ def create_model(
 ) -> nn.Module:
     """Create a model as specified by the config."""
 
-    def model_fn(graphs):
+    def model_fn(graphs: datatypes.Fragment) -> datatypes.Predictions:
+        """Defines the entire network."""
+
         if config.activation == "shifted_softplus":
             activation = models.shifted_softplus
         else:
@@ -66,7 +68,6 @@ def create_model(
 
         if config.model == "MACE":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-
             node_embedder = models.MACE(
                 output_irreps=output_irreps,
                 hidden_irreps=output_irreps,
@@ -77,6 +78,20 @@ def create_model(
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 num_basis_fns=config.num_basis_fns,
+            )
+        elif config.model == "NequIP":
+            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+            node_embedder = models.NequIP(
+                avg_num_neighbors=config.avg_num_neighbors,
+                max_ell=config.max_ell,
+                init_embedding_dims=config.num_channels,
+                output_irreps=output_irreps,
+                even_activation=getattr(jax.nn, config.even_activation),
+                odd_activation=getattr(jax.nn, config.odd_activation),
+                mlp_activation=getattr(jax.nn, config.mlp_activation),
+                mlp_n_hidden=config.num_channels,
+                mlp_n_layers=config.mlp_n_layers,
+                n_radial_basis=config.num_basis_fns,
             )
         elif config.model == "E3SchNet":
             node_embedder = models.E3SchNet(
@@ -113,21 +128,6 @@ def create_model(
             target_position_predictor=target_position_predictor,
             run_in_evaluation_mode=run_in_evaluation_mode,
         )(graphs)
-
-    if config.model == "NequIP":
-        raise NotImplementedError("NequIP is not ready yet.")
-        return models.NequIP(
-            latent_size=config.latent_size,
-            avg_num_neighbors=config.avg_num_neighbors,
-            sh_lmax=config.sh_lmax,
-            target_irreps=config.target_irreps,
-            even_activation=config.even_activation,
-            odd_activation=config.odd_activation,
-            mlp_activation=config.mlp_activation,
-            mlp_n_hidden=config.mlp_n_hidden,
-            mlp_n_layers=config.mlp_n_layers,
-            n_radial_basis=config.n_radial_basis,
-        )
 
     return hk.transform(model_fn)
 
@@ -551,4 +551,4 @@ def train_and_evaluate(
                     }
                 )
 
-    return best_state
+    return best_state, metrics_for_best_state
