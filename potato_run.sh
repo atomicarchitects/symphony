@@ -6,9 +6,9 @@ do
    do
       for i in 1
       do
-        grun python -m main --config=configs/mace.py     --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=/tmp/mace/interactions="$i"/l="$l"/channels="$c"/ &
-        grun python -m main --config=configs/e3schnet.py --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=/tmp/e3schnet/interactions="$i"/l="$l"/channels="$c"/ &
-        grun python -m main --config=configs/nequip.py   --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=/tmp/nequip/interactions="$i"/l="$l"/channels="$c"/ &
+        grun python -m main --config=configs/mace.py     --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=/tmp/exps/mace/interactions="$i"/l="$l"/channels="$c"/ &
+        grun python -m main --config=configs/e3schnet.py --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=/tmp/exps/e3schnet/interactions="$i"/l="$l"/channels="$c"/ &
+        grun python -m main --config=configs/nequip.py   --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=/tmp/exps/nequip/interactions="$i"/l="$l"/channels="$c"/ &
       done
     done
 done
