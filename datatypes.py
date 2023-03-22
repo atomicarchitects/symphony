@@ -44,20 +44,18 @@ class Fragment(jraph.GraphsTuple):
         )
 
 
-class Predictions(NamedTuple):
+class PredictionsNodes(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
-    target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
-    position_coeffs: jnp.ndarray  # [n_graph, n_radii, ...] float array
-    position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
-    position_probs: e3nn.SphericalSignal
 
 
-class EvaluationPredictions(NamedTuple):
-    stop: jnp.ndarray  # [n_graph] bool array
-    focus_logits: jnp.ndarray  # [n_node] float array
+class PredictionsGlobals(NamedTuple):
     focus_indices: jnp.ndarray  # [n_graph] int array
+    stop: jnp.ndarray  # [n_graph] bool array
+
     target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
     target_species: jnp.ndarray  # [n_graph,] int array
+
     position_coeffs: jnp.ndarray  # [n_graph, n_radii, ...] float array
     position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
+    position_probs: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
     position_vectors: jnp.ndarray  # [n_graph, 3] float array

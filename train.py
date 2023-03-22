@@ -2,15 +2,13 @@
 
 import functools
 import os
+import pickle
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
 
-import pickle
 import chex
 import e3nn_jax as e3nn
 import flax
 import flax.core
-import flax.linen as nn
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
@@ -30,6 +28,7 @@ from flax.training import train_state
 import datatypes
 import input_pipeline_tf
 import models
+from models import create_model
 
 
 @flax.struct.dataclass
@@ -51,85 +50,6 @@ class EvalMetrics(metrics.Collection):
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     """Adds a prefix to the keys of a dict, returning a new dict."""
     return {f"{prefix}_{key}": val for key, val in result.items()}
-
-
-def create_model(
-    config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
-) -> nn.Module:
-    """Create a model as specified by the config."""
-
-    def model_fn(graphs: datatypes.Fragment) -> datatypes.Predictions:
-        """Defines the entire network."""
-
-        if config.activation == "shifted_softplus":
-            activation = models.shifted_softplus
-        else:
-            activation = getattr(jax.nn, config.activation)
-
-        if config.model == "MACE":
-            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-            node_embedder = models.MACE(
-                output_irreps=output_irreps,
-                hidden_irreps=output_irreps,
-                readout_mlp_irreps=output_irreps,
-                r_max=config.r_max,
-                num_interactions=config.num_interactions,
-                avg_num_neighbors=config.avg_num_neighbors,
-                num_species=config.num_species,
-                max_ell=config.max_ell,
-                num_basis_fns=config.num_basis_fns,
-            )
-        elif config.model == "NequIP":
-            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-            node_embedder = models.NequIP(
-                avg_num_neighbors=config.avg_num_neighbors,
-                max_ell=config.max_ell,
-                init_embedding_dims=config.num_channels,
-                output_irreps=output_irreps,
-                even_activation=getattr(jax.nn, config.even_activation),
-                odd_activation=getattr(jax.nn, config.odd_activation),
-                mlp_activation=getattr(jax.nn, config.mlp_activation),
-                mlp_n_hidden=config.num_channels,
-                mlp_n_layers=config.mlp_n_layers,
-                n_radial_basis=config.num_basis_fns,
-            )
-        elif config.model == "E3SchNet":
-            node_embedder = models.E3SchNet(
-                n_atom_basis=config.num_channels,
-                n_interactions=config.num_interactions,
-                n_filters=config.num_channels,
-                n_rbf=config.num_basis_fns,
-                activation=activation,
-                cutoff=config.cutoff,
-                max_ell=config.max_ell,
-            )
-        else:
-            raise ValueError(f"Unsupported model: {config.model}.")
-
-        focus_predictor = models.FocusPredictor(
-            latent_size=config.focus_predictor.latent_size,
-            num_layers=config.focus_predictor.num_layers,
-            activation=activation,
-        )
-        target_species_predictor = models.TargetSpeciesPredictor(
-            latent_size=config.target_species_predictor.latent_size,
-            num_layers=config.target_species_predictor.num_layers,
-            activation=activation,
-        )
-        target_position_predictor = models.TargetPositionPredictor(
-            position_coeffs_lmax=config.max_ell,
-            res_beta=config.target_position_predictor.res_beta,
-            res_alpha=config.target_position_predictor.res_alpha,
-        )
-        return models.Predictor(
-            node_embedder=node_embedder,
-            focus_predictor=focus_predictor,
-            target_species_predictor=target_species_predictor,
-            target_position_predictor=target_position_predictor,
-            run_in_evaluation_mode=run_in_evaluation_mode,
-        )(graphs)
-
-    return hk.transform(model_fn)
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
@@ -505,7 +425,9 @@ def train_and_evaluate(
             if is_last_step:
                 # If this is the last step, we want to evaluate the best model,
                 # on the entire validation and test splits.
-                logging.info("Evaluating best state on the entire validation and test splits.")
+                logging.info(
+                    "Evaluating best state on the entire validation and test splits."
+                )
                 eval_state = eval_state.replace(params=best_state.params)
                 num_eval_steps = config.num_eval_steps_at_end_of_training
             else:
@@ -531,7 +453,7 @@ def train_and_evaluate(
                 )
 
             # Note best state seen so far.
-            # Best state is defined as the state with the lowest validation loss.                
+            # Best state is defined as the state with the lowest validation loss.
             if not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss:
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
