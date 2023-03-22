@@ -322,6 +322,7 @@ def train_step(
         _,
         (total_loss, focus_loss, atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
+    jax.debug.print("grad_sum={grad_sum}", grad_sum=sum(jax.tree_leaves(jax.tree_map(lambda x: jnp.abs(x).sum(), grads))))
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = TrainMetrics.single_from_model_output(
@@ -504,6 +505,11 @@ def train_and_evaluate(
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             if is_last_step:
+                # If this is the first time we are evaluating,
+                # we will just evaluate the current model.
+                if min_val_loss == jnp.inf:
+                    best_state = state
+    
                 # If this is the last step,
                 # we want to evaluate the best model on more number of steps.
                 logging.info("Evaluating best state at the end of training.")
@@ -533,7 +539,7 @@ def train_and_evaluate(
 
             # Note best state seen so far.
             # Best state is defined as the state with the lowest validation loss.                
-            if not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss:
+            if (not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss) or (min_val_loss == jnp.inf):
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
                 metrics_for_best_state = eval_metrics
