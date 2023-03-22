@@ -503,9 +503,9 @@ def train_and_evaluate(
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             if is_last_step:
-                # If this is the last step, we want to evaluate the best model,
-                # on the entire validation and test splits.
-                logging.info("Evaluating best state on the entire validation and test splits.")
+                # If this is the last step,
+                # we want to evaluate the best model on more number of steps.
+                logging.info("Evaluating best state at the end of training.")
                 eval_state = eval_state.replace(params=best_state.params)
                 num_eval_steps = config.num_eval_steps_at_end_of_training
             else:

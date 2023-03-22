@@ -574,9 +574,6 @@ class Predictor(hk.Module):
         position_max = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        position_probs = position_logits.apply(
-            lambda pos: jnp.exp(pos - position_max)
-        )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Check the shapes.
         assert focus_logits.shape == (num_nodes,)
@@ -589,7 +586,6 @@ class Predictor(hk.Module):
             target_species_logits=target_species_logits,
             position_coeffs=position_coeffs,
             position_logits=position_logits,
-            position_probs=position_probs
         )
 
     def get_evaluation_predictions(
