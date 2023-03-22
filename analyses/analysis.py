@@ -48,7 +48,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 
 def get_results_as_dataframe(
-    model: str, metrics: Sequence[str], basedir: str
+    models: Sequence[str], metrics: Sequence[str], basedir: str
 ) -> Dict[str, pd.DataFrame]:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
@@ -73,32 +73,38 @@ def get_results_as_dataframe(
         return num_interactions, max_l, num_channels
 
     results = {"val": [], "test": []}
-    for config_file_path in glob.glob(
-        os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
-    ):
-        workdir = os.path.dirname(config_file_path)
+    for model in models:
+        for config_file_path in glob.glob(
+            os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
+        ):
+            workdir = os.path.dirname(config_file_path)
+            try:
+                config, best_state, _, metrics_for_best_state = load_from_workdir(workdir)
+            except FileNotFoundError:
+                logging.warning(f"Skipping {workdir} because it is incomplete.")
+                continue
 
-        config, best_state, _, metrics_for_best_state = load_from_workdir(workdir)
-        num_params = sum(jax.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
-        num_interactions, max_l, num_channels = extract_hyperparameters(config)
+            num_params = sum(jax.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
+            num_interactions, max_l, num_channels = extract_hyperparameters(config)
 
-        for split in results:
-            metrics_for_split = [
-                metrics_for_best_state[split][metric] for metric in metrics
-            ]
-            results[split].append(
-                [num_interactions, max_l, num_channels, num_params] + metrics_for_split
-            )
+            for split in results:
+                metrics_for_split = [
+                    metrics_for_best_state[split][metric] for metric in metrics
+                ]
+                results[split].append(
+                    [model, num_interactions, max_l, num_channels, num_params] + metrics_for_split
+                )
 
     for split in results:
         results[split] = np.array(results[split])
         results[split] = pd.DataFrame(
             results[split],
-            columns=["num_interactions", "max_l", "num_channels", "num_params"]
+            columns=["model", "num_interactions", "max_l", "num_channels", "num_params"]
             + metrics,
         )
         results[split] = results[split].astype(
             {
+                "model": str,
                 "num_interactions": int,
                 "max_l": int,
                 "num_channels": int,

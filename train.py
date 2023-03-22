@@ -58,7 +58,9 @@ def create_model(
 ) -> nn.Module:
     """Create a model as specified by the config."""
 
-    def model_fn(graphs):
+    def model_fn(graphs: datatypes.Fragment) -> datatypes.Predictions:
+        """Defines the entire network."""
+
         if config.activation == "shifted_softplus":
             activation = models.shifted_softplus
         else:
@@ -66,7 +68,6 @@ def create_model(
 
         if config.model == "MACE":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-
             node_embedder = models.MACE(
                 output_irreps=output_irreps,
                 hidden_irreps=output_irreps,
@@ -77,6 +78,20 @@ def create_model(
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 num_basis_fns=config.num_basis_fns,
+            )
+        elif config.model == "NequIP":
+            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+            node_embedder = models.NequIP(
+                avg_num_neighbors=config.avg_num_neighbors,
+                max_ell=config.max_ell,
+                init_embedding_dims=config.num_channels,
+                output_irreps=output_irreps,
+                even_activation=getattr(jax.nn, config.even_activation),
+                odd_activation=getattr(jax.nn, config.odd_activation),
+                mlp_activation=getattr(jax.nn, config.mlp_activation),
+                mlp_n_hidden=config.num_channels,
+                mlp_n_layers=config.mlp_n_layers,
+                n_radial_basis=config.num_basis_fns,
             )
         elif config.model == "E3SchNet":
             node_embedder = models.E3SchNet(
@@ -113,21 +128,6 @@ def create_model(
             target_position_predictor=target_position_predictor,
             run_in_evaluation_mode=run_in_evaluation_mode,
         )(graphs)
-
-    if config.model == "NequIP":
-        raise NotImplementedError("NequIP is not ready yet.")
-        return models.NequIP(
-            latent_size=config.latent_size,
-            avg_num_neighbors=config.avg_num_neighbors,
-            sh_lmax=config.sh_lmax,
-            target_irreps=config.target_irreps,
-            even_activation=config.even_activation,
-            odd_activation=config.odd_activation,
-            mlp_activation=config.mlp_activation,
-            mlp_n_hidden=config.mlp_n_hidden,
-            mlp_n_layers=config.mlp_n_layers,
-            n_radial_basis=config.n_radial_basis,
-        )
 
     return hk.transform(model_fn)
 
@@ -464,7 +464,7 @@ def train_and_evaluate(
     hooks = [report_progress, profile]
 
     # We will record the best model seen during training.
-    best_state = state
+    best_state = None
     min_val_loss = jnp.inf
 
     # Begin training loop.
@@ -502,8 +502,16 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
-            # Evaluate with the current set of parameters.
-            eval_state = eval_state.replace(params=state.params)
+            if is_last_step:
+                # If this is the last step, we want to evaluate the best model,
+                # on the entire validation and test splits.
+                logging.info("Evaluating best state on the entire validation and test splits.")
+                eval_state = eval_state.replace(params=best_state.params)
+                num_eval_steps = config.num_eval_steps_at_end_of_training
+            else:
+                # Evaluate with the current set of parameters.
+                eval_state = eval_state.replace(params=state.params)
+                num_eval_steps = config.num_eval_steps
 
             splits = ["val", "test"]
             with report_progress.timed("eval"):
@@ -514,7 +522,7 @@ def train_and_evaluate(
                     splits,
                     eval_rng,
                     config.loss_kwargs,
-                    config.num_eval_steps,
+                    num_eval_steps,
                 )
             for split in splits:
                 eval_metrics[split] = eval_metrics[split].compute()
@@ -523,22 +531,24 @@ def train_and_evaluate(
                 )
 
             # Note best state seen so far.
-            # Best state is defined as the state with the lowest validation loss.
-            if eval_metrics["val"]["total_loss"] < min_val_loss:
+            # Best state is defined as the state with the lowest validation loss.                
+            if not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss:
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
                 metrics_for_best_state = eval_metrics
 
-                # Checkpoint the best state and corresponding metrics seen during training.
-                # Save pickled parameters for easy access during evaluation.
-                with report_progress.timed("checkpoint"):
-                    with open(pickled_params_file, "wb") as f:
-                        pickle.dump(best_state.params, f)
-                    ckpt.save(
-                        {
-                            "best_state": best_state,
-                            "metrics_for_best_state": metrics_for_best_state,
-                        }
-                    )
+            # Checkpoint the best state and corresponding metrics seen during training.
+            # Note whether we have evaluated the best state on the entire validation and test splits.
+            # Save pickled parameters for easy access during evaluation.
+            with report_progress.timed("checkpoint"):
+                with open(pickled_params_file, "wb") as f:
+                    pickle.dump(best_state.params, f)
+                ckpt.save(
+                    {
+                        "best_state": best_state,
+                        "metrics_for_best_state": metrics_for_best_state,
+                        "evaluated_on_entire_val_and_test_splits": is_last_step,
+                    }
+                )
 
-    return best_state
+    return best_state, metrics_for_best_state
