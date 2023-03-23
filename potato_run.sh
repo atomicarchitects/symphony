@@ -18,12 +18,15 @@ do
       if [ $scriptnum -eq 1 ]
       then
         CUDA_VISIBLE_DEVICES=6 python -m main --config=configs/mace.py     --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/mace/interactions="$i"/l="$l"/channels="$c"/     >> workdirs/v"$vnum"/mace/out.txt     2>&1
+      
       elif [ $scriptnum -eq 2 ]
       then
         CUDA_VISIBLE_DEVICES=7 python -m main --config=configs/e3schnet.py --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/e3schnet/interactions="$i"/l="$l"/channels="$c"/ >> workdirs/v"$vnum"/e3schnet/out.txt 2>&1
+      
       elif [ $scriptnum -eq 3 ]
       then
         CUDA_VISIBLE_DEVICES=1 python -m main --config=configs/nequip.py   --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/nequip/interactions="$i"/l="$l"/channels="$c"/   >> workdirs/v"$vnum"/nequip/out.txt   2>&1
+      fi
     done
   done
 done
