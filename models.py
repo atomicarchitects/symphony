@@ -745,13 +745,16 @@ def create_model(
 ) -> hk.Transformed:
     """Create a model as specified by the config."""
 
+    def get_activation(activation: str) -> Callable[[jnp.ndarray], jnp.ndarray]:
+        """Get the activation function."""
+
+        if activation == "shifted_softplus":
+            return shifted_softplus
+        return getattr(jax.nn, activation)
+
+
     def model_fn(graphs: datatypes.Fragments) -> datatypes.Predictions:
         """Defines the entire network."""
-
-        if config.activation == "shifted_softplus":
-            activation = shifted_softplus
-        else:
-            activation = getattr(jax.nn, config.activation)
 
         if config.model == "MACE":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
@@ -773,9 +776,10 @@ def create_model(
                 max_ell=config.max_ell,
                 init_embedding_dims=config.num_channels,
                 output_irreps=output_irreps,
-                even_activation=getattr(jax.nn, config.even_activation),
-                odd_activation=getattr(jax.nn, config.odd_activation),
-                mlp_activation=getattr(jax.nn, config.mlp_activation),
+                num_interactions=config.num_interactions,
+                even_activation=get_activation(config.even_activation),
+                odd_activation=get_activation(config.odd_activation),
+                mlp_activation=get_activation(config.mlp_activation),
                 mlp_n_hidden=config.num_channels,
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
@@ -786,7 +790,7 @@ def create_model(
                 n_interactions=config.num_interactions,
                 n_filters=config.num_channels,
                 n_rbf=config.num_basis_fns,
-                activation=activation,
+                activation=get_activation(config.activation),
                 cutoff=config.cutoff,
                 max_ell=config.max_ell,
             )
@@ -796,12 +800,12 @@ def create_model(
         focus_predictor = FocusPredictor(
             latent_size=config.focus_predictor.latent_size,
             num_layers=config.focus_predictor.num_layers,
-            activation=activation,
+            activation=get_activation(config.activation),
         )
         target_species_predictor = TargetSpeciesPredictor(
             latent_size=config.target_species_predictor.latent_size,
             num_layers=config.target_species_predictor.num_layers,
-            activation=activation,
+            activation=get_activation(config.activation),
         )
         target_position_predictor = TargetPositionPredictor(
             position_coeffs_lmax=config.max_ell,
