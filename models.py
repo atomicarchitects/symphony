@@ -1,6 +1,5 @@
 """Definition of the generative models."""
 
-import functools
 from typing import Callable, Optional, Tuple
 
 import chex
@@ -338,6 +337,7 @@ class MACE(hk.Module):
             radial_basis=lambda x, x_max: e3nn.bessel(x, self.num_basis_fns, x_max),
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
+            skip_connection_first_layer=True,
         )(relative_positions, species, graphs.senders, graphs.receivers)
 
         assert node_embeddings.shape == (

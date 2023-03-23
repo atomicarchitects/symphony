@@ -171,3 +171,4 @@ qm9_data_tf
 
 *.pkl
 grun
+grid_main.py
