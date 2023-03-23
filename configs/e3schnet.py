@@ -21,4 +21,5 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_channels = 128
     config.max_ell = 3
     config.activation = "shifted_softplus"
-    return config
+
+    return ml_collections.FrozenConfigDict(config)

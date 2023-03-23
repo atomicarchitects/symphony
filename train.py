@@ -423,11 +423,14 @@ def train_and_evaluate(
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             if is_last_step:
-                # If this is the last step, we want to evaluate the best model,
-                # on the entire validation and test splits.
-                logging.info(
-                    "Evaluating best state on the entire validation and test splits."
-                )
+                # If this is the first time we are evaluating,
+                # we will just evaluate the current model.
+                if min_val_loss == jnp.inf:
+                    best_state = state
+    
+                # If this is the last step,
+                # we want to evaluate the best model on more number of steps.
+                logging.info("Evaluating best state at the end of training.")
                 eval_state = eval_state.replace(params=best_state.params)
                 num_eval_steps = config.num_eval_steps_at_end_of_training
             else:
@@ -453,8 +456,8 @@ def train_and_evaluate(
                 )
 
             # Note best state seen so far.
-            # Best state is defined as the state with the lowest validation loss.
-            if not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss:
+            # Best state is defined as the state with the lowest validation loss.                
+            if (not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss) or (min_val_loss == jnp.inf):
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
                 metrics_for_best_state = eval_metrics
