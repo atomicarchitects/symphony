@@ -1,4 +1,4 @@
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import e3nn_jax as e3nn
 import jax.numpy as jnp
@@ -10,30 +10,30 @@ class NodesInfo(NamedTuple):
     species: jnp.ndarray  # [n_node] int array
 
 
-class FragmentGlobals(NamedTuple):
+class FragmentsGlobals(NamedTuple):
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
     target_positions: jnp.ndarray  # [n_graph, 3] float array (only for training)
     target_species: jnp.ndarray  # [n_graph] int array (only for training)
     target_species_probability: jnp.ndarray  # [n_graph, n_species] float array (only for training)
 
 
-class FragmentNodes(NamedTuple):
+class FragmentsNodes(NamedTuple):
     positions: jnp.ndarray  # [n_node, 3] float array
     species: jnp.ndarray  # [n_node] int array
     focus_probability: jnp.ndarray  # [n_node] float array (only for training)
 
 
-class Fragment(jraph.GraphsTuple):
-    nodes: FragmentNodes
-    edges: Optional[jnp.ndarray]
+class Fragments(jraph.GraphsTuple):
+    nodes: FragmentsNodes
+    edges: None
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
-    globals: FragmentGlobals
+    globals: FragmentsGlobals
     n_node: jnp.ndarray  # with integer dtype
     n_edge: jnp.ndarray  # with integer dtype
 
-    def from_graphstuple(graphs: jraph.GraphsTuple) -> "Fragment":
-        return Fragment(
+    def from_graphstuple(graphs: jraph.GraphsTuple) -> "Fragments":
+        return Fragments(
             nodes=graphs.nodes,
             edges=graphs.edges,
             receivers=graphs.receivers,
@@ -59,3 +59,13 @@ class PredictionsGlobals(NamedTuple):
     position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
     position_probs: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
     position_vectors: jnp.ndarray  # [n_graph, 3] float array
+
+
+class Predictions(jraph.GraphsTuple):
+    nodes: PredictionsNodes
+    edges: None
+    receivers: jnp.ndarray  # with integer dtype
+    senders: jnp.ndarray  # with integer dtype
+    globals: PredictionsGlobals
+    n_node: jnp.ndarray  # with integer dtype
+    n_edge: jnp.ndarray  # with integer dtype

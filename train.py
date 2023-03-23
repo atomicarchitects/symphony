@@ -62,14 +62,14 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
 
 def generation_loss(
-    preds: jraph.GraphsTuple,
-    graphs: datatypes.Fragment,
+    preds: datatypes.Predictions,
+    graphs: datatypes.Fragments,
     radius_rbf_variance: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
-        preds (jraph.GraphsTuple): the model predictions
-        graphs (jraph.GraphsTuple): a batch of graphs representing the current molecules
+        preds (datatypes.Predictions): the model predictions
+        graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
     num_radii = models.RADII.shape[0]
     num_graphs = graphs.n_node.shape[0]
@@ -211,9 +211,9 @@ def generation_loss(
 
 def get_predictions(
     state: train_state.TrainState,
-    graphs: jraph.GraphsTuple,
+    graphs: datatypes.Fragments,
     rng: Optional[chex.Array],
-) -> jraph.GraphsTuple:
+) -> datatypes.Predictions:
     """Get predictions from the network for input graphs."""
     return state.apply_fn(state.params, rng, graphs)
 
@@ -221,12 +221,12 @@ def get_predictions(
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def train_step(
     state: train_state.TrainState,
-    graphs: jraph.GraphsTuple,
+    graphs: datatypes.Fragments,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
-    def loss_fn(params: optax.Params, graphs: jraph.GraphsTuple) -> float:
+    def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rng=None)
         total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
@@ -256,7 +256,7 @@ def train_step(
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def evaluate_step(
     eval_state: train_state.TrainState,
-    graphs: jraph.GraphsTuple,
+    graphs: datatypes.Fragments,
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
@@ -280,7 +280,7 @@ def evaluate_step(
 
 def evaluate_model(
     eval_state: train_state.TrainState,
-    datasets: Iterator[datatypes.Fragment],
+    datasets: Iterator[datatypes.Fragments],
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
@@ -295,7 +295,7 @@ def evaluate_model(
 
         # Loop over graphs.
         for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
-            graphs = datatypes.Fragment.from_graphstuple(graphs)
+            graphs = datatypes.Fragments.from_graphstuple(graphs)
 
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
@@ -394,7 +394,7 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             graphs = next(train_iter)
-            graphs = datatypes.Fragment.from_graphstuple(graphs)
+            graphs = datatypes.Fragments.from_graphstuple(graphs)
             state, batch_metrics = train_step(
                 state,
                 graphs,

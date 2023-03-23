@@ -309,7 +309,7 @@ class MACE(hk.Module):
         self.max_ell = max_ell
         self.num_basis_fns = num_basis_fns
 
-    def __call__(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
+    def __call__(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
         """Returns node embeddings for input graphs.
         Inputs:
             graphs: a jraph.GraphsTuple with the following fields:
@@ -382,7 +382,7 @@ class NequIP(hk.Module):
 
     def __call__(
         self,
-        graphs: datatypes.Fragment,
+        graphs: datatypes.Fragments,
     ):
         relative_positions = (
             graphs.nodes.positions[graphs.receivers]
@@ -542,7 +542,9 @@ class Predictor(hk.Module):
         self.target_position_predictor = target_position_predictor
         self.run_in_evaluation_mode = run_in_evaluation_mode
 
-    def get_training_predictions(self, graphs: datatypes.Fragment) -> jraph.GraphsTuple:
+    def get_training_predictions(
+        self, graphs: datatypes.Fragments
+    ) -> datatypes.Predictions:
         """Returns the predictions on these graphs during training, when we have access to the true focus and target species."""
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
@@ -584,7 +586,7 @@ class Predictor(hk.Module):
         assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
-        return jraph.GraphsTuple(
+        return datatypes.Predictions(
             nodes=datatypes.PredictionsNodes(
                 focus_logits=focus_logits,
             ),
@@ -606,8 +608,8 @@ class Predictor(hk.Module):
         )
 
     def get_evaluation_predictions(
-        self, graphs: datatypes.Fragment
-    ) -> jraph.GraphsTuple:
+        self, graphs: datatypes.Fragments
+    ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
@@ -705,7 +707,7 @@ class Predictor(hk.Module):
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
-        return jraph.GraphsTuple(
+        return datatypes.Predictions(
             nodes=datatypes.PredictionsNodes(
                 focus_logits=focus_logits,
             ),
@@ -726,7 +728,7 @@ class Predictor(hk.Module):
             n_edge=graphs.n_edge,
         )
 
-    def __call__(self, graphs: datatypes.Fragment) -> jraph.GraphsTuple:
+    def __call__(self, graphs: datatypes.Fragments) -> datatypes.Predictions:
         if self.run_in_evaluation_mode:
             return self.get_evaluation_predictions(graphs)
         return self.get_training_predictions(graphs)
@@ -737,7 +739,7 @@ def create_model(
 ) -> hk.Transformed:
     """Create a model as specified by the config."""
 
-    def model_fn(graphs: datatypes.Fragment) -> jraph.GraphsTuple:
+    def model_fn(graphs: datatypes.Fragments) -> datatypes.Predictions:
         """Defines the entire network."""
 
         if config.activation == "shifted_softplus":
