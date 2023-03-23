@@ -15,12 +15,15 @@ do
   do
     for i in 1 2 3 4
     do
-        grun python -m main --config=configs/mace.py     --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/mace/interactions="$i"/l="$l"/channels="$c"/     1>> 2>> workdirs/v"$vnum"/mace/out.txt &
-        sleep 10
-        grun python -m main --config=configs/e3schnet.py --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/e3schnet/interactions="$i"/l="$l"/channels="$c"/ 1>> 2>> workdirs/v"$vnum"/e3schnet/out.txt &
-        sleep 10
-        grun python -m main --config=configs/nequip.py   --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/nequip/interactions="$i"/l="$l"/channels="$c"/   1>> 2>> workdirs/v"$vnum"/nequip/out.txt &
-        sleep 10
+      if [ $scriptnum -eq 1 ]
+      then
+        export CUDA_VISIBLE_DEVICES=6 python -m main --config=configs/mace.py     --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/mace/interactions="$i"/l="$l"/channels="$c"/     1>> 2>> workdirs/v"$vnum"/mace/out.txt &
+      elif [ $scriptnum -eq 2 ]
+      then
+        export CUDA_VISIBLE_DEVICES=7 python -m main --config=configs/e3schnet.py --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/e3schnet/interactions="$i"/l="$l"/channels="$c"/ 1>> 2>> workdirs/v"$vnum"/e3schnet/out.txt &
+      elif [ $scriptnum -eq 3 ]
+      then
+        export CUDA_VISIBLE_DEVICES=1 python -m main --config=configs/nequip.py   --config.max_ell="$l" --config.num_channels="$c" --config.num_interactions="$i" --workdir=workdirs/v"$vnum"/nequip/interactions="$i"/l="$l"/channels="$c"/   1>> 2>> workdirs/v"$vnum"/nequip/out.txt &
     done
   done
 done
