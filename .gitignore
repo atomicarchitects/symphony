@@ -170,3 +170,5 @@ qm9_data_tf
 *.metadata
 
 *.pkl
+
+notebooks/gen

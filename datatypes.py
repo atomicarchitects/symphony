@@ -46,6 +46,7 @@ class Fragments(jraph.GraphsTuple):
 
 class PredictionsNodes(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
+    embeddings: e3nn.IrrepsArray  # [n_node, irreps] float array
 
 
 class PredictionsGlobals(NamedTuple):

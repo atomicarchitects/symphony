@@ -589,6 +589,7 @@ class Predictor(hk.Module):
         return datatypes.Predictions(
             nodes=datatypes.PredictionsNodes(
                 focus_logits=focus_logits,
+                embeddings=node_embeddings,
             ),
             edges=None,
             globals=datatypes.PredictionsGlobals(
@@ -710,6 +711,7 @@ class Predictor(hk.Module):
         return datatypes.Predictions(
             nodes=datatypes.PredictionsNodes(
                 focus_logits=focus_logits,
+                embeddings=node_embeddings,
             ),
             edges=None,
             globals=datatypes.PredictionsGlobals(
