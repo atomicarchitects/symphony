@@ -241,7 +241,6 @@ def train_step(
         _,
         (total_loss, focus_loss, atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
-    jax.debug.print("grad_sum={grad_sum}", grad_sum=sum(jax.tree_leaves(jax.tree_map(lambda x: jnp.abs(x).sum(), grads))))
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = TrainMetrics.single_from_model_output(

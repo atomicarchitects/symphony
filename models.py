@@ -554,12 +554,18 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
+        segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
 
         # Get the focus logits.
         focus_logits = self.focus_predictor(node_embeddings)
+
+        # Get the focus and stop probabilities.
+        focus_probs, stop_probs = segment_softmax_with_zero(
+            focus_logits, segment_ids, num_graphs
+        )
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
@@ -570,6 +576,7 @@ class Predictor(hk.Module):
         target_species_logits = self.target_species_predictor(
             true_focus_node_embeddings
         )
+        target_species_probs = jax.nn.softmax(target_species_logits)
 
         # Get the position coefficients.
         position_coeffs, position_logits = self.target_position_predictor(
@@ -581,6 +588,9 @@ class Predictor(hk.Module):
         position_max = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
+        position_probs = position_logits.apply(
+            lambda pos: jnp.exp(pos - position_max)
+        )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Check the shapes.
         assert focus_logits.shape == (num_nodes,)
@@ -589,20 +599,23 @@ class Predictor(hk.Module):
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
         return datatypes.Predictions(
-            nodes=datatypes.PredictionsNodes(
+            nodes=datatypes.NodePredictions(
                 focus_logits=focus_logits,
+                focus_probs=focus_probs,
                 embeddings=node_embeddings,
             ),
             edges=None,
-            globals=datatypes.PredictionsGlobals(
+            globals=datatypes.GlobalPredictions(
+                stop_probs=stop_probs,
+                stop=None,
                 focus_indices=focus_node_indices,
-                stop=graphs.globals.stop,
                 target_species_logits=target_species_logits,
-                target_species=graphs.globals.target_species,
+                target_species_probs=target_species_probs,
+                target_species=None,
                 position_coeffs=position_coeffs,
                 position_logits=position_logits,
                 position_probs=position_probs,
-                position_vectors=graphs.globals.target_positions,
+                position_vectors=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -713,14 +726,16 @@ class Predictor(hk.Module):
         assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.Predictions(
-            nodes=datatypes.PredictionsNodes(
+            nodes=datatypes.NodePredictions(
                 focus_logits=focus_logits,
+                focus_probs=focus_probs,
                 embeddings=node_embeddings,
             ),
             edges=None,
-            globals=datatypes.PredictionsGlobals(
-                focus_indices=focus_indices,
+            globals=datatypes.GlobalPredictions(
+                stop_probs=stop_probs,
                 stop=stop,
+                focus_indices=focus_indices,
                 target_species_logits=target_species_logits,
                 target_species=target_species,
                 position_coeffs=position_coeffs,

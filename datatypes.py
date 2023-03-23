@@ -44,14 +44,17 @@ class Fragments(jraph.GraphsTuple):
         )
 
 
-class PredictionsNodes(NamedTuple):
+class NodePredictions(NamedTuple):
     focus_logits: jnp.ndarray  # [n_node] float array
+    focus_probs: jnp.ndarray  # [n_node] float array
     embeddings: e3nn.IrrepsArray  # [n_node, irreps] float array
 
 
-class PredictionsGlobals(NamedTuple):
-    focus_indices: jnp.ndarray  # [n_graph] int array
+class GlobalPredictions(NamedTuple):
+    stop_probs: jnp.ndarray  # [n_graph] float array
     stop: jnp.ndarray  # [n_graph] bool array
+
+    focus_indices: jnp.ndarray  # [n_graph] int array
 
     target_species_logits: jnp.ndarray  # [n_graph, n_species] float array
     target_species_probs: jnp.ndarray  # [n_graph, n_species] float array
@@ -64,10 +67,10 @@ class PredictionsGlobals(NamedTuple):
 
 
 class Predictions(jraph.GraphsTuple):
-    nodes: PredictionsNodes
+    nodes: NodePredictions
     edges: None
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
-    globals: PredictionsGlobals
+    globals: GlobalPredictions
     n_node: jnp.ndarray  # with integer dtype
     n_edge: jnp.ndarray  # with integer dtype
