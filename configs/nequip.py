@@ -26,4 +26,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.mlp_n_layers = 2
     config.num_basis_fns = 8
 
-    return ml_collections.FrozenConfigDict(config)
+    return config

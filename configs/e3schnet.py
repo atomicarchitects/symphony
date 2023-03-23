@@ -22,4 +22,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_ell = 3
     config.activation = "shifted_softplus"
 
-    return ml_collections.FrozenConfigDict(config)
+    return config
