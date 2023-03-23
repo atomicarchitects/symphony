@@ -39,7 +39,7 @@ def update_dummy_config(config):
     config.eval_every_steps = 50
 
 
-def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
+def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     """Creates dummy data for testing."""
     num_graphs = 2
     num_nodes = 5
@@ -61,13 +61,13 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
             p_arg=-1,
         ),
     )
-    graphs = datatypes.Fragment(
-        nodes=datatypes.FragmentNodes(
+    graphs = datatypes.Fragments(
+        nodes=datatypes.FragmentsNodes(
             positions=jnp.zeros((num_nodes, 3)),
             species=jnp.zeros((num_nodes,)),
             focus_probability=jnp.asarray([0.5, 0.5, 0.1, 0.1, 0.1]),
         ),
-        globals=datatypes.FragmentGlobals(
+        globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,)),
             target_positions=jnp.zeros((num_graphs, 3)),

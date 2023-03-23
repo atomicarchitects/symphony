@@ -160,12 +160,12 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
         return tf.TensorSpec(shape=shape, dtype=dtype)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.FragmentNodes(
+        nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
             focus_probability=get_tensor_spec(graph.nodes.focus_probability),
         ),
-        globals=datatypes.FragmentGlobals(
+        globals=datatypes.FragmentsGlobals(
             stop=get_tensor_spec(graph.globals.stop),
             target_positions=get_tensor_spec(graph.globals.target_positions),
             target_species=get_tensor_spec(graph.globals.target_species),
@@ -197,13 +197,13 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     target_species_probability = graph["target_species_probability"]
 
     return jraph.GraphsTuple(
-        nodes=datatypes.FragmentNodes(
+        nodes=datatypes.FragmentsNodes(
             positions=positions, species=species, focus_probability=focus_probability
         ),
         edges=edges,
         receivers=receivers,
         senders=senders,
-        globals=datatypes.FragmentGlobals(
+        globals=datatypes.FragmentsGlobals(
             stop=stop,
             target_positions=target_positions,
             target_species=target_species,

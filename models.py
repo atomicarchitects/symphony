@@ -9,13 +9,10 @@ import jax
 import jax.numpy as jnp
 import jraph
 import mace_jax.modules
+import ml_collections
 import nequip_jax
 
-import chex
-import functools
-
 import datatypes
-
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -27,7 +24,9 @@ def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
 
 
-def get_segment_ids(n_node: jnp.ndarray, num_nodes: int, num_graphs: int) -> jnp.ndarray:
+def get_segment_ids(
+    n_node: jnp.ndarray, num_nodes: int, num_graphs: int
+) -> jnp.ndarray:
     """Returns the segment ids for each node in the graphs."""
     num_graphs = n_node.shape[0]
 
@@ -36,16 +35,19 @@ def get_segment_ids(n_node: jnp.ndarray, num_nodes: int, num_graphs: int) -> jnp
     )
 
 
-def segment_softmax_with_zero(logits: jnp.ndarray, segment_ids: jnp.ndarray, num_segments: int) -> jnp.ndarray:
+def segment_softmax_with_zero(
+    logits: jnp.ndarray, segment_ids: jnp.ndarray, num_segments: int
+) -> jnp.ndarray:
     """Returns the segment softmax with a zero logit added to each segment.
-    
+
     This function returns the probabilities assuming the zero logit was not present,
     and the probabilities of sampling the zero logit.
     """
-    
+
     # First, subtract the segment max for numerical stability
-    maxs = jraph.segment_max(logits, segment_ids, num_segments, indices_are_sorted=True,
-                             unique_indices=False)
+    maxs = jraph.segment_max(
+        logits, segment_ids, num_segments, indices_are_sorted=True, unique_indices=False
+    )
     logits = logits - maxs[segment_ids]
 
     # Then, take the exp.
@@ -53,11 +55,12 @@ def segment_softmax_with_zero(logits: jnp.ndarray, segment_ids: jnp.ndarray, num
 
     # Then, calculate the normalizers.
     # These probabilities are ignoring the stop logit.
-    original_normalizers = jraph.segment_sum(logits, segment_ids, num_segments,
-                                             indices_are_sorted=True, unique_indices=False)
+    original_normalizers = jraph.segment_sum(
+        logits, segment_ids, num_segments, indices_are_sorted=True, unique_indices=False
+    )
     probs = logits / original_normalizers[segment_ids]
 
-    # Finally, calculate the zero probabilities.    
+    # Finally, calculate the zero probabilities.
     zero_probs = jnp.exp(-maxs) / (original_normalizers + jnp.exp(-maxs))
     return probs, zero_probs
 
@@ -306,7 +309,7 @@ class MACE(hk.Module):
         self.max_ell = max_ell
         self.num_basis_fns = num_basis_fns
 
-    def __call__(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
+    def __call__(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
         """Returns node embeddings for input graphs.
         Inputs:
             graphs: a jraph.GraphsTuple with the following fields:
@@ -382,7 +385,7 @@ class NequIP(hk.Module):
 
     def __call__(
         self,
-        graphs: datatypes.Fragment,
+        graphs: datatypes.Fragments,
     ):
         relative_positions = (
             graphs.nodes.positions[graphs.receivers]
@@ -430,7 +433,7 @@ class FocusPredictor(hk.Module):
         focus_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1) + [1],
             act=self.activation,
-            output_activation=False
+            output_activation=False,
         )(node_scalars)
         focus_logits = focus_logits.array.squeeze(axis=-1)
         return focus_logits
@@ -456,7 +459,7 @@ class TargetSpeciesPredictor(hk.Module):
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1) + [NUM_ELEMENTS],
             act=self.activation,
-            output_activation=False
+            output_activation=False,
         )(focus_node_scalars).array
         return species_logits
 
@@ -545,7 +548,7 @@ class Predictor(hk.Module):
         self.run_in_evaluation_mode = run_in_evaluation_mode
 
     def get_training_predictions(
-        self, graphs: datatypes.Fragment
+        self, graphs: datatypes.Fragments
     ) -> datatypes.Predictions:
         """Returns the predictions on these graphs during training, when we have access to the true focus and target species."""
         # Get the number of graphs and nodes.
@@ -586,15 +589,30 @@ class Predictor(hk.Module):
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
         return datatypes.Predictions(
-            focus_logits=focus_logits,
-            target_species_logits=target_species_logits,
-            position_coeffs=position_coeffs,
-            position_logits=position_logits,
+            nodes=datatypes.PredictionsNodes(
+                focus_logits=focus_logits,
+                embeddings=node_embeddings,
+            ),
+            edges=None,
+            globals=datatypes.PredictionsGlobals(
+                focus_indices=focus_node_indices,
+                stop=graphs.globals.stop,
+                target_species_logits=target_species_logits,
+                target_species=graphs.globals.target_species,
+                position_coeffs=position_coeffs,
+                position_logits=position_logits,
+                position_probs=position_probs,
+                position_vectors=graphs.globals.target_positions,
+            ),
+            senders=graphs.senders,
+            receivers=graphs.receivers,
+            n_node=graphs.n_node,
+            n_edge=graphs.n_edge,
         )
 
     def get_evaluation_predictions(
-        self, graphs: datatypes.Fragment
-    ) -> datatypes.EvaluationPredictions:
+        self, graphs: datatypes.Fragments
+    ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
@@ -606,14 +624,16 @@ class Predictor(hk.Module):
 
         # Compute corresponding focus probabilities.
         focus_logits = self.focus_predictor(node_embeddings)
-        focus_probs, stop_probs = segment_softmax_with_zero(focus_logits, segment_ids, num_graphs)
+        focus_probs, stop_probs = segment_softmax_with_zero(
+            focus_logits, segment_ids, num_graphs
+        )
+
+        # Get the PRNG key.
+        rng = hk.next_rng_key()
 
         # Check if we have to stop.
         rng, stop_rng = jax.random.split(rng)
         stop = jax.random.bernoulli(stop_rng, stop_probs)
-
-        # Get the PRNG key.
-        rng = hk.next_rng_key()
 
         # Sample the focus node.
         rng, focus_rng = jax.random.split(rng)
@@ -692,20 +712,108 @@ class Predictor(hk.Module):
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
-        return datatypes.EvaluationPredictions(
-            stop=stop,
-            focus_logits=focus_logits,
-            focus_probs=focus_probs,
-            focus_indices=focus_indices,
-            target_species_logits=target_species_logits,
-            position_coeffs=position_coeffs,
-            target_species=target_species,
-            position_logits=position_logits,
-            position_probs=position_probs,
-            position_vectors=position_vectors,
+        return datatypes.Predictions(
+            nodes=datatypes.PredictionsNodes(
+                focus_logits=focus_logits,
+                embeddings=node_embeddings,
+            ),
+            edges=None,
+            globals=datatypes.PredictionsGlobals(
+                focus_indices=focus_indices,
+                stop=stop,
+                target_species_logits=target_species_logits,
+                target_species=target_species,
+                position_coeffs=position_coeffs,
+                position_logits=position_logits,
+                position_probs=position_probs,
+                position_vectors=position_vectors,
+            ),
+            senders=graphs.senders,
+            receivers=graphs.receivers,
+            n_node=graphs.n_node,
+            n_edge=graphs.n_edge,
         )
 
-    def __call__(self, graphs: datatypes.Fragment) -> datatypes.Predictions:
+    def __call__(self, graphs: datatypes.Fragments) -> datatypes.Predictions:
         if self.run_in_evaluation_mode:
             return self.get_evaluation_predictions(graphs)
         return self.get_training_predictions(graphs)
+
+
+def create_model(
+    config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
+) -> hk.Transformed:
+    """Create a model as specified by the config."""
+
+    def model_fn(graphs: datatypes.Fragments) -> datatypes.Predictions:
+        """Defines the entire network."""
+
+        if config.activation == "shifted_softplus":
+            activation = shifted_softplus
+        else:
+            activation = getattr(jax.nn, config.activation)
+
+        if config.model == "MACE":
+            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+            node_embedder = MACE(
+                output_irreps=output_irreps,
+                hidden_irreps=output_irreps,
+                readout_mlp_irreps=output_irreps,
+                r_max=config.r_max,
+                num_interactions=config.num_interactions,
+                avg_num_neighbors=config.avg_num_neighbors,
+                num_species=config.num_species,
+                max_ell=config.max_ell,
+                num_basis_fns=config.num_basis_fns,
+            )
+        elif config.model == "NequIP":
+            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+            node_embedder = NequIP(
+                avg_num_neighbors=config.avg_num_neighbors,
+                max_ell=config.max_ell,
+                init_embedding_dims=config.num_channels,
+                output_irreps=output_irreps,
+                even_activation=getattr(jax.nn, config.even_activation),
+                odd_activation=getattr(jax.nn, config.odd_activation),
+                mlp_activation=getattr(jax.nn, config.mlp_activation),
+                mlp_n_hidden=config.num_channels,
+                mlp_n_layers=config.mlp_n_layers,
+                n_radial_basis=config.num_basis_fns,
+            )
+        elif config.model == "E3SchNet":
+            node_embedder = E3SchNet(
+                n_atom_basis=config.num_channels,
+                n_interactions=config.num_interactions,
+                n_filters=config.num_channels,
+                n_rbf=config.num_basis_fns,
+                activation=activation,
+                cutoff=config.cutoff,
+                max_ell=config.max_ell,
+            )
+        else:
+            raise ValueError(f"Unsupported model: {config.model}.")
+
+        focus_predictor = FocusPredictor(
+            latent_size=config.focus_predictor.latent_size,
+            num_layers=config.focus_predictor.num_layers,
+            activation=activation,
+        )
+        target_species_predictor = TargetSpeciesPredictor(
+            latent_size=config.target_species_predictor.latent_size,
+            num_layers=config.target_species_predictor.num_layers,
+            activation=activation,
+        )
+        target_position_predictor = TargetPositionPredictor(
+            position_coeffs_lmax=config.max_ell,
+            res_beta=config.target_position_predictor.res_beta,
+            res_alpha=config.target_position_predictor.res_alpha,
+        )
+        return Predictor(
+            node_embedder=node_embedder,
+            focus_predictor=focus_predictor,
+            target_species_predictor=target_species_predictor,
+            target_position_predictor=target_position_predictor,
+            run_in_evaluation_mode=run_in_evaluation_mode,
+        )(graphs)
+
+    return hk.transform(model_fn)
