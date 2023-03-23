@@ -24,7 +24,7 @@ config_flags.DEFINE_config_file(
     "config",
     None,
     "File path to the training hyperparameter configuration.",
-    lock_config=True,
+    lock_config=False,
 )
 
 
