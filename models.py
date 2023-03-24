@@ -737,6 +737,7 @@ class Predictor(hk.Module):
                 stop=stop,
                 focus_indices=focus_indices,
                 target_species_logits=target_species_logits,
+                target_species_probs=target_species_probs,
                 target_species=target_species,
                 position_coeffs=position_coeffs,
                 position_logits=position_logits,
