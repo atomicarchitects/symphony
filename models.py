@@ -309,7 +309,7 @@ class MACE(hk.Module):
         self.max_ell = max_ell
         self.num_basis_fns = num_basis_fns
 
-    def __call__(self, graphs: datatypes.Fragment) -> e3nn.IrrepsArray:
+    def __call__(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
         """Returns node embeddings for input graphs.
         Inputs:
             graphs: a jraph.GraphsTuple with the following fields:
@@ -340,6 +340,7 @@ class MACE(hk.Module):
             radial_basis=lambda x, x_max: e3nn.bessel(x, self.num_basis_fns, x_max),
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
+            skip_connection_first_layer=True,
         )(relative_positions, species, graphs.senders, graphs.receivers)
 
         assert node_embeddings.shape == (
@@ -360,6 +361,7 @@ class NequIP(hk.Module):
         max_ell: int,
         init_embedding_dims: int,
         output_irreps: str,
+        num_interactions: int,
         even_activation: Callable[[jnp.ndarray], jnp.ndarray],
         odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
         mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
@@ -373,6 +375,7 @@ class NequIP(hk.Module):
         self.max_ell = max_ell
         self.init_embedding_dims = init_embedding_dims
         self.output_irreps = output_irreps
+        self.num_interactions = num_interactions
         self.even_activation = even_activation
         self.odd_activation = odd_activation
         self.mlp_activation = mlp_activation
@@ -382,7 +385,7 @@ class NequIP(hk.Module):
 
     def __call__(
         self,
-        graphs: datatypes.Fragment,
+        graphs: datatypes.Fragments,
     ):
         relative_positions = (
             graphs.nodes.positions[graphs.receivers]
@@ -394,18 +397,20 @@ class NequIP(hk.Module):
         node_feats = hk.Embed(NUM_ELEMENTS, self.init_embedding_dims)(species)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
-        return nequip_jax.NEQUIPLayerHaiku(
-            avg_num_neighbors=self.avg_num_neighbors,
-            num_species=NUM_ELEMENTS,
-            max_ell=self.max_ell,
-            output_irreps=self.output_irreps,
-            even_activation=self.even_activation,
-            odd_activation=self.odd_activation,
-            mlp_activation=self.mlp_activation,
-            mlp_n_hidden=self.mlp_n_hidden,
-            mlp_n_layers=self.mlp_n_layers,
-            n_radial_basis=self.n_radial_basis,
-        )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+        for _ in range(self.num_interactions):
+            node_feats = nequip_jax.NEQUIPLayerHaiku(
+                avg_num_neighbors=self.avg_num_neighbors,
+                num_species=NUM_ELEMENTS,
+                max_ell=self.max_ell,
+                output_irreps=self.output_irreps,
+                even_activation=self.even_activation,
+                odd_activation=self.odd_activation,
+                mlp_activation=self.mlp_activation,
+                mlp_n_hidden=self.mlp_n_hidden,
+                mlp_n_layers=self.mlp_n_layers,
+                n_radial_basis=self.n_radial_basis,
+            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+        return node_feats
 
 
 class FocusPredictor(hk.Module):
@@ -542,17 +547,25 @@ class Predictor(hk.Module):
         self.target_position_predictor = target_position_predictor
         self.run_in_evaluation_mode = run_in_evaluation_mode
 
-    def get_training_predictions(self, graphs: datatypes.Fragment) -> jraph.GraphsTuple:
+    def get_training_predictions(
+        self, graphs: datatypes.Fragments
+    ) -> datatypes.Predictions:
         """Returns the predictions on these graphs during training, when we have access to the true focus and target species."""
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
+        segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
 
         # Get the focus logits.
         focus_logits = self.focus_predictor(node_embeddings)
+
+        # Get the focus and stop probabilities.
+        focus_probs, stop_probs = segment_softmax_with_zero(
+            focus_logits, segment_ids, num_graphs
+        )
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
@@ -563,6 +576,7 @@ class Predictor(hk.Module):
         target_species_logits = self.target_species_predictor(
             true_focus_node_embeddings
         )
+        target_species_probs = jax.nn.softmax(target_species_logits)
 
         # Get the position coefficients.
         position_coeffs, position_logits = self.target_position_predictor(
@@ -584,20 +598,24 @@ class Predictor(hk.Module):
         assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
-        return jraph.GraphsTuple(
-            nodes=datatypes.PredictionsNodes(
+        return datatypes.Predictions(
+            nodes=datatypes.NodePredictions(
                 focus_logits=focus_logits,
+                focus_probs=focus_probs,
+                embeddings=node_embeddings,
             ),
             edges=None,
-            globals=datatypes.PredictionsGlobals(
+            globals=datatypes.GlobalPredictions(
+                stop_probs=stop_probs,
+                stop=None,
                 focus_indices=focus_node_indices,
-                stop=graphs.globals.stop,
                 target_species_logits=target_species_logits,
-                target_species=graphs.globals.target_species,
+                target_species_probs=target_species_probs,
+                target_species=None,
                 position_coeffs=position_coeffs,
                 position_logits=position_logits,
                 position_probs=position_probs,
-                position_vectors=graphs.globals.target_positions,
+                position_vectors=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -606,8 +624,8 @@ class Predictor(hk.Module):
         )
 
     def get_evaluation_predictions(
-        self, graphs: datatypes.Fragment
-    ) -> jraph.GraphsTuple:
+        self, graphs: datatypes.Fragments
+    ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
@@ -698,22 +716,28 @@ class Predictor(hk.Module):
             self.target_position_predictor.res_alpha,
         )
 
+        assert stop.shape == (num_graphs,)
         assert focus_logits.shape == (num_nodes,)
+        assert focus_probs.shape == (num_nodes,)
         assert focus_indices.shape == (num_graphs,)
         assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
         assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
-        return jraph.GraphsTuple(
-            nodes=datatypes.PredictionsNodes(
+        return datatypes.Predictions(
+            nodes=datatypes.NodePredictions(
                 focus_logits=focus_logits,
+                focus_probs=focus_probs,
+                embeddings=node_embeddings,
             ),
             edges=None,
-            globals=datatypes.PredictionsGlobals(
-                focus_indices=focus_indices,
+            globals=datatypes.GlobalPredictions(
+                stop_probs=stop_probs,
                 stop=stop,
+                focus_indices=focus_indices,
                 target_species_logits=target_species_logits,
+                target_species_probs=target_species_probs,
                 target_species=target_species,
                 position_coeffs=position_coeffs,
                 position_logits=position_logits,
@@ -726,7 +750,7 @@ class Predictor(hk.Module):
             n_edge=graphs.n_edge,
         )
 
-    def __call__(self, graphs: datatypes.Fragment) -> jraph.GraphsTuple:
+    def __call__(self, graphs: datatypes.Fragments) -> datatypes.Predictions:
         if self.run_in_evaluation_mode:
             return self.get_evaluation_predictions(graphs)
         return self.get_training_predictions(graphs)
@@ -737,13 +761,15 @@ def create_model(
 ) -> hk.Transformed:
     """Create a model as specified by the config."""
 
-    def model_fn(graphs: datatypes.Fragment) -> jraph.GraphsTuple:
-        """Defines the entire network."""
+    def get_activation(activation: str) -> Callable[[jnp.ndarray], jnp.ndarray]:
+        """Get the activation function."""
 
-        if config.activation == "shifted_softplus":
-            activation = shifted_softplus
-        else:
-            activation = getattr(jax.nn, config.activation)
+        if activation == "shifted_softplus":
+            return shifted_softplus
+        return getattr(jax.nn, activation)
+
+    def model_fn(graphs: datatypes.Fragments) -> datatypes.Predictions:
+        """Defines the entire network."""
 
         if config.model == "MACE":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
@@ -765,9 +791,10 @@ def create_model(
                 max_ell=config.max_ell,
                 init_embedding_dims=config.num_channels,
                 output_irreps=output_irreps,
-                even_activation=getattr(jax.nn, config.even_activation),
-                odd_activation=getattr(jax.nn, config.odd_activation),
-                mlp_activation=getattr(jax.nn, config.mlp_activation),
+                num_interactions=config.num_interactions,
+                even_activation=get_activation(config.even_activation),
+                odd_activation=get_activation(config.odd_activation),
+                mlp_activation=get_activation(config.mlp_activation),
                 mlp_n_hidden=config.num_channels,
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
@@ -778,7 +805,7 @@ def create_model(
                 n_interactions=config.num_interactions,
                 n_filters=config.num_channels,
                 n_rbf=config.num_basis_fns,
-                activation=activation,
+                activation=get_activation(config.activation),
                 cutoff=config.cutoff,
                 max_ell=config.max_ell,
             )
@@ -788,12 +815,12 @@ def create_model(
         focus_predictor = FocusPredictor(
             latent_size=config.focus_predictor.latent_size,
             num_layers=config.focus_predictor.num_layers,
-            activation=activation,
+            activation=get_activation(config.activation),
         )
         target_species_predictor = TargetSpeciesPredictor(
             latent_size=config.target_species_predictor.latent_size,
             num_layers=config.target_species_predictor.num_layers,
-            activation=activation,
+            activation=get_activation(config.activation),
         )
         target_position_predictor = TargetPositionPredictor(
             position_coeffs_lmax=config.max_ell,

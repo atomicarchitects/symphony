@@ -170,4 +170,8 @@ qm9_data_tf
 *.metadata
 
 *.pkl
+grun
+grid_main.py
+
+notebooks/gen
 analyses/outputs

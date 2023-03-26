@@ -38,7 +38,7 @@ def main(argv):
 
     qm9_datasets = input_pipeline_tf.get_datasets(key, config)
     example_graph = next(qm9_datasets["test"].as_numpy_iterator())
-    frag = datatypes.Fragment.from_graphstuple(example_graph)
+    frag = datatypes.Fragments.from_graphstuple(example_graph)
     frag = jax.tree_map(jnp.asarray, frag)
 
     generated_dict = analysis.to_mol_dict(frag, "workdirs", "generated_single_frag")

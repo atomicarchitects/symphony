@@ -1,32 +1,29 @@
 """Loads the model from a workdir to perform analysis."""
 
+import glob
 import os
-
-from typing import Any, Dict, Optional, Tuple, Sequence
-
 import pickle
-import jraph
+import sys
+from typing import Any, Dict, Optional, Sequence, Tuple
+
 import jax
 import jax.numpy as jnp
+import jraph
 import ml_collections
 import numpy as np
-import yaml
 import pandas as pd
-import glob
-
+import yaml
 from absl import logging
 from clu import checkpoint
 from flax.training import train_state
 
-import sys
-
 sys.path.append("..")
 
-import datatypes
-import input_pipeline_tf
-import train
-import models
-from configs import default
+import datatypes  # noqa: E402
+import input_pipeline_tf  # noqa: E402
+import models  # noqa: E402
+import train  # noqa: E402
+from configs import default  # noqa: E402
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -79,7 +76,9 @@ def get_results_as_dataframe(
         ):
             workdir = os.path.dirname(config_file_path)
             try:
-                config, best_state, _, metrics_for_best_state = load_from_workdir(workdir)
+                config, best_state, _, metrics_for_best_state = load_from_workdir(
+                    workdir
+                )
             except FileNotFoundError:
                 logging.warning(f"Skipping {workdir} because it is incomplete.")
                 continue
@@ -92,7 +91,8 @@ def get_results_as_dataframe(
                     metrics_for_best_state[split][metric] for metric in metrics
                 ]
                 results[split].append(
-                    [model, num_interactions, max_l, num_channels, num_params] + metrics_for_split
+                    [model, num_interactions, max_l, num_channels, num_params]
+                    + metrics_for_split
                 )
 
     for split in results:
@@ -236,11 +236,11 @@ def load_from_workdir(
     )
 
 
-def to_db(generated_frag: datatypes.Fragment, model_path: str, file_name: str):
+def to_db(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
     raise NotImplementedError("to_db() is not implemented yet.")
 
 
-def to_mol_dict(generated_frag: datatypes.Fragment, model_path: str, file_name: str):
+def to_mol_dict(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
     first_index = np.asarray(
         jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)])
     )

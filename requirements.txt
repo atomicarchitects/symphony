@@ -8,7 +8,7 @@ contourpy==1.0.7
 cycler==0.11.0
 dm-haiku==0.0.9
 dm-tree==0.1.8
-e3nn-jax==0.16.0
+e3nn-jax==0.17.1
 etils==1.0.0
 flax==0.6.5
 fonttools==4.38.0

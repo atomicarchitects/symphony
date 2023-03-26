@@ -33,41 +33,63 @@ _ALL_CONFIGS = {
 
 def update_dummy_config(config):
     """Updates the dummy config."""
+    config = ml_collections.ConfigDict(config)
     config.num_train_steps = 100
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 50
+    return ml_collections.FrozenConfigDict(config)
 
 
-def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
+def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     """Creates dummy data for testing."""
     num_graphs = 2
     num_nodes = 5
     num_elements = models.NUM_ELEMENTS
     num_radii = models.RADII.shape[0]
+
+    # Dummy predictions and graphs.
     position_coeffs = e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1)))
     preds = datatypes.Predictions(
-        focus_logits=jnp.ones((num_nodes,)),
-        target_species_logits=jnp.asarray(
-            [[0.1, 0.2, 0.3, 0.4, 0.5], [1.1, 1.2, 1.3, 1.4, 1.5]]
+        nodes=datatypes.NodePredictions(
+            focus_logits=jnp.ones((num_nodes,)),
+            focus_probs=None,
+            embeddings=None
         ),
-        position_coeffs=position_coeffs,
-        position_logits=e3nn.to_s2grid(
-            position_coeffs,
-            res_beta=10,
-            res_alpha=9,
-            quadrature="gausslegendre",
-            p_val=1,
-            p_arg=-1,
+        globals=datatypes.GlobalPredictions(
+            stop=None,
+            stop_probs=None,
+            focus_indices=None,
+            target_species_logits=jnp.asarray(
+                [[0.1, 0.2, 0.3, 0.4, 0.5], [1.1, 1.2, 1.3, 1.4, 1.5]]
+            ),
+            target_species_probs=None,
+            target_species=None,
+            position_coeffs=position_coeffs,
+            position_logits=e3nn.to_s2grid(
+                position_coeffs,
+                res_beta=10,
+                res_alpha=9,
+                quadrature="gausslegendre",
+                p_val=1,
+                p_arg=-1,
+            ),
+            position_probs=None,
+            position_vectors=None,
         ),
+        edges=None,
+        senders=None,
+        receivers=None,
+        n_node=jnp.asarray([2, 3]),
+        n_edge=None,
     )
-    graphs = datatypes.Fragment(
-        nodes=datatypes.FragmentNodes(
+    graphs = datatypes.Fragments(
+        nodes=datatypes.FragmentsNodes(
             positions=jnp.zeros((num_nodes, 3)),
             species=jnp.zeros((num_nodes,)),
             focus_probability=jnp.asarray([0.5, 0.5, 0.1, 0.1, 0.1]),
         ),
-        globals=datatypes.FragmentGlobals(
+        globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,)),
             target_positions=jnp.zeros((num_graphs, 3)),
@@ -139,7 +161,7 @@ class TrainTest(parameterized.TestCase):
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
-        update_dummy_config(config)
+        config = update_dummy_config(config)
         config = ml_collections.FrozenConfigDict(config)
 
         # Create a temporary directory where metrics are written.

@@ -20,7 +20,7 @@ import qm9
 def get_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
-) -> Dict[str, Iterator[datatypes.Fragment]]:
+) -> Dict[str, Iterator[datatypes.Fragments]]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
@@ -84,7 +84,7 @@ def dataloader(
     max_n_edges: int,
     max_n_graphs: int,
     max_iterations: Optional[int] = None,
-) -> Iterator[datatypes.Fragment]:
+) -> Iterator[datatypes.Fragments]:
     """Dataloader for the generative model.
     Args:
         rng: The random number seed.
@@ -133,7 +133,7 @@ def fragments_pool_iterator(
     graph_molecules: Sequence[jraph.GraphsTuple],
     n_species: int,
     nn_tolerance: float,
-) -> Iterator[datatypes.Fragment]:
+) -> Iterator[datatypes.Fragments]:
     """A pool of fragments that are generated on the fly."""
     # TODO: Make this configurable.
     SAMPLES_POOL_SIZE = 1024
@@ -254,7 +254,7 @@ def generate_fragments(
     graph: jraph.GraphsTuple,
     n_species: int,
     nn_tolerance: float = 0.01,
-) -> Iterator[datatypes.Fragment]:
+) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
     Args:
@@ -388,12 +388,12 @@ def _into_fragment(
     target_node,
     stop,
 ):
-    nodes = datatypes.FragmentNodes(
+    nodes = datatypes.FragmentsNodes(
         positions=graph.nodes.positions,
         species=graph.nodes.species,
         focus_probability=focus_probability,
     )
-    globals = datatypes.FragmentGlobals(
+    globals = datatypes.FragmentsGlobals(
         stop=jnp.array([stop], dtype=bool),  # [1]
         target_species_probability=target_species_probability[None],  # [1, n_species]
         target_species=graph.nodes.species[target_node][None],  # [1]
