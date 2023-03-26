@@ -70,7 +70,7 @@ for i in tqdm.tqdm(range(1000)):
 
 losses = sorted(losses)
 
-with open('losses_1k.p', 'wb') as f:
+with open('losses_1k.pkl', 'wb') as f:
     f.write(losses)
 
 with open('losses_1k_top_bot_25', 'w') as f:
