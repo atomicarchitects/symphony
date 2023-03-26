@@ -35,9 +35,11 @@ def update_dummy_config(config):
     """Updates the dummy config."""
     config.num_train_steps = 100
     config.num_eval_steps = 10
+    config.num_eval_steps_at_end_of_training = 10
+    config.eval_every_steps = 50
 
 
-def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
+def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
     """Creates dummy data for testing."""
     num_graphs = 2
     num_nodes = 5
@@ -83,7 +85,7 @@ def _create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragment]:
 
 class TrainTest(parameterized.TestCase):
     def setUp(self):
-        self.preds, self.graphs = _create_dummy_data()
+        self.preds, self.graphs = create_dummy_data()
 
     def test_focus_loss(self):
         _, (focus_loss, _, _) = train.generation_loss(
@@ -127,7 +129,7 @@ class TrainTest(parameterized.TestCase):
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("mace", "e3schnet")
+    @parameterized.parameters("mace", "e3schnet", "nequip")
     def test_train_and_evaluate(self, config_name: str):
         """Tests that training and evaluation runs without errors."""
 

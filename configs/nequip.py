@@ -3,8 +3,6 @@
 import ml_collections
 
 from configs import default
-import e3nn_jax as e3nn
-import jax
 
 
 def get_config() -> ml_collections.ConfigDict:
@@ -15,20 +13,16 @@ def get_config() -> ml_collections.ConfigDict:
     config.optimizer = "adam"
     config.learning_rate = 1e-3
 
-    # GNN hyperparameters.
+    # NequIP hyperparameters.
     config.model = "NequIP"
-    config.latent_size = 256
-    config.layer_norm = True
-    config.position_coeffs_lmax = 2
-
+    config.num_channels = 128
     config.avg_num_neighbors = 15.0
-    config.sh_lmax = 3
-    config.target_irreps = 64 * e3nn.Irreps("0e + 1o + 2e")
-    config.even_activation = jax.nn.swish
-    config.odd_activation = jax.nn.tanh
-    config.mlp_activation = jax.nn.swish
-    config.mlp_n_hidden = 64
+    config.max_ell = 3
+    config.even_activation = "swish"
+    config.odd_activation = "tanh"
+    config.mlp_activation = "swish"
+    config.activation = "softplus"
     config.mlp_n_layers = 2
-    config.n_radial_basis = 8
+    config.num_basis_fns = 8
 
     return config

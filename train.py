@@ -2,15 +2,13 @@
 
 import functools
 import os
+import pickle
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
 
-import pickle
 import chex
 import e3nn_jax as e3nn
 import flax
 import flax.core
-import flax.linen as nn
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import jraph
@@ -30,6 +28,7 @@ from flax.training import train_state
 import datatypes
 import input_pipeline_tf
 import models
+from models import create_model
 
 
 @flax.struct.dataclass
@@ -53,85 +52,6 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     return {f"{prefix}_{key}": val for key, val in result.items()}
 
 
-def create_model(
-    config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
-) -> nn.Module:
-    """Create a model as specified by the config."""
-
-    def model_fn(graphs):
-        if config.activation == "shifted_softplus":
-            activation = models.shifted_softplus
-        else:
-            activation = getattr(jax.nn, config.activation)
-
-        if config.model == "MACE":
-            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-
-            node_embedder = models.MACE(
-                output_irreps=output_irreps,
-                hidden_irreps=output_irreps,
-                readout_mlp_irreps=output_irreps,
-                r_max=config.r_max,
-                num_interactions=config.num_interactions,
-                avg_num_neighbors=config.avg_num_neighbors,
-                num_species=config.num_species,
-                max_ell=config.max_ell,
-                num_basis_fns=config.num_basis_fns,
-            )
-        elif config.model == "E3SchNet":
-            node_embedder = models.E3SchNet(
-                n_atom_basis=config.num_channels,
-                n_interactions=config.num_interactions,
-                n_filters=config.num_channels,
-                n_rbf=config.num_basis_fns,
-                activation=activation,
-                cutoff=config.cutoff,
-                max_ell=config.max_ell,
-            )
-        else:
-            raise ValueError(f"Unsupported model: {config.model}.")
-
-        focus_predictor = models.FocusPredictor(
-            latent_size=config.focus_predictor.latent_size,
-            num_layers=config.focus_predictor.num_layers,
-            activation=activation,
-        )
-        target_species_predictor = models.TargetSpeciesPredictor(
-            latent_size=config.target_species_predictor.latent_size,
-            num_layers=config.target_species_predictor.num_layers,
-            activation=activation,
-        )
-        target_position_predictor = models.TargetPositionPredictor(
-            position_coeffs_lmax=config.max_ell,
-            res_beta=config.target_position_predictor.res_beta,
-            res_alpha=config.target_position_predictor.res_alpha,
-        )
-        return models.Predictor(
-            node_embedder=node_embedder,
-            focus_predictor=focus_predictor,
-            target_species_predictor=target_species_predictor,
-            target_position_predictor=target_position_predictor,
-            run_in_evaluation_mode=run_in_evaluation_mode,
-        )(graphs)
-
-    if config.model == "NequIP":
-        raise NotImplementedError("NequIP is not ready yet.")
-        return models.NequIP(
-            latent_size=config.latent_size,
-            avg_num_neighbors=config.avg_num_neighbors,
-            sh_lmax=config.sh_lmax,
-            target_irreps=config.target_irreps,
-            even_activation=config.even_activation,
-            odd_activation=config.odd_activation,
-            mlp_activation=config.mlp_activation,
-            mlp_n_hidden=config.mlp_n_hidden,
-            mlp_n_layers=config.mlp_n_layers,
-            n_radial_basis=config.n_radial_basis,
-        )
-
-    return hk.transform(model_fn)
-
-
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     if config.optimizer == "adam":
@@ -142,13 +62,13 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
 
 def generation_loss(
-    preds: datatypes.Predictions,
+    preds: jraph.GraphsTuple,
     graphs: datatypes.Fragment,
     radius_rbf_variance: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
-        preds (datatypes.Predictions): the model predictions
+        preds (jraph.GraphsTuple): the model predictions
         graphs (jraph.GraphsTuple): a batch of graphs representing the current molecules
     """
     num_radii = models.RADII.shape[0]
@@ -159,13 +79,13 @@ def generation_loss(
     def focus_loss() -> jnp.ndarray:
         # focus_logits is of shape (num_nodes,)
         assert (
-            preds.focus_logits.shape
+            preds.nodes.focus_logits.shape
             == graphs.nodes.focus_probability.shape
             == (num_nodes,)
         )
 
         n_node = graphs.n_node
-        focus_logits = preds.focus_logits
+        focus_logits = preds.nodes.focus_logits
 
         # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
         loss_focus = e3nn.scatter_sum(
@@ -190,13 +110,13 @@ def generation_loss(
     def atom_type_loss() -> jnp.ndarray:
         # target_species_logits is of shape (num_graphs, num_elements)
         assert (
-            preds.target_species_logits.shape
+            preds.globals.target_species_logits.shape
             == graphs.globals.target_species_probability.shape
             == (num_graphs, num_elements)
         )
 
         loss_atom_type = optax.softmax_cross_entropy(
-            logits=preds.target_species_logits,
+            logits=preds.globals.target_species_logits,
             labels=graphs.globals.target_species_probability,
         )
 
@@ -205,18 +125,18 @@ def generation_loss(
 
     def position_loss() -> jnp.ndarray:
         # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
-        assert preds.position_coeffs.array.shape == (
+        assert preds.globals.position_coeffs.array.shape == (
             num_graphs,
             num_radii,
-            preds.position_coeffs.irreps.dim,
+            preds.globals.position_coeffs.irreps.dim,
         )
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_max = jnp.max(
-            preds.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+            preds.globals.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        sphere_normalizing_factors = preds.position_logits.apply(
+        sphere_normalizing_factors = preds.globals.position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         ).integrate()
         sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
@@ -260,7 +180,7 @@ def generation_loss(
         target_positions = e3nn.IrrepsArray("1o", target_positions)
         target_positions_logits = jax.vmap(
             functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.position_coeffs, target_positions)
+        )(preds.globals.position_coeffs, target_positions)
         target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
@@ -293,7 +213,7 @@ def get_predictions(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rng: Optional[chex.Array],
-) -> datatypes.Predictions:
+) -> jraph.GraphsTuple:
     """Get predictions from the network for input graphs."""
     return state.apply_fn(state.params, rng, graphs)
 
@@ -464,7 +384,7 @@ def train_and_evaluate(
     hooks = [report_progress, profile]
 
     # We will record the best model seen during training.
-    best_state = state
+    best_state = None
     min_val_loss = jnp.inf
 
     # Begin training loop.
@@ -502,8 +422,18 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
-            # Evaluate with the current set of parameters.
-            eval_state = eval_state.replace(params=state.params)
+            if is_last_step:
+                # If this is the last step, we want to evaluate the best model,
+                # on the entire validation and test splits.
+                logging.info(
+                    "Evaluating best state on the entire validation and test splits."
+                )
+                eval_state = eval_state.replace(params=best_state.params)
+                num_eval_steps = config.num_eval_steps_at_end_of_training
+            else:
+                # Evaluate with the current set of parameters.
+                eval_state = eval_state.replace(params=state.params)
+                num_eval_steps = config.num_eval_steps
 
             splits = ["val", "test"]
             with report_progress.timed("eval"):
@@ -514,7 +444,7 @@ def train_and_evaluate(
                     splits,
                     eval_rng,
                     config.loss_kwargs,
-                    config.num_eval_steps,
+                    num_eval_steps,
                 )
             for split in splits:
                 eval_metrics[split] = eval_metrics[split].compute()
@@ -524,21 +454,23 @@ def train_and_evaluate(
 
             # Note best state seen so far.
             # Best state is defined as the state with the lowest validation loss.
-            if eval_metrics["val"]["total_loss"] < min_val_loss:
+            if not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss:
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
                 metrics_for_best_state = eval_metrics
 
-                # Checkpoint the best state and corresponding metrics seen during training.
-                # Save pickled parameters for easy access during evaluation.
-                with report_progress.timed("checkpoint"):
-                    with open(pickled_params_file, "wb") as f:
-                        pickle.dump(best_state.params, f)
-                    ckpt.save(
-                        {
-                            "best_state": best_state,
-                            "metrics_for_best_state": metrics_for_best_state,
-                        }
-                    )
+            # Checkpoint the best state and corresponding metrics seen during training.
+            # Note whether we have evaluated the best state on the entire validation and test splits.
+            # Save pickled parameters for easy access during evaluation.
+            with report_progress.timed("checkpoint"):
+                with open(pickled_params_file, "wb") as f:
+                    pickle.dump(best_state.params, f)
+                ckpt.save(
+                    {
+                        "best_state": best_state,
+                        "metrics_for_best_state": metrics_for_best_state,
+                        "evaluated_on_entire_val_and_test_splits": is_last_step,
+                    }
+                )
 
-    return best_state
+    return best_state, metrics_for_best_state
