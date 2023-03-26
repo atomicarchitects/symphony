@@ -20,7 +20,7 @@ import analyses.analysis as analysis
 
 
 ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
-ALL_MODELS = ["mace", "e3schnet", "nequip"]
+ALL_MODELS = ["mace", "e3schnet"]
 
 FLAGS = flags.FLAGS
 
