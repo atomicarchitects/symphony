@@ -19,12 +19,15 @@ sys.path.append("..")
 import analyses.analysis as analysis
 
 
+ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
+ALL_MODELS = ["mace", "e3schnet", "nequip"]
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("basedir", None, "Directory where all workdirs are stored.")
 flags.DEFINE_string(
     "outputdir",
-    os.path.join(os.getcwd(), "analyses", "outputs", "v2"),
+    os.path.join(os.getcwd(), "analyses", "outputs"),
     "Directory where plots should be saved.",
 )
 
@@ -34,6 +37,8 @@ def get_title_for_model(model: str) -> str:
         return "E3SchNet"
     elif model == "mace":
         return "MACE"
+    elif model == "nequip":
+        return "NequIP"
     return model.title()
 
 
@@ -68,6 +73,11 @@ def plot_performance_for_parameters(
             # Choose the subset of data based on the number of interactions and model.
             df = results[split][results[split]["model"] == model]
             df_subset = df[df["num_interactions"] == num_interactions]
+
+            # Skip empty dataframes.
+            if not len(df_subset):
+                print(f"Skipping model {model}, split {split}, num_interactions {num_interactions}")
+                continue
 
             # Lineplot.
             sns.lineplot(
@@ -159,6 +169,11 @@ def plot_performance_for_max_ell(
             df = results[split][results[split]["model"] == model]
             df_subset = df[df["num_interactions"] == num_interactions]
 
+            # Skip empty dataframes.
+            if not len(df_subset):
+                print(f"Skipping model {model}, split {split}, num_interactions {num_interactions}")
+                continue
+
             # Scatterplot.
             ax = sns.scatterplot(
                 data=df_subset,
@@ -226,18 +241,17 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
+    # Extract version from basedir.
     basedir = os.path.abspath(FLAGS.basedir)
-    outputdir = os.path.abspath(FLAGS.outputdir)
-
-    metrics = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
-    models = ["mace", "e3schnet"]
+    version = os.path.basename(basedir)
+    outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), version)
 
     # Get results.
-    results = analysis.get_results_as_dataframe(models, metrics, basedir)
+    results = analysis.get_results_as_dataframe(ALL_MODELS, ALL_METRICS, basedir)
 
     # Make plots.
-    plot_performance_for_max_ell(metrics, results, outputdir)
-    plot_performance_for_parameters(metrics, results, outputdir)
+    plot_performance_for_max_ell(ALL_METRICS, results, outputdir)
+    plot_performance_for_parameters(ALL_METRICS, results, outputdir)
 
 
 if __name__ == "__main__":

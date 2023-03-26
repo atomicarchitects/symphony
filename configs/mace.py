@@ -24,4 +24,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_basis_fns = 8
     config.activation = "softplus"
 
-    return config
+    return ml_collections.FrozenConfigDict(config)
