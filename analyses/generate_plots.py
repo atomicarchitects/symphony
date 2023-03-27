@@ -20,7 +20,7 @@ import analyses.analysis as analysis
 
 
 ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
-ALL_MODELS = ["mace", "e3schnet", "nequip"]
+ALL_MODELS = ["mace", "e3schnet"]
 
 FLAGS = flags.FLAGS
 
@@ -30,6 +30,7 @@ flags.DEFINE_string(
     os.path.join(os.getcwd(), "analyses", "outputs"),
     "Directory where plots should be saved.",
 )
+
 
 def get_title_for_model(model: str) -> str:
     """Returns the title for the given model."""
@@ -61,22 +62,30 @@ def plot_performance_for_parameters(
         sns.set_theme(style="darkgrid")
 
         # Get all values of num_interactions in this split.
-        split_num_interactions = results[split]["num_interactions"].drop_duplicates().sort_values().values
+        split_num_interactions = (
+            results[split]["num_interactions"].drop_duplicates().sort_values().values
+        )
 
         # One figure for each value of num_interactions.
-        fig, axs = plt.subplots(ncols=len(split_num_interactions), figsize=(len(split_num_interactions) * 4, 6), sharey=True)
-        fig.suptitle(get_title_for_model(model) + " on " + get_title_for_split(split) + " Set")
+        fig, axs = plt.subplots(
+            ncols=len(split_num_interactions),
+            figsize=(len(split_num_interactions) * 4, 6),
+            sharey=True,
+        )
+        fig.suptitle(
+            get_title_for_model(model) + " on " + get_title_for_split(split) + " Set"
+        )
 
-        for ax, num_interactions in zip(
-            axs, split_num_interactions
-        ):
+        for ax, num_interactions in zip(axs, split_num_interactions):
             # Choose the subset of data based on the number of interactions and model.
             df = results[split][results[split]["model"] == model]
             df_subset = df[df["num_interactions"] == num_interactions]
 
             # Skip empty dataframes.
             if not len(df_subset):
-                print(f"Skipping model {model}, split {split}, num_interactions {num_interactions}")
+                print(
+                    f"Skipping model {model}, split {split}, num_interactions {num_interactions}"
+                )
                 continue
 
             # Lineplot.
@@ -111,7 +120,7 @@ def plot_performance_for_parameters(
             min_y = results[split][metric].min()
             max_y = results[split][metric].max()
             ax.set_ylim(min_y - 0.2, max_y + 0.2)
-        
+
             # Labels and titles.
             ax.set_title(f"{num_interactions} Interactions")
             ax.set_xlabel("Number of Parameters")
@@ -156,22 +165,30 @@ def plot_performance_for_max_ell(
         sns.set_theme(style="darkgrid")
 
         # Get all values of num_interactions in this split.
-        split_num_interactions = results[split]["num_interactions"].drop_duplicates().sort_values().values
+        split_num_interactions = (
+            results[split]["num_interactions"].drop_duplicates().sort_values().values
+        )
 
         # One figure for each value of num_interactions.
-        fig, axs = plt.subplots(ncols=len(split_num_interactions), figsize=(len(split_num_interactions) * 4, 6), sharey=True)
-        fig.suptitle(get_title_for_model(model) + " on " + get_title_for_split(split) + " Set")
+        fig, axs = plt.subplots(
+            ncols=len(split_num_interactions),
+            figsize=(len(split_num_interactions) * 4, 6),
+            sharey=True,
+        )
+        fig.suptitle(
+            get_title_for_model(model) + " on " + get_title_for_split(split) + " Set"
+        )
 
-        for ax, num_interactions in zip(
-            axs, split_num_interactions
-        ):
+        for ax, num_interactions in zip(axs, split_num_interactions):
             # Choose the subset of data based on the number of interactions.
             df = results[split][results[split]["model"] == model]
             df_subset = df[df["num_interactions"] == num_interactions]
 
             # Skip empty dataframes.
             if not len(df_subset):
-                print(f"Skipping model {model}, split {split}, num_interactions {num_interactions}")
+                print(
+                    f"Skipping model {model}, split {split}, num_interactions {num_interactions}"
+                )
                 continue
 
             # Scatterplot.
@@ -226,7 +243,9 @@ def plot_performance_for_max_ell(
 
         # Save plot.
         os.makedirs(os.path.join(outputdir, "max_ell"), exist_ok=True)
-        outputfile = os.path.join(outputdir, "max_ell", f"{model}_{split}_{metric}_max_ell.png")
+        outputfile = os.path.join(
+            outputdir, "max_ell", f"{model}_{split}_{metric}_max_ell.png"
+        )
         plt.savefig(outputfile, bbox_inches="tight")
         plt.close()
 
