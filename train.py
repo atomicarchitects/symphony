@@ -61,6 +61,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
+@functools.partial(jax.profiler.annotate_function, name="generation_loss")
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
@@ -209,6 +210,7 @@ def generation_loss(
     )
 
 
+@functools.partial(jax.profiler.annotate_function, name="get_predictions")
 def get_predictions(
     state: train_state.TrainState,
     graphs: datatypes.Fragments,
