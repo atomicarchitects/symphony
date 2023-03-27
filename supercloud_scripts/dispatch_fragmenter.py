@@ -5,6 +5,7 @@ import time
 
 from .. import qm9
 
+
 def main(chunk: int = 3000, num_seeds: int = 8, root_dir: str = "data"):
     qm9_data = qm9.load_qm9("qm9_data")
     processes = []

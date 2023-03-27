@@ -46,8 +46,12 @@ def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragment
 
     def generator():
         for molecule in tqdm.tqdm(molecules):
-            graph = input_pipeline.ase_atoms_to_jraph_graph(molecule, atomic_numbers, cutoff)
-            frags = input_pipeline.generate_fragments(seed, graph, len(atomic_numbers), epsilon)
+            graph = input_pipeline.ase_atoms_to_jraph_graph(
+                molecule, atomic_numbers, cutoff
+            )
+            frags = input_pipeline.generate_fragments(
+                seed, graph, len(atomic_numbers), epsilon
+            )
             frags = list(frags)
 
             skip = False

@@ -52,9 +52,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     position_coeffs = e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1)))
     preds = datatypes.Predictions(
         nodes=datatypes.NodePredictions(
-            focus_logits=jnp.ones((num_nodes,)),
-            focus_probs=None,
-            embeddings=None
+            focus_logits=jnp.ones((num_nodes,)), focus_probs=None, embeddings=None
         ),
         globals=datatypes.GlobalPredictions(
             stop=None,

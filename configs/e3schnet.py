@@ -13,7 +13,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.optimizer = "adam"
     config.learning_rate = 1e-3
 
-    # GNN hyperparameters.
+    # E3SchNet hyperparameters.
     config.model = "E3SchNet"
     config.cutoff = 5.0
     config.num_interactions = 1

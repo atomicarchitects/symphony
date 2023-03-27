@@ -767,7 +767,6 @@ def create_model(
             return shifted_softplus
         return getattr(jax.nn, activation)
 
-
     def model_fn(graphs: datatypes.Fragments) -> datatypes.Predictions:
         """Defines the entire network."""
 

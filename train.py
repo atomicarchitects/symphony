@@ -326,6 +326,28 @@ def train_and_evaluate(
     # We only support single-host training.
     assert jax.process_count() == 1
 
+    # Helper for evaluation.
+    def evaluate_model_helper(
+        eval_state: train_state.TrainState,
+        num_eval_steps: int,
+        eval_name: str,
+        rng: chex.PRNGKey,
+    ) -> Dict[str, Any]:
+        splits = ["val", "test"]
+        with report_progress.timed(eval_name):
+            eval_metrics = evaluate_model(
+                eval_state,
+                datasets,
+                splits,
+                rng,
+                config.loss_kwargs,
+                num_eval_steps,
+            )
+        for split in splits:
+            eval_metrics[split] = eval_metrics[split].compute()
+            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
+        return eval_metrics
+
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
     writer.write_hparams(config.to_dict())
@@ -422,58 +444,44 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
-            if is_last_step:
-                # If this is the first time we are evaluating,
-                # we will just evaluate the current model.
-                if min_val_loss == jnp.inf:
-                    best_state = state
-    
-                # If this is the last step,
-                # we want to evaluate the best model on more number of steps.
-                logging.info("Evaluating best state at the end of training.")
-                eval_state = eval_state.replace(params=best_state.params)
-                num_eval_steps = config.num_eval_steps_at_end_of_training
-            else:
-                # Evaluate with the current set of parameters.
-                eval_state = eval_state.replace(params=state.params)
-                num_eval_steps = config.num_eval_steps
+            eval_state = eval_state.replace(params=state.params)
+            num_eval_steps = config.num_eval_steps
 
-            splits = ["val", "test"]
-            with report_progress.timed("eval"):
-                rng, eval_rng = jax.random.split(rng)
-                eval_metrics = evaluate_model(
-                    eval_state,
-                    datasets,
-                    splits,
-                    eval_rng,
-                    config.loss_kwargs,
-                    num_eval_steps,
-                )
-            for split in splits:
-                eval_metrics[split] = eval_metrics[split].compute()
-                writer.write_scalars(
-                    step, add_prefix_to_keys(eval_metrics[split], split)
-                )
+            # Evaluate on validation and test splits.
+            rng, eval_rng = jax.random.split(rng)
+            eval_metrics = evaluate_model_helper(
+                eval_state, num_eval_steps, "eval", eval_rng
+            )
 
             # Note best state seen so far.
-            # Best state is defined as the state with the lowest validation loss.                
-            if (not is_last_step and eval_metrics["val"]["total_loss"] < min_val_loss) or (min_val_loss == jnp.inf):
+            # Best state is defined as the state with the lowest validation loss.
+            if eval_metrics["val"]["total_loss"] < min_val_loss:
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
                 metrics_for_best_state = eval_metrics
 
-            # Checkpoint the best state and corresponding metrics seen during training.
-            # Note whether we have evaluated the best state on the entire validation and test splits.
-            # Save pickled parameters for easy access during evaluation.
-            with report_progress.timed("checkpoint"):
-                with open(pickled_params_file, "wb") as f:
-                    pickle.dump(best_state.params, f)
-                ckpt.save(
-                    {
-                        "best_state": best_state,
-                        "metrics_for_best_state": metrics_for_best_state,
-                        "evaluated_on_entire_val_and_test_splits": is_last_step,
-                    }
-                )
+    # Once training is complete, return the best state and corresponding metrics.
+    logging.info("Evaluating best state at the end of training.")
+    eval_state = eval_state.replace(params=best_state.params)
+    num_eval_steps = config.num_eval_steps_at_end_of_training
+
+    # Evaluate on validation and test splits, but at the end of training.
+    rng, eval_rng = jax.random.split(rng)
+    metrics_for_best_state = evaluate_model_helper(
+        eval_state, num_eval_steps, "eval_final", eval_rng
+    )
+
+    # Checkpoint the best state and corresponding metrics seen during training.
+    # Save pickled parameters for easy access during evaluation.
+    with report_progress.timed("checkpoint"):
+        with open(pickled_params_file, "wb") as f:
+            pickle.dump(best_state.params, f)
+        ckpt.save(
+            {
+                "best_state": best_state,
+                "metrics_for_best_state": metrics_for_best_state,
+                "evaluated_on_entire_val_and_test_splits": num_eval_steps,
+            }
+        )
 
     return best_state, metrics_for_best_state
