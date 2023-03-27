@@ -174,4 +174,5 @@ grun
 grid_main.py
 
 notebooks/gen
-
+loss_outputs
+analyses/outputs

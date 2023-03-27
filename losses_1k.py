@@ -1,8 +1,10 @@
 import jax
 import jax.numpy as jnp
 import jraph
+import os
 import pickle
 import sys
+import tensorflow as tf
 import tqdm
 
 sys.path.append('./analyses')
@@ -12,10 +14,15 @@ import input_pipeline_tf
 import train
 
 
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".XX"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
+
+tf.config.experimental.set_visible_devices([], "GPU")
+
 interactions=int(sys.argv[1])
 l=int(sys.argv[2])
 channels=int(sys.argv[3])
-
 
 atomic_numbers = jnp.array([1, 6, 7, 8, 9])
 numbers_to_symbols = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}
@@ -61,8 +68,16 @@ for i in tqdm.tqdm(range(1000)):
         mol_loss = jax.tree_util.tree_map(lambda x: x[0], mol_loss)
         losses.append((mol_loss, i, j, mol, jraph.unpad_with_graphs(preds)))
 
-losses = sorted(losses)
+losses.sort(key=lambda x: abs(x[0][0]))
 
 with open(f'loss_outputs/losses_1k_interactions={interactions}_l={l}_channels={channels}.pkl', 'wb') as f:
     pickle.dump(losses, f)
 
+first_nonstop = 0
+for i, loss in enumerate(losses):
+    if not loss[-2].globals.stop:
+        first_nonstop = i
+        break
+
+with open(f'losses_1k_interactions={interactions}_l={l}_channels={channels}_topbot25.pkl', 'wb') as f:
+    pickle.dump((losses[:25], losses[first_nonstop:first_nonstop+25], losses[-25:]), f)
