@@ -5,6 +5,7 @@ from typing import Dict, List, Sequence, Tuple
 import re
 import os
 
+from absl import logging
 import tensorflow as tf
 import chex
 import jax
@@ -37,14 +38,20 @@ def get_datasets(
             deterministic=True,
         )
 
+    # Estimate the padding budget.
+    max_n_nodes, max_n_edges, max_n_graphs = estimate_padding_budget_for_num_graphs(
+        datasets["train"], config.max_n_graphs, num_estimation_graphs=1000
+    )
+
+    logging.info(
+        "Padding budget computed as: n_nodes = %d, n_edges = %d, n_graphs = %d",
+        max_n_nodes,
+        max_n_edges,
+        max_n_graphs,
+    )
     # Pad an example graph to see what the output shapes will be.
     # We will use this shape information when creating the tf.data.Dataset.
     example_graph = next(datasets["train"].as_numpy_iterator())
-    max_n_nodes, max_n_edges, max_n_graphs = (
-        config.max_n_nodes,
-        config.max_n_edges,
-        config.max_n_graphs,
-    )
     example_padded_graph = jraph.pad_with_graphs(
         example_graph, n_node=max_n_nodes, n_edge=max_n_edges, n_graph=max_n_graphs
     )
@@ -64,6 +71,55 @@ def get_datasets(
         )
 
     return datasets
+
+
+def estimate_padding_budget_for_num_graphs(
+    dataset: tf.data.Dataset, num_graphs: int, num_estimation_graphs: int
+) -> Tuple[int, int, int]:
+    """Estimates the padding budget for a dataset of unbatched GraphsTuples.
+    Args:
+        dataset: A dataset of unbatched GraphsTuples.
+        num_graphs: The intended number of graphs per batch. Note that no batching is performed by
+        this function.
+        num_estimation_graphs: How many graphs to take from the dataset to estimate
+        the distribution of number of nodes and edges per graph.
+    Returns:
+        padding_budget: The padding budget for batching and padding the graphs
+        in this dataset to the given batch size.
+    """
+
+    def get_graphs_tuple_size(graph: datatypes.Fragments) -> Tuple[int, int, int]:
+        """Returns the number of nodes, edges and graphs in a GraphsTuple."""
+        return (
+            np.shape(jax.tree_leaves(graph.nodes)[0])[0],
+            np.sum(graph.n_edge),
+            np.shape(graph.n_node)[0],
+        )
+
+    def next_multiple_of_64(val: float) -> int:
+        """Returns the next multiple of 64 after val."""
+        return 64 * (1 + int(val // 64))
+
+    if num_graphs <= 1:
+        raise ValueError("Batch size must be > 1 to account for padding graphs.")
+
+    total_num_nodes = 0
+    total_num_edges = 0
+    for graph in dataset.take(num_estimation_graphs).as_numpy_iterator():
+        n_node, n_edge, n_graph = get_graphs_tuple_size(graph)
+        if n_graph != 1:
+            raise ValueError("Dataset contains batched GraphTuples.")
+
+        total_num_nodes += n_node
+        total_num_edges += n_edge
+
+    num_nodes_per_graph_estimate = total_num_nodes / num_estimation_graphs
+    num_edges_per_graph_estimate = total_num_edges / num_estimation_graphs
+
+    n_node = next_multiple_of_64(num_nodes_per_graph_estimate * num_graphs)
+    n_edge = next_multiple_of_64(num_edges_per_graph_estimate * num_graphs)
+    n_graph = num_graphs
+    return n_node, n_edge, n_graph
 
 
 def _deprecated_get_raw_qm9_datasets(

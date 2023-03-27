@@ -37,9 +37,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.checkpoint_every_steps = 1000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
-    config.max_n_nodes = 512
-    config.max_n_edges = 1024
-    config.max_n_graphs = 64
+    config.max_n_graphs = 32
     config.loss_kwargs = {
         "radius_rbf_variance": 1e-3,
     }
