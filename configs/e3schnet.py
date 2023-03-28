@@ -9,10 +9,6 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the MACE model."""
     config = default.get_config()
 
-    # Optimizer.
-    config.optimizer = "adam"
-    config.learning_rate = 1e-3
-
     # E3SchNet hyperparameters.
     config.model = "E3SchNet"
     config.cutoff = 5.0

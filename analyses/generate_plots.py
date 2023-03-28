@@ -267,7 +267,7 @@ def main(argv):
 
     # Get results.
     results = analysis.get_results_as_dataframe(ALL_MODELS, ALL_METRICS, basedir)
-
+    print(results)
     # Make plots.
     plot_performance_for_max_ell(ALL_METRICS, results, outputdir)
     plot_performance_for_parameters(ALL_METRICS, results, outputdir)

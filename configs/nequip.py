@@ -9,10 +9,6 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the NequIP model."""
     config = default.get_config()
 
-    # Optimizer.
-    config.optimizer = "adam"
-    config.learning_rate = 1e-3
-
     # NequIP hyperparameters.
     config.model = "NequIP"
     config.num_channels = 128

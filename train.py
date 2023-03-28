@@ -54,10 +54,17 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
+    if config.learning_rate_schedule == "constant":
+        schedule = optax.constant_schedule(config.learning_rate)
+    elif config.learning_rate_schedule == "sgdr":
+        num_cycles = 1 + config.num_train_steps // config.learning_rate_schedule_kwargs.decay_steps
+        schedule = optax.sgdr_schedule(
+            cosine_kwargs=[config.learning_rate_schedule_kwargs for _ in range(num_cycles)]
+        )
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=config.learning_rate)
+        return optax.adam(learning_rate=schedule)
     if config.optimizer == "sgd":
-        return optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
+        return optax.sgd(learning_rate=schedule, momentum=config.momentum)
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
@@ -332,9 +339,10 @@ def train_and_evaluate(
     def evaluate_model_helper(
         eval_state: train_state.TrainState,
         num_eval_steps: int,
+        step: int,
         eval_name: str,
         rng: chex.PRNGKey,
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, metrics.Collection]:
         splits = ["val", "test"]
         with report_progress.timed(eval_name):
             eval_metrics = evaluate_model(
@@ -452,7 +460,7 @@ def train_and_evaluate(
             # Evaluate on validation and test splits.
             rng, eval_rng = jax.random.split(rng)
             eval_metrics = evaluate_model_helper(
-                eval_state, num_eval_steps, "eval", eval_rng
+                eval_state, num_eval_steps, step, "eval", eval_rng
             )
 
             # Note best state seen so far.
@@ -460,17 +468,17 @@ def train_and_evaluate(
             if eval_metrics["val"]["total_loss"] < min_val_loss:
                 min_val_loss = eval_metrics["val"]["total_loss"]
                 best_state = state
-                metrics_for_best_state = eval_metrics
+                step_for_best_state = step
 
     # Once training is complete, return the best state and corresponding metrics.
-    logging.info("Evaluating best state at the end of training.")
+    logging.info("Evaluating best state from step %d at the end of training.", step_for_best_state)
     eval_state = eval_state.replace(params=best_state.params)
     num_eval_steps = config.num_eval_steps_at_end_of_training
 
     # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
     metrics_for_best_state = evaluate_model_helper(
-        eval_state, num_eval_steps, "eval_final", eval_rng
+        eval_state, num_eval_steps, step + 1, "eval_final", eval_rng
     )
 
     # Checkpoint the best state and corresponding metrics seen during training.
@@ -482,6 +490,7 @@ def train_and_evaluate(
             {
                 "best_state": best_state,
                 "metrics_for_best_state": metrics_for_best_state,
+                "step_for_best_state": step_for_best_state,
                 "evaluated_on_entire_val_and_test_splits": num_eval_steps,
             }
         )

@@ -23,12 +23,23 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the default training configuration."""
     config = ml_collections.ConfigDict()
 
+    # Dataset.
     config.root_dir = get_root_dir()
-    config.rng_seed = 0
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
 
+    # Optimizer.
+    config.optimizer = "adam"
+    config.learning_rate_schedule = "sgdr"
+    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
+    config.learning_rate_schedule_kwargs.init_value = 5e-4
+    config.learning_rate_schedule_kwargs.peak_value = 1e-3
+    config.learning_rate_schedule_kwargs.warmup_steps = 100
+    config.learning_rate_schedule_kwargs.decay_steps = 1000
+
+    # Training.
+    config.rng_seed = 0
     config.num_train_steps = 20000
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 5000
@@ -38,9 +49,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.max_n_graphs = 32
-    config.loss_kwargs = {
-        "radius_rbf_variance": 1e-3,
-    }
+    config.loss_kwargs = ml_collections.ConfigDict()
+    config.loss_kwargs.radius_rbf_variance = 1e-3
 
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()
