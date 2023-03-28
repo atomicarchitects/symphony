@@ -52,7 +52,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_species_predictor.num_layers = 2
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.res_beta = 30
-    config.target_position_predictor.res_alpha = 51
+    config.target_position_predictor.res_beta = 180
+    config.target_position_predictor.res_alpha = 359
 
     return config
