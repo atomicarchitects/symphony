@@ -356,6 +356,7 @@ def train_and_evaluate(
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
             writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
+        writer.flush()
         return eval_metrics
 
     # Create writer for logs.
