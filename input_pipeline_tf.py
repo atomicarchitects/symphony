@@ -39,16 +39,26 @@ def get_datasets(
         )
 
     # Estimate the padding budget.
-    max_n_nodes, max_n_edges, max_n_graphs = estimate_padding_budget_for_num_graphs(
-        datasets["train"], config.max_n_graphs, num_estimation_graphs=1000
-    )
+    if config.compute_padding_dynamically:
+        max_n_nodes, max_n_edges, max_n_graphs = estimate_padding_budget_for_num_graphs(
+            datasets["train"], config.max_n_graphs, num_estimation_graphs=1000
+        )
+        
+    else:
+        max_n_nodes, max_n_edges, max_n_graphs = (
+            config.max_n_nodes,
+            config.max_n_edges,
+            config.max_n_graphs,
+        )
 
     logging.info(
-        "Padding budget computed as: n_nodes = %d, n_edges = %d, n_graphs = %d",
+        "Padding budget %s as: n_nodes = %d, n_edges = %d, n_graphs = %d",
+        "computed" if config.compute_padding_dynamically else "provided",
         max_n_nodes,
         max_n_edges,
         max_n_graphs,
     )
+
     # Pad an example graph to see what the output shapes will be.
     # We will use this shape information when creating the tf.data.Dataset.
     example_graph = next(datasets["train"].as_numpy_iterator())

@@ -48,7 +48,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.eval_every_steps = 1000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
+    config.compute_padding_dynamically = False
     config.max_n_graphs = 16
+    config.max_n_nodes = 192
+    config.max_n_edges = 1344
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-3
 
