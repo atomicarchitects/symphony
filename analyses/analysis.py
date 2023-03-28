@@ -241,6 +241,7 @@ def to_db(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
 
 
 def to_mol_dict(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
+    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
     first_index = np.asarray(
         jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)])
     )
@@ -256,8 +257,7 @@ def to_mol_dict(generated_frag: datatypes.Fragments, model_path: str, file_name:
 
     generated = (
         {}
-    )  # G-SchNet seems to expect this to be a dictionary with int keys and dictionary values
-    # is this supposed to be one sequence of generated fragments at a time, or can multiple mols be considered?
+    )
     for i in range(len(first_index) - 1):
         k = int(first_index[i + 1] - first_index[i])
         if k not in generated:
