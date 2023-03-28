@@ -3,10 +3,6 @@
 # Set experiment name
 expname=v4
 
-# Make directories
-mkdir -p workdirs/"$expname"/mace
-mkdir -p workdirs/"$expname"/e3schnet
-
 # Loop over hyperparameters
 for l in 0 1 2 3 4 5
 do
