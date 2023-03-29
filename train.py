@@ -55,13 +55,19 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     # If a learning rate schedule is specified, use it.
-    if config.get('learning_rate_schedule') is not None:
+    if config.get("learning_rate_schedule") is not None:
         if config.learning_rate_schedule == "constant":
             learning_rate_or_schedule = optax.constant_schedule(config.learning_rate)
         elif config.learning_rate_schedule == "sgdr":
-            num_cycles = 1 + config.num_train_steps // config.learning_rate_schedule_kwargs.decay_steps
+            num_cycles = (
+                1
+                + config.num_train_steps
+                // config.learning_rate_schedule_kwargs.decay_steps
+            )
             learning_rate_or_schedule = optax.sgdr_schedule(
-                cosine_kwargs=[config.learning_rate_schedule_kwargs for _ in range(num_cycles)]
+                cosine_kwargs=[
+                    config.learning_rate_schedule_kwargs for _ in range(num_cycles)
+                ]
             )
     else:
         learning_rate_or_schedule = config.learning_rate
@@ -69,7 +75,9 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     if config.optimizer == "adam":
         return optax.adam(learning_rate=learning_rate_or_schedule)
     if config.optimizer == "sgd":
-        return optax.sgd(learning_rate=learning_rate_or_schedule, momentum=config.momentum)
+        return optax.sgd(
+            learning_rate=learning_rate_or_schedule, momentum=config.momentum
+        )
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
@@ -345,8 +353,8 @@ def train_and_evaluate(
         eval_state: train_state.TrainState,
         num_eval_steps: int,
         step: int,
-        is_final_eval: bool,
         rng: chex.PRNGKey,
+        is_final_eval: bool,
     ) -> Dict[str, metrics.Collection]:
         # Since the final eval is usually longer, we give it a different name.
         if is_final_eval:
@@ -365,7 +373,7 @@ def train_and_evaluate(
             )
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
-            prefix = "final_" + split if is_final_eval else split
+            prefix = split + "_final" if is_final_eval else split
             writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], prefix))
         writer.flush()
         return eval_metrics
@@ -472,7 +480,11 @@ def train_and_evaluate(
             # Evaluate on validation and test splits.
             rng, eval_rng = jax.random.split(rng)
             eval_metrics = evaluate_model_helper(
-                eval_state, num_eval_steps, step, "eval", eval_rng
+                eval_state,
+                num_eval_steps,
+                step,
+                eval_rng,
+                is_final_eval=False,
             )
 
             # Note best state seen so far.
@@ -483,14 +495,21 @@ def train_and_evaluate(
                 step_for_best_state = step
 
     # Once training is complete, return the best state and corresponding metrics.
-    logging.info("Evaluating best state from step %d at the end of training.", step_for_best_state)
+    logging.info(
+        "Evaluating best state from step %d at the end of training.",
+        step_for_best_state,
+    )
     eval_state = eval_state.replace(params=best_state.params)
     num_eval_steps = config.num_eval_steps_at_end_of_training
 
     # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
     metrics_for_best_state = evaluate_model_helper(
-        eval_state, num_eval_steps, step, "eval_final", eval_rng
+        eval_state,
+        num_eval_steps,
+        step,
+        eval_rng,
+        is_final_eval=True,
     )
 
     # Checkpoint the best state and corresponding metrics seen during training.

@@ -43,7 +43,7 @@ def get_datasets(
         max_n_nodes, max_n_edges, max_n_graphs = estimate_padding_budget_for_num_graphs(
             datasets["train"], config.max_n_graphs, num_estimation_graphs=1000
         )
-        
+
     else:
         max_n_nodes, max_n_edges, max_n_graphs = (
             config.max_n_nodes,
