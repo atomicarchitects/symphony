@@ -345,9 +345,14 @@ def train_and_evaluate(
         eval_state: train_state.TrainState,
         num_eval_steps: int,
         step: int,
-        eval_name: str,
+        is_final_eval: bool,
         rng: chex.PRNGKey,
     ) -> Dict[str, metrics.Collection]:
+        # Since the final eval is usually longer, we give it a different name.
+        if is_final_eval:
+            eval_name = "final_eval"
+        else:
+            eval_name = "eval"
         splits = ["val", "test"]
         with report_progress.timed(eval_name):
             eval_metrics = evaluate_model(
@@ -360,7 +365,8 @@ def train_and_evaluate(
             )
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
-            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
+            prefix = "final_" + split if is_final_eval else split
+            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], prefix))
         writer.flush()
         return eval_metrics
 
@@ -484,7 +490,7 @@ def train_and_evaluate(
     # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
     metrics_for_best_state = evaluate_model_helper(
-        eval_state, num_eval_steps, step + 1, "eval_final", eval_rng
+        eval_state, num_eval_steps, step, "eval_final", eval_rng
     )
 
     # Checkpoint the best state and corresponding metrics seen during training.

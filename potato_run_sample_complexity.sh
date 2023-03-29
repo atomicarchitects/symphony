@@ -8,7 +8,7 @@ for nummoleculesfactor in 1 2 4 8 16
 do
   nummolecules=$(( 2976*nummoleculesfactor ))
 
-  for l in 5
+  for l in 0 1 2 3 4 5
   do
     for c in 32
     do
