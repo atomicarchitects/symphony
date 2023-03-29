@@ -54,17 +54,22 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
-    if config.learning_rate_schedule == "constant":
-        schedule = optax.constant_schedule(config.learning_rate)
-    elif config.learning_rate_schedule == "sgdr":
-        num_cycles = 1 + config.num_train_steps // config.learning_rate_schedule_kwargs.decay_steps
-        schedule = optax.sgdr_schedule(
-            cosine_kwargs=[config.learning_rate_schedule_kwargs for _ in range(num_cycles)]
-        )
+    # If a learning rate schedule is specified, use it.
+    if config.get('learning_rate_schedule') is not None:
+        if config.learning_rate_schedule == "constant":
+            learning_rate_or_schedule = optax.constant_schedule(config.learning_rate)
+        elif config.learning_rate_schedule == "sgdr":
+            num_cycles = 1 + config.num_train_steps // config.learning_rate_schedule_kwargs.decay_steps
+            learning_rate_or_schedule = optax.sgdr_schedule(
+                cosine_kwargs=[config.learning_rate_schedule_kwargs for _ in range(num_cycles)]
+            )
+    else:
+        learning_rate_or_schedule = config.learning_rate
+
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=schedule)
+        return optax.adam(learning_rate=learning_rate_or_schedule)
     if config.optimizer == "sgd":
-        return optax.sgd(learning_rate=schedule, momentum=config.momentum)
+        return optax.sgd(learning_rate=learning_rate_or_schedule, momentum=config.momentum)
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
