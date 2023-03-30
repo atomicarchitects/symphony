@@ -4,16 +4,23 @@ import functools
 from typing import Dict, List, Sequence, Tuple
 import re
 import os
+import sys
+
+sys.path.append('analyses')
 
 from absl import logging
 import tensorflow as tf
+from ase import Atoms
+from ase.db import connect
 import chex
 import jax
 import numpy as np
 import jraph
 import ml_collections
 
+from utility_classes import Molecule, ConnectivityCompressor
 import datatypes
+import models
 
 
 def get_datasets(
@@ -205,6 +212,28 @@ def get_raw_qm9_datasets(
         dataset_split = dataset_split.shuffle(1000, seed=seed)
         datasets[split] = dataset_split
     return datasets
+
+
+def dataset_as_db(config: ml_collections.ConfigDict, dbpath: str):
+    datasets = get_raw_qm9_datasets(
+        config.root_dir,
+        config.train_molecules,
+        config.val_molecules,
+        config.test_molecules,
+    )
+    compressor = ConnectivityCompressor()
+    with connect(dbpath) as conn:
+        for mol in datasets['train'].as_numpy_iterator():
+            atoms = Atoms(positions=mol['positions'], numbers=models.get_atomic_numbers(mol['species']))
+            conn.write(atoms)
+            # instantiate utility_classes.Molecule object
+            mol = Molecule(atoms.positions, atoms.numbers)
+            # get connectivity matrix (detecting bond orders with Open Babel)
+            con_mat = mol.get_connectivity()
+            conn.write(
+                atoms,
+                data={'con_mat': compressor.compress(con_mat)}
+            )
 
 
 def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
