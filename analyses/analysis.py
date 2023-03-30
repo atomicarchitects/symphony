@@ -236,37 +236,13 @@ def load_from_workdir(
     )
 
 
-def to_mol_dict(generated_frag: datatypes.Fragments, save=True, model_path=None, file_name=None):
-    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
-
-    generated = (
-        {}
-    )
-    for mol in jraph.unbatch(generated_frag):
-        l = generated_frag.nodes.species.shape[0]
-        if l not in generated:
-            generated[l] = {
-                "_positions": np.array(mol.nodes.positions),
-                "_atomic_numbers": np.array(list(map(
-                    lambda z: models.ATOMIC_NUMBERS[z],
-                    mol.nodes.species
-                ))),
-            }
-        else:
-            generated[l]["_positions"] = np.append(
-                generated[l]["_positions"],
-                np.array(mol.nodes.positions),
-                0,
-            )
-            generated[l]["_atomic_numbers"] = np.append(
-                generated[l]["_atomic_numbers"],
-                np.array(list(map(
-                    lambda z: models.ATOMIC_NUMBERS[z],
-                    mol.nodes.species
-                ))),
-                0,
-            )
-
+def to_mol_dict(dataset, save=True, model_path=None):
+    generated_dict = {}
+    data_iter = dataset.as_numpy_iterator()
+    for graph in data_iter:
+        frag = datatypes.Fragments.from_graphstuple(graph)
+        frag = jax.tree_map(jnp.asarray, frag)
+        update_dict(generated_dict, frag_to_mol_dict(frag, False))
     if save:
         gen_path = os.path.join(model_path, "generated/")
         if not os.path.exists(gen_path):
@@ -284,7 +260,40 @@ def to_mol_dict(generated_frag: datatypes.Fragments, save=True, model_path=None,
                     file_name = new_file_name
                     break
         with open(file_name + ".mol_dict", "wb") as f:
-            pickle.dump(generated, f)
+            pickle.dump(generated_dict, f)
+    return generated_dict
+
+
+def frag_to_mol_dict(generated_frag: datatypes.Fragments, save=True, model_path=None, file_name=None):
+    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
+
+    generated = (
+        {}
+    )
+    for mol in jraph.unbatch(generated_frag):
+        l = mol.nodes.species.shape[0]
+        if l not in generated:
+            generated[l] = {
+                "_positions": np.array([mol.nodes.positions]),
+                "_atomic_numbers": np.array([list(map(
+                    lambda z: models.ATOMIC_NUMBERS[z],
+                    mol.nodes.species
+                ))]),
+            }
+        else:
+            generated[l]["_positions"] = np.append(
+                generated[l]["_positions"],
+                np.array([mol.nodes.positions]),
+                0,
+            )
+            generated[l]["_atomic_numbers"] = np.append(
+                generated[l]["_atomic_numbers"],
+                np.array([list(map(
+                    lambda z: models.ATOMIC_NUMBERS[z],
+                    mol.nodes.species
+                ))]),
+                0,
+            )
 
     return generated
 
