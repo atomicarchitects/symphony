@@ -1,21 +1,22 @@
-############################
-# From G-SchNet repository #
-############################
+##########################################################
+# From G-SchNet repository                               #
+# https://github.com/atomistic-machine-learning/G-SchNet #
+##########################################################
 
 import numpy as np
 import collections
 import pickle
 import os
 import argparse
-import openbabel as ob
+from openbabel import openbabel as ob
 import pybel
 import time
-import json
 import sys
 
-gschnet_path = '/home/songk/atomicarchitects/G-SchNet'
-sys.path.append(gschnet_path)
+sys.path.append('..')
 
+import analysis
+import input_pipeline_tf
 from schnetpack import Properties
 from utility_classes import Molecule, ConnectivityCompressor
 from utility_functions import run_threaded, print_atom_bond_ring_stats, update_dict
@@ -43,13 +44,7 @@ def get_parser():
                              default=None)
     main_parser.add_argument('--model_path',
                              help='Path of directory containing the model that '
-                                  'generated the molecules. It should contain a '
-                                  'split.npz file with training data splits and a '
-                                  'args.json file with the arguments used during '
-                                  'training (if this and --train_data_path '
-                                  'are provided, the generated molecules will be '
-                                  'filtered for new structures which were not included '
-                                  'in the training or validation data)',
+                                  'generated the molecules. ',
                              default=None)
     main_parser.add_argument('--valence',
                              default=[1, 1, 6, 4, 7, 3, 8, 2, 9, 1], type=int,
@@ -681,24 +676,14 @@ def filter_new(mols, stats, stat_heads, model_path, train_data_path, print_file=
         raise FileNotFoundError
     print(f'Using data base at {dbpath}...')
 
-    split_file = os.path.join(model_path, 'split.npz')
-    if not os.path.exists(split_file):
+    if not os.path.exists(model_path):
         raise FileNotFoundError
-    S = np.load(split_file)
-    train_idx = S['train_idx']
-    val_idx = S['val_idx']
-    test_idx = S['test_idx']
+    config, _, _, _ = analysis.load_from_workdir(model_path)
+    train_idx = np.array(range(config.train_molecules[0], config.train_molecules[1]))
+    val_idx = np.array(range(config.val_molecules[0], config.val_molecules[1]))
+    test_idx = np.array(range(config.test_molecules[0], config.test_molecules[1]))
     train_idx = np.append(train_idx, val_idx)
     train_idx = np.append(train_idx, test_idx)
-
-    # check if subset was used (and restrict indices accordingly)
-    train_args_path = os.path.join(model_path, f'args.json')
-    with open(train_args_path) as handle:
-        train_args = json.loads(handle.read())
-    if 'subset_path' in train_args:
-        if train_args['subset_path'] is not None:
-            subset = np.load(train_args['subset_path'])
-            train_idx = subset[train_idx]
 
     print('\nComputing fingerprints of training data...')
     start_time = time.time()

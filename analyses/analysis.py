@@ -236,67 +236,74 @@ def load_from_workdir(
     )
 
 
-def to_db(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
-    raise NotImplementedError("to_db() is not implemented yet.")
-
-
-def to_mol_dict(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
+def to_mol_dict(generated_frag: datatypes.Fragments, save=True, model_path=None, file_name=None):
     '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
-    first_index = np.asarray(
-        jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)])
-    )
-    positions = np.asarray(generated_frag.nodes.positions)
-    species = np.asarray(
-        list(
-            map(
-                lambda z: models.ATOMIC_NUMBERS[z],
-                generated_frag.nodes.species.tolist(),
-            )
-        )
-    )
 
     generated = (
         {}
     )
-    for i in range(len(first_index) - 1):
-        k = int(first_index[i + 1] - first_index[i])
-        if k not in generated:
-            generated[k] = {
-                "_positions": np.array(
-                    [positions[first_index[i] : first_index[i + 1]]]
-                ),
-                "_atomic_numbers": np.array(
-                    [species[first_index[i] : first_index[i + 1]]]
-                ),
+    for mol in jraph.unbatch(generated_frag):
+        l = generated_frag.nodes.species.shape[0]
+        if l not in generated:
+            generated[l] = {
+                "_positions": np.array(mol.nodes.positions),
+                "_atomic_numbers": np.array(list(map(
+                    lambda z: models.ATOMIC_NUMBERS[z],
+                    mol.nodes.species
+                ))),
             }
         else:
-            generated[k]["_positions"] = np.append(
-                generated[k]["_positions"],
-                [positions[first_index[i] : first_index[i + 1]]],
+            generated[l]["_positions"] = np.append(
+                generated[l]["_positions"],
+                np.array(mol.nodes.positions),
                 0,
             )
-            generated[k]["_atomic_numbers"] = np.append(
-                generated[k]["_atomic_numbers"],
-                [species[first_index[i] : first_index[i + 1]]],
+            generated[l]["_atomic_numbers"] = np.append(
+                generated[l]["_atomic_numbers"],
+                np.array(list(map(
+                    lambda z: models.ATOMIC_NUMBERS[z],
+                    mol.nodes.species
+                ))),
                 0,
             )
 
-    gen_path = os.path.join(model_path, "generated/")
-    if not os.path.exists(gen_path):
-        os.makedirs(gen_path)
-    # get untaken filename and store results
-    file_name = os.path.join(gen_path, file_name)
-    if os.path.isfile(file_name + ".mol_dict"):
-        expand = 0
-        while True:
-            expand += 1
-            new_file_name = file_name + "_" + str(expand)
-            if os.path.isfile(new_file_name + ".mol_dict"):
-                continue
-            else:
-                file_name = new_file_name
-                break
-    with open(file_name + ".mol_dict", "wb") as f:
-        pickle.dump(generated, f)
+    if save:
+        gen_path = os.path.join(model_path, "generated/")
+        if not os.path.exists(gen_path):
+            os.makedirs(gen_path)
+        # get untaken filename and store results
+        file_name = os.path.join(gen_path, file_name)
+        if os.path.isfile(file_name + ".mol_dict"):
+            expand = 0
+            while True:
+                expand += 1
+                new_file_name = file_name + "_" + str(expand)
+                if os.path.isfile(new_file_name + ".mol_dict"):
+                    continue
+                else:
+                    file_name = new_file_name
+                    break
+        with open(file_name + ".mol_dict", "wb") as f:
+            pickle.dump(generated, f)
 
     return generated
+
+
+def update_dict(d, d_upd):
+    '''
+    Updates a dictionary of numpy.ndarray with values from another dictionary of the
+    same kind. If a key is present in both dictionaries, the array of the second
+    dictionary is appended to the array of the first one and saved under that key in
+    the first dictionary.
+    Args:
+        d (dict of numpy.ndarray): dictionary to be updated
+        d_upd (dict of numpy.ndarray): dictionary with new values for updating
+
+    Also from G-SchNet
+    '''
+    for key in d_upd:
+        if key not in d:
+            d[key] = d_upd[key]
+        else:
+            for k in d_upd[key]:
+                d[key][k] = np.append(d[key][k], d_upd[key][k], 0)

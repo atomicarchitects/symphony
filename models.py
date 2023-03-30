@@ -19,6 +19,13 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
+def get_atomic_numbers(species: jnp.ndarray, atomic_numbers=jnp.array([1, 6, 7, 8, 9])):
+    numbers = []
+    for i in species:
+        numbers.append(atomic_numbers[i])
+    return jnp.array(numbers)
+
+
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     """Returns the indices of the focus nodes in each graph."""
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
