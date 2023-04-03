@@ -18,7 +18,6 @@ import numpy as np
 import jraph
 import ml_collections
 
-from utility_classes import Molecule, ConnectivityCompressor
 import datatypes
 import models
 
