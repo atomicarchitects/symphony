@@ -236,7 +236,7 @@ def load_from_workdir(
     )
 
 
-def to_mol_dict(dataset, save=True, model_path=None):
+def dataset_to_mol_dict(dataset, save=True, model_path=None):
     generated_dict = {}
     data_iter = dataset.as_numpy_iterator()
     for graph in data_iter:

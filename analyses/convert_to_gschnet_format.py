@@ -32,16 +32,13 @@ def main(argv):
         metrics_for_best_state,
     ) = analysis.load_from_workdir(FLAGS.workdir)
 
-    cutoff = 5.0
-    key = jax.random.PRNGKey(0)
-    epsilon = 1e-4
+    key = jax.random.PRNGKey(config.rng_seed)
 
     qm9_datasets = input_pipeline_tf.get_datasets(key, config)
-    example_graph = next(qm9_datasets["test"].as_numpy_iterator())
-    frag = datatypes.Fragments.from_graphstuple(example_graph)
-    frag = jax.tree_map(jnp.asarray, frag)
 
-    generated_dict = analysis.to_mol_dict(frag, "workdirs", "generated_single_frag")
+    generated_dict = analysis.to_mol_dict(
+        qm9_datasets["test"], "workdirs", "generated_single_frag"
+    )
 
 
 if __name__ == "__main__":

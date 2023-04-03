@@ -14,7 +14,7 @@ def get_root_dir() -> Optional[str]:
         return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
     elif username == "songk":
         return (
-            "/home/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
+            "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
         )
     return None
 
