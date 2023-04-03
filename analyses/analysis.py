@@ -51,7 +51,7 @@ def get_results_as_dataframe(
 
     def extract_hyperparameters(
         config: ml_collections.ConfigDict,
-    ) -> Tuple[int, int, int]:
+    ) -> Tuple[int, int, int, int]:
         """Returns the hyperparameters extracted from the config."""
 
         if "num_interactions" in config:
@@ -67,7 +67,10 @@ def get_results_as_dataframe(
             num_channels = config.n_atom_basis
             assert num_channels == config.n_filters
 
-        return num_interactions, max_l, num_channels
+        num_train_molecules = config.train_molecules[1] - config.train_molecules[0]
+
+        return num_interactions, max_l, num_channels, num_train_molecules
+
 
     results = {"val": [], "test": []}
     for model in models:
@@ -84,14 +87,14 @@ def get_results_as_dataframe(
                 continue
 
             num_params = sum(jax.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
-            num_interactions, max_l, num_channels = extract_hyperparameters(config)
+            num_interactions, max_l, num_channels, num_train_molecules = extract_hyperparameters(config)
 
             for split in results:
                 metrics_for_split = [
                     metrics_for_best_state[split][metric] for metric in metrics
                 ]
                 results[split].append(
-                    [model, num_interactions, max_l, num_channels, num_params]
+                    [model, num_interactions, max_l, num_channels, num_train_molecules, num_params]
                     + metrics_for_split
                 )
 
@@ -99,7 +102,7 @@ def get_results_as_dataframe(
         results[split] = np.array(results[split])
         results[split] = pd.DataFrame(
             results[split],
-            columns=["model", "num_interactions", "max_l", "num_channels", "num_params"]
+            columns=["model", "num_interactions", "max_l", "num_channels", "num_train_molecules", "num_params"]
             + metrics,
         )
         results[split] = results[split].astype(
@@ -108,6 +111,7 @@ def get_results_as_dataframe(
                 "num_interactions": int,
                 "max_l": int,
                 "num_channels": int,
+                "num_train_molecules": int,
                 "num_params": int,
                 **{metric: float for metric in metrics},
             }
