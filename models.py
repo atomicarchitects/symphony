@@ -756,9 +756,171 @@ class Predictor(hk.Module):
             n_edge=graphs.n_edge,
         )
 
+    def get_beamlined_evaluation_predictions(
+        self,
+        graphs: datatypes.Fragments,
+        inverse_temperature: float,
+    ) -> datatypes.Predictions:
+        """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
+        rng = hk.next_rng_key()
+
+        # Get the number of graphs and nodes.
+        num_nodes = graphs.nodes.positions.shape[0]
+        num_graphs = graphs.n_node.shape[0]
+
+        # Get the node embeddings.
+        node_embeddings = self.node_embedder(graphs)
+
+        # Compute corresponding focus probabilities.
+        focus_logits = self.focus_predictor(node_embeddings)
+        assert focus_logits.shape == (num_nodes,)
+
+        # Check if we have to stop.
+        segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
+        _, stop_probs = segment_softmax_with_zero(
+            inverse_temperature * focus_logits, segment_ids, num_graphs
+        )
+        rng, stop_rng = jax.random.split(rng)
+        stop = jax.random.bernoulli(stop_rng, stop_probs)
+        assert stop_probs.shape == (num_graphs,)
+        assert stop.shape == (num_graphs,)
+
+        # Get the species logits.
+        target_species_logits = hk.vmap(self.target_species_predictor, split_rng=True)(
+            node_embeddings
+        )
+        assert target_species_logits.shape == (num_nodes, NUM_ELEMENTS)
+
+        # Get the position coefficients.
+        res_beta, res_alpha = (
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
+        )
+
+        def f(x, z):
+            _, position_logits = self.target_position_predictor(x[None, :], z[None])
+            return jax.tree_util.tree_map(lambda x: x[0], position_logits)
+
+        position_logits = hk.vmap(
+            hk.vmap(f, (None, 0), 0, split_rng=True), (0, None), 0, split_rng=True
+        )(node_embeddings, jnp.arange(NUM_ELEMENTS))
+        assert position_logits.shape == (
+            num_nodes,
+            NUM_ELEMENTS,
+            len(RADII),
+            res_beta,
+            res_alpha,
+        ), position_logits.shape
+
+        # Logits of the beamlined distribution.
+        logits = inverse_temperature * jax.tree_util.tree_map(
+            lambda x: (
+                x
+                + target_species_logits[:, :, None, None, None]
+                + focus_logits[:, None, None, None, None]
+            ),
+            position_logits,
+        )
+
+        # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
+        max_logit = jraph.segment_max(
+            jnp.max(logits.grid_values, axis=(1, 2, 3, 4)),
+            segment_ids,
+            num_graphs,
+            indices_are_sorted=True,
+            unique_indices=False,
+        )
+        assert max_logit.shape == (num_graphs,)
+        probs = logits.apply(
+            lambda logit: jnp.exp(
+                logit - max_logit[segment_ids, None, None, None, None]
+            )
+        )  # [num_nodes, num_elements, num_radii, res_beta, res_alpha]
+
+        int_probs = probs.integrate().array.squeeze(
+            axis=-1
+        )  # [num_nodes, num_elements, num_radii]
+
+        p = jnp.sum(int_probs, axis=(1, 2))  # [num_nodes]
+        partition_functions = jraph.segment_sum(
+            p,
+            segment_ids,
+            num_graphs,
+            indices_are_sorted=True,
+            unique_indices=False,
+        )
+        focus_probs = p / partition_functions[segment_ids]
+        assert focus_probs.shape == (num_nodes,)
+
+        # Sample the focus.
+        rng, focus_rng = jax.random.split(rng)
+        focus_indices = segment_sample(focus_probs, segment_ids, num_graphs, focus_rng)
+        assert focus_indices.shape == (num_graphs,)
+
+        # Sample the target species.
+        p = jnp.sum(int_probs, axis=2)[focus_indices]  # [num_graphs, num_elements]
+        rng, target_species_rng = jax.random.split(rng)
+        target_species_rngs = jax.random.split(target_species_rng, num_graphs)
+        target_species = jax.vmap(
+            lambda key, p: jax.random.choice(key, NUM_ELEMENTS, p=p)
+        )(target_species_rngs, p)
+        assert target_species.shape == (num_graphs,)
+
+        # Sample the radius.
+        p = int_probs[focus_indices, target_species]  # [num_graphs, num_radii]
+        rng, radius_rng = jax.random.split(rng)
+        radius_rngs = jax.random.split(radius_rng, num_graphs)
+        radius_indices = jax.vmap(
+            lambda key, p: jax.random.choice(key, len(RADII), p=p)
+        )(
+            radius_rngs, p
+        )  # [num_graphs]
+
+        # Sample angles.
+        p = jax.tree_util.tree_map(
+            lambda x: x[focus_indices, target_species, radius_indices], probs
+        )  # [num_graphs, res_beta, res_alpha]
+
+        rng, angular_rng = jax.random.split(rng)
+        angular_rngs = jax.random.split(angular_rng, num_graphs)
+        beta_indices, alpha_indices = jax.vmap(lambda key, p: p.sample(key))(
+            angular_rngs, p
+        )
+
+        # Combine the radius and angles to get the position vectors.
+        position_vectors = jax.vmap(
+            lambda r, b, a: RADII[r] * probs.grid_vectors[b, a]
+        )(radius_indices, beta_indices, alpha_indices)
+        assert position_vectors.shape == (num_graphs, 3)
+
+        return datatypes.Predictions(
+            nodes=datatypes.NodePredictions(
+                focus_logits=focus_logits,
+                focus_probs=focus_probs,
+                embeddings=node_embeddings,
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                stop_probs=stop_probs,
+                stop=stop,
+                focus_indices=focus_indices,
+                target_species_logits=target_species_logits,
+                target_species_probs=None,
+                target_species=target_species,
+                position_coeffs=None,
+                position_logits=position_logits,
+                position_probs=None,
+                position_vectors=position_vectors,
+            ),
+            senders=graphs.senders,
+            receivers=graphs.receivers,
+            n_node=graphs.n_node,
+            n_edge=graphs.n_edge,
+        )
+
 
 def create_model(
-    config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
+    config: ml_collections.ConfigDict, run_in_evaluation_mode: bool, beamlined: bool
 ) -> hk.Transformed:
     """Create a model as specified by the config."""
 
@@ -838,7 +1000,12 @@ def create_model(
         )
 
         if run_in_evaluation_mode:
-            return predictor.get_evaluation_predictions(graphs, inverse_temperature)
+            if beamlined:
+                return predictor.get_beamlined_evaluation_predictions(
+                    graphs, inverse_temperature
+                )
+            else:
+                return predictor.get_evaluation_predictions(graphs, inverse_temperature)
         else:
             return predictor.get_training_predictions(graphs)
 
