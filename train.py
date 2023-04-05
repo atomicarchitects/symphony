@@ -49,19 +49,25 @@ class EvalMetrics(metrics.Collection):
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     """Adds a prefix to the keys of a dict, returning a new dict."""
-    return {f"{prefix}_{key}": val for key, val in result.items()}
+    return {f"{prefix}/{key}": val for key, val in result.items()}
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     # If a learning rate schedule is specified, use it.
-    if config.get('learning_rate_schedule') is not None:
+    if config.get("learning_rate_schedule") is not None:
         if config.learning_rate_schedule == "constant":
             learning_rate_or_schedule = optax.constant_schedule(config.learning_rate)
         elif config.learning_rate_schedule == "sgdr":
-            num_cycles = 1 + config.num_train_steps // config.learning_rate_schedule_kwargs.decay_steps
+            num_cycles = (
+                1
+                + config.num_train_steps
+                // config.learning_rate_schedule_kwargs.decay_steps
+            )
             learning_rate_or_schedule = optax.sgdr_schedule(
-                cosine_kwargs=[config.learning_rate_schedule_kwargs for _ in range(num_cycles)]
+                cosine_kwargs=[
+                    config.learning_rate_schedule_kwargs for _ in range(num_cycles)
+                ]
             )
     else:
         learning_rate_or_schedule = config.learning_rate
@@ -69,7 +75,9 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     if config.optimizer == "adam":
         return optax.adam(learning_rate=learning_rate_or_schedule)
     if config.optimizer == "sgd":
-        return optax.sgd(learning_rate=learning_rate_or_schedule, momentum=config.momentum)
+        return optax.sgd(
+            learning_rate=learning_rate_or_schedule, momentum=config.momentum
+        )
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
@@ -298,7 +306,6 @@ def evaluate_model(
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
-    num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -308,7 +315,7 @@ def evaluate_model(
         split_metrics = None
 
         # Loop over graphs.
-        for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
+        for graphs in datasets[split].as_numpy_iterator():
             graphs = datatypes.Fragments.from_graphstuple(graphs)
 
             # Compute metrics for this batch.
@@ -343,21 +350,27 @@ def train_and_evaluate(
     # Helper for evaluation.
     def evaluate_model_helper(
         eval_state: train_state.TrainState,
-        num_eval_steps: int,
         step: int,
-        eval_name: str,
         rng: chex.PRNGKey,
+        is_final_eval: bool,
     ) -> Dict[str, metrics.Collection]:
-        splits = ["val", "test"]
-        with report_progress.timed(eval_name):
+        # Final eval splits are usually larger.
+        if is_final_eval:
+            splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
+        else:
+            splits = ["train_eval", "val_eval", "test_eval"]
+
+        # Evaluate the model.
+        with report_progress.timed("eval"):
             eval_metrics = evaluate_model(
                 eval_state,
                 datasets,
                 splits,
                 rng,
                 config.loss_kwargs,
-                num_eval_steps,
             )
+        
+        # Compute and write metrics.
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
             writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
@@ -461,30 +474,37 @@ def train_and_evaluate(
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             eval_state = eval_state.replace(params=state.params)
-            num_eval_steps = config.num_eval_steps
 
             # Evaluate on validation and test splits.
             rng, eval_rng = jax.random.split(rng)
             eval_metrics = evaluate_model_helper(
-                eval_state, num_eval_steps, step, "eval", eval_rng
+                eval_state,
+                step,
+                eval_rng,
+                is_final_eval=False,
             )
 
             # Note best state seen so far.
             # Best state is defined as the state with the lowest validation loss.
-            if eval_metrics["val"]["total_loss"] < min_val_loss:
-                min_val_loss = eval_metrics["val"]["total_loss"]
+            if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+                min_val_loss = eval_metrics["val_eval"]["total_loss"]
                 best_state = state
                 step_for_best_state = step
 
     # Once training is complete, return the best state and corresponding metrics.
-    logging.info("Evaluating best state from step %d at the end of training.", step_for_best_state)
+    logging.info(
+        "Evaluating best state from step %d at the end of training.",
+        step_for_best_state,
+    )
     eval_state = eval_state.replace(params=best_state.params)
-    num_eval_steps = config.num_eval_steps_at_end_of_training
 
     # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
     metrics_for_best_state = evaluate_model_helper(
-        eval_state, num_eval_steps, step + 1, "eval_final", eval_rng
+        eval_state,
+        step,
+        eval_rng,
+        is_final_eval=True,
     )
 
     # Checkpoint the best state and corresponding metrics seen during training.
@@ -497,7 +517,6 @@ def train_and_evaluate(
                 "best_state": best_state,
                 "metrics_for_best_state": metrics_for_best_state,
                 "step_for_best_state": step_for_best_state,
-                "evaluated_on_entire_val_and_test_splits": num_eval_steps,
             }
         )
 

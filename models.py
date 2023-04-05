@@ -19,6 +19,13 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
+def get_atomic_numbers(species: jnp.ndarray, atomic_numbers=jnp.array([1, 6, 7, 8, 9])):
+    numbers = []
+    for i in species:
+        numbers.append(atomic_numbers[i])
+    return jnp.array(numbers)
+
+
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     """Returns the indices of the focus nodes in each graph."""
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
@@ -529,7 +536,6 @@ class Predictor(hk.Module):
     focus_predictor: FocusPredictor
     target_species_predictor: TargetSpeciesPredictor
     target_position_predictor: TargetPositionPredictor
-    run_in_evaluation_mode: bool
 
     def __init__(
         self,
@@ -537,7 +543,6 @@ class Predictor(hk.Module):
         focus_predictor: hk.Module,
         target_species_predictor: hk.Module,
         target_position_predictor: hk.Module,
-        run_in_evaluation_mode: bool,
         name: str = None,
     ):
         super().__init__(name=name)
@@ -545,7 +550,6 @@ class Predictor(hk.Module):
         self.focus_predictor = focus_predictor
         self.target_species_predictor = target_species_predictor
         self.target_position_predictor = target_position_predictor
-        self.run_in_evaluation_mode = run_in_evaluation_mode
 
     def get_training_predictions(
         self, graphs: datatypes.Fragments
@@ -624,7 +628,7 @@ class Predictor(hk.Module):
         )
 
     def get_evaluation_predictions(
-        self, graphs: datatypes.Fragments
+        self, graphs: datatypes.Fragments, inverse_temperature: float
     ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
@@ -638,7 +642,7 @@ class Predictor(hk.Module):
         # Compute corresponding focus probabilities.
         focus_logits = self.focus_predictor(node_embeddings)
         focus_probs, stop_probs = segment_softmax_with_zero(
-            focus_logits, segment_ids, num_graphs
+            inverse_temperature * focus_logits, segment_ids, num_graphs
         )
 
         # Get the PRNG key.
@@ -657,7 +661,9 @@ class Predictor(hk.Module):
 
         # Get the species logits.
         target_species_logits = self.target_species_predictor(focus_node_embeddings)
-        target_species_probs = jax.nn.softmax(target_species_logits)
+        target_species_probs = jax.nn.softmax(
+            inverse_temperature * target_species_logits
+        )
 
         # Sample the target species.
         rng, species_rng = jax.random.split(rng)
@@ -673,11 +679,11 @@ class Predictor(hk.Module):
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_max = jnp.max(
+        max_logit = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
         position_probs = position_logits.apply(
-            lambda pos: jnp.exp(pos - position_max)
+            lambda logit: jnp.exp(inverse_temperature * (logit - max_logit))
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         radii_probs = position_probs.integrate().array.squeeze(
@@ -750,11 +756,6 @@ class Predictor(hk.Module):
             n_edge=graphs.n_edge,
         )
 
-    def __call__(self, graphs: datatypes.Fragments) -> datatypes.Predictions:
-        if self.run_in_evaluation_mode:
-            return self.get_evaluation_predictions(graphs)
-        return self.get_training_predictions(graphs)
-
 
 def create_model(
     config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
@@ -768,7 +769,9 @@ def create_model(
             return shifted_softplus
         return getattr(jax.nn, activation)
 
-    def model_fn(graphs: datatypes.Fragments) -> datatypes.Predictions:
+    def model_fn(
+        graphs: datatypes.Fragments, inverse_temperature: float = 1.0
+    ) -> datatypes.Predictions:
         """Defines the entire network."""
 
         if config.model == "MACE":
@@ -827,12 +830,16 @@ def create_model(
             res_beta=config.target_position_predictor.res_beta,
             res_alpha=config.target_position_predictor.res_alpha,
         )
-        return Predictor(
+        predictor = Predictor(
             node_embedder=node_embedder,
             focus_predictor=focus_predictor,
             target_species_predictor=target_species_predictor,
             target_position_predictor=target_position_predictor,
-            run_in_evaluation_mode=run_in_evaluation_mode,
-        )(graphs)
+        )
+
+        if run_in_evaluation_mode:
+            return predictor.get_evaluation_predictions(graphs, inverse_temperature)
+        else:
+            return predictor.get_training_predictions(graphs)
 
     return hk.transform(model_fn)

@@ -44,32 +44,40 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
     return casted_dictionary
 
 
+def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
+    """Flattens a nested config into a Pandas dataframe."""
+
+    # Compatibility with old configs.
+    if "num_interactions" not in config:
+        config.num_interactions = config.n_interactions
+        del config.n_interactions
+
+    if "num_channels" not in config:
+        config.num_channels = config.n_atom_basis
+        assert config.num_channels == config.n_filters
+        del config.n_atom_basis, config.n_filters
+
+    #config.num_train_molecules = config.train_molecules[1] - config.train_molecules[0]
+
+    def iterate_with_prefix(dictionary: Dict[str, Any], prefix: str):
+        """Iterates through a nested dictionary, yielding the flattened and prefixed keys and values."""
+        for k, v in dictionary.items():
+            if isinstance(v, dict):
+                yield from iterate_with_prefix(v, prefix=f"{prefix}{k}.")
+            else:
+                yield prefix + k, v
+
+    config_dict = dict(iterate_with_prefix(config.to_dict(), "config."))
+    return pd.DataFrame().from_dict(config_dict)
+
+
 def get_results_as_dataframe(
     models: Sequence[str], metrics: Sequence[str], basedir: str
 ) -> Dict[str, pd.DataFrame]:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
-    def extract_hyperparameters(
-        config: ml_collections.ConfigDict,
-    ) -> Tuple[int, int, int]:
-        """Returns the hyperparameters extracted from the config."""
 
-        if "num_interactions" in config:
-            num_interactions = config.num_interactions
-        else:
-            num_interactions = config.n_interactions
-
-        max_l = config.max_ell
-
-        if "num_channels" in config:
-            num_channels = config.num_channels
-        else:
-            num_channels = config.n_atom_basis
-            assert num_channels == config.n_filters
-
-        return num_interactions, max_l, num_channels
-
-    results = {"val": [], "test": []}
+    results = {"val": pd.DataFrame(), "test": pd.DataFrame()}
     for model in models:
         for config_file_path in glob.glob(
             os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
@@ -83,35 +91,22 @@ def get_results_as_dataframe(
                 logging.warning(f"Skipping {workdir} because it is incomplete.")
                 continue
 
-            num_params = sum(jax.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
-            num_interactions, max_l, num_channels = extract_hyperparameters(config)
-
+            num_params = sum(jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
+            config_df = config_to_dataframe(config)
+            other_df = pd.DataFrame.from_dict({
+                "model": [config.model.lower()],
+                "max_l": [config.max_ell],
+                "num_params": [num_params],
+                "num_train_molecules": [config.train_molecules[1] - config.train_molecules[0]],
+            })
             for split in results:
-                metrics_for_split = [
-                    metrics_for_best_state[split][metric] for metric in metrics
-                ]
-                results[split].append(
-                    [model, num_interactions, max_l, num_channels, num_params]
-                    + metrics_for_split
-                )
-
-    for split in results:
-        results[split] = np.array(results[split])
-        results[split] = pd.DataFrame(
-            results[split],
-            columns=["model", "num_interactions", "max_l", "num_channels", "num_params"]
-            + metrics,
-        )
-        results[split] = results[split].astype(
-            {
-                "model": str,
-                "num_interactions": int,
-                "max_l": int,
-                "num_channels": int,
-                "num_params": int,
-                **{metric: float for metric in metrics},
-            }
-        )
+                metrics_for_split = {
+                    metric: [metrics_for_best_state[split][metric].item()] for metric in metrics
+                }
+                metrics_df = pd.DataFrame.from_dict(metrics_for_split)
+                df = pd.merge(config_df, metrics_df, left_index=True, right_index=True)
+                df = pd.merge(df, other_df, left_index=True, right_index=True)
+                results[split] = pd.concat([results[split], df], ignore_index=True)
 
     return results
 
@@ -154,6 +149,7 @@ def load_from_workdir(
     workdir: str,
     load_pickled_params: bool = True,
     init_graphs: Optional[jraph.GraphsTuple] = None,
+
 ) -> Tuple[
     ml_collections.ConfigDict,
     train_state.TrainState,
@@ -236,67 +232,85 @@ def load_from_workdir(
     )
 
 
-def to_db(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
-    raise NotImplementedError("to_db() is not implemented yet.")
+def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):
+    """Converts a dataset of Fragments to a dictionary of molecules."""
+
+    generated_dict = {}
+    data_iter = dataset.as_numpy_iterator()
+    for graph in data_iter:
+        frag = datatypes.Fragments.from_graphstuple(graph)
+        frag = jax.tree_map(jnp.asarray, frag)
+        update_dict(generated_dict, frag_to_mol_dict(frag))
+    if save:
+        gen_path = os.path.join(model_path, "generated/")
+        if not os.path.exists(gen_path):
+            os.makedirs(gen_path)
+        # get untaken filename and store results
+        file_name = os.path.join(gen_path, file_name)
+        if os.path.isfile(file_name + ".mol_dict"):
+            expand = 0
+            while True:
+                expand += 1
+                new_file_name = file_name + "_" + str(expand)
+                if os.path.isfile(new_file_name + ".mol_dict"):
+                    continue
+                else:
+                    file_name = new_file_name
+                    break
+        with open(file_name + ".mol_dict", "wb") as f:
+            pickle.dump(generated_dict, f)
+    return generated_dict
 
 
-def to_mol_dict(generated_frag: datatypes.Fragments, model_path: str, file_name: str):
-    first_index = np.asarray(
-        jnp.concatenate([jnp.array([0]), jnp.cumsum(generated_frag.n_node)])
-    )
-    positions = np.asarray(generated_frag.nodes.positions)
-    species = np.asarray(
-        list(
-            map(
-                lambda z: models.ATOMIC_NUMBERS[z],
-                generated_frag.nodes.species.tolist(),
-            )
-        )
-    )
+def frag_to_mol_dict(generated_frag: datatypes.Fragments) -> Dict[int, Dict[str, np.ndarray]]:
+    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
 
     generated = (
         {}
-    )  # G-SchNet seems to expect this to be a dictionary with int keys and dictionary values
-    # is this supposed to be one sequence of generated fragments at a time, or can multiple mols be considered?
-    for i in range(len(first_index) - 1):
-        k = int(first_index[i + 1] - first_index[i])
-        if k not in generated:
-            generated[k] = {
-                "_positions": np.array(
-                    [positions[first_index[i] : first_index[i + 1]]]
-                ),
-                "_atomic_numbers": np.array(
-                    [species[first_index[i] : first_index[i + 1]]]
-                ),
+    )
+    for mol in jraph.unbatch(generated_frag):
+        l = mol.nodes.species.shape[0]
+        if l not in generated:
+            generated[l] = {
+                "_positions": np.array([mol.nodes.positions]),
+                "_atomic_numbers": np.array([list(map(
+                    lambda z: models.ATOMIC_NUMBERS[z],
+                    mol.nodes.species
+                ))]),
             }
         else:
-            generated[k]["_positions"] = np.append(
-                generated[k]["_positions"],
-                [positions[first_index[i] : first_index[i + 1]]],
+            generated[l]["_positions"] = np.append(
+                generated[l]["_positions"],
+                np.array([mol.nodes.positions]),
                 0,
             )
-            generated[k]["_atomic_numbers"] = np.append(
-                generated[k]["_atomic_numbers"],
-                [species[first_index[i] : first_index[i + 1]]],
+            generated[l]["_atomic_numbers"] = np.append(
+                generated[l]["_atomic_numbers"],
+                np.array([list(map(
+                    lambda z: models.ATOMIC_NUMBERS[z],
+                    mol.nodes.species
+                ))]),
                 0,
             )
-
-    gen_path = os.path.join(model_path, "generated/")
-    if not os.path.exists(gen_path):
-        os.makedirs(gen_path)
-    # get untaken filename and store results
-    file_name = os.path.join(gen_path, file_name)
-    if os.path.isfile(file_name + ".mol_dict"):
-        expand = 0
-        while True:
-            expand += 1
-            new_file_name = file_name + "_" + str(expand)
-            if os.path.isfile(new_file_name + ".mol_dict"):
-                continue
-            else:
-                file_name = new_file_name
-                break
-    with open(file_name + ".mol_dict", "wb") as f:
-        pickle.dump(generated, f)
 
     return generated
+
+
+def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
+    '''
+    Updates a dictionary of numpy.ndarray with values from another dictionary of the
+    same kind. If a key is present in both dictionaries, the array of the second
+    dictionary is appended to the array of the first one and saved under that key in
+    the first dictionary.
+    Args:
+        d (dict of numpy.ndarray): dictionary to be updated
+        d_upd (dict of numpy.ndarray): dictionary with new values for updating
+
+    Also from G-SchNet
+    '''
+    for key in d_upd:
+        if key not in d:
+            d[key] = d_upd[key]
+        else:
+            for k in d_upd[key]:
+                d[key][k] = np.append(d[key][k], d_upd[key][k], 0)

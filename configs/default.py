@@ -34,8 +34,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.learning_rate = 1e-3
     config.learning_rate_schedule = "sgdr"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
-    config.learning_rate_schedule_kwargs.init_value = config.get_ref('learning_rate')
-    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref('learning_rate')
+    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
+    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
+        "learning_rate"
+    )
     config.learning_rate_schedule_kwargs.warmup_steps = 100
     config.learning_rate_schedule_kwargs.decay_steps = 1000
 
@@ -58,14 +60,14 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()
     config.focus_predictor.latent_size = 128
-    config.focus_predictor.num_layers = 2
+    config.focus_predictor.num_layers = 3
 
     config.target_species_predictor = ml_collections.ConfigDict()
     config.target_species_predictor.latent_size = 128
-    config.target_species_predictor.num_layers = 2
+    config.target_species_predictor.num_layers = 3
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.res_beta = 30
-    config.target_position_predictor.res_alpha = 51
+    config.target_position_predictor.res_beta = 180
+    config.target_position_predictor.res_alpha = 359
 
     return config
