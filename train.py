@@ -49,7 +49,7 @@ class EvalMetrics(metrics.Collection):
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     """Adds a prefix to the keys of a dict, returning a new dict."""
-    return {f"{prefix}_{key}": val for key, val in result.items()}
+    return {f"{prefix}/{key}": val for key, val in result.items()}
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
@@ -306,7 +306,6 @@ def evaluate_model(
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
-    num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -316,7 +315,7 @@ def evaluate_model(
         split_metrics = None
 
         # Loop over graphs.
-        for graphs in datasets[split].take(num_eval_steps).as_numpy_iterator():
+        for graphs in datasets[split].as_numpy_iterator():
             graphs = datatypes.Fragments.from_graphstuple(graphs)
 
             # Compute metrics for this batch.
@@ -351,30 +350,30 @@ def train_and_evaluate(
     # Helper for evaluation.
     def evaluate_model_helper(
         eval_state: train_state.TrainState,
-        num_eval_steps: int,
         step: int,
         rng: chex.PRNGKey,
         is_final_eval: bool,
     ) -> Dict[str, metrics.Collection]:
-        # Since the final eval is usually longer, we give it a different name.
+        # Final eval splits are usually larger.
         if is_final_eval:
-            eval_name = "final_eval"
+            splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
         else:
-            eval_name = "eval"
-        splits = ["val", "test"]
-        with report_progress.timed(eval_name):
+            splits = ["train_eval", "val_eval", "test_eval"]
+
+        # Evaluate the model.
+        with report_progress.timed("eval"):
             eval_metrics = evaluate_model(
                 eval_state,
                 datasets,
                 splits,
                 rng,
                 config.loss_kwargs,
-                num_eval_steps,
             )
+        
+        # Compute and write metrics.
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
-            prefix = split + "_final" if is_final_eval else split
-            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], prefix))
+            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
         writer.flush()
         return eval_metrics
 
@@ -475,13 +474,11 @@ def train_and_evaluate(
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or is_last_step:
             eval_state = eval_state.replace(params=state.params)
-            num_eval_steps = config.num_eval_steps
 
             # Evaluate on validation and test splits.
             rng, eval_rng = jax.random.split(rng)
             eval_metrics = evaluate_model_helper(
                 eval_state,
-                num_eval_steps,
                 step,
                 eval_rng,
                 is_final_eval=False,
@@ -489,8 +486,8 @@ def train_and_evaluate(
 
             # Note best state seen so far.
             # Best state is defined as the state with the lowest validation loss.
-            if eval_metrics["val"]["total_loss"] < min_val_loss:
-                min_val_loss = eval_metrics["val"]["total_loss"]
+            if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+                min_val_loss = eval_metrics["val_eval"]["total_loss"]
                 best_state = state
                 step_for_best_state = step
 
@@ -500,13 +497,11 @@ def train_and_evaluate(
         step_for_best_state,
     )
     eval_state = eval_state.replace(params=best_state.params)
-    num_eval_steps = config.num_eval_steps_at_end_of_training
 
     # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
     metrics_for_best_state = evaluate_model_helper(
         eval_state,
-        num_eval_steps,
         step,
         eval_rng,
         is_final_eval=True,
@@ -522,7 +517,6 @@ def train_and_evaluate(
                 "best_state": best_state,
                 "metrics_for_best_state": metrics_for_best_state,
                 "step_for_best_state": step_for_best_state,
-                "evaluated_on_entire_val_and_test_splits": num_eval_steps,
             }
         )
 
