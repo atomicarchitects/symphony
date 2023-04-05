@@ -20,6 +20,7 @@ import ml_collections
 
 import datatypes
 import models
+import utility_classes
 
 
 def get_datasets(
@@ -231,13 +232,12 @@ def dataset_as_db(config: ml_collections.ConfigDict, dbpath: str):
         config.val_molecules,
         config.test_molecules,
     )
-    compressor = ConnectivityCompressor()
+    compressor = utility_classes.ConnectivityCompressor()
     with connect(dbpath) as conn:
         for mol in datasets['train'].as_numpy_iterator():
             atoms = Atoms(positions=mol['positions'], numbers=models.get_atomic_numbers(mol['species']))
-            conn.write(atoms)
             # instantiate utility_classes.Molecule object
-            mol = Molecule(atoms.positions, atoms.numbers)
+            mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
             # get connectivity matrix (detecting bond orders with Open Babel)
             con_mat = mol.get_connectivity()
             conn.write(
