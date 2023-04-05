@@ -12,6 +12,7 @@ import jraph
 import ml_collections
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 import yaml
 from absl import logging
 from clu import checkpoint
@@ -24,6 +25,9 @@ import input_pipeline_tf  # noqa: E402
 import models  # noqa: E402
 import train  # noqa: E402
 from configs import default  # noqa: E402
+
+
+tf.config.experimental.set_visible_devices([], "GPU")
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
