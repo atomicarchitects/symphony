@@ -95,7 +95,7 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
             molecules.append(molecule)
 
     # Save molecules.
-    outputdir = os.path.join(outputdir, name, f"beta={beta}", "generated")
+    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}", "generated")
     os.makedirs(outputdir, exist_ok=True)
     for seed, molecule in enumerate(molecules):
         ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
@@ -112,13 +112,13 @@ def main(unused_argv: Sequence[str]) -> None:
 
 
 if __name__ == "__main__":
-    flags.DEFINE_string("workdir", None, "Workdir for molecules.")
+    flags.DEFINE_string("workdir", None, "Workdir for model.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses", "molecules"),
+        os.path.join(os.getcwd(), "analyses"),
         "Directory where molecules should be saved.",
     )
-    flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
+    flags.DEFINE_float("beta", 1., "Inverse temperature value for sampling.")
 
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

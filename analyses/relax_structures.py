@@ -1,17 +1,33 @@
 """Relaxes structures using ASE."""
 
-from typing import Tuple, Sequence
+from typing import Tuple, Sequence, Optional
 
 from ase import Atoms
 from ase.optimize import BFGS
 from ase.calculators.emt import EMT
-from ase.calculators.psi4 import Psi4
 import ase.io
 import os
 import pandas as pd
 from absl import app
 from absl import flags
 from absl import logging
+
+# Try to import ORCA and Psi4 calculators
+AVAILABLE_CALCULATORS = []
+try:
+    from ase.calculators.orca import ORCA
+    ORCA()
+    logging.info("Found ORCA calculator")
+    AVAILABLE_CALCULATORS.append("ORCA")
+except ImportError:
+    pass
+try:
+    from ase.calculators.psi4 import Psi4
+    Psi4()
+    logging.info("Found Psi4 calculator")
+    AVAILABLE_CALCULATORS.append("PSI4")
+except ImportError:
+    pass
 
 FLAGS = flags.FLAGS
 
@@ -45,10 +61,18 @@ def relax_all_structures(moldir: str, outputdir: str) -> pd.DataFrame:
     return results
 
 
-def relax_structure(molecule: ase.Atoms, output_file: str) -> Tuple[float, float, float]:
+def relax_structure(molecule: ase.Atoms, output_file: str, calculator: Optional[str] = None) -> Tuple[float, float, float]:
     """Relaxes a structure using ASE, saving the trajectory to a file."""
+    if calculator not in AVAILABLE_CALCULATORS:
+        if calculator is not None:
+            logging.info("Calculator %s not available, using first available calculator from %s.", calculator, AVAILABLE_CALCULATORS)
+        calculator = AVAILABLE_CALCULATORS[0]
+
+    if calculator == "ORCA":
+        molecule.calc = ORCA(label='orcarun', orcasimpleinput='B3LYP', orcablocks='%pal nprocs 8 end')
+    elif calculator == "PSI4":
+        molecule.calc = Psi4(method='b3lyp', basis='6-31g_2df_p_', memory='4000MB', threads=1)
     
-    molecule.calc = Psi4(method='b3lyp', basis='6-311g_d_p_', memory='4000MB', threads=1)
     dyn = BFGS(molecule, trajectory=output_file)
     dyn.run(fmax=0.001)
 
@@ -63,9 +87,12 @@ def relax_structure(molecule: ase.Atoms, output_file: str) -> Tuple[float, float
 def main(unused_argv: Sequence[str]):
     del unused_argv
 
-    moldir = FLAGS.moldir
-    workdir = moldir[moldir.find("molecules") + len("molecules/"):]
-    outputdir = os.path.join(FLAGS.outputdir, workdir)
+    workdir = FLAGS.workdir
+    index = workdir.find("workdirs") + len("workdirs/")
+    name = workdir[index:]
+    moldir = os.path.join(FLAGS.outputdir, "molecules", name, f"beta={FLAGS.beta}", "generated")
+
+    outputdir = os.path.join(FLAGS.outputdir, "relaxations", workdir)
     os.makedirs(outputdir, exist_ok=True)
 
     results = relax_all_structures(moldir, outputdir)
@@ -74,12 +101,14 @@ def main(unused_argv: Sequence[str]):
 
 
 if __name__ == "__main__":
-    flags.DEFINE_string("moldir", None, "Directory of generated molecules.")
+    flags.DEFINE_string("workdir", None, "Workdir for model.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses", "relaxations"),
-        "Directory where output relaxation trajectories should be saved.",
+        os.path.join(os.getcwd(), "analyses"),
+        "Directory where molecules should be saved.",
     )
+    flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
 
-    flags.mark_flags_as_required(["moldir"])
+
+    flags.mark_flags_as_required(["workdir"])
     app.run(main)
