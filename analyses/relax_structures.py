@@ -5,6 +5,7 @@ from typing import Tuple, Sequence
 from ase import Atoms
 from ase.optimize import BFGS
 from ase.calculators.emt import EMT
+from ase.calculators.psi4 import Psi4
 import ase.io
 import os
 import pandas as pd
@@ -47,7 +48,7 @@ def relax_all_structures(moldir: str, outputdir: str) -> pd.DataFrame:
 def relax_structure(molecule: ase.Atoms, output_file: str) -> Tuple[float, float, float]:
     """Relaxes a structure using ASE, saving the trajectory to a file."""
     
-    molecule.calc = EMT()
+    molecule.calc = Psi4(method='b3lyp', basis='6-311g_d_p_', memory=1000, threads=1)
     dyn = BFGS(molecule, trajectory=output_file)
     dyn.run(fmax=0.001)
 
