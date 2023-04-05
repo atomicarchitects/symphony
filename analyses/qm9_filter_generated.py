@@ -85,6 +85,7 @@ def get_parser():
                              help='Number of threads used (set to 0 to run '
                                   'everything sequentially in the main thread,'
                                   ' default: %(default)s)')
+    main_parser.add_argument('--use_con_mat', type=bool, default=True)
 
     return main_parser
 
@@ -635,7 +636,7 @@ def check_valency(positions, numbers, valence, filter_by_valency=True,
 
 
 def filter_new(mols, stats, stat_heads, model_path, train_data_path, print_file=False,
-               n_threads=0):
+               n_threads=0, use_con_mat=True):
     '''
     Check whether generated molecules correspond to structures in the training database
     used for either training, validation, or as test data and update statistics array of
@@ -689,12 +690,12 @@ def filter_new(mols, stats, stat_heads, model_path, train_data_path, print_file=
     start_time = time.time()
     if n_threads <= 0:
         train_fps = _get_training_fingerprints(dbpath, train_idx, print_file,
-                                               use_con_mat=True)
+                                               use_con_mat=use_con_mat)
     else:
         train_fps = {'fingerprints': [None for _ in range(len(train_idx))]}
         run_threaded(_get_training_fingerprints,
                      {'train_idx': train_idx},
-                     {'dbpath': dbpath, 'use_bits': True, 'use_con_mat': True},
+                     {'dbpath': dbpath, 'use_bits': True, 'use_con_mat': use_con_mat},
                      train_fps,
                      exclusive_kwargs={'print_file': print_file},
                      n_threads=n_threads)
@@ -1194,7 +1195,7 @@ if __name__ == '__main__':
     if args.model_path is not None:
         stats = filter_new(all_mols, stats, stat_heads, args.model_path,
                            args.train_data_path, print_file=print_file,
-                           n_threads=args.threads)
+                           n_threads=args.threads, use_con_mat=args.use_con_mat)
         res.update({'stats': stats})
 
     # shrink results dictionary (remove invalid attempts, known molecules and
