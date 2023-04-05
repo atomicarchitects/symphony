@@ -323,19 +323,19 @@ def main(argv):
     # Get results.
     basedir = os.path.abspath(FLAGS.basedir)
     results = analysis.get_results_as_dataframe(ALL_MODELS, ALL_METRICS, basedir)
-    print(results)
+
     # Make plots.
     if os.path.basename(basedir).startswith("v"):
 
         # Extract version from basedir.
         version = os.path.basename(basedir)
-        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), version)
+        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "plots", version)
 
         plot_performance_for_max_ell(ALL_METRICS, results, outputdir)
         plot_performance_for_parameters(ALL_METRICS, results, outputdir)
 
     if os.path.basename(basedir) == "sample_complexity":
-        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "extras", "sample_complexity")
+        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "plots", "extras", "sample_complexity")
 
         plot_sample_complexity_curves(ALL_METRICS, results, outputdir)
 
@@ -344,7 +344,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("basedir", None, "Directory where all workdirs are stored.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses", "plots"),
+        os.path.join(os.getcwd(), "analyses"),
         "Directory where plots should be saved.",
     )
 
