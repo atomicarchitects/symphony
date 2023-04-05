@@ -227,10 +227,7 @@ def get_raw_qm9_datasets(
 
 def dataset_as_db(config: ml_collections.ConfigDict, dbpath: str):
     datasets = get_raw_qm9_datasets(
-        config.root_dir,
-        config.train_molecules,
-        config.val_molecules,
-        config.test_molecules,
+        config
     )
     compressor = utility_classes.ConnectivityCompressor()
     with connect(dbpath) as conn:
