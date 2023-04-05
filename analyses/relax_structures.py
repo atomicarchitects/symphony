@@ -48,7 +48,7 @@ def relax_all_structures(moldir: str, outputdir: str) -> pd.DataFrame:
 def relax_structure(molecule: ase.Atoms, output_file: str) -> Tuple[float, float, float]:
     """Relaxes a structure using ASE, saving the trajectory to a file."""
     
-    molecule.calc = Psi4(method='b3lyp', basis='6-311g_d_p_', memory=1000, threads=1)
+    molecule.calc = Psi4(method='b3lyp', basis='6-311g_d_p_', memory='4000MB', threads=1)
     dyn = BFGS(molecule, trajectory=output_file)
     dyn.run(fmax=0.001)
 
