@@ -1,47 +1,84 @@
+"""Relaxes structures using ASE."""
+
+from typing import Tuple, Sequence
+
 from ase import Atoms
 from ase.optimize import BFGS
 from ase.calculators.emt import EMT
 import ase.io
-import numpy as np
 import os
-
+import pandas as pd
 from absl import app
 from absl import flags
+from absl import logging
 
-def main(argv):
-    del argv
-    outfile = 'analyses/H2O.traj'
+FLAGS = flags.FLAGS
 
-    d = 0.9575
-    t = np.pi / 180 * 104.51
-    water = ase.Atoms('H2O',
-                positions=[(d, 0, 0),
-                            (d * np.cos(t), d * np.sin(t), 0),
-                            (0, 0, 0)],
-                calculator=EMT())
+
+def relax_all_structures(moldir: str, outputdir: str) -> pd.DataFrame:
+    """Relaxes all structures in a directory."""
+
+    results = []
+    for atoms_file in os.listdir(moldir):
+        if atoms_file.endswith(".xyz"):
+            input_file = os.path.join(moldir, atoms_file)
+            output_file = os.path.join(outputdir, atoms_file.removesuffix(".xyz") + ".traj")
+
+            molecule = ase.io.read(input_file)
+            init_energy, final_energy, delta_energy = relax_structure(molecule, output_file)
+            formula = molecule.get_chemical_formula(mode='hill')
+            results.append([formula, init_energy, final_energy, delta_energy])
     
-    dyn = BFGS(water, trajectory=outfile)
+    results = pd.DataFrame(
+        results,
+        columns=["formula", "init_energy", "final_energy", "delta_energy"]
+    )
+    results = results.astype(
+        {
+            "formula": str,
+            "init_energy": float,
+            "final_energy": float,
+            "delta_energy": float,
+        }
+    )
+    return results
+
+
+def relax_structure(molecule: ase.Atoms, output_file: str) -> Tuple[float, float, float]:
+    """Relaxes a structure using ASE, saving the trajectory to a file."""
+    
+    molecule.calc = EMT()
+    dyn = BFGS(molecule, trajectory=output_file)
     dyn.run(fmax=0.001)
 
-    traj = ase.io.Trajectory(outfile)
+    traj = ase.io.Trajectory(output_file)
     init_energy = traj[0].get_potential_energy()
     final_energy = traj[-1].get_potential_energy()
-    delta_energy = final_energy - init_energy
+    delta_energy = init_energy - final_energy
 
-    print()
-    print("Relaxation complete.")
-    print(f"* E_init: {init_energy}")
-    print(f"* E_final: {final_energy}")
-    print(f"* Delta E: {delta_energy}")
+    return init_energy, final_energy, delta_energy
+
+
+def main(unused_argv: Sequence[str]):
+    del unused_argv
+
+    moldir = FLAGS.moldir
+    workdir = moldir[moldir.find("molecules") + len("molecules/"):]
+    outputdir = os.path.join(FLAGS.outputdir, workdir)
+    os.makedirs(outputdir, exist_ok=True)
+
+    results = relax_all_structures(moldir, outputdir)
+    logging.info("Relaxation results:")
+    logging.info(results)
 
 
 if __name__ == "__main__":
-    # flags.DEFINE_string("workdir", None, "Workdir.")
-    # flags.DEFINE_string(
-    #     "outputdir",
-    #     os.path.join(os.getcwd(), "analyses", "outputs", "relax_structures"),
-    #     "Directory where plots should be saved.",
-    # )
+    flags.DEFINE_string("moldir", None, "Directory of generated molecules.")
+    flags.DEFINE_string(
+        "outputdir",
+        os.path.join(os.getcwd(), "analyses", "relaxations"),
+        "Directory where output relaxation trajectories should be saved.",
+    )
 
-    # flags.mark_flags_as_required(["basedir"])
+    flags.mark_flags_as_required(["moldir"])
     app.run(main)

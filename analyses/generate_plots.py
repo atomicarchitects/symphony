@@ -7,8 +7,6 @@ from absl import flags
 import os
 import pandas as pd
 import numpy as np
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -259,6 +257,10 @@ def plot_sample_complexity_curves(
             f"{get_title_for_model(model)}: Sample Complexity Curve for {get_title_for_metric(metric)} on {get_title_for_split(split)} Set"
         )
 
+        # Use log-log scale.
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+
         # Extract results for this model.
         df_subset = results[split][results[split]["model"] == model]
 
@@ -285,19 +287,19 @@ def plot_sample_complexity_curves(
             shadow=False,
         )
 
-        # Use log-log scale.
-        # ax.set_xscale("log")
-        # ax.set_yscale("log")
 
         # Axes limits.
         min_y = results[split][metric].min()
         max_y = results[split][metric].max()
-        ax.set_ylim(min_y - 0.2, max_y + 0.2)
+        ax.set_ylim(max(1e-9, min_y - 0.2), max_y + 0.2)
+        ax.set_yticks(np.arange(1, 10))
+        ax.set_yticklabels(np.arange(1, 10))
+        ax.set_xticks([2000, 4000, 8000, 16000, 32000, 64000])
+        ax.set_xticklabels([2000, 4000, 8000, 16000, 32000, 64000])
 
         # Labels and titles.
         ax.set_ylabel(get_title_for_metric(metric))
         ax.set_xlabel("Number of Training Molecules")
-        # ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 
         # Save figure.
         os.makedirs(outputdir, exist_ok=True)
@@ -321,7 +323,7 @@ def main(argv):
     # Get results.
     basedir = os.path.abspath(FLAGS.basedir)
     results = analysis.get_results_as_dataframe(ALL_MODELS, ALL_METRICS, basedir)
-
+    print(results)
     # Make plots.
     if os.path.basename(basedir).startswith("v"):
 
@@ -342,7 +344,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("basedir", None, "Directory where all workdirs are stored.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses", "outputs"),
+        os.path.join(os.getcwd(), "analyses", "plots"),
         "Directory where plots should be saved.",
     )
 
