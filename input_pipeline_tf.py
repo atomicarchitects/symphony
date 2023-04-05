@@ -30,10 +30,7 @@ def get_datasets(
 
     # Get the raw datasets.
     datasets = get_raw_qm9_datasets(
-        config.root_dir,
-        config.train_molecules,
-        config.val_molecules,
-        config.test_molecules,
+        config
     )
 
     # Convert to jraph.GraphsTuple.
@@ -74,7 +71,8 @@ def get_datasets(
     padded_graphs_spec = _specs_from_graphs_tuple(example_padded_graph)
 
     # Batch and pad each split separately.
-    for split, dataset_split in datasets.items():
+    for split in ["train", "val", "test"]:
+        dataset_split = datasets[split]
         batching_fn = functools.partial(
             jraph.dynamically_batch,
             graphs_tuple_iterator=iter(dataset_split),
@@ -82,9 +80,12 @@ def get_datasets(
             n_edge=max_n_edges,
             n_graph=max_n_graphs,
         )
-        datasets[split] = tf.data.Dataset.from_generator(
+        dataset_split = tf.data.Dataset.from_generator(
             batching_fn, output_signature=padded_graphs_spec
         )
+        datasets[split] = dataset_split
+        datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache()
+        datasets[split + "_eval_final"] = dataset_split.take(config.num_eval_steps_at_end_of_training).cache()
 
     return datasets
 
@@ -179,17 +180,17 @@ def _deprecated_get_raw_qm9_datasets(
 
 
 def get_raw_qm9_datasets(
-    root_dir: str,
-    train_molecules: Tuple[int, int],
-    val_molecules: Tuple[int, int],
-    test_molecules: Tuple[int, int],
+    config: ml_collections.ConfigDict,
     seed: int = 0,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
+    # Set the seed for reproducibility.
+    tf.random.set_seed(seed)
+
     # Root directory of the dataset.
-    filenames = os.listdir(root_dir)
+    filenames = sorted(os.listdir(config.root_dir))
     filenames = [
-        os.path.join(root_dir, f) for f in filenames if f.startswith("fragments_seed")
+        os.path.join(config.root_dir, f) for f in filenames if f.startswith("fragments_seed")
     ]
 
     # Partition the filenames into train, val, and test.
@@ -204,9 +205,9 @@ def get_raw_qm9_datasets(
         return [f for f in filenames if filter_file(f, start, end)]
 
     files_by_split = {
-        "train": filter_by_molecule_number(filenames, *train_molecules),
-        "val": filter_by_molecule_number(filenames, *val_molecules),
-        "test": filter_by_molecule_number(filenames, *test_molecules),
+        "train": filter_by_molecule_number(filenames, *config.train_molecules),
+        "val": filter_by_molecule_number(filenames, *config.val_molecules),
+        "test": filter_by_molecule_number(filenames, *config.test_molecules),
     }
 
     element_spec = tf.data.Dataset.load(filenames[0]).element_spec
