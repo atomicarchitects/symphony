@@ -314,14 +314,6 @@ def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path)
     # load split file to identify training, validation, and test molecules
     config, _, _, _ = analysis.load_from_workdir(model_path)
     train_idx = np.array(range(config.train_molecules[0], config.train_molecules[1]))
-    # check if subset was used (and restrict indices accordingly)
-    train_args_path = os.path.join(model_path, f'args.json')
-    with open(train_args_path) as handle:
-        train_args = json.loads(handle.read())
-    if 'subset_path' in train_args:
-        if train_args['subset_path'] is not None:
-            subset = np.load(train_args['subset_path'])
-            train_idx = subset[train_idx]
 
     # Atom type statistics
     descr = ' concerning atom types'
