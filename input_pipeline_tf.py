@@ -29,7 +29,7 @@ def get_datasets(
     del rng
 
     # Get the raw datasets.
-    datasets = get_raw_qm9_datasets(
+    datasets = get_unbatched_qm9_datasets(
         config
     )
 
@@ -139,7 +139,7 @@ def estimate_padding_budget_for_num_graphs(
     return n_node, n_edge, n_graph
 
 
-def _deprecated_get_raw_qm9_datasets(
+def _deprecated_get_unbatched_qm9_datasets(
     rng: chex.PRNGKey,
     root_dir: str,
     num_train_files: int,
@@ -179,7 +179,7 @@ def _deprecated_get_raw_qm9_datasets(
     return datasets
 
 
-def get_raw_qm9_datasets(
+def get_unbatched_qm9_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
 ) -> Dict[str, tf.data.Dataset]:
@@ -225,7 +225,7 @@ def get_raw_qm9_datasets(
 
 
 def dataset_as_db(config: ml_collections.ConfigDict, dbpath: str):
-    datasets = get_raw_qm9_datasets(
+    datasets = get_unbatched_qm9_datasets(
         config.root_dir,
         config.train_molecules,
         config.val_molecules,
