@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence
+from typing import List, Sequence
 
 import os
 import pickle
@@ -16,6 +16,7 @@ import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
+import numpy as np
 import tqdm
 import yaml
 import chex
@@ -99,6 +100,39 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
     os.makedirs(outputdir, exist_ok=True)
     for seed, molecule in enumerate(molecules):
         ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
+    ase_to_mol_dict(molecules, file_name=f"{outputdir}/generated_molecules.mol_dict")
+
+
+def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
+    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
+
+    generated = (
+        {}
+    )
+    for mol in molecules:
+        l = mol.get_atomic_numbers().shape[0]
+        if l not in generated:
+            generated[l] = {
+                "_positions": np.array([mol.get_positions()]),
+                "_atomic_numbers": np.array([mol.get_atomic_numbers()]),
+            }
+        else:
+            generated[l]["_positions"] = np.append(
+                generated[l]["_positions"],
+                np.array([mol.get_positions()]),
+                0,
+            )
+            generated[l]["_atomic_numbers"] = np.append(
+                generated[l]["_atomic_numbers"],
+                np.array([mol.get_atomic_numbers()]),
+                0,
+            )
+
+    if save:
+        with open(file_name, "wb") as f:
+            pickle.dump(generated, f)
+
+    return generated
 
 
 def main(unused_argv: Sequence[str]) -> None:
