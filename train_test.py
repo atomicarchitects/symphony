@@ -22,7 +22,8 @@ try:
 except ImportError:
     profile_nn_jax = None
 
-logging.getLogger().setLevel(logging.INFO)  # Important to see the messages!
+# Important to see the logging messages!
+logging.getLogger().setLevel(logging.INFO)
 
 _ALL_CONFIGS = {
     "e3schnet": e3schnet.get_config(),
