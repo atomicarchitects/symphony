@@ -29,8 +29,8 @@ def get_datasets(key: jax.random.PRNGKey, cutoff: float):
     random.shuffle(subgraphs, seed=0)
     return subgraphs
 
+
 key = jax.random.PRNGKey(0)
 qm9_data = get_datasets(key, 3.5)
 
 pickle.dump(qm9_data, open("qm9_subgraphs_seed=0_cutoff=3.5.p", "w"))
-

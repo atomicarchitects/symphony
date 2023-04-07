@@ -301,7 +301,6 @@ def plot_sample_complexity_curves(
             shadow=False,
         )
 
-
         # Axes limits.
         min_y = results[split][metric].min()
         max_y = results[split][metric].max()
@@ -341,7 +340,6 @@ def main(argv):
 
     # Make plots.
     if os.path.basename(basedir).startswith("v"):
-
         # Extract version from basedir.
         version = os.path.basename(basedir)
         outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "plots", version)
@@ -350,7 +348,9 @@ def main(argv):
         plot_performance_for_parameters(ALL_METRICS, results, outputdir)
 
     if os.path.basename(basedir) == "sample_complexity":
-        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "plots", "extras", "sample_complexity")
+        outputdir = os.path.join(
+            os.path.abspath(FLAGS.outputdir), "plots", "extras", "sample_complexity"
+        )
 
         plot_sample_complexity_curves(ALL_METRICS, results, outputdir)
 

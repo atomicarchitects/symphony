@@ -6,7 +6,7 @@ import re
 import os
 import sys
 
-sys.path.append('analyses')
+sys.path.append("analyses")
 
 from absl import logging
 import tensorflow as tf
@@ -29,9 +29,7 @@ def get_datasets(
     del rng
 
     # Get the raw datasets.
-    datasets = get_unbatched_qm9_datasets(
-        config
-    )
+    datasets = get_unbatched_qm9_datasets(config)
 
     # Convert to jraph.GraphsTuple.
     for split, dataset_split in datasets.items():
@@ -85,7 +83,9 @@ def get_datasets(
         )
         datasets[split] = dataset_split
         datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache()
-        datasets[split + "_eval_final"] = dataset_split.take(config.num_eval_steps_at_end_of_training).cache()
+        datasets[split + "_eval_final"] = dataset_split.take(
+            config.num_eval_steps_at_end_of_training
+        ).cache()
 
     return datasets
 
@@ -190,7 +190,9 @@ def get_unbatched_qm9_datasets(
     # Root directory of the dataset.
     filenames = sorted(os.listdir(config.root_dir))
     filenames = [
-        os.path.join(config.root_dir, f) for f in filenames if f.startswith("fragments_seed")
+        os.path.join(config.root_dir, f)
+        for f in filenames
+        if f.startswith("fragments_seed")
     ]
 
     # Partition the filenames into train, val, and test.

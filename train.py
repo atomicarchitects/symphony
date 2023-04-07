@@ -369,7 +369,7 @@ def train_and_evaluate(
                 rng,
                 config.loss_kwargs,
             )
-        
+
         # Compute and write metrics.
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
@@ -501,7 +501,7 @@ def train_and_evaluate(
                     "best_state": best_state,
                     "step_for_best_state": step_for_best_state,
                 }
-            )        
+            )
 
     # Once training is complete, return the best state and corresponding metrics.
     logging.info(

@@ -451,14 +451,14 @@ def dataset_as_database(config: ml_collections.ConfigDict, dbpath: str) -> None:
     )
     compressor = ConnectivityCompressor()
     with connect(dbpath) as conn:
-        for mol in datasets['train'].as_numpy_iterator():
-            atoms = Atoms(positions=mol['positions'], numbers=models.get_atomic_numbers(mol['species']))
+        for mol in datasets["train"].as_numpy_iterator():
+            atoms = Atoms(
+                positions=mol["positions"],
+                numbers=models.get_atomic_numbers(mol["species"]),
+            )
             conn.write(atoms)
             # instantiate utility_classes.Molecule object
             mol = Molecule(atoms.positions, atoms.numbers)
             # get connectivity matrix (detecting bond orders with Open Babel)
             con_mat = mol.get_connectivity()
-            conn.write(
-                atoms,
-                data={'con_mat': compressor.compress(con_mat)}
-            )
+            conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
