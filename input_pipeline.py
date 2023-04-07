@@ -1,4 +1,4 @@
-from typing import Iterator, Sequence, Dict, Optional
+from typing import Iterator, Sequence, Dict, Optional, List, Tuple
 
 import functools
 import ase
@@ -17,11 +17,11 @@ import dynamic_batcher
 import qm9
 
 
-def get_datasets(
+def get_raw_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
-) -> Dict[str, Iterator[datatypes.Fragments]]:
-    """Dataloader for the generative model.
+) -> Tuple[Dict[str, chex.PRNGKey], jnp.ndarray, Dict[str, List[ase.Atoms]]]:
+    """Constructs the splits for the QM9 dataset.
     Args:
         rng: The random number seed.
         config: The configuration.
@@ -58,6 +58,22 @@ def get_datasets(
         split: [all_molecules[i] for i in indices[split]]
         for split in ["train", "val", "test"]
     }
+
+    return rngs, atomic_numbers, molecules
+
+
+def get_datasets(
+    rng: chex.PRNGKey,
+    config: ml_collections.ConfigDict,
+) -> Dict[str, Iterator[datatypes.Fragments]]:
+    """Dataloader for the generative model for each split.
+    Args:
+        rng: The random number seed.
+        config: The configuration.
+    Returns:
+        An iterator of (batched and padded) fragments.
+    """
+    rngs, atomic_numbers, molecules = get_raw_datasets(rng, config)
     return {
         split: dataloader(
             rngs[split],
@@ -425,3 +441,24 @@ def _move_first(xs, x):
 def _normalized_bitcount(xs, n: int):
     assert xs.ndim == 1
     return jnp.bincount(xs, length=n) / len(xs)
+
+
+def dataset_as_database(config: ml_collections.ConfigDict, dbpath: str) -> None:
+    """Converts the dataset to a ASE database."""
+    _, _, molecules = get_raw_datasets(
+        rng=jax.random.PRNGKey(0),
+        config=config,
+    )
+    compressor = ConnectivityCompressor()
+    with connect(dbpath) as conn:
+        for mol in datasets['train'].as_numpy_iterator():
+            atoms = Atoms(positions=mol['positions'], numbers=models.get_atomic_numbers(mol['species']))
+            conn.write(atoms)
+            # instantiate utility_classes.Molecule object
+            mol = Molecule(atoms.positions, atoms.numbers)
+            # get connectivity matrix (detecting bond orders with Open Babel)
+            con_mat = mol.get_connectivity()
+            conn.write(
+                atoms,
+                data={'con_mat': compressor.compress(con_mat)}
+            )

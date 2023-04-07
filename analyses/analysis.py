@@ -76,8 +76,8 @@ def get_results_as_dataframe(
 ) -> Dict[str, pd.DataFrame]:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
-
-    results = {"val": pd.DataFrame(), "test": pd.DataFrame()}
+    splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
+    results = {split: pd.DataFrame() for split in splits}
     for model in models:
         for config_file_path in glob.glob(
             os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
@@ -96,6 +96,8 @@ def get_results_as_dataframe(
             other_df = pd.DataFrame.from_dict({
                 "model": [config.model.lower()],
                 "max_l": [config.max_ell],
+                "num_interactions": [config.num_interactions],
+                "num_channels": [config.num_channels],
                 "num_params": [num_params],
                 "num_train_molecules": [config.train_molecules[1] - config.train_molecules[0]],
             })

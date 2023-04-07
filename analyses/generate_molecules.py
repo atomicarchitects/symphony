@@ -101,7 +101,7 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
             molecules.append(molecule)
 
     # Save molecules.
-    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}", "generated")
+    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}")
     os.makedirs(outputdir, exist_ok=True)
     for seed, molecule in enumerate(molecules):
         ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
