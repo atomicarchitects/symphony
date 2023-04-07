@@ -13,11 +13,9 @@ import ase.data
 import ase.io
 import ase.visualize
 import jax
-import jax.numpy as jnp
 import jraph
 import ml_collections
 import tqdm
-import chex
 import yaml
 import plotly.graph_objects as go
 import e3nn_jax as e3nn
@@ -29,55 +27,39 @@ import datatypes
 import input_pipeline
 import analyses.analysis as analysis
 import models
-import qm9
 
 FLAGS = flags.FLAGS
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
+ELEMENTS = ["H", "C", "N", "O", "F"]
 RADII = models.RADII
 
-
-def get_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
-    """Returns a molecule from the given input."""
-    # A number is interpreted as a QM9 molecule index.
-    if molecule_str.isdigit():
-        dataset = qm9.load_qm9("qm9_data")
-        molecule = dataset[int(molecule_str)]
-        return molecule, f"qm9_index={molecule_str}"
-
-    # If the string is a valid molecule name, try to build it.
-    try:
-        molecule = ase.build.molecule(molecule_str)
-        return molecule, molecule.get_chemical_formula()
-
-    except (KeyError, ValueError):
-        filename = os.path.basename(molecule_str).split('.')[0]
-        return ase.io.read(molecule_str), filename
+# Colors and sizes for the atoms.
+ATOMIC_COLORS = {
+    1: "rgb(200, 200, 200)",  # H
+    6: "rgb(50, 50, 50)",  # C
+    7: "rgb(0, 100, 255)",  # N
+    8: "rgb(255, 0, 0)",  # O
+    9: "rgb(255, 0, 255)",  # F
+}
+ATOMIC_SIZES = {
+    1: 10,  # H
+    6: 30,  # C
+    7: 30,  # N
+    8: 30,  # O
+    9: 30,  # F
+}
 
 
-def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int, molecule_str: str):
+def visualize_atom_removals(
+    workdir: str, outputdir: str, beta: float, step: int, molecule_str: str
+):
     """Generates visualizations of the predictions when removing each atom from a molecule."""
-    molecule, molecule_name = get_molecule(molecule_str)
-
-    if step == -1:
-        params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
-        step_name = "step=best"
-    else:
-        params_file = os.path.join(workdir, "checkpoints/params_{step}.pkl")
-        step_name = f"step={step}"
-
-    try:
-        with open(params_file, "rb") as f:
-            params = pickle.load(f)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find params file {params_file}")
-
-    with open(workdir + "/config.yml", "rt") as config_file:
-        config = yaml.unsafe_load(config_file)
-    assert config is not None
-    config = ml_collections.ConfigDict(config)
-
+    molecule, molecule_name = analysis.construct_molecule(molecule_str)
     name = analysis.name_from_workdir(workdir)
-    model = models.create_model(config, run_in_evaluation_mode=True)
+    model, params, config = analysis.load_model_at_step(
+        workdir, step, run_in_evaluation_mode=True
+    )
+
     apply_fn = jax.jit(model.apply)
 
     def get_predictions(
@@ -88,11 +70,12 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
         dummy_rng = jax.random.PRNGKey(0)
         preds = apply_fn(params, dummy_rng, frags, beta)
         pred = jraph.unpad_with_graphs(preds)
+        pred = jax.tree_map(np.asarray, pred)
         return pred
 
     def remove_atom_and_visualize_predictions(
         molecule: ase.Atoms, target: int
-    ) -> go.Figure:
+    ) -> Tuple[go.Figure, go.Figure, go.Figure]:
         # Remove the target atom from the molecule.
         molecule_with_target_removed = ase.Atoms(
             positions=np.concatenate(
@@ -109,57 +92,69 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
         )
         pred = get_predictions(frag)
 
-        ATOMIC_COLORS = {
-            1: "rgb(200, 200, 200)",  # H
-            6: "rgb(50, 50, 50)",  # C
-            7: "rgb(0, 100, 255)",  # N
-            8: "rgb(255, 0, 0)",  # O
-            9: "rgb(255, 0, 255)",  # F
-        }
-        ATOMIC_SIZE = {
-            1: 10,  # H
-            6: 30,  # C
-            7: 30,  # N
-            8: 30,  # O
-            9: 30,  # F
-        }
+        # Compute focus probabilities.
+        num_nodes = len(molecule)
+        stop_probs = pred.globals.stop_probs.item()
+        focus = pred.globals.focus_indices.item()
+        focus_position = frag.nodes.positions[focus]
+        focus_probs_shifted = np.concatenate([pred.nodes.focus_probs[:target], [0], pred.nodes.focus_probs[target:]])
+        focus_probs_renormalized = focus_probs_shifted * (1 - stop_probs)
 
-        figdata = []
-        figdata.append(
+        # Plot species probabilities.
+        target_element_index = ATOMIC_NUMBERS.index(molecule.numbers[target])
+        species_probs = pred.globals.target_species_probs[0].tolist()
+        species_fig = go.Figure(
+            [
+                go.Bar(
+                    x=[ELEMENTS[target_element_index]],
+                    y=[species_probs[target_element_index]],
+                ),
+                go.Bar(
+                    x=ELEMENTS[:target_element_index]
+                    + ELEMENTS[target_element_index + 1 :],
+                    y=species_probs[:target_element_index]
+                    + species_probs[target_element_index + 1 :],
+                ),
+            ]
+        )
+
+        # Plot the actual molecule.
+        mol_fig_data = []
+        mol_fig_data.append(
             go.Scatter3d(
                 x=molecule.positions[:, 0],
                 y=molecule.positions[:, 1],
                 z=molecule.positions[:, 2],
                 mode="markers",
                 marker=dict(
-                    size=[ATOMIC_SIZE[i] for i in molecule.numbers],
+                    size=[ATOMIC_SIZES[i] for i in molecule.numbers],
                     color=[ATOMIC_COLORS[i] for i in molecule.numbers],
                 ),
                 hovertext=[ase.data.chemical_symbols[i] for i in molecule.numbers],
+                text=["p(focus) = {:.2f}".format(focus_probs_renormalized[i]) if i != target else "Removed" for i in range(num_nodes)],
                 opacity=1.0,
                 showlegend=False,
             )
         )
-        figdata.append(
+        # Highlight the target atom.
+        mol_fig_data.append(
             go.Scatter3d(
                 x=[molecule.positions[target, 0]],
                 y=[molecule.positions[target, 1]],
                 z=[molecule.positions[target, 2]],
                 mode="markers",
                 marker=dict(
-                    size=1.05 * ATOMIC_SIZE[molecule.numbers[target]],
-                    color="yellow",
+                    size=1.05 * ATOMIC_SIZES[molecule.numbers[target]],
+                    color="green",
                 ),
                 opacity=0.5,
                 name="Target",
-            )
+            )   
         )
 
-        focus = pred.globals.focus_indices[0]
-        sp = pred.globals.target_species.item()
+        predicted_species = pred.globals.target_species.item()
         position_probs = pred.globals.position_probs
         position_probs = position_probs.resample(50, 99, 6)
-        pos = frag.nodes.positions[focus]
 
         cmax = position_probs.grid_values.max().item()
         for i in range(len(RADII)):
@@ -167,7 +162,7 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
             prob_r = e3nn.SphericalSignal(prob_r, position_probs.quadrature)
 
             surface_r = go.Surface(
-                **prob_r.plotly_surface(radius=RADII[i], translation=pos),
+                **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
                 colorscale=[
                     [0, f"rgba(0, 0, 0, 0.0)"],
                     [1, f"rgba(0, 0, 0, 1.0)"],
@@ -175,9 +170,9 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
                 showscale=False,
                 cmin=0.0,
                 cmax=cmax,
-                name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[sp]]}",
+                name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[predicted_species]]}",
             )
-            figdata.append(surface_r)
+            mol_fig_data.append(surface_r)
 
         axis = dict(
             showbackground=False,
@@ -207,28 +202,51 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
             plot_bgcolor="rgba(0,0,0,0)",
             margin=dict(l=0, r=0, t=0, b=0),
         )
+        mol_fig = go.Figure(data=mol_fig_data, layout=layout)
 
-        return go.Figure(data=figdata, layout=layout)
+        return focus_fig, species_fig, mol_fig
 
     # Create the output directory where HTML files will be saved.
+    step_name = "step=best" if step == -1 else f"step={step}"
     outputdir = os.path.join(
         FLAGS.outputdir,
         "visualizations",
         "atom_removal",
         name,
         f"beta={beta}",
-        step_name
+        step_name,
     )
     os.makedirs(outputdir, exist_ok=True)
 
     # Loop over all possible targets.
     for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):
-        fig = remove_atom_and_visualize_predictions(molecule, target=target)
+        focus_fig, species_fig, mol_fig = remove_atom_and_visualize_predictions(
+            molecule, target=target
+        )
         outputfile = os.path.join(
             outputdir,
-            f"{molecule_name}_target={target}.html",
+            f"{molecule_name}_target={target}_focus.png",
         )
-        fig.write_html(outputfile)
+        focus_fig.write_image(outputfile)
+
+        outputfile = os.path.join(
+            outputdir,
+            f"{molecule_name}_target={target}_species.png",
+        )
+        species_fig.write_image(outputfile)
+
+        outputfile = os.path.join(
+            outputdir,
+            f"{molecule_name}_target={target}_molecule.png",
+        )
+        mol_fig.write_image(outputfile)
+
+        outputfile = os.path.join(
+            outputdir,
+            f"{molecule_name}_target={target}_molecule.html",
+        )
+        mol_fig.write_html(outputfile)
+
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv

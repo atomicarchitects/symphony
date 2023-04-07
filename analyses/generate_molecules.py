@@ -31,10 +31,17 @@ import models  # noqa: E402
 FLAGS = flags.FLAGS
 
 
-def generate_molecules(workdir: str, outputdir: str, beta: float):
+def generate_molecules(workdir: str, outputdir: str, beta: float, step: int):
     """Generates molecules from a trained model at the given workdir."""
 
-    with open(workdir + "/checkpoints/params.pkl", "rb") as f:
+    if step == -1:
+        params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
+        step_name = "step=best"
+    else:
+        params_file = os.path.join(workdir, "checkpoints/params_{step}.pkl")
+        step_name = f"step={step}"
+
+    with open(params_file, "rb") as f:
         params = pickle.load(f)
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
@@ -100,7 +107,7 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
             molecules.append(molecule)
 
     # Save molecules.
-    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}")
+    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}", step_name)
     os.makedirs(outputdir, exist_ok=True)
     for seed, molecule in enumerate(molecules):
         ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
@@ -109,11 +116,12 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
-    workdir = FLAGS.workdir
+    workdir = os.path.abspath(FLAGS.workdir)
     outputdir = FLAGS.outputdir
     beta = FLAGS.beta
+    step = FLAGS.step
 
-    generate_molecules(workdir, outputdir, beta)
+    generate_molecules(workdir, outputdir, beta, step)
 
 
 if __name__ == "__main__":
@@ -124,6 +132,11 @@ if __name__ == "__main__":
         "Directory where molecules should be saved.",
     )
     flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
+    flags.DEFINE_integer(
+        "step",
+        -1,
+        "Step number to load model from. The default of -1 corresponds to the best model.",
+    )
 
     flags.mark_flags_as_required(["workdir"])
     app.run(main)
