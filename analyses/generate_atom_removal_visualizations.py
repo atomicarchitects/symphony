@@ -106,7 +106,7 @@ def main():
 
         # We don't actually need a PRNG key, since we're not sampling.
         dummy_rng = jax.random.PRNGKey(0)
-        pred = apply_fn(frag, dummy_rng, beta)
+        pred = get_predictions(frag, dummy_rng, beta)
 
         ATOMIC_COLORS = {
             1: "rgb(200, 200, 200)",  # H
@@ -219,6 +219,7 @@ def main():
             "atom_removal",
             name,
             f"beta={beta}",
+            step_name,
             f"{molecule_name()}_target={target}.html",
         )
         fig.write_html(outputfile)
