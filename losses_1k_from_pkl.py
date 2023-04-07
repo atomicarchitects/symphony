@@ -15,11 +15,12 @@ import train
 
 
 atomic_numbers = jnp.array([1, 6, 7, 8, 9])
-numbers_to_symbols = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}
+numbers_to_symbols = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 elements = list(numbers_to_symbols.values())
 
 # covalent bond radii, in angstroms
 element_radii = [0.32, 0.75, 0.71, 0.63, 0.64]
+
 
 def get_numbers(species: jnp.ndarray):
     numbers = []
@@ -27,9 +28,10 @@ def get_numbers(species: jnp.ndarray):
         numbers.append(atomic_numbers[i])
     return jnp.array(numbers)
 
+
 path = "/home/ameyad/spherical-harmonic-net/workdirs/v3/mace/interactions=1/l=3/channels=32"
 
-with open(path + "/checkpoints/params.pkl", 'rb') as f:
+with open(path + "/checkpoints/params.pkl", "rb") as f:
     params = pickle.load(f)
 with open(path + "/config.yml", "rt") as config_file:
     config = yaml.unsafe_load(config_file)
@@ -58,38 +60,39 @@ for i in tqdm.tqdm(range(1000)):
     frags = list(frags)
 
     frag = frags[-4]
-    
 
     frag_unpadded = jraph.unpad_with_graphs(frag)
     molecules = jraph.unbatch(frag_unpadded)
 
     for j, mol in enumerate(molecules):
         preds = train.get_predictions(model, mol, seed)
-        mol_loss = train.generation_loss(preds, mol, config.loss_kwargs.radius_rbf_variance)
+        mol_loss = train.generation_loss(
+            preds, mol, config.loss_kwargs.radius_rbf_variance
+        )
         losses.append((mol_loss, i, j))
 
 losses = sorted(losses)
 
-with open('losses_1k.pkl', 'wb') as f:
+with open("losses_1k.pkl", "wb") as f:
     f.write(losses)
 
-with open('losses_1k_top_bot_25', 'w') as f:
-    f.write('Top 25:\n')
+with open("losses_1k_top_bot_25", "w") as f:
+    f.write("Top 25:\n")
     for i in range(25):
         loss, frag_num, mol_num = losses[i]
-        f.write(f'Fragment {frag_num} #{mol_num}:')
-        f.write(f'total loss = {loss[0].tolist()[0]}\n')
-        f.write(f'focus loss = {loss[1][0].tolist()[0]}\n')
-        f.write(f'species loss = {loss[1][1].tolist()[0]}\n')
-        f.write(f'position loss = {loss[1][2].tolist()[0]}\n')
-        f.write('\n')
+        f.write(f"Fragment {frag_num} #{mol_num}:")
+        f.write(f"total loss = {loss[0].tolist()[0]}\n")
+        f.write(f"focus loss = {loss[1][0].tolist()[0]}\n")
+        f.write(f"species loss = {loss[1][1].tolist()[0]}\n")
+        f.write(f"position loss = {loss[1][2].tolist()[0]}\n")
+        f.write("\n")
 
-    f.write('\nBottom 25:\n')
+    f.write("\nBottom 25:\n")
     for i in range(25):
         loss, frag_num, mol_num = losses[-i]
-        f.write(f'Fragment {frag_num} #{mol_num}:')
-        f.write(f'total loss = {loss[0].tolist()[0]}\n')
-        f.write(f'focus loss = {loss[1][0].tolist()[0]}\n')
-        f.write(f'species loss = {loss[1][1].tolist()[0]}\n')
-        f.write(f'position loss = {loss[1][2].tolist()[0]}\n')
-        f.write('\n')
+        f.write(f"Fragment {frag_num} #{mol_num}:")
+        f.write(f"total loss = {loss[0].tolist()[0]}\n")
+        f.write(f"focus loss = {loss[1][0].tolist()[0]}\n")
+        f.write(f"species loss = {loss[1][1].tolist()[0]}\n")
+        f.write(f"position loss = {loss[1][2].tolist()[0]}\n")
+        f.write("\n")

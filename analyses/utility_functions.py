@@ -18,7 +18,7 @@ from utility_classes import ProcessQ, IndexProvider
 
 
 def boolean_string(s):
-    '''
+    """
     Allows to parse boolean strings ('true' or 'false') with argparse
 
     Args:
@@ -26,14 +26,14 @@ def boolean_string(s):
 
     Returns:
         bool: the corresponding boolean value (True or False)
-    '''
-    if s.lower() not in {'false', 'true'}:
-        raise ValueError('Not a valid boolean string')
-    return s.lower() == 'true'
+    """
+    if s.lower() not in {"false", "true"}:
+        raise ValueError("Not a valid boolean string")
+    return s.lower() == "true"
 
 
 def cdists(mols, grid):
-    '''
+    """
     Calculates the pairwise Euclidean distances between a set of molecules and a list
     of positions on a grid (uses inplace operations to minimize memory demands).
 
@@ -44,15 +44,16 @@ def cdists(mols, grid):
 
     Returns:
         torch.Tensor: batch of distance matrices (batch_size x n_atoms x n_positions)
-    '''
-    if len(mols.size()) == len(grid.size())+1:
+    """
+    if len(mols.size()) == len(grid.size()) + 1:
         grid = grid.unsqueeze(0)  # add batch dimension
-    return F.relu(torch.sum((mols[:, :, None, :] - grid[:, None, :, :]).pow_(2), -1),
-                  inplace=True).sqrt_()
+    return F.relu(
+        torch.sum((mols[:, :, None, :] - grid[:, None, :, :]).pow_(2), -1), inplace=True
+    ).sqrt_()
 
 
 def update_dict(d, d_upd):
-    '''
+    """
     Updates a dictionary of numpy.ndarray with values from another dictionary of the
     same kind. If a key is present in both dictionaries, the array of the second
     dictionary is appended to the array of the first one and saved under that key in
@@ -61,7 +62,7 @@ def update_dict(d, d_upd):
     Args:
         d (dict of numpy.ndarray): dictionary to be updated
         d_upd (dict of numpy.ndarray): dictionary with new values for updating
-    '''
+    """
     for key in d_upd:
         if key not in d:
             d[key] = d_upd[key]
@@ -71,7 +72,7 @@ def update_dict(d, d_upd):
 
 
 def get_dict_count(d, max_length, skip=0):
-    '''
+    """
     Counts the number of molecules in a dictionary where for each integer key i
     molecules with i atoms are stored as positions and atomic numbers. Dictionaries
     must be of the form
@@ -87,7 +88,7 @@ def get_dict_count(d, max_length, skip=0):
 
     Returns:
         int: the number of molecules in the dictionary
-    '''
+    """
     n = np.zeros(max_length + 1, dtype=int)
     for key in d:
         if key == skip:
@@ -96,9 +97,10 @@ def get_dict_count(d, max_length, skip=0):
     return n
 
 
-def run_threaded(target, splitable_kwargs, kwargs, results, n_threads=16,
-                 exclusive_kwargs={}):
-    '''
+def run_threaded(
+    target, splitable_kwargs, kwargs, results, n_threads=16, exclusive_kwargs={}
+):
+    """
     Allows to run a target callable object in several processes simultaneously and
     join the results afterwards. This can be used to parallelize independent
     computations on objects in lists (e.g. validity checks on a set of molecules).
@@ -125,7 +127,7 @@ def run_threaded(target, splitable_kwargs, kwargs, results, n_threads=16,
         dict of list: the results dictionary containing lists with the returned values
             of the target function (the order of the elements in the splitable_kwargs
             inputs is preserved in the output lists)
-    '''
+    """
     # check if the number of threads is higher than the number of data points
     if len(splitable_kwargs) > 0:
         for key in splitable_kwargs:
@@ -156,8 +158,7 @@ def run_threaded(target, splitable_kwargs, kwargs, results, n_threads=16,
         thread_kwargs.update(kwargs)  # include unsplitable kwargs
         if i == 0:
             thread_kwargs.update(exclusive_kwargs)
-        threads += [ProcessQ(queue, target=target, name=str(i),
-                             kwargs=thread_kwargs)]
+        threads += [ProcessQ(queue, target=target, name=str(i), kwargs=thread_kwargs)]
         threads[-1].start()
 
     # gather returned results
@@ -182,7 +183,7 @@ def run_threaded(target, splitable_kwargs, kwargs, results, n_threads=16,
 
 
 def print_equally_spaced(head, value, space=13):
-    '''
+    """
     Prints a provided heading followed by a provided value with a dynamical spacing
     depending on the length of the heading and value (can be used to print small
     tables).
@@ -192,16 +193,21 @@ def print_equally_spaced(head, value, space=13):
         value (str): the value that is printed
         space (int, optional): the maximum number of spaces (if heading is empty and
             value is empty)
-    '''
-    space = max((space - len(f'{head}:') - len(f'{value}')), 1) * ' '
-    print(f'{head}:{space}{value}')
+    """
+    space = max((space - len(f"{head}:") - len(f"{value}")), 1) * " "
+    print(f"{head}:{space}{value}")
 
 
-def print_accumulated_staticstics(stats, stat_heads, name='generated',
-                                  fields=('H', 'C', 'N', 'O', 'F'), set=None,
-                                  print_stats=('mean_percentage',),
-                                  additive_fields={}):
-    '''
+def print_accumulated_staticstics(
+    stats,
+    stat_heads,
+    name="generated",
+    fields=("H", "C", "N", "O", "F"),
+    set=None,
+    print_stats=("mean_percentage",),
+    additive_fields={},
+):
+    """
     Accumulates and prints statistics of a set of molecules (e.g. the average number
     of carbon atoms per molecule of the set).
 
@@ -233,50 +239,49 @@ def print_accumulated_staticstics(stats, stat_heads, name='generated',
             (e.g. {'triple': ['C3C', 'C3N']} will print the average number of triple
             bonds by summing the triple bonds between two carbon atoms and those
             between carbon and nitrogen atoms)
-    '''
+    """
     stat_heads = list(stat_heads)
     n_mols = len(stats[0])
     if set is None:
         set = np.arange(n_mols)
     idcs = [stat_heads.index(key) for key in fields]
-    np_stats = np.zeros((len(fields)+len(additive_fields), len(set)))
+    np_stats = np.zeros((len(fields) + len(additive_fields), len(set)))
     names = [i for i in fields] + [key for key in additive_fields]
 
-    print(f'\nAccumulated statistics of {name}:')
-    print(f'\nMean absolute values...')
+    print(f"\nAccumulated statistics of {name}:")
+    print(f"\nMean absolute values...")
     # transfer data from fields
     for i, idx in enumerate(idcs):
         np_stats[i] = np.array(stats[idx, set])
-        print_equally_spaced(stat_heads[idx], f'{np.mean(np_stats[i]):.2f}')
+        print_equally_spaced(stat_heads[idx], f"{np.mean(np_stats[i]):.2f}")
     # accumulate and transfer data from additive_fields
     for i, key in enumerate(additive_fields):
         _idcs = [stat_heads.index(val) for val in additive_fields[key]]
         for idx in _idcs:
-            np_stats[len(fields)+i] += np.array(stats[idx, set])
-        print_equally_spaced(key, f'{np.mean(np_stats[len(fields)+i]):.2f}')
+            np_stats[len(fields) + i] += np.array(stats[idx, set])
+        print_equally_spaced(key, f"{np.mean(np_stats[len(fields)+i]):.2f}")
 
     if len(np_stats) > 1:
-        print_equally_spaced('All', f'{np.mean(np_stats.sum(axis=0)):.2f}')
+        print_equally_spaced("All", f"{np.mean(np_stats.sum(axis=0)):.2f}")
 
-    if 'mean_percentage' in print_stats:
-        print(f'\nMean percentage...')
+    if "mean_percentage" in print_stats:
+        print(f"\nMean percentage...")
         for i, name in enumerate(names):
-            mean_p = np.mean(np_stats[i]/np.maximum(1, np_stats.sum(axis=0)))
-            print_equally_spaced(name, f'{mean_p:.2f}')
+            mean_p = np.mean(np_stats[i] / np.maximum(1, np_stats.sum(axis=0)))
+            print_equally_spaced(name, f"{mean_p:.2f}")
 
-    if 'molecules_with' in print_stats:
-        print(f'\nMolecules with...')
+    if "molecules_with" in print_stats:
+        print(f"\nMolecules with...")
         IP = IndexProvider(stats[:, set], stat_heads)
         for i, idx in enumerate(idcs):
             selected = IP.get_selected(fields[i])
             print_equally_spaced(
-                stat_heads[idx],
-                f'{len(selected)}  ({len(selected)/len(set):.2f}%)',
-                22)
+                stat_heads[idx], f"{len(selected)}  ({len(selected)/len(set):.2f}%)", 22
+            )
 
 
 def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path):
-    '''
+    """
     Print average atom, bond, and ring count statistics of generated molecules
     in the provided database and reference training molecules.
 
@@ -287,96 +292,133 @@ def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path)
             training, validation, and test molecules and an args.json file containing
             the arguments of the training procedure)
         train_data_path (str): path to database with training data molecules
-    '''
+    """
     # load data of generated molecules
-    stats_path = os.path.splitext(generated_data_path)[0] + f'_statistics.npz'
+    stats_path = os.path.splitext(generated_data_path)[0] + f"_statistics.npz"
     if not os.path.isfile(stats_path):
-        print(f'Statistics of generated molecules not found (expected it at '
-              f'{stats_path}).\nPlease specify the correct path to the database '
-              f'holding the generated molecules!')
+        print(
+            f"Statistics of generated molecules not found (expected it at "
+            f"{stats_path}).\nPlease specify the correct path to the database "
+            f"holding the generated molecules!"
+        )
         return
     stats_dict = np.load(stats_path)
-    stats = stats_dict['stats']
-    stat_heads = stats_dict['stat_heads']
+    stats = stats_dict["stats"]
+    stat_heads = stats_dict["stat_heads"]
 
     # load data of training molecules
-    training_stats_path = os.path.splitext(train_data_path)[0] + f'_statistics.npz'
+    training_stats_path = os.path.splitext(train_data_path)[0] + f"_statistics.npz"
     if not os.path.isfile(training_stats_path):
-        print(f'Statistics of training data not found (expected it at '
-              f'{training_stats_path}).\nWill only print statistics of generated '
-              f'molecules...')
+        print(
+            f"Statistics of training data not found (expected it at "
+            f"{training_stats_path}).\nWill only print statistics of generated "
+            f"molecules..."
+        )
         have_train_stats = False
     else:
         have_train_stats = True
         train_stat_dict = np.load(training_stats_path)
 
     # load split file to identify training, validation, and test molecules
-    split_file = os.path.join(model_path, f'split.npz')
+    split_file = os.path.join(model_path, f"split.npz")
     S = np.load(split_file)
-    train_idx = S['train_idx']
+    train_idx = S["train_idx"]
     # check if subset was used (and restrict indices accordingly)
-    train_args_path = os.path.join(model_path, f'args.json')
+    train_args_path = os.path.join(model_path, f"args.json")
     with open(train_args_path) as handle:
         train_args = json.loads(handle.read())
-    if 'subset_path' in train_args:
-        if train_args['subset_path'] is not None:
-            subset = np.load(train_args['subset_path'])
+    if "subset_path" in train_args:
+        if train_args["subset_path"] is not None:
+            subset = np.load(train_args["subset_path"])
             train_idx = subset[train_idx]
 
     # Atom type statistics
-    descr = ' concerning atom types'
-    print_accumulated_staticstics(stats, stat_heads,
-                                  name='generated molecules' + descr)
+    descr = " concerning atom types"
+    print_accumulated_staticstics(stats, stat_heads, name="generated molecules" + descr)
     if have_train_stats:
-        print_accumulated_staticstics(train_stat_dict['stats'],
-                                      train_stat_dict['stat_heads'],
-                                      name='training molecules' + descr,
-                                      set=train_idx)
+        print_accumulated_staticstics(
+            train_stat_dict["stats"],
+            train_stat_dict["stat_heads"],
+            name="training molecules" + descr,
+            set=train_idx,
+        )
 
     # Atom bond statistics
-    descr = ' concerning atom bonds'
-    print_accumulated_staticstics(stats, stat_heads, fields=(),
-                                  name='generated molecules' + descr,
-                                  additive_fields={
-                                      'Single': ['H1C', 'H1N', 'H1O',
-                                                 'C1C', 'C1N', 'C1O', 'C1F',
-                                                 'N1N', 'N1O', 'N1F',
-                                                 'O1O', 'O1F'],
-                                      'Double': ['C2C', 'C2N', 'C2O',
-                                                 'N2N', 'N2O'],
-                                      'Triple': ['C3C', 'C3N']})
+    descr = " concerning atom bonds"
+    print_accumulated_staticstics(
+        stats,
+        stat_heads,
+        fields=(),
+        name="generated molecules" + descr,
+        additive_fields={
+            "Single": [
+                "H1C",
+                "H1N",
+                "H1O",
+                "C1C",
+                "C1N",
+                "C1O",
+                "C1F",
+                "N1N",
+                "N1O",
+                "N1F",
+                "O1O",
+                "O1F",
+            ],
+            "Double": ["C2C", "C2N", "C2O", "N2N", "N2O"],
+            "Triple": ["C3C", "C3N"],
+        },
+    )
     if have_train_stats:
-        print_accumulated_staticstics(train_stat_dict['stats'],
-                                      train_stat_dict['stat_heads'],
-                                      fields=(),
-                                      name='training molecules' + descr,
-                                      set=train_idx,
-                                      additive_fields={
-                                          'Single': ['H1C', 'H1N', 'H1O',
-                                                     'C1C', 'C1N', 'C1O', 'C1F',
-                                                     'N1N', 'N1O', 'N1F',
-                                                     'O1O', 'O1F'],
-                                          'Double': ['C2C', 'C2N', 'C2O',
-                                                     'N2N', 'N2O'],
-                                          'Triple': ['C3C', 'C3N']})
+        print_accumulated_staticstics(
+            train_stat_dict["stats"],
+            train_stat_dict["stat_heads"],
+            fields=(),
+            name="training molecules" + descr,
+            set=train_idx,
+            additive_fields={
+                "Single": [
+                    "H1C",
+                    "H1N",
+                    "H1O",
+                    "C1C",
+                    "C1N",
+                    "C1O",
+                    "C1F",
+                    "N1N",
+                    "N1O",
+                    "N1F",
+                    "O1O",
+                    "O1F",
+                ],
+                "Double": ["C2C", "C2N", "C2O", "N2N", "N2O"],
+                "Triple": ["C3C", "C3N"],
+            },
+        )
 
     # Ring statistics
-    descr = ' concerning ring structures'
-    fields = ['R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R>8']
-    print_accumulated_staticstics(stats, stat_heads, fields=fields,
-                                  name='generated molecules' + descr,
-                                  print_stats=['molecules_with'])
+    descr = " concerning ring structures"
+    fields = ["R3", "R4", "R5", "R6", "R7", "R8", "R>8"]
+    print_accumulated_staticstics(
+        stats,
+        stat_heads,
+        fields=fields,
+        name="generated molecules" + descr,
+        print_stats=["molecules_with"],
+    )
     if have_train_stats:
-        print_accumulated_staticstics(train_stat_dict['stats'],
-                                      train_stat_dict['stat_heads'],
-                                      fields=fields,
-                                      name='training molecules' + descr,
-                                      set=train_idx,
-                                      print_stats=['molecules_with'])
+        print_accumulated_staticstics(
+            train_stat_dict["stats"],
+            train_stat_dict["stat_heads"],
+            fields=fields,
+            name="training molecules" + descr,
+            set=train_idx,
+            print_stats=["molecules_with"],
+        )
 
 
 def get_random_walk(mol_dict, stop_token=10, seed=None):
-    '''
+    """
     Builds a random generation trace of a training molecule. Assumes that the atoms are
     ordered by distance to the center of mass (close to far) and always starts with
     the first atom (i.e. the one closest to center of mass). At each step, one of the
@@ -403,7 +445,7 @@ def get_random_walk(mol_dict, stop_token=10, seed=None):
             (default: 10)
         seed (int, optional): a seed for the random selection of the focus at each
             step (default: None)
-    '''
+    """
 
     # set seed
     if seed is not None:
@@ -413,7 +455,7 @@ def get_random_walk(mol_dict, stop_token=10, seed=None):
     # extract positions, atomic numbers, and connectivity matrix
     numbers = mol_dict[Properties.Z]
     n_atoms = len(numbers)
-    con_mat = (mol_dict['_con_mat'] > 0).float()
+    con_mat = (mol_dict["_con_mat"] > 0).float()
 
     current = [-1]  # in the first step, none of the atoms is focused
     order = [0]  # the new ordering always starts with the first atom (closest to com)
@@ -422,7 +464,7 @@ def get_random_walk(mol_dict, stop_token=10, seed=None):
     # start from first atom and traverse molecular graph (choosing the focus randomly)
     con_mat[:, 0] = 0  # mark first atom as placed by removing its bonds
     avail = torch.zeros(n_atoms).float()  # list with atoms available as focus
-    avail[0] = 1.  # first atom is available
+    avail[0] = 1.0  # first atom is available
     i = 1
     while torch.sum(con_mat > 0) or (torch.sum(avail) > 0):
         # take random current focus
@@ -451,19 +493,24 @@ def get_random_walk(mol_dict, stop_token=10, seed=None):
     current = torch.tensor(current)
 
     # update dict of molecule with re-ordered positions, numbers, focus, and next types
-    mol_dict.update({'pred_types': pred_types,
-                    'current': current,
-                     Properties.R: mol_dict[Properties.R][order],
-                     Properties.Z: mol_dict[Properties.Z][order]})
+    mol_dict.update(
+        {
+            "pred_types": pred_types,
+            "current": current,
+            Properties.R: mol_dict[Properties.R][order],
+            Properties.Z: mol_dict[Properties.Z][order],
+        }
+    )
 
     # re-order or calculate distances (depending on whether they were precomputed)
-    if 'dists' in mol_dict:
+    if "dists" in mol_dict:
         # re-order
-        mol_dict['dists'] = \
-            squareform(squareform(mol_dict['dists'][:, 0])[order][:, order])[:, None]
+        mol_dict["dists"] = squareform(
+            squareform(mol_dict["dists"][:, 0])[order][:, order]
+        )[:, None]
     else:
         # compute
-        mol_dict['dists'] = pdist(mol_dict[Properties.R][order])[:, None]
+        mol_dict["dists"] = pdist(mol_dict[Properties.R][order])[:, None]
 
     # reset seed
     if seed is not None:
@@ -471,7 +518,7 @@ def get_random_walk(mol_dict, stop_token=10, seed=None):
 
 
 def get_labels(n_bins, max_size, target, width_scaling):
-    '''
+    """
     Get labels for distance predictions from ground truth distances. The labels are
     either obtained by 1d Gaussian smearing or by one-hot encoding.
 
@@ -498,31 +545,32 @@ def get_labels(n_bins, max_size, target, width_scaling):
     Returns:
         torch.Tensor: labels for distance predictions (discretized distributions over
             distances of the shape ((batch_size x )n_atoms x n_atoms x n_bins))
-    '''
+    """
     if width_scaling > 0:
         # use 1d Gaussian smearing
         centers = torch.linspace(0, max_size, n_bins)
         centers = centers.view(*[1 for _ in target.size()], -1)
         width = max_size / (n_bins - 1) * width_scaling
-        labels = torch.exp(-(1 / width) * (target.unsqueeze(-1)-centers) ** 2)
+        labels = torch.exp(-(1 / width) * (target.unsqueeze(-1) - centers) ** 2)
         max_dist_label = torch.zeros(n_bins)
-        max_dist_label[-1] = 1.
+        max_dist_label[-1] = 1.0
         labels = torch.where(target.unsqueeze(-1) <= max_size, labels, max_dist_label)
         labels = labels / torch.sum(labels, -1, keepdim=True)
     else:
         # use one hot encoding
         width = max_size / (n_bins - 1)
-        bins = (((target + (width / 2.)) / max_size) * (n_bins - 1)).long()
+        bins = (((target + (width / 2.0)) / max_size) * (n_bins - 1)).long()
         bins = torch.clamp(bins, 0, n_bins - 1)
         label_idcs = torch.arange(n_bins).reshape(1, 1, -1)
         zero_labels = torch.zeros(*target.size(), n_bins)
-        labels = torch.where(label_idcs == bins.unsqueeze(-1),
-                             torch.ones_like(zero_labels), zero_labels)
+        labels = torch.where(
+            label_idcs == bins.unsqueeze(-1), torch.ones_like(zero_labels), zero_labels
+        )
     return labels
 
 
 def get_padded_batch(mol_dicts):
-    '''
+    """
     Builds a batch of input data and applies padding where necessary.
 
     Args:
@@ -531,37 +579,38 @@ def get_padded_batch(mol_dicts):
 
     Returns:
         dict of torch.Tensor: the input data as batches in a dictionary
-    '''
+    """
 
     properties = mol_dicts[0]
 
     # initialize maximum sizes
     max_size = {
-        prop: np.array(val.size(), dtype=np.int)
-        for prop, val in properties.items()
+        prop: np.array(val.size(), dtype=np.int) for prop, val in properties.items()
     }
 
     # get maximum sizes
     for properties in mol_dicts[1:]:
         for prop, val in properties.items():
-            max_size[prop] = np.maximum(max_size[prop], np.array(val.size(),
-                                                                 dtype=np.int))
+            max_size[prop] = np.maximum(
+                max_size[prop], np.array(val.size(), dtype=np.int)
+            )
 
     # initialize batch
     batch = {
-        p: torch.zeros(len(mol_dicts),
-                       *[int(ss) for ss in size]).type(mol_dicts[0][p].type())
+        p: torch.zeros(len(mol_dicts), *[int(ss) for ss in size]).type(
+            mol_dicts[0][p].type()
+        )
         for p, size in max_size.items()
     }
     has_atom_mask = Properties.atom_mask in batch
     has_neighbor_mask = Properties.neighbor_mask in batch
 
     if not has_neighbor_mask:
-        batch[Properties.neighbor_mask] =\
-            torch.zeros_like(batch[Properties.neighbors]).float()
+        batch[Properties.neighbor_mask] = torch.zeros_like(
+            batch[Properties.neighbors]
+        ).float()
     if not has_atom_mask:
-        batch[Properties.atom_mask] =\
-            torch.zeros_like(batch[Properties.Z]).float()
+        batch[Properties.atom_mask] = torch.zeros_like(batch[Properties.Z]).float()
 
     # build batch and pad
     for k, properties in enumerate(mol_dicts):
@@ -591,15 +640,17 @@ def get_padded_batch(mol_dicts):
     return batch
 
 
-def collate_atoms(mol_dicts,
-                  all_types=[1, 6, 7, 8, 9, 10],
-                  start_token=11,
-                  n_bins=300,
-                  max_dist=15.,
-                  label_width_scaling=0.1,
-                  draw_samples=0,
-                  seed=None):
-    '''
+def collate_atoms(
+    mol_dicts,
+    all_types=[1, 6, 7, 8, 9, 10],
+    start_token=11,
+    n_bins=300,
+    max_dist=15.0,
+    label_width_scaling=0.1,
+    draw_samples=0,
+    seed=None,
+):
+    """
     Split each molecule into a random generation trace and then build batch of input
     data and apply padding.
 
@@ -630,13 +681,13 @@ def collate_atoms(mol_dicts,
 
     Returns:
         dict[str->torch.Tensor]: mini-batch of atomistic systems
-    '''
+    """
 
     # store all possible types in a tensor, build one-hot encoded label vectors
     all_types_tensor = torch.tensor(all_types)
     type_labels = torch.eye(len(all_types))  # one-hot encoding of types
     # build array that converts type to correct row index in the type labels
-    type_idc_converter = torch.zeros(torch.max(all_types_tensor)+1).long()
+    type_idc_converter = torch.zeros(torch.max(all_types_tensor) + 1).long()
     type_idc_converter[all_types_tensor.long()] = torch.arange(len(all_types))
     # extract stop token
     stop_token = all_types[-1]
@@ -661,8 +712,8 @@ def collate_atoms(mol_dicts,
         pos = mol[Properties.R]
         numbers = mol[Properties.Z]
         neighbors = mol[Properties.neighbors]
-        pred_types = mol['pred_types'].long()
-        focus = mol['current'].long() + n_tokens
+        pred_types = mol["pred_types"].long()
+        focus = mol["current"].long() + n_tokens
 
         # add start and focus tokens to data (positions, distances, atomic numbers)
         # use origin as position for both tokens
@@ -670,34 +721,38 @@ def collate_atoms(mol_dicts,
         n_atoms = len(pos)
         # store (pre-computed) pairwise distances between atoms in a distance matrix
         dists = torch.zeros(n_atoms, n_atoms)
-        dists[n_tokens:, n_tokens:] = torch.tensor(squareform(mol['dists'][:, 0]))
+        dists[n_tokens:, n_tokens:] = torch.tensor(squareform(mol["dists"][:, 0]))
         # compute distances of atoms to origin (tokens) and save them in distance matrix
-        center_dists = torch.sqrt(F.relu(torch.sum(pos ** 2, dim=1)))  # dists to com
+        center_dists = torch.sqrt(F.relu(torch.sum(pos**2, dim=1)))  # dists to com
         dists[:n_tokens, :] = center_dists.view(1, -1)
         dists[:, :n_tokens] = center_dists.view(-1, 1)
         # add start and focus token to atomic numbers
         numbers = torch.cat((torch.tensor([focus_token, start_token]), numbers), 0)
         # adjust neighbor lists due to tokens (which are basically additional atoms)
         for i in range(n_tokens, 0, -1):
-            neighbors = \
-                torch.cat((neighbors, torch.ones(n_atoms-i, 1).long()*n_atoms-i), 1)
-            neighbors = \
-                torch.cat((neighbors, torch.arange(n_atoms-i).view(1, -1)), 0)
-        cell_offset = torch.zeros(n_atoms, n_atoms-1, 3)
+            neighbors = torch.cat(
+                (neighbors, torch.ones(n_atoms - i, 1).long() * n_atoms - i), 1
+            )
+            neighbors = torch.cat((neighbors, torch.arange(n_atoms - i).view(1, -1)), 0)
+        cell_offset = torch.zeros(n_atoms, n_atoms - 1, 3)
         # update dictionary with altered data
-        mol.update({Properties.R: pos,
-                    Properties.Z: numbers,
-                    Properties.neighbors: neighbors,
-                    Properties.cell_offset: cell_offset})
+        mol.update(
+            {
+                Properties.R: pos,
+                Properties.Z: numbers,
+                Properties.neighbors: neighbors,
+                Properties.cell_offset: cell_offset,
+            }
+        )
 
         # get distance labels
-        mol['_labels'] = get_labels(n_bins, max_dist, dists, label_width_scaling)
+        mol["_labels"] = get_labels(n_bins, max_dist, dists, label_width_scaling)
 
         # remove unnecessary entries
-        mol.pop('dists')
-        mol.pop('pred_types')
-        mol.pop('current')
-        mol.pop('_con_mat')
+        mol.pop("dists")
+        mol.pop("pred_types")
+        mol.pop("current")
+        mol.pop("_con_mat")
 
         # DIVIDE INTO PARTIAL MOLECULAR STRUCTURES #
         # i marks the current step in the trace excluding prediction of stop tokens
@@ -712,9 +767,9 @@ def collate_atoms(mol_dicts,
 
             # sample a few random steps
             np.random.seed(seed)  # set seed (will have no effect if None)
-            random_steps = np.random.choice(overall_steps,
-                                            min(draw_samples, overall_steps),
-                                            replace=False)
+            random_steps = np.random.choice(
+                overall_steps, min(draw_samples, overall_steps), replace=False
+            )
             np.random.seed(None)  # reset seed
 
             index_list = []
@@ -723,7 +778,7 @@ def collate_atoms(mol_dicts,
                 random_step = int(random_step)
                 i = int(torch.sum(pred_types[:random_step] != stop_token))
                 j = random_step - i
-                index_list += [i+n_tokens]
+                index_list += [i + n_tokens]
                 j_list += [j]
                 next_list += [pred_types[random_step]]
                 current_list += [focus[random_step]]
@@ -732,11 +787,11 @@ def collate_atoms(mol_dicts,
 
         # iterate over steps in trace
         for i in index_list:
-            _i = i-n_tokens  # atom index if ignoring tokens
+            _i = i - n_tokens  # atom index if ignoring tokens
             while True:
                 partial_mol = mol.copy()
                 # get the type of the next atom
-                next_type = pred_types[_i+j]
+                next_type = pred_types[_i + j]
                 # don't consider distance predictions at stop token prediction steps
                 if next_type == stop_token:
                     dist_mask = torch.zeros(i).float()
@@ -745,26 +800,30 @@ def collate_atoms(mol_dicts,
                 # always consider the type prediction
                 type_mask = torch.ones(i).float()
                 # assemble neighborhood mask and neighbor indices
-                neighbor_mask = torch.ones(i, i-1)
-                neighbors = partial_mol[Properties.neighbors][:i, :i-1]
+                neighbor_mask = torch.ones(i, i - 1)
+                neighbors = partial_mol[Properties.neighbors][:i, : i - 1]
                 # set position and labels of the current (focus) token (first atom)
                 cur = focus[_i + j]
                 pos = partial_mol[Properties.R][:i]
                 label_idx = i if i < n_atoms else 0
-                labels = partial_mol['_labels'][label_idx, :i]
-                pos = torch.cat((pos[cur:cur+1], pos[1:]), 0)
-                labels = torch.cat((labels[cur:cur+1], labels[1:]), 0)
+                labels = partial_mol["_labels"][label_idx, :i]
+                pos = torch.cat((pos[cur : cur + 1], pos[1:]), 0)
+                labels = torch.cat((labels[cur : cur + 1], labels[1:]), 0)
 
                 partial_mol.update(
-                    {Properties.R: pos,
-                     Properties.Z: partial_mol[Properties.Z][:i],
-                     '_labels': labels,
-                     '_dist_mask': dist_mask,
-                     '_type_mask': type_mask,
-                     Properties.neighbor_mask: neighbor_mask,
-                     Properties.neighbors: neighbors,
-                     Properties.cell_offset: partial_mol[Properties.cell_offset][:i, :i-1]
-                     })
+                    {
+                        Properties.R: pos,
+                        Properties.Z: partial_mol[Properties.Z][:i],
+                        "_labels": labels,
+                        "_dist_mask": dist_mask,
+                        "_type_mask": type_mask,
+                        Properties.neighbor_mask: neighbor_mask,
+                        Properties.neighbors: neighbors,
+                        Properties.cell_offset: partial_mol[Properties.cell_offset][
+                            :i, : i - 1
+                        ],
+                    }
+                )
 
                 # store current step in list of trace steps of mini-batch molecules
                 mols_gen_steps += [partial_mol]
@@ -774,9 +833,9 @@ def collate_atoms(mol_dicts,
                         j = j_list.pop(0)
                     break
 
-                if pred_types[_i+j] == stop_token:
+                if pred_types[_i + j] == stop_token:
                     j += 1  # increase stop token counter
-                    if j == n_atoms-n_tokens:
+                    if j == n_atoms - n_tokens:
                         # stop predicted for every atom -> trace finished
                         break
                     else:
@@ -792,17 +851,21 @@ def collate_atoms(mol_dicts,
     # update with remaining indicators (the type of the next atom, all available atom
     # types and the one-hot encoded labels for the type predictions)
     next_list = torch.tensor(next_list)
-    batch.update({'_next_types': Variable(next_list),
-                  '_all_types': Variable(all_types_tensor.view(1, -1)),
-                  '_type_labels': Variable(
-                      type_labels[torch.gather(type_idc_converter, 0, next_list)])
-                  })
+    batch.update(
+        {
+            "_next_types": Variable(next_list),
+            "_all_types": Variable(all_types_tensor.view(1, -1)),
+            "_type_labels": Variable(
+                type_labels[torch.gather(type_idc_converter, 0, next_list)]
+            ),
+        }
+    )
 
     return batch
 
 
 def get_grid(radial_limits, n_bins, max_dist):
-    '''
+    """
     Get a grid with candidate atom positions. A lower and upper radial cutoff is used
     to remove positions too close to or too far from the origin of the grid (which
     should manually be centered on the current focus token at each generation step).
@@ -833,7 +896,7 @@ def get_grid(radial_limits, n_bins, max_dist):
         start_grid (numpy.ndarray): 2d array of grid positions (n_grid_positions x 3)
             for the first generation step
 
-    '''
+    """
     n_dims = 3  # make grid in 3d space
     grid_max = radial_limits[1]
     grid_steps = int(grid_max * 2 * 20) + 1  # gives steps of length 0.05
@@ -845,8 +908,9 @@ def get_grid(radial_limits, n_bins, max_dist):
     grid = np.reshape(grid, (shape_a0, -1))
     # cut off cells that are out of the spherical limits
     grid_dists = np.sqrt(np.sum(grid**2, axis=-1))
-    grid_mask = np.logical_and(grid_dists >= radial_limits[0],
-                               grid_dists <= radial_limits[1])
+    grid_mask = np.logical_and(
+        grid_dists >= radial_limits[0], grid_dists <= radial_limits[1]
+    )
     grid = grid[grid_mask]
     # assemble special grid extending only in one direction (x-axis) for the first step
     # (we don't need to populate a 3d grid due to rotational invariance at first step)
@@ -856,7 +920,7 @@ def get_grid(radial_limits, n_bins, max_dist):
 
 
 def get_default_neighbors(n_atoms):
-    '''
+    """
     Get a neighborhood indices matrix where every atom is the neighbor of every other
     atom (but not of itself, e.g. [[1, 2], [0, 2], [0, 1]] for three atoms).
 
@@ -865,23 +929,24 @@ def get_default_neighbors(n_atoms):
 
     Returns:
         list of list of int: the indices of the neighbors of each atom
-    '''
+    """
     return [list(range(0, i)) + list(range(i + 1, n_atoms)) for i in range(0, n_atoms)]
 
 
-def generate_molecules(amount,
-                       model,
-                       t=0.1,
-                       max_length=35,
-                       save_unfinished=False,
-                       all_types=[1, 6, 7, 8, 9, 10],
-                       start_token=11,
-                       n_bins=300,
-                       max_dist=15.,
-                       radial_limits=[0.9, 1.7],
-                       device='cuda'
-                       ):
-    '''
+def generate_molecules(
+    amount,
+    model,
+    t=0.1,
+    max_length=35,
+    save_unfinished=False,
+    all_types=[1, 6, 7, 8, 9, 10],
+    start_token=11,
+    n_bins=300,
+    max_dist=15.0,
+    radial_limits=[0.9, 1.7],
+    device="cuda",
+):
+    """
     Generate molecules using a trained G-SchNet model. The atomic numbers of all
     chemical elements in the training data and the numbers assigned to focus and
     start token need to be specified. A spherical grid that is re-centered on the
@@ -929,7 +994,7 @@ def generate_molecules(amount,
             positions or '_atomic_numbers' to get the corresponding
             (n_molecules x n_atoms) array of atomic numbers
 
-    '''
+    """
     failed_counter = 0
     n_dims = 3
     n_tokens = 2  # token for current atom and for center of mass (start)
@@ -937,7 +1002,7 @@ def generate_molecules(amount,
     model = model.to(device)  # put model on chosen device (gpu/cpu)
 
     # increase max_length by three to compensate for tokens and last prediction step
-    max_length += n_tokens+1
+    max_length += n_tokens + 1
     all_types = torch.tensor(all_types).long().to(device)
     stop_token = all_types[-1]
     focus_token = stop_token
@@ -965,7 +1030,7 @@ def generate_molecules(amount,
     start_grid = torch.tensor(start_grid).float().to(device)  # small start grid
 
     # create default neighborhood list
-    neighbors = torch.tensor(get_default_neighbors(max_length-1)).long().to(device)
+    neighbors = torch.tensor(get_default_neighbors(max_length - 1)).long().to(device)
 
     # create dictionary in which generated molecules will be stored (where the key
     # will be the number of atoms in the respective generated molecule)
@@ -978,13 +1043,14 @@ def generate_molecules(amount,
     def build_batch(i):
         amount = torch.sum(unfinished)  # only get predictions for unfinished molecules
         # build neighborhood and neighborhood mask
-        neighbors_i = neighbors[:i, :i-1].expand(amount, -1, -1).contiguous()
+        neighbors_i = neighbors[:i, : i - 1].expand(amount, -1, -1).contiguous()
         neighbor_mask = torch.ones_like(neighbors_i).float()
         # set position of focus token (first entry of positions)
         positions[unfinished, 0] = positions[unfinished, current_atoms[unfinished]]
         # center positions on currently focused atom (for localized grid)
-        positions[unfinished, :i] -= \
-            positions[unfinished, current_atoms[unfinished]][:, None, :]
+        positions[unfinished, :i] -= positions[unfinished, current_atoms[unfinished]][
+            :, None, :
+        ]
 
         # build batch with data of the partial molecules
         batch = {
@@ -993,18 +1059,15 @@ def generate_molecules(amount,
             Properties.atom_mask: torch.zeros(amount, i, dtype=torch.float),
             Properties.neighbors: neighbors_i,
             Properties.neighbor_mask: neighbor_mask,
-            Properties.cell_offset: torch.zeros(amount, i, max(i-1, 1), n_dims),
+            Properties.cell_offset: torch.zeros(amount, i, max(i - 1, 1), n_dims),
             Properties.cell: torch.zeros(amount, n_dims, n_dims),
-            '_next_types': atom_numbers[unfinished, i],
-            '_all_types': all_types.view(1, -1),
-            '_type_mask': torch.ones(amount, i, dtype=torch.float),
+            "_next_types": atom_numbers[unfinished, i],
+            "_all_types": all_types.view(1, -1),
+            "_type_mask": torch.ones(amount, i, dtype=torch.float),
         }
 
         # put batch into torch variables and on gpu
-        batch = {
-            k: v.to(device)
-            for k, v in batch.items()
-        }
+        batch = {k: v.to(device) for k, v in batch.items()}
         return batch
 
     for i in range(n_tokens, max_length):
@@ -1020,15 +1083,16 @@ def generate_molecules(amount,
         # a proper next type (not stop token) or are completely finished
         while torch.sum(unfinished) > 0:
             # set the marker for the current (focus) atom
-            current_atoms[unfinished] = \
-                torch.multinomial(atoms_unfinished[unfinished, :i], 1).squeeze()
+            current_atoms[unfinished] = torch.multinomial(
+                atoms_unfinished[unfinished, :i], 1
+            ).squeeze()
 
             # get batch with updated data (changes in each iteration as unfinished and
             # current_atoms are changed)
             batch = build_batch(i)
 
             # predict distribution over next atom types with model
-            type_pred = F.softmax(model(batch)['type_predictions'], dim=-1)
+            type_pred = F.softmax(model(batch)["type_predictions"], dim=-1)
             # sample types from predictions
             next_types = torch.multinomial(type_pred, 1)
             # store sampled type in tensor with atomic numbers
@@ -1041,8 +1105,9 @@ def generate_molecules(amount,
             atoms_unfinished[stop_mask, current_atoms[stop_mask]] = 0
             # get molecules that were finished in this iteration (those which were
             # unfinished before and now have all atoms marked as finished)
-            finished = global_unfinished & \
-                       (torch.sum(atoms_unfinished[:, :i], dim=1) == 0)
+            finished = global_unfinished & (
+                torch.sum(atoms_unfinished[:, :i], dim=1) == 0
+            )
 
             # store molecules which are not yet completely finished but have
             # predicted the stop type in the local unfished list in order to repeat
@@ -1052,13 +1117,15 @@ def generate_molecules(amount,
 
         # store molecules which have been finished in this generation step (i.e. all
         # of their atoms are marked as finished)
-        idx = i-n_tokens  # number of atoms in the finished molecules
+        idx = i - n_tokens  # number of atoms in the finished molecules
         if idx > 0 and torch.sum(finished) > 0:
             # center generated molecules on origin token
             positions[finished, :i] -= positions[finished, start_idx][:, None, :]
             # store positions and atomic numbers in dictionary
-            results[idx] = {Properties.R: s(positions[finished, :i]),
-                            Properties.Z: s(atom_numbers[finished, :i])}
+            results[idx] = {
+                Properties.R: s(positions[finished, :i]),
+                Properties.Z: s(atom_numbers[finished, :i]),
+            }
 
         # mark finished moleclues in global unfinished mask
         global_unfinished[global_unfinished] = ~finished[global_unfinished]
@@ -1067,7 +1134,7 @@ def generate_molecules(amount,
 
         # stop if max_length of molecules is reached or all are finished
         amount = torch.sum(unfinished)
-        if i >= max_length-1 or amount == 0:
+        if i >= max_length - 1 or amount == 0:
             break
 
         ### 2nd Part ###
@@ -1078,7 +1145,7 @@ def generate_molecules(amount,
         # run model to get predictions
         logits = model(batch)
         # get normalized log probabilities
-        log_p = F.log_softmax(logits['distance_predictions'], -1)
+        log_p = F.log_softmax(logits["distance_predictions"], -1)
         del logits
 
         if i == n_tokens:
@@ -1088,15 +1155,15 @@ def generate_molecules(amount,
 
         # set up storage for log pdf over grid positions
         log_pdf = torch.zeros_like(grid[:, 0].expand(amount, -1))
-        step = max_dist / (n_bins-1)  # step size between two distance bins
+        step = max_dist / (n_bins - 1)  # step size between two distance bins
         # iterate over atoms in order to reduce memory demands
         for atom in range(i):
             # calculate distances between grid points and respective atom
-            dists = cdists(batch[Properties.R][:, atom:atom+1, :], grid)
+            dists = cdists(batch[Properties.R][:, atom : atom + 1, :], grid)
             # calculate indices of the corresponding distance bins
-            dists += step / 2.
-            dists *= (n_bins-1) / max_dist
-            dists.clamp_(0., n_bins-1)
+            dists += step / 2.0
+            dists *= (n_bins - 1) / max_dist
+            dists.clamp_(0.0, n_bins - 1)
             dist_labels = dists.long().squeeze(1)
             del dists
             # look up probabilities of distance bins in output
@@ -1138,9 +1205,11 @@ def generate_molecules(amount,
     if save_unfinished:
         if torch.sum(unfinished) > 0:
             batch = build_batch(i)
-            results[-1] = {Properties.R: s(batch[Properties.R]),
-                           Properties.Z: s(batch[Properties.Z])}
+            results[-1] = {
+                Properties.R: s(batch[Properties.R]),
+                Properties.Z: s(batch[Properties.Z]),
+            }
 
     if failed_counter > 0:
-        print(f'Failed attempts: {failed_counter}')
+        print(f"Failed attempts: {failed_counter}")
     return results

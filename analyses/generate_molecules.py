@@ -22,6 +22,7 @@ import chex
 
 sys.path.append("..")
 
+import analyses.analysis as analysis
 import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
 import train  # noqa: E402
@@ -41,16 +42,14 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
     assert config is not None
     config = ml_collections.ConfigDict(config)
 
-    index = workdir.find("workdirs") + len("workdirs/")
-    name = workdir[index:]
-
+    name = analysis.name_from_workdir(workdir)
     model = train.create_model(config, run_in_evaluation_mode=True)
     apply_fn = jax.jit(model.apply)
 
     def get_predictions(
         frag: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
-        frags = jraph.pad_with_graphs(frag, 32, 1024, 2)
+        frags = jraph.pad_with_graphs(frag, n_node=32, n_edge=1024, n_graph=2)
         preds = apply_fn(params, rng, frags, beta)
         pred = jraph.unpad_with_graphs(preds)
         return pred
