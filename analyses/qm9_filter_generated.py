@@ -15,7 +15,7 @@ import sys
 
 sys.path.append('..')
 
-import analysis
+from analyses import analysis
 import input_pipeline_tf
 from schnetpack import Properties
 from utility_classes import Molecule, ConnectivityCompressor
