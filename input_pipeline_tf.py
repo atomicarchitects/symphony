@@ -20,7 +20,7 @@ import ml_collections
 
 import datatypes
 import models
-import utility_classes
+from analyses import utility_classes
 
 
 def get_datasets(
