@@ -1,35 +1,32 @@
 """Creates a series of visualizations to build up a molecule."""
-from typing import Sequence, Tuple
-
 import os
 import pickle
 import sys
+from typing import Sequence, Tuple
 
-from absl import flags
-from absl import app
 import ase
 import ase.build
 import ase.data
 import ase.io
 import ase.visualize
+import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
-import tqdm
-import chex
-import yaml
-import plotly.graph_objects as go
-import e3nn_jax as e3nn
 import numpy as np
-
+import plotly.graph_objects as go
+import tqdm
+import yaml
+from absl import app, flags
 
 sys.path.append("..")
-import datatypes
-import input_pipeline
-import analyses.analysis as analysis
-import models
-import qm9
+
+import analyses.analysis as analysis  # noqa: E402
+import datatypes  # noqa: E402
+import input_pipeline  # noqa: E402
+import models  # noqa: E402
+import qm9  # noqa: E402
 
 FLAGS = flags.FLAGS
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
@@ -50,11 +47,13 @@ def get_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
         return molecule, molecule.get_chemical_formula()
 
     except (KeyError, ValueError):
-        filename = os.path.basename(molecule_str).split('.')[0]
+        filename = os.path.basename(molecule_str).split(".")[0]
         return ase.io.read(molecule_str), filename
 
 
-def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int, molecule_str: str):
+def visualize_atom_removals(
+    workdir: str, outputdir: str, beta: float, step: int, molecule_str: str
+):
     """Generates visualizations of the predictions when removing each atom from a molecule."""
     molecule, molecule_name = get_molecule(molecule_str)
 
@@ -110,7 +109,7 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
         pred = get_predictions(frag)
 
         ATOMIC_COLORS = {
-            1: "rgb(200, 200, 200)",  # H
+            1: "rgb(150, 150, 150)",  # H
             6: "rgb(50, 50, 50)",  # C
             7: "rgb(0, 100, 255)",  # N
             8: "rgb(255, 0, 0)",  # O
@@ -133,51 +132,75 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
                 mode="markers",
                 marker=dict(
                     size=[ATOMIC_SIZE[i] for i in molecule.numbers],
+                    sizemode="diameter",
                     color=[ATOMIC_COLORS[i] for i in molecule.numbers],
                 ),
                 hovertext=[ase.data.chemical_symbols[i] for i in molecule.numbers],
                 opacity=1.0,
-                showlegend=False,
-            )
-        )
-        figdata.append(
-            go.Scatter3d(
-                x=[molecule.positions[target, 0]],
-                y=[molecule.positions[target, 1]],
-                z=[molecule.positions[target, 2]],
-                mode="markers",
-                marker=dict(
-                    size=1.05 * ATOMIC_SIZE[molecule.numbers[target]],
-                    color="yellow",
-                ),
-                opacity=0.5,
-                name="Target",
+                name="Molecule",
             )
         )
 
         focus = pred.globals.focus_indices[0]
-        sp = pred.globals.target_species.item()
-        position_probs = pred.globals.position_probs
-        position_probs = position_probs.resample(50, 99, 6)
-        pos = frag.nodes.positions[focus]
+        focus_pos = frag.nodes.positions[focus]
+        focus_sp = frag.nodes.species[focus].item()
 
-        cmax = position_probs.grid_values.max().item()
-        for i in range(len(RADII)):
-            prob_r = position_probs.grid_values[0, i]
-            prob_r = e3nn.SphericalSignal(prob_r, position_probs.quadrature)
-
-            surface_r = go.Surface(
-                **prob_r.plotly_surface(radius=RADII[i], translation=pos),
-                colorscale=[
-                    [0, f"rgba(0, 0, 0, 0.0)"],
-                    [1, f"rgba(0, 0, 0, 1.0)"],
-                ],
-                showscale=False,
-                cmin=0.0,
-                cmax=cmax,
-                name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[sp]]}",
+        figdata.append(
+            go.Scatter3d(
+                x=[molecule.positions[target, 0], focus_pos[0]],
+                y=[molecule.positions[target, 1], focus_pos[1]],
+                z=[molecule.positions[target, 2], focus_pos[2]],
+                mode="markers",
+                marker=dict(
+                    size=[
+                        1.3 * ATOMIC_SIZE[molecule.numbers[target]],
+                        1.3 * ATOMIC_SIZE[ATOMIC_NUMBERS[focus_sp]],
+                    ],
+                    sizemode="diameter",
+                    color=["yellow", "green"],
+                ),
+                hovertext=["Target", "Focus"],
+                opacity=0.2,
+                name="Special atoms",
             )
-            figdata.append(surface_r)
+        )
+
+        target_sp = pred.globals.target_species.item()
+        target_color = ATOMIC_COLORS[ATOMIC_NUMBERS[target_sp]]
+        target_logits = e3nn.to_s2grid(
+            pred.globals.position_coeffs,
+            50,
+            99,
+            quadrature="gausslegendre",
+            normalization="integral",
+            p_val=1,
+            p_arg=-1,
+        )
+        target_probs = target_logits.apply(
+            lambda x: jnp.exp(x - target_logits.grid_values.max())
+        )
+
+        cmin = 0.0
+        cmax = target_probs.grid_values.max().item()
+        for i in range(len(RADII)):
+            p = target_probs[0, i]
+
+            if p.grid_values.max() < cmax / 100.0:
+                continue
+
+            figdata.append(
+                go.Surface(
+                    **p.plotly_surface(radius=RADII[i], translation=focus_pos),
+                    colorscale=[
+                        [0, f"rgba({target_color[4:-1]}, 0.0)"],
+                        [1, f"rgba({target_color[4:-1]}, 1.0)"],
+                    ],
+                    showscale=False,
+                    cmin=cmin,
+                    cmax=cmax,
+                    name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[target_sp]]}",
+                )
+            )
 
         axis = dict(
             showbackground=False,
@@ -217,7 +240,7 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
         "atom_removal",
         name,
         f"beta={beta}",
-        step_name
+        step_name,
     )
     os.makedirs(outputdir, exist_ok=True)
 
@@ -229,6 +252,7 @@ def visualize_atom_removals(workdir: str, outputdir: str, beta: float, step: int
             f"{molecule_name}_target={target}.html",
         )
         fig.write_html(outputfile)
+
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
