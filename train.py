@@ -430,7 +430,7 @@ def train_and_evaluate(
     )
     profile = periodic_actions.Profile(
         logdir=workdir,
-        num_profile_steps=5,
+        every_secs=10800,
     )
     hooks = [report_progress, profile]
 
