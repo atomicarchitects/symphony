@@ -11,6 +11,7 @@ import ase.io
 import ase.visualize
 import e3nn_jax as e3nn
 import jax
+import jax.numpy as jnp
 import jraph
 import ml_collections
 import numpy as np
@@ -134,20 +135,29 @@ def visualize_atom_removals(
                 name="Molecule",
             )
         )
+        # Highlight the focus atom.
+        mol_fig_data.append(
+            go.Scatter3d(
+                x=[molecule_with_target_removed.positions[focus, 0]],
+                y=[molecule_with_target_removed.positions[focus, 1]],
+                z=[molecule_with_target_removed.positions[focus, 2]],
+                mode="markers",
+                marker=dict(
+                    size=1.05 * ATOMIC_SIZES[molecule_with_target_removed.numbers[focus]],
+                    color="yellow",
+                ),
+                opacity=0.5,
+                name="Focus",
+            )   
+        )
         # Highlight the target atom.
         mol_fig_data.append(
             go.Scatter3d(
-                x=[molecule.positions[target, 0], focus_pos[0]],
-                y=[molecule.positions[target, 1], focus_pos[1]],
-                z=[molecule.positions[target, 2], focus_pos[2]],
+                x=[molecule.positions[target, 0]],
+                y=[molecule.positions[target, 1]],
+                z=[molecule.positions[target, 2]],
                 mode="markers",
                 marker=dict(
-                    size=[
-                        1.3 * ATOMIC_SIZE[molecule.numbers[target]],
-                        1.3 * ATOMIC_SIZE[ATOMIC_NUMBERS[focus_sp]],
-                    ],
-                    sizemode="diameter",
-                    color=["yellow", "green"],
                     size=1.05 * ATOMIC_SIZES[molecule.numbers[target]],
                     color="green",
                 ),
@@ -174,23 +184,21 @@ def visualize_atom_removals(
         cmin = 0.0
         cmax = target_probs.grid_values.max().item()
         for i in range(len(RADII)):
-            p = target_probs[0, i]
+            prob_r = target_probs[0, i]
 
-            if p.grid_values.max() < cmax / 100.0:
+            if prob_r.grid_values.max() < cmax / 100.0:
                 continue
 
-            figdata.append(
-                go.Surface(
-                    **p.plotly_surface(radius=RADII[i], translation=focus_pos),
-                    colorscale=[
-                        [0, f"rgba({target_color[4:-1]}, 0.0)"],
-                        [1, f"rgba({target_color[4:-1]}, 1.0)"],
-                    ],
-                    showscale=False,
-                    cmin=cmin,
-                    cmax=cmax,
-                    name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[target_sp]]}",
-                )
+            surface_r = go.Surface(
+                **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
+                colorscale=[
+                    [0, f"rgba({target_color[4:-1]}, 0.0)"],
+                    [1, f"rgba({target_color[4:-1]}, 1.0)"],
+                ],
+                showscale=False,
+                cmin=cmin,
+                cmax=cmax,
+                name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[target_sp]]}",
             )
             mol_fig_data.append(surface_r)
 
