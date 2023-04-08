@@ -1,26 +1,23 @@
 """Creates a series of visualizations to build up a molecule."""
-from typing import Sequence, Tuple
-
 import os
 import pickle
 import sys
+from typing import Sequence, Tuple
 
-from absl import flags
-from absl import app
 import ase
 import ase.build
 import ase.data
 import ase.io
 import ase.visualize
+import e3nn_jax as e3nn
 import jax
 import jraph
 import ml_collections
+import numpy as np
+import plotly.graph_objects as go
 import tqdm
 import yaml
-import plotly.graph_objects as go
-import e3nn_jax as e3nn
-import numpy as np
-
+from absl import app, flags
 
 sys.path.append("..")
 import datatypes
@@ -35,7 +32,7 @@ RADII = models.RADII
 
 # Colors and sizes for the atoms.
 ATOMIC_COLORS = {
-    1: "rgb(200, 200, 200)",  # H
+    1: "rgb(150, 150, 150)",  # H
     6: "rgb(50, 50, 50)",  # C
     7: "rgb(0, 100, 255)",  # N
     8: "rgb(255, 0, 0)",  # O
@@ -48,6 +45,7 @@ ATOMIC_SIZES = {
     8: 30,  # O
     9: 30,  # F
 }
+
 
 
 def visualize_atom_removals(
@@ -133,17 +131,23 @@ def visualize_atom_removals(
                 hovertext=[ase.data.chemical_symbols[i] for i in molecule.numbers],
                 text=["p(focus) = {:.2f}".format(focus_probs_renormalized[i]) if i != target else "Removed" for i in range(num_nodes)],
                 opacity=1.0,
-                showlegend=False,
+                name="Molecule",
             )
         )
         # Highlight the target atom.
         mol_fig_data.append(
             go.Scatter3d(
-                x=[molecule.positions[target, 0]],
-                y=[molecule.positions[target, 1]],
-                z=[molecule.positions[target, 2]],
+                x=[molecule.positions[target, 0], focus_pos[0]],
+                y=[molecule.positions[target, 1], focus_pos[1]],
+                z=[molecule.positions[target, 2], focus_pos[2]],
                 mode="markers",
                 marker=dict(
+                    size=[
+                        1.3 * ATOMIC_SIZE[molecule.numbers[target]],
+                        1.3 * ATOMIC_SIZE[ATOMIC_NUMBERS[focus_sp]],
+                    ],
+                    sizemode="diameter",
+                    color=["yellow", "green"],
                     size=1.05 * ATOMIC_SIZES[molecule.numbers[target]],
                     color="green",
                 ),
@@ -152,25 +156,41 @@ def visualize_atom_removals(
             )   
         )
 
-        predicted_species = pred.globals.target_species.item()
-        position_probs = pred.globals.position_probs
-        position_probs = position_probs.resample(50, 99, 6)
+        target_sp = pred.globals.target_species.item()
+        target_color = ATOMIC_COLORS[ATOMIC_NUMBERS[target_sp]]
+        target_logits = e3nn.to_s2grid(
+            pred.globals.position_coeffs,
+            50,
+            99,
+            quadrature="gausslegendre",
+            normalization="integral",
+            p_val=1,
+            p_arg=-1,
+        )
+        target_probs = target_logits.apply(
+            lambda x: jnp.exp(x - target_logits.grid_values.max())
+        )
 
-        cmax = position_probs.grid_values.max().item()
+        cmin = 0.0
+        cmax = target_probs.grid_values.max().item()
         for i in range(len(RADII)):
-            prob_r = position_probs.grid_values[0, i]
-            prob_r = e3nn.SphericalSignal(prob_r, position_probs.quadrature)
+            p = target_probs[0, i]
 
-            surface_r = go.Surface(
-                **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
-                colorscale=[
-                    [0, f"rgba(0, 0, 0, 0.0)"],
-                    [1, f"rgba(0, 0, 0, 1.0)"],
-                ],
-                showscale=False,
-                cmin=0.0,
-                cmax=cmax,
-                name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[predicted_species]]}",
+            if p.grid_values.max() < cmax / 100.0:
+                continue
+
+            figdata.append(
+                go.Surface(
+                    **p.plotly_surface(radius=RADII[i], translation=focus_pos),
+                    colorscale=[
+                        [0, f"rgba({target_color[4:-1]}, 0.0)"],
+                        [1, f"rgba({target_color[4:-1]}, 1.0)"],
+                    ],
+                    showscale=False,
+                    cmin=cmin,
+                    cmax=cmax,
+                    name=f"Prediction: {ase.data.chemical_symbols[ATOMIC_NUMBERS[target_sp]]}",
+                )
             )
             mol_fig_data.append(surface_r)
 
@@ -215,6 +235,7 @@ def visualize_atom_removals(
         name,
         f"beta={beta}",
         step_name,
+        step_name,
     )
     os.makedirs(outputdir, exist_ok=True)
 
@@ -246,6 +267,8 @@ def visualize_atom_removals(
             f"{molecule_name}_target={target}_molecule.html",
         )
         mol_fig.write_html(outputfile)
+
+
 
 
 def main(unused_argv: Sequence[str]) -> None:
