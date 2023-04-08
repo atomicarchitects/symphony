@@ -303,6 +303,7 @@ class MACE(hk.Module):
         num_species: int,
         max_ell: int,
         num_basis_fns: int,
+        soft_normalization: Optional[float],
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -315,6 +316,7 @@ class MACE(hk.Module):
         self.num_species = num_species
         self.max_ell = max_ell
         self.num_basis_fns = num_basis_fns
+        self.soft_normalization = soft_normalization
 
     def __call__(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
         """Returns node embeddings for input graphs.
@@ -348,6 +350,7 @@ class MACE(hk.Module):
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
             skip_connection_first_layer=True,
+            soft_normalization=self.soft_normalization,
         )(relative_positions, species, graphs.senders, graphs.receivers)
 
         assert node_embeddings.shape == (
@@ -786,6 +789,7 @@ def create_model(
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 num_basis_fns=config.num_basis_fns,
+                soft_normalization=config.soft_normalization,
             )
         elif config.model == "NequIP":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
