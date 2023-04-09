@@ -12,6 +12,7 @@ def get_config() -> ml_collections.ConfigDict:
     # NequIP hyperparameters.
     config.model = "NequIP"
     config.num_channels = 128
+    config.r_max = 5
     config.avg_num_neighbors = 15.0
     config.num_interactions = 1
     config.max_ell = 3
