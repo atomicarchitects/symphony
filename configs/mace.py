@@ -19,5 +19,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_ell = 3
     config.num_basis_fns = 8
     config.activation = "softplus"
+    config.soft_normalization = 1e2
 
     return config
