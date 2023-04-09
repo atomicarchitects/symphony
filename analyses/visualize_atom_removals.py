@@ -109,9 +109,8 @@ def visualize_atom_removals(
     # We don't actually need a PRNG key, since we're not sampling.
     logging.info("Computing predictions...")
     preds_path = os.path.join(f"cached/{workdir.replace('/', '_')}_{molecule_name}_preds.pkl")
-    print(os.path.exists(preds_path))
     if use_cache and os.path.exists(preds_path):
-        logging.info("Using cached predictions.")
+        logging.info("Using cached predictions at %s", os.path.abspath(preds_path))
         preds = pickle.load(open(preds_path, "rb"))
     else:
         dummy_rng = jax.random.PRNGKey(0)
