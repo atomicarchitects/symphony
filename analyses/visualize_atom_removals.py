@@ -374,7 +374,7 @@ if __name__ == "__main__":
     flags.DEFINE_bool(
         "use_cache",
         False,
-        "Whether to use cached model if it exists.",
+        "Whether to use cached predictions if they exist.",
     )
 
     flags.mark_flags_as_required(["workdir", "molecule"])
