@@ -74,9 +74,13 @@ def chosen_focus_string(index: int, focus: int) -> str:
     return "(Not Chosen as Focus)"
 
 
-
 def visualize_atom_removals(
-    workdir: str, outputdir: str, beta: float, step: int, molecule_str: str, use_cache: bool
+    workdir: str,
+    outputdir: str,
+    beta: float,
+    step: int,
+    molecule_str: str,
+    use_cache: bool,
 ):
     """Generates visualizations of the predictions when removing each atom from a molecule."""
     molecule, molecule_name = analysis.construct_molecule(molecule_str)
@@ -108,7 +112,9 @@ def visualize_atom_removals(
 
     # We don't actually need a PRNG key, since we're not sampling.
     logging.info("Computing predictions...")
-    preds_path = os.path.join(f"cached/{workdir.replace('/', '_')}_{molecule_name}_preds.pkl")
+    preds_path = os.path.join(
+        f"cached/{workdir.replace('/', '_')}_{molecule_name}_preds.pkl"
+    )
     if use_cache and os.path.exists(preds_path):
         logging.info("Using cached predictions at %s", os.path.abspath(preds_path))
         preds = pickle.load(open(preds_path, "rb"))
@@ -134,16 +140,15 @@ def visualize_atom_removals(
     )
     os.makedirs(outputdir, exist_ok=True)
 
-
-    def visualize_predictions(
-        target: int
-    ) -> go.Figure:
+    def visualize_predictions(target: int) -> go.Figure:
         # Get the predictions and the molecule with the target removed.
         pred = preds[target]
-        pred = pred._replace(globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals))
+        pred = pred._replace(
+            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+        )
         molecule_with_target_removed = molecules_with_target_removed[target]
         fragment = fragments[target]
-    
+
         # Make subplots.
         fig = plotly.subplots.make_subplots(
             rows=1,
@@ -168,7 +173,10 @@ def visualize_atom_removals(
                 mode="markers",
                 marker=dict(
                     size=[
-                        get_scaling_factor(float(focus_prob), len(molecule_with_target_removed)) * ATOMIC_SIZES[num]
+                        get_scaling_factor(
+                            float(focus_prob), len(molecule_with_target_removed)
+                        )
+                        * ATOMIC_SIZES[num]
                         for focus_prob, num in zip(
                             focus_probs, molecule_with_target_removed.numbers
                         )
@@ -260,6 +268,7 @@ def visualize_atom_removals(
         predicted_target_element = ELEMENTS[predicted_target_species]
         target_element_index = ATOMIC_NUMBERS.index(molecule.numbers[target])
         species_probs = pred.globals.target_species_probs.tolist()
+
         def chosen_element_string(elem: str) -> str:
             if elem == predicted_target_element:
                 return "Chosen as Target Element"
@@ -284,10 +293,7 @@ def visualize_atom_removals(
                 hovertext=[chosen_element_string(elem) for elem in other_elements],
                 name="Other Elements Probabilities",
                 marker=dict(
-                    color=[
-                        "gray"
-                        for _ in other_elements
-                    ],
+                    color=["gray" for _ in other_elements],
                     opacity=0.8,
                 ),
                 showlegend=False,

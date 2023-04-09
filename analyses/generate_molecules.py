@@ -31,7 +31,9 @@ import models  # noqa: E402
 FLAGS = flags.FLAGS
 
 
-def generate_molecules(workdir: str, outputdir: str, beta: float, step: int, num_seeds: int):
+def generate_molecules(
+    workdir: str, outputdir: str, beta: float, step: int, num_seeds: int
+):
     """Generates molecules from a trained model at the given workdir."""
 
     if step == -1:
