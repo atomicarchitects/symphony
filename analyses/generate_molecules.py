@@ -8,6 +8,7 @@ import sys
 
 from absl import flags
 from absl import app
+from absl import logging
 import ase
 import ase.data
 import ase.io
@@ -27,6 +28,9 @@ import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
 import train  # noqa: E402
 import models  # noqa: E402
+
+
+MAX_NUM_ATOMS = 32
 
 FLAGS = flags.FLAGS
 
@@ -55,11 +59,15 @@ def generate_molecules(
     model = train.create_model(config, run_in_evaluation_mode=True)
     apply_fn = jax.jit(model.apply)
 
+    # Create output directory.
+    outputdir = os.path.join(outputdir, "molecules", "generated", name, f"beta={beta}", step_name)
+    os.makedirs(outputdir, exist_ok=True)
+    
     def get_predictions(
-        frag: jraph.GraphsTuple, rng: chex.PRNGKey
+        fragment: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
-        frags = jraph.pad_with_graphs(frag, n_node=32, n_edge=1024, n_graph=2)
-        preds = apply_fn(params, rng, frags, beta)
+        fragments = jraph.pad_with_graphs(fragment, n_node=32, n_edge=1024, n_graph=2)
+        preds = apply_fn(params, rng, fragments, beta)
         pred = jraph.unpad_with_graphs(preds)
         return pred
 
@@ -82,8 +90,6 @@ def generate_molecules(
             numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
         )
 
-    molecules = []
-
     # Generate with different seeds.
     for seed in tqdm.tqdm(range(num_seeds), desc="Generating molecules"):
         molecule = ase.Atoms(
@@ -94,10 +100,10 @@ def generate_molecules(
         rng = jax.random.PRNGKey(seed)
         for _ in range(31):
             step_rng, rng = jax.random.split(rng)
-            frag = input_pipeline.ase_atoms_to_jraph_graph(
+            fragment = input_pipeline.ase_atoms_to_jraph_graph(
                 molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
             )
-            pred = get_predictions(frag, step_rng)
+            pred = get_predictions(fragment, step_rng)
 
             stop = pred.globals.stop.squeeze(0).item()
             if stop:
@@ -105,14 +111,12 @@ def generate_molecules(
 
             molecule = append_predictions(molecule, pred)
 
-        if molecule.numbers.shape[0] < 32:
-            molecules.append(molecule)
-
-    # Save molecules.
-    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}", step_name)
-    os.makedirs(outputdir, exist_ok=True)
-    for seed, molecule in enumerate(molecules):
-        ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
+        # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
+        if molecule.numbers.shape[0] < MAX_NUM_ATOMS:
+            logging.info("Generated %s", molecule.get_chemical_formula())
+            ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
+        else:
+            logging.info("Discarding %s because it is too long", molecule.get_chemical_formula())
 
 
 def main(unused_argv: Sequence[str]) -> None:
