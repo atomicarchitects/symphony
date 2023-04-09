@@ -208,6 +208,7 @@ class E3SchNet(hk.Module):
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         cutoff: float,
         max_ell: int,
+        num_species: int,
     ):
         """
         Args:
@@ -238,9 +239,10 @@ class E3SchNet(hk.Module):
         )
         self.cutoff_fn = lambda x: cosine_cutoff(x, cutoff=cutoff)
         self.max_ell = max_ell
+        self.num_species = num_species
 
     def __call__(self, graphs: jraph.GraphsTuple) -> jnp.ndarray:
-        # 'species' are actually atomic numbers mapped to [0, NUM_ELEMENTS).
+        # 'species' are actually atomic numbers mapped to [0, self.num_species).
         # But we keep the same name for consistency with SchNetPack.
         atomic_numbers = graphs.nodes.species
         r_ij = (
@@ -258,7 +260,7 @@ class E3SchNet(hk.Module):
 
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
-        x = hk.Embed(NUM_ELEMENTS, self.n_atom_basis)(atomic_numbers)
+        x = hk.Embed(self.num_species, self.n_atom_basis)(atomic_numbers)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps)(x)
 
@@ -462,17 +464,20 @@ class TargetSpeciesPredictor(hk.Module):
         latent_size: int,
         num_layers: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
+        num_species: int,
         name: Optional[str] = None,
     ):
         super().__init__(name)
         self.latent_size = latent_size
         self.num_layers = num_layers
         self.activation = activation
+        self.num_species = num_species
 
     def __call__(self, focus_node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         focus_node_scalars = focus_node_embeddings.filter(keep="0e")
         species_logits = e3nn.haiku.MultiLayerPerceptron(
-            list_neurons=[self.latent_size] * (self.num_layers - 1) + [NUM_ELEMENTS],
+            list_neurons=[self.latent_size] * (self.num_layers - 1)
+            + [self.num_species],
             act=self.activation,
             output_activation=False,
         )(focus_node_scalars).array
@@ -491,12 +496,14 @@ class TargetPositionPredictor(hk.Module):
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
+        num_species: int,
         name: Optional[str] = None,
     ):
         super().__init__(name)
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
+        self.num_species = num_species
 
     def __call__(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
@@ -510,7 +517,7 @@ class TargetPositionPredictor(hk.Module):
 
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         target_species_embeddings = hk.Embed(
-            NUM_ELEMENTS, focus_node_embeddings.irreps.num_irreps
+            self.num_species, focus_node_embeddings.irreps.num_irreps
         )(target_species)
 
         assert target_species_embeddings.shape == (
@@ -606,7 +613,10 @@ class Predictor(hk.Module):
 
         # Check the shapes.
         assert focus_logits.shape == (num_nodes,)
-        assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
+        assert target_species_logits.shape == (
+            num_graphs,
+            self.target_species_predictor.num_species,
+        )
         assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
@@ -677,7 +687,9 @@ class Predictor(hk.Module):
         rng, species_rng = jax.random.split(rng)
         species_rngs = jax.random.split(species_rng, num_graphs)
         target_species = jax.vmap(
-            lambda key, p: jax.random.choice(key, NUM_ELEMENTS, p=p)
+            lambda key, p: jax.random.choice(
+                key, self.target_species_predictor.num_species, p=p
+            )
         )(species_rngs, target_species_probs)
 
         # Get the position coefficients.
@@ -734,7 +746,10 @@ class Predictor(hk.Module):
         assert focus_logits.shape == (num_nodes,)
         assert focus_probs.shape == (num_nodes,)
         assert focus_indices.shape == (num_graphs,)
-        assert target_species_logits.shape == (num_graphs, NUM_ELEMENTS)
+        assert target_species_logits.shape == (
+            num_graphs,
+            self.target_species_predictor.num_species,
+        )
         assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
@@ -782,6 +797,9 @@ def create_model(
     ) -> datatypes.Predictions:
         """Defines the entire network."""
 
+        if config.get("dataset", "qm9") == "qm9":
+            num_species = NUM_ELEMENTS
+
         if config.model == "MACE":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
             node_embedder = MACE(
@@ -791,7 +809,7 @@ def create_model(
                 r_max=config.r_max,
                 num_interactions=config.num_interactions,
                 avg_num_neighbors=config.avg_num_neighbors,
-                num_species=config.num_species,
+                num_species=num_species,
                 max_ell=config.max_ell,
                 num_basis_fns=config.num_basis_fns,
                 soft_normalization=config.get("soft_normalization"),
@@ -799,7 +817,7 @@ def create_model(
         elif config.model == "NequIP":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
             node_embedder = NequIP(
-                num_species=config.num_species,
+                num_species=num_species,
                 r_max=config.r_max,
                 avg_num_neighbors=config.avg_num_neighbors,
                 max_ell=config.max_ell,
@@ -822,6 +840,7 @@ def create_model(
                 activation=get_activation(config.activation),
                 cutoff=config.cutoff,
                 max_ell=config.max_ell,
+                num_species=num_species,
             )
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
@@ -835,11 +854,13 @@ def create_model(
             latent_size=config.target_species_predictor.latent_size,
             num_layers=config.target_species_predictor.num_layers,
             activation=get_activation(config.activation),
+            num_species=num_species,
         )
         target_position_predictor = TargetPositionPredictor(
             position_coeffs_lmax=config.max_ell,
             res_beta=config.target_position_predictor.res_beta,
             res_alpha=config.target_position_predictor.res_alpha,
+            num_species=num_species,
         )
         predictor = Predictor(
             node_embedder=node_embedder,
