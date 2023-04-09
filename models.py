@@ -367,6 +367,8 @@ class NequIP(hk.Module):
 
     def __init__(
         self,
+        num_species: int,
+        r_max: float,
         avg_num_neighbors: float,
         max_ell: int,
         init_embedding_dims: int,
@@ -381,6 +383,8 @@ class NequIP(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
+        self.num_species = num_species
+        self.r_max = r_max
         self.avg_num_neighbors = avg_num_neighbors
         self.max_ell = max_ell
         self.init_embedding_dims = init_embedding_dims
@@ -401,16 +405,17 @@ class NequIP(hk.Module):
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
         )
+        relative_positions = relative_positions / self.r_max
         relative_positions = e3nn.IrrepsArray("1o", relative_positions)
 
         species = graphs.nodes.species
-        node_feats = hk.Embed(NUM_ELEMENTS, self.init_embedding_dims)(species)
+        node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
         for _ in range(self.num_interactions):
             node_feats = nequip_jax.NEQUIPLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
-                num_species=NUM_ELEMENTS,
+                num_species=self.num_species,
                 max_ell=self.max_ell,
                 output_irreps=self.output_irreps,
                 even_activation=self.even_activation,
@@ -794,6 +799,8 @@ def create_model(
         elif config.model == "NequIP":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
             node_embedder = NequIP(
+                num_species=config.num_species,
+                r_max=config.r_max,
                 avg_num_neighbors=config.avg_num_neighbors,
                 max_ell=config.max_ell,
                 init_embedding_dims=config.num_channels,
