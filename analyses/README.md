@@ -6,14 +6,16 @@ Run these scripts from the top-level directory of the repository.
 For more details on supported flags,
 pass `--help` to the script.
 
+A workdir (`WORKDIR` below) is where all of the data for a particular experiment is stored. Some scripts analyse a single experiment, while others analyse multiple.
+
 ## Plot Performance of Different Models
 
 ```bash
 python -m analyses.generate_plots --basedir="${BASEDIR}"/v5                     
 ```
 
-`${BASEDIR}` is the directory where all of the workdirs are found.
-You can change the version number ("v5") depending on which models you want to plot.
+`BASEDIR` is the directory where all of the workdirs are found.
+You can change the version number (`v5`) depending on which models you want to plot.
 
 
 ## Plot Sample Complexity Curves of Different Models
