@@ -153,8 +153,7 @@ class TrainTest(parameterized.TestCase):
     @parameterized.parameters("mace", "e3schnet", "nequip")
     def test_train_and_evaluate(self, config_name: str):
         """Tests that training and evaluation runs without errors."""
-        if config_name != "e3schnet":
-            return
+
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
         jax.config.update("jax_debug_infs", True)
