@@ -49,7 +49,6 @@ ATOMIC_SIZES = {
 }
 
 
-
 def visualize_atom_removals(
     workdir: str, outputdir: str, beta: float, step: int, molecule_str: str
 ):
@@ -102,8 +101,12 @@ def visualize_atom_removals(
         pred = get_predictions(frag)
 
         # Make subplots.
-        fig = plotly.subplots.make_subplots(rows=1, cols=2, specs=[[{"type": "scene"}, {"type": "xy"}]],
-                                            subplot_titles=('Molecule',  'Target Element Probabilities'))
+        fig = plotly.subplots.make_subplots(
+            rows=1,
+            cols=2,
+            specs=[[{"type": "scene"}, {"type": "xy"}]],
+            subplot_titles=("Molecule", "Target Element Probabilities"),
+        )
 
         # Compute focus probabilities.
         focus = pred.globals.focus_indices.item()
@@ -124,16 +127,20 @@ def visualize_atom_removals(
                     size=[ATOMIC_SIZES[num] for num in molecule.numbers],
                     color=[ATOMIC_COLORS[num] for num in molecule.numbers],
                 ),
-                hovertext=[f"Element: {ase.data.chemical_symbols[num]}" for num in molecule.numbers],
+                hovertext=[
+                    f"Element: {ase.data.chemical_symbols[num]}"
+                    for num in molecule.numbers
+                ],
                 opacity=1.0,
                 name="Molecule Atoms",
             )
         )
+
         # Highlight the focus probabilities.
         def get_scaling_factor(p: float) -> float:
             if p < 1 / len(molecule_with_target_removed):
-                return 0.
-            return 1 + p ** 2
+                return 0.0
+            return 1 + p**2
 
         def chosen_focus_string(i: int) -> str:
             if i == focus:
@@ -147,12 +154,22 @@ def visualize_atom_removals(
                 z=molecule_with_target_removed.positions[:, 2],
                 mode="markers",
                 marker=dict(
-                    size=[get_scaling_factor(focus_prob) * ATOMIC_SIZES[num] for focus_prob, num in zip(focus_probs, molecule_with_target_removed.numbers)],
-                    color=["rgba(150, 75, 0, 0.5)" for _ in molecule_with_target_removed],
+                    size=[
+                        get_scaling_factor(focus_prob) * ATOMIC_SIZES[num]
+                        for focus_prob, num in zip(
+                            focus_probs, molecule_with_target_removed.numbers
+                        )
+                    ],
+                    color=[
+                        "rgba(150, 75, 0, 0.5)" for _ in molecule_with_target_removed
+                    ],
                 ),
-                hovertext=[f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i)}" for i, focus_prob in enumerate(focus_probs)],
+                hovertext=[
+                    f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i)}"
+                    for i, focus_prob in enumerate(focus_probs)
+                ],
                 name="Focus Probabilities",
-            )   
+            )
         )
         # Highlight the target atom.
         mol_trace.append(
@@ -167,7 +184,7 @@ def visualize_atom_removals(
                 ),
                 opacity=0.5,
                 name="Target Atom",
-            )   
+            )
         )
 
         # Since we downsample the position grid, we need to recompute the focus probabilities.
@@ -183,7 +200,7 @@ def visualize_atom_removals(
         position_probs = position_logits.apply(
             lambda x: jnp.exp(x - position_logits.grid_values.max())
         )
-        cmin = 0.
+        cmin = 0.0
         cmax = position_probs.grid_values.max().item()
         for i in range(len(RADII)):
             prob_r = position_probs[i]
@@ -204,7 +221,7 @@ def visualize_atom_removals(
 
         for trace in mol_trace:
             fig.add_trace(trace, row=1, col=1)
-        
+
         # Plot target species probabilities.
         predicted_target_species = pred.globals.target_species.item()
         predicted_target_element = ELEMENTS[predicted_target_species]
@@ -216,7 +233,9 @@ def visualize_atom_removals(
                 return "Chosen as Target Element"
             return "Not Chosen as Target Element"
 
-        other_elements = ELEMENTS[:target_element_index] + ELEMENTS[target_element_index + 1 :]
+        other_elements = (
+            ELEMENTS[:target_element_index] + ELEMENTS[target_element_index + 1 :]
+        )
         species_trace = [
             go.Bar(
                 x=[ELEMENTS[target_element_index]],
@@ -231,7 +250,13 @@ def visualize_atom_removals(
                 + species_probs[target_element_index + 1 :],
                 hovertext=[chosen_element_string(elem) for elem in other_elements],
                 name="Other Elements Probabilities",
-                marker=dict(color=[ATOMIC_COLORS[ATOMIC_NUMBERS[ELEMENTS.index(elem)]] for elem in other_elements], opacity=0.8),
+                marker=dict(
+                    color=[
+                        ATOMIC_COLORS[ATOMIC_NUMBERS[ELEMENTS.index(elem)]]
+                        for elem in other_elements
+                    ],
+                    opacity=0.8,
+                ),
             ),
         ]
 
@@ -281,10 +306,8 @@ def visualize_atom_removals(
     os.makedirs(outputdir, exist_ok=True)
 
     # Loop over all possible targets.
-    for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):     
-        fig = remove_atom_and_visualize_predictions(
-            molecule, target=target
-        )
+    for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):
+        fig = remove_atom_and_visualize_predictions(molecule, target=target)
         outputfile = os.path.join(
             outputdir,
             f"{molecule_name}_target={target}.html",
