@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 import plotly.subplots
 import tqdm
 import yaml
-from absl import app, flags
+from absl import app, flags, logging
 
 sys.path.append("..")
 import datatypes
@@ -49,8 +49,34 @@ ATOMIC_SIZES = {
 }
 
 
+def get_title_for_name(name: str) -> str:
+    """Returns the title for the given name."""
+    if "e3schnet" in name:
+        return "E3SchNet"
+    elif "mace" in name:
+        return "MACE"
+    elif "nequip" in name:
+        return "NequIP"
+    return name.title()
+
+
+def get_scaling_factor(prob: float, num_nodes: int) -> float:
+    """Returns a scaling factor for the size of the atom."""
+    if prob < 1 / num_nodes:
+        return 0.95
+    return 1 + prob**2
+
+
+def chosen_focus_string(index: int, focus: int) -> str:
+    """Returns a string indicating whether the atom was chosen as the focus."""
+    if index == focus:
+        return "(Chosen as Focus)"
+    return "(Not Chosen as Focus)"
+
+
+
 def visualize_atom_removals(
-    workdir: str, outputdir: str, beta: float, step: int, molecule_str: str
+    workdir: str, outputdir: str, beta: float, step: int, molecule_str: str, use_cache: bool
 ):
     """Generates visualizations of the predictions when removing each atom from a molecule."""
     molecule, molecule_name = analysis.construct_molecule(molecule_str)
@@ -59,32 +85,10 @@ def visualize_atom_removals(
         workdir, step, run_in_evaluation_mode=True
     )
 
-    apply_fn = jax.jit(model.apply)
-
-    def get_predictions(
-        frag: jraph.GraphsTuple,
-    ) -> datatypes.Predictions:
-        frags = jraph.pad_with_graphs(frag, n_node=32, n_edge=1024, n_graph=2)
-        # We don't actually need a PRNG key, since we're not sampling.
-        dummy_rng = jax.random.PRNGKey(0)
-        preds = apply_fn(params, dummy_rng, frags, beta)
-        pred = jraph.unpad_with_graphs(preds)
-        pred = jax.tree_map(np.asarray, pred)
-        pred = datatypes.Predictions(
-            globals=jax.tree_map(lambda x: x.squeeze(axis=0), pred.globals),
-            nodes=pred.nodes,
-            edges=pred.edges,
-            senders=pred.senders,
-            receivers=pred.receivers,
-            n_node=pred.n_node,
-            n_edge=pred.n_edge,
-        )
-        return pred
-
-    def remove_atom_and_visualize_predictions(
-        molecule: ase.Atoms, target: int
-    ) -> Tuple[go.Figure, go.Figure, go.Figure]:
-        # Remove the target atom from the molecule.
+    # Remove the target atoms from the molecule.
+    molecules_with_target_removed = []
+    fragments = []
+    for target in range(len(molecule)):
         molecule_with_target_removed = ase.Atoms(
             positions=np.concatenate(
                 [molecule.positions[:target], molecule.positions[target + 1 :]]
@@ -93,13 +97,54 @@ def visualize_atom_removals(
                 [molecule.numbers[:target], molecule.numbers[target + 1 :]]
             ),
         )
-        frag = input_pipeline.ase_atoms_to_jraph_graph(
+        fragment = input_pipeline.ase_atoms_to_jraph_graph(
             molecule_with_target_removed,
             ATOMIC_NUMBERS,
             config.nn_cutoff,
         )
-        pred = get_predictions(frag)
 
+        molecules_with_target_removed.append(molecule_with_target_removed)
+        fragments.append(fragment)
+
+    # We don't actually need a PRNG key, since we're not sampling.
+    logging.info("Computing predictions...")
+    preds_path = os.path.join(f"cached/{workdir.replace('/', '_')}_{molecule_name}_preds.pkl")
+    print(os.path.exists(preds_path))
+    if use_cache and os.path.exists(preds_path):
+        logging.info("Using cached predictions.")
+        preds = pickle.load(open(preds_path, "rb"))
+    else:
+        dummy_rng = jax.random.PRNGKey(0)
+        preds = jax.jit(model.apply)(params, dummy_rng, jraph.batch(fragments), beta)
+        preds = jax.tree_map(np.asarray, preds)
+        preds = jraph.unbatch(preds)
+        os.makedirs(os.path.dirname(preds_path), exist_ok=True)
+        pickle.dump(preds, open(preds_path, "wb"))
+        logging.info("Predictions computed.")
+
+    # Create the output directory where HTML files will be saved.
+    step_name = "step=best" if step == -1 else f"step={step}"
+    outputdir = os.path.join(
+        FLAGS.outputdir,
+        "visualizations",
+        "atom_removal",
+        name,
+        f"beta={beta}",
+        step_name,
+        step_name,
+    )
+    os.makedirs(outputdir, exist_ok=True)
+
+
+    def visualize_predictions(
+        target: int
+    ) -> go.Figure:
+        # Get the predictions and the molecule with the target removed.
+        pred = preds[target]
+        pred = pred._replace(globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals))
+        molecule_with_target_removed = molecules_with_target_removed[target]
+        fragment = fragments[target]
+    
         # Make subplots.
         fig = plotly.subplots.make_subplots(
             rows=1,
@@ -108,15 +153,39 @@ def visualize_atom_removals(
             subplot_titles=("Molecule", "Target Element Probabilities"),
         )
 
-        # Compute focus probabilities.
-        focus = pred.globals.focus_indices.item()
-        focus_position = frag.nodes.positions[focus]
-        stop_prob = pred.globals.stop_probs.item()
-        focus_probs = pred.nodes.focus_probs
-        focus_probs = (1 - stop_prob) * focus_probs
-
-        # Plot the actual molecule.
+        # Highlight the focus probabilities.
         mol_trace = []
+        focus = pred.globals.focus_indices.item()
+        focus -= sum(p.n_node.item() for i, p in enumerate(preds) if i < target)
+        focus_position = fragment.nodes.positions[focus]
+        stop_prob = pred.globals.stop_probs.item()
+        focus_probs = (1 - stop_prob) * pred.nodes.focus_probs
+
+        mol_trace.append(
+            go.Scatter3d(
+                x=molecule_with_target_removed.positions[:, 0],
+                y=molecule_with_target_removed.positions[:, 1],
+                z=molecule_with_target_removed.positions[:, 2],
+                mode="markers",
+                marker=dict(
+                    size=[
+                        get_scaling_factor(float(focus_prob), len(molecule_with_target_removed)) * ATOMIC_SIZES[num]
+                        for focus_prob, num in zip(
+                            focus_probs, molecule_with_target_removed.numbers
+                        )
+                    ],
+                    color=[
+                        "rgba(150, 75, 0, 0.5)" for _ in molecule_with_target_removed
+                    ],
+                ),
+                hovertext=[
+                    f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
+                    for i, focus_prob in enumerate(focus_probs)
+                ],
+                name="Focus Probabilities",
+            )
+        )
+        # Plot the actual molecule.
         mol_trace.append(
             go.Scatter3d(
                 x=molecule.positions[:, 0],
@@ -133,42 +202,7 @@ def visualize_atom_removals(
                 ],
                 opacity=1.0,
                 name="Molecule Atoms",
-            )
-        )
-
-        # Highlight the focus probabilities.
-        def get_scaling_factor(p: float) -> float:
-            if p < 1 / len(molecule_with_target_removed):
-                return 0.0
-            return 1 + p**2
-
-        def chosen_focus_string(i: int) -> str:
-            if i == focus:
-                return "(Chosen as Focus)"
-            return "(Not Chosen as Focus)"
-
-        mol_trace.append(
-            go.Scatter3d(
-                x=molecule_with_target_removed.positions[:, 0],
-                y=molecule_with_target_removed.positions[:, 1],
-                z=molecule_with_target_removed.positions[:, 2],
-                mode="markers",
-                marker=dict(
-                    size=[
-                        get_scaling_factor(focus_prob) * ATOMIC_SIZES[num]
-                        for focus_prob, num in zip(
-                            focus_probs, molecule_with_target_removed.numbers
-                        )
-                    ],
-                    color=[
-                        "rgba(150, 75, 0, 0.5)" for _ in molecule_with_target_removed
-                    ],
-                ),
-                hovertext=[
-                    f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i)}"
-                    for i, focus_prob in enumerate(focus_probs)
-                ],
-                name="Focus Probabilities",
+                legendrank=1,
             )
         )
         # Highlight the target atom.
@@ -227,7 +261,6 @@ def visualize_atom_removals(
         predicted_target_element = ELEMENTS[predicted_target_species]
         target_element_index = ATOMIC_NUMBERS.index(molecule.numbers[target])
         species_probs = pred.globals.target_species_probs.tolist()
-
         def chosen_element_string(elem: str) -> str:
             if elem == predicted_target_element:
                 return "Chosen as Target Element"
@@ -243,6 +276,7 @@ def visualize_atom_removals(
                 hovertext=[chosen_element_string(ELEMENTS[target_element_index])],
                 name="True Target Element Probability",
                 marker=dict(color="green", opacity=0.8),
+                showlegend=False,
             ),
             go.Bar(
                 x=other_elements,
@@ -252,11 +286,12 @@ def visualize_atom_removals(
                 name="Other Elements Probabilities",
                 marker=dict(
                     color=[
-                        ATOMIC_COLORS[ATOMIC_NUMBERS[ELEMENTS.index(elem)]]
-                        for elem in other_elements
+                        "gray"
+                        for _ in other_elements
                     ],
                     opacity=0.8,
                 ),
+                showlegend=False,
             ),
         ]
 
@@ -272,7 +307,10 @@ def visualize_atom_removals(
             title="",
             nticks=3,
         )
+        model_name = get_title_for_name(name)
         fig.update_layout(
+            title=f"{model_name}: Predictions for {molecule_name}",
+            title_x=0.5,
             width=1500,
             height=800,
             scene=dict(
@@ -292,22 +330,10 @@ def visualize_atom_removals(
         )
         return fig
 
-    # Create the output directory where HTML files will be saved.
-    step_name = "step=best" if step == -1 else f"step={step}"
-    outputdir = os.path.join(
-        FLAGS.outputdir,
-        "visualizations",
-        "atom_removal",
-        name,
-        f"beta={beta}",
-        step_name,
-        step_name,
-    )
-    os.makedirs(outputdir, exist_ok=True)
-
     # Loop over all possible targets.
+    logging.info("Visualizing predictions...")
     for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):
-        fig = remove_atom_and_visualize_predictions(molecule, target=target)
+        fig = visualize_predictions(target)
         outputfile = os.path.join(
             outputdir,
             f"{molecule_name}_target={target}.html",
@@ -323,8 +349,9 @@ def main(unused_argv: Sequence[str]) -> None:
     beta = FLAGS.beta
     step = FLAGS.step
     molecule_str = FLAGS.molecule
+    use_cache = FLAGS.use_cache
 
-    visualize_atom_removals(workdir, outputdir, beta, step, molecule_str)
+    visualize_atom_removals(workdir, outputdir, beta, step, molecule_str, use_cache)
 
 
 if __name__ == "__main__":
@@ -344,6 +371,11 @@ if __name__ == "__main__":
         "molecule",
         None,
         "Molecule to use for experiment. Can be specified either as an index for the QM9 dataset, a name for ase.build.molecule(), or a file with atomic numbers and coordinates for ase.io.read().",
+    )
+    flags.DEFINE_bool(
+        "use_cache",
+        False,
+        "Whether to use cached model if it exists.",
     )
 
     flags.mark_flags_as_required(["workdir", "molecule"])
