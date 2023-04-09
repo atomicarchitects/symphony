@@ -48,7 +48,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 
 def name_from_workdir(workdir: str) -> str:
-    """Returns the name of the model from the workdir."""
+    """Returns the full name of the model from the workdir."""
     index = workdir.find("workdirs") + len("workdirs/")
     return workdir[index:]
 

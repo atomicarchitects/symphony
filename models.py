@@ -794,7 +794,7 @@ def create_model(
                 num_species=config.num_species,
                 max_ell=config.max_ell,
                 num_basis_fns=config.num_basis_fns,
-                soft_normalization=config.soft_normalization,
+                soft_normalization=config.get("soft_normalization"),
             )
         elif config.model == "NequIP":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)

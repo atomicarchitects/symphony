@@ -31,7 +31,9 @@ import models  # noqa: E402
 FLAGS = flags.FLAGS
 
 
-def generate_molecules(workdir: str, outputdir: str, beta: float, step: int):
+def generate_molecules(
+    workdir: str, outputdir: str, beta: float, step: int, num_seeds: int
+):
     """Generates molecules from a trained model at the given workdir."""
 
     if step == -1:
@@ -83,7 +85,7 @@ def generate_molecules(workdir: str, outputdir: str, beta: float, step: int):
     molecules = []
 
     # Generate with different seeds.
-    for seed in tqdm.tqdm(range(64)):
+    for seed in tqdm.tqdm(range(num_seeds), desc="Generating molecules"):
         molecule = ase.Atoms(
             positions=jnp.array([[0.0, 0.0, 0.0]]),
             numbers=jnp.array([6]),
@@ -120,8 +122,9 @@ def main(unused_argv: Sequence[str]) -> None:
     outputdir = FLAGS.outputdir
     beta = FLAGS.beta
     step = FLAGS.step
+    num_seeds = FLAGS.num_seeds
 
-    generate_molecules(workdir, outputdir, beta, step)
+    generate_molecules(workdir, outputdir, beta, step, num_seeds)
 
 
 if __name__ == "__main__":
@@ -137,6 +140,10 @@ if __name__ == "__main__":
         -1,
         "Step number to load model from. The default of -1 corresponds to the best model.",
     )
-
+    flags.DEFINE_integer(
+        "num_seeds",
+        64,
+        "Number of seeds to attempt to generate molecules from.",
+    )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

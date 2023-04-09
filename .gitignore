@@ -176,3 +176,4 @@ grid_main.py
 notebooks/gen
 loss_outputs
 *.html
+cached/
