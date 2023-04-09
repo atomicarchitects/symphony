@@ -16,6 +16,7 @@ import jraph
 import ml_collections
 import numpy as np
 import plotly.graph_objects as go
+import plotly.subplots
 import tqdm
 import yaml
 from absl import app, flags
@@ -100,31 +101,16 @@ def visualize_atom_removals(
         )
         pred = get_predictions(frag)
 
+        # Make subplots.
+        fig = plotly.subplots.make_subplots(rows=1, cols=2, specs=[[{"type": "scene"}, {"type": "xy"}]],
+                                            subplot_titles=('Molecule',  'Target Element Probabilities'))
+
         # Compute focus probabilities.
         focus = pred.globals.focus_indices.item()
         focus_position = frag.nodes.positions[focus]
         stop_prob = pred.globals.stop_probs.item()
         focus_probs = pred.nodes.focus_probs
         focus_probs = (1 - stop_prob) * focus_probs
-
-        # Plot species probabilities.
-        target_element_index = ATOMIC_NUMBERS.index(molecule.numbers[target])
-        species_probs = pred.globals.target_species_probs.tolist()
-        species_trace = [
-            go.Bar(
-                x=[ELEMENTS[target_element_index]],
-                y=[species_probs[target_element_index]],
-            ),
-            go.Bar(
-                x=ELEMENTS[:target_element_index]
-                + ELEMENTS[target_element_index + 1 :],
-                y=species_probs[:target_element_index]
-                + species_probs[target_element_index + 1 :],
-            ),
-        ]
-
-        species_fig = go.Figure(species_trace
-        )
 
         # Plot the actual molecule.
         mol_trace = []
@@ -135,20 +121,24 @@ def visualize_atom_removals(
                 z=molecule.positions[:, 2],
                 mode="markers",
                 marker=dict(
-                    size=[ATOMIC_SIZES[i] for i in molecule.numbers],
-                    color=[ATOMIC_COLORS[i] for i in molecule.numbers],
+                    size=[ATOMIC_SIZES[num] for num in molecule.numbers],
+                    color=[ATOMIC_COLORS[num] for num in molecule.numbers],
                 ),
-                hovertext=[ase.data.chemical_symbols[i] for i in molecule.numbers],
+                hovertext=[f"Element: {ase.data.chemical_symbols[num]}" for num in molecule.numbers],
                 opacity=1.0,
-                name="Molecule",
+                name="Molecule Atoms",
             )
         )
         # Highlight the focus probabilities.
-        print(focus_probs)
-        def get_size(x):
-            if x < 0.1:
-                return 0
-            return 1 + x
+        def get_scaling_factor(p: float) -> float:
+            if p < 1 / len(molecule_with_target_removed):
+                return 0.
+            return 1 + p ** 2
+
+        def chosen_focus_string(i: int) -> str:
+            if i == focus:
+                return "(Chosen as Focus)"
+            return "(Not Chosen as Focus)"
 
         mol_trace.append(
             go.Scatter3d(
@@ -157,10 +147,10 @@ def visualize_atom_removals(
                 z=molecule_with_target_removed.positions[:, 2],
                 mode="markers",
                 marker=dict(
-                    size=[get_size(focus_probs[i]) * ATOMIC_SIZES[i] for i in molecule_with_target_removed.numbers],
-                    color=["yellow" for _ in molecule_with_target_removed.numbers],
+                    size=[get_scaling_factor(focus_prob) * ATOMIC_SIZES[num] for focus_prob, num in zip(focus_probs, molecule_with_target_removed.numbers)],
+                    color=["rgba(150, 75, 0, 0.5)" for _ in molecule_with_target_removed],
                 ),
-                opacity=0.5,
+                hovertext=[f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i)}" for i, focus_prob in enumerate(focus_probs)],
                 name="Focus Probabilities",
             )   
         )
@@ -176,11 +166,11 @@ def visualize_atom_removals(
                     color=["green"],
                 ),
                 opacity=0.5,
-                name="Target",
+                name="Target Atom",
             )   
         )
 
-        target_sp = pred.globals.target_species.item()
+        # Since we downsample the position grid, we need to recompute the focus probabilities.
         position_logits = e3nn.to_s2grid(
             pred.globals.position_coeffs,
             50,
@@ -193,24 +183,62 @@ def visualize_atom_removals(
         position_probs = position_logits.apply(
             lambda x: jnp.exp(x - position_logits.grid_values.max())
         )
-        cmin = 0.1
+        cmin = 0.
         cmax = position_probs.grid_values.max().item()
         for i in range(len(RADII)):
             prob_r = position_probs[i]
             surface_r = go.Surface(
                 **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
                 colorscale=[
-                    [0, f"rgba(0, 0, 0, 0.0)"],
-                    [1, f"rgba(0, 0, 0, 1.0)"],
+                    [0, "rgba(4, 59, 192, 0.)"],
+                    [1, "rgba(4, 59, 192, 1.)"],
                 ],
                 showscale=False,
                 cmin=cmin,
                 cmax=cmax,
                 name=f"Position Probabilities",
+                legendgroup="Position Probabilities",
                 showlegend=(i == 0),
             )
             mol_trace.append(surface_r)
 
+        for trace in mol_trace:
+            fig.add_trace(trace, row=1, col=1)
+        
+        # Plot target species probabilities.
+        predicted_target_species = pred.globals.target_species.item()
+        predicted_target_element = ELEMENTS[predicted_target_species]
+        target_element_index = ATOMIC_NUMBERS.index(molecule.numbers[target])
+        species_probs = pred.globals.target_species_probs.tolist()
+
+        def chosen_element_string(elem: str) -> str:
+            if elem == predicted_target_element:
+                return "Chosen as Target Element"
+            return "Not Chosen as Target Element"
+
+        other_elements = ELEMENTS[:target_element_index] + ELEMENTS[target_element_index + 1 :]
+        species_trace = [
+            go.Bar(
+                x=[ELEMENTS[target_element_index]],
+                y=[species_probs[target_element_index]],
+                hovertext=[chosen_element_string(ELEMENTS[target_element_index])],
+                name="True Target Element Probability",
+                marker=dict(color="green", opacity=0.8),
+            ),
+            go.Bar(
+                x=other_elements,
+                y=species_probs[:target_element_index]
+                + species_probs[target_element_index + 1 :],
+                hovertext=[chosen_element_string(elem) for elem in other_elements],
+                name="Other Elements Probabilities",
+                marker=dict(color=[ATOMIC_COLORS[ATOMIC_NUMBERS[ELEMENTS.index(elem)]] for elem in other_elements], opacity=0.8),
+            ),
+        ]
+
+        fig.add_trace(species_trace[0], row=1, col=2)
+        fig.add_trace(species_trace[1], row=1, col=2)
+
+        # Update the layout.
         axis = dict(
             showbackground=False,
             showticklabels=False,
@@ -219,35 +247,25 @@ def visualize_atom_removals(
             title="",
             nticks=3,
         )
-
-        layout = go.Layout(
-            width=800,
-            height=600,
+        fig.update_layout(
+            width=1500,
+            height=800,
             scene=dict(
                 xaxis=dict(**axis),
                 yaxis=dict(**axis),
                 zaxis=dict(**axis),
                 aspectmode="data",
-                camera=dict(
-                    up=dict(x=0, y=1, z=0),
-                    center=dict(x=0, y=0, z=0),
-                    eye=dict(x=0, y=0, z=5),
-                    projection=dict(type="orthographic"),
-                ),
             ),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=0, b=0),
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="right",
+                x=0.1,
+            ),
         )
-        mol_fig = go.Figure(data=mol_trace, layout=layout)
-        mol_fig.update_layout(legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=0.01
-        ))
-
-        return species_fig, mol_fig
+        return fig
 
     # Create the output directory where HTML files will be saved.
     step_name = "step=best" if step == -1 else f"step={step}"
@@ -263,30 +281,15 @@ def visualize_atom_removals(
     os.makedirs(outputdir, exist_ok=True)
 
     # Loop over all possible targets.
-    # for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):
-    for target in tqdm.tqdm(range(1), desc="Targets"):
-        species_fig, mol_fig = remove_atom_and_visualize_predictions(
+    for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):     
+        fig = remove_atom_and_visualize_predictions(
             molecule, target=target
         )
         outputfile = os.path.join(
             outputdir,
-            f"{molecule_name}_target={target}_species.png",
+            f"{molecule_name}_target={target}.html",
         )
-        species_fig.write_image(outputfile)
-
-        outputfile = os.path.join(
-            outputdir,
-            f"{molecule_name}_target={target}_molecule.png",
-        )
-        mol_fig.write_image(outputfile)
-
-        outputfile = os.path.join(
-            outputdir,
-            f"{molecule_name}_target={target}_molecule.html",
-        )
-        mol_fig.write_html(outputfile)
-
-
+        fig.write_html(outputfile)
 
 
 def main(unused_argv: Sequence[str]) -> None:
