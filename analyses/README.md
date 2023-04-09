@@ -20,7 +20,8 @@ You can change the version number (`v5`) depending on which models you want to p
 
 ## Plot Sample Complexity Curves of Different Models
 
-A sample complexity curve is the 
+A sample complexity curve is a plot of the model's performance as a function of the number of training samples.
+
 ```bash
 python -m analyses.generate_plots --basedir="${BASEDIR}"/extras/sample_complexity                   
 ```
