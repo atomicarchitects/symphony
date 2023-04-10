@@ -175,12 +175,14 @@ def visualize_predictions(
     cmax = position_probs.grid_values.max().item()
     for i in range(len(RADII)):
         prob_r = position_probs[i]
+
+        # Skip if the probability is too small.
+        if prob_r.grid_values.max() < 1e-2 * cmax:
+            continue
+
         surface_r = go.Surface(
             **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
-            colorscale=[
-                [0, "rgba(4, 59, 192, 0.)"],
-                [1, "rgba(4, 59, 192, 1.)"],
-            ],
+            colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
             showscale=False,
             cmin=cmin,
             cmax=cmax,
