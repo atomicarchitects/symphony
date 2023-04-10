@@ -3,7 +3,6 @@
 from typing import Sequence
 
 import os
-import pickle
 import sys
 
 from absl import flags
@@ -26,7 +25,6 @@ import analyses.analysis as analysis
 import analyses.visualize_atom_removals as visualize_atom_removals
 import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
-import train  # noqa: E402
 import models  # noqa: E402
 
 
@@ -50,7 +48,7 @@ def generate_molecules(
     step_name = "step=best" if step == -1 else f"step={step}"
     molecules_outputdir = os.path.join(outputdir, "molecules", "generated", name, f"beta={beta}", step_name)
     visualizations_outputdir = os.path.join(outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name)
-    os.makedirs(outputdir, exist_ok=True)
+    os.makedirs(molecules_outputdir, exist_ok=True)
     os.makedirs(visualizations_outputdir, exist_ok=True)
 
     def get_predictions(
