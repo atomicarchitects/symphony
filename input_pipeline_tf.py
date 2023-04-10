@@ -6,8 +6,6 @@ import re
 import os
 import sys
 
-sys.path.append("analyses")
-
 from absl import logging
 import tensorflow as tf
 from ase import Atoms
@@ -19,7 +17,6 @@ import jraph
 import ml_collections
 
 import datatypes
-import models
 
 
 def get_datasets(
@@ -151,7 +148,6 @@ def _deprecated_get_unbatched_qm9_datasets(
     num_test_files: int,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
-    print(root_dir)
     # Root directory of the dataset.
     filenames = os.listdir(root_dir)
     filenames = [os.path.join(root_dir, f) for f in filenames if "dataset_tf" in f]
