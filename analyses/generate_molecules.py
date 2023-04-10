@@ -98,15 +98,16 @@ def generate_molecules(
 
             # Run the model on the current molecule.
             pred = get_predictions(fragment, step_rng)
+
             # Check for any NaNs in the predictions.
-            # num_nans = sum(jax.tree_leaves(jax.tree_map(lambda x: jnp.isnan(x).sum(), pred)))
-            # if num_nans > 0:
-            #     print("NaNs in predictions. Skipping.")
-            #     print(pred)
+            num_nans = sum(jax.tree_leaves(jax.tree_map(lambda x: jnp.isnan(x).sum(), pred)))
+            if num_nans > 0:
+                logging.info("NaNs in predictions. Stopping generation...")
+                break
 
             # Check if we should stop.
             stop = pred.globals.stop.item()
-            if stop or jnp.isnan(pred.globals.stop_probs):
+            if stop:
                 break
 
             # Save visualization of generation process.
