@@ -89,7 +89,7 @@ def load_model_at_step(
     if step == -1:
         params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
     else:
-        params_file = os.path.join(workdir, "checkpoints/params_{step}.pkl")
+        params_file = os.path.join(workdir, f"checkpoints/params_{step}.pkl")
 
     try:
         with open(params_file, "rb") as f:
