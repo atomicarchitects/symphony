@@ -2,7 +2,7 @@
 import os
 import pickle
 import sys
-from typing import Sequence, Tuple, Optional
+from typing import Optional, Sequence
 
 import ase
 import ase.build
@@ -13,19 +13,18 @@ import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
 import jraph
-import ml_collections
 import numpy as np
 import plotly.graph_objects as go
 import plotly.subplots
 import tqdm
-import yaml
 from absl import app, flags, logging
 
 sys.path.append("..")
-import datatypes
-import input_pipeline
-import analyses.analysis as analysis
-import models
+
+import analyses.analysis as analysis  # noqa: E402
+import datatypes  # noqa: E402
+import input_pipeline  # noqa: E402
+import models  # noqa: E402
 
 FLAGS = flags.FLAGS
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
@@ -60,7 +59,12 @@ def get_title_for_name(name: str) -> str:
     return name.title()
 
 
-def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms, molecule_with_target: Optional[ase.Atoms] = None, target: Optional[int] = None) -> go.Figure:
+def visualize_predictions(
+    pred: datatypes.Predictions,
+    input_molecule: ase.Atoms,
+    molecule_with_target: Optional[ase.Atoms] = None,
+    target: Optional[int] = None,
+) -> go.Figure:
     """Visualizes the predictions for a molecule with a target atom removed."""
 
     def get_scaling_factor(focus_prob: float, num_nodes: int) -> float:
@@ -69,13 +73,11 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
             return 0.95
         return 1 + focus_prob**2
 
-
     def chosen_focus_string(index: int, focus: int) -> str:
         """Returns a string indicating whether the atom was chosen as the focus."""
         if index == focus:
             return "(Chosen as Focus)"
         return "(Not Chosen as Focus)"
-
 
     def chosen_element_string(element: str, predicted_target_element: str) -> str:
         """Returns a string indicating whether an element was chosen as the target element."""
@@ -106,17 +108,11 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
             mode="markers",
             marker=dict(
                 size=[
-                    get_scaling_factor(
-                        float(focus_prob), len(input_molecule)
-                    )
+                    get_scaling_factor(float(focus_prob), len(input_molecule))
                     * ATOMIC_SIZES[num]
-                    for focus_prob, num in zip(
-                        focus_probs, input_molecule.numbers
-                    )
+                    for focus_prob, num in zip(focus_probs, input_molecule.numbers)
                 ],
-                color=[
-                    "rgba(150, 75, 0, 0.5)" for _ in input_molecule
-                ],
+                color=["rgba(150, 75, 0, 0.5)" for _ in input_molecule],
             ),
             hovertext=[
                 f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
@@ -188,7 +184,7 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
             showscale=False,
             cmin=cmin,
             cmax=cmax,
-            name=f"Position Probabilities",
+            name="Position Probabilities",
             legendgroup="Position Probabilities",
             showlegend=(i == 0),
         )
@@ -204,7 +200,9 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
 
     # We highlight the true target if provided.
     if target is not None:
-        target_element_index = ATOMIC_NUMBERS.index(molecule_with_target.numbers[target])
+        target_element_index = ATOMIC_NUMBERS.index(
+            molecule_with_target.numbers[target]
+        )
         other_elements = (
             ELEMENTS[:target_element_index] + ELEMENTS[target_element_index + 1 :]
         )
@@ -212,7 +210,11 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
             go.Bar(
                 x=[ELEMENTS[target_element_index]],
                 y=[species_probs[target_element_index]],
-                hovertext=[chosen_element_string(ELEMENTS[target_element_index], predicted_target_element)],
+                hovertext=[
+                    chosen_element_string(
+                        ELEMENTS[target_element_index], predicted_target_element
+                    )
+                ],
                 name="True Target Element Probability",
                 marker=dict(color="green", opacity=0.8),
                 showlegend=False,
@@ -221,10 +223,16 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
                 x=other_elements,
                 y=species_probs[:target_element_index]
                 + species_probs[target_element_index + 1 :],
-                hovertext=[chosen_element_string(elem, predicted_target_element) for elem in other_elements],
+                hovertext=[
+                    chosen_element_string(elem, predicted_target_element)
+                    for elem in other_elements
+                ],
                 name="Other Elements Probabilities",
                 marker=dict(
-                    color=["gray" if elem != predicted_target_element else "blue" for elem in other_elements],
+                    color=[
+                        "gray" if elem != predicted_target_element else "blue"
+                        for elem in other_elements
+                    ],
                     opacity=0.8,
                 ),
                 showlegend=False,
@@ -237,9 +245,15 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
                 x=ELEMENTS,
                 y=species_probs,
                 name="Elements Probabilities",
-                hovertext=[chosen_element_string(elem, predicted_target_element) for elem in ELEMENTS],
+                hovertext=[
+                    chosen_element_string(elem, predicted_target_element)
+                    for elem in ELEMENTS
+                ],
                 marker=dict(
-                    color=["gray" if elem != predicted_target_element else "blue" for elem in ELEMENTS],
+                    color=[
+                        "gray" if elem != predicted_target_element else "blue"
+                        for elem in ELEMENTS
+                    ],
                     opacity=0.8,
                 ),
                 showlegend=False,
@@ -248,7 +262,6 @@ def visualize_predictions(pred: datatypes.Predictions, input_molecule: ase.Atoms
 
     for trace in species_trace:
         fig.add_trace(trace, row=1, col=2)
-
 
     # Update the layout.
     axis = dict(
@@ -287,7 +300,7 @@ def visualize_atom_removals(
     step: int,
     molecule_str: str,
     use_cache: bool,
-    seed: int
+    seed: int,
 ):
     """Generates visualizations of the predictions when removing each atom from a molecule."""
     molecule, molecule_name = analysis.construct_molecule(molecule_str)
@@ -354,11 +367,17 @@ def visualize_atom_removals(
         pred = preds[target]._replace(
             globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
         )
-        corrected_focus_indices = pred.globals.focus_indices - sum(p.n_node.item() for i, p in enumerate(preds) if i < target)
-        pred = pred._replace(globals=pred.globals._replace(focus_indices=corrected_focus_indices))
-        
+        corrected_focus_indices = pred.globals.focus_indices - sum(
+            p.n_node.item() for i, p in enumerate(preds) if i < target
+        )
+        pred = pred._replace(
+            globals=pred.globals._replace(focus_indices=corrected_focus_indices)
+        )
+
         # Visualize and add a title.
-        fig = visualize_predictions(pred, molecules_with_target_removed[target], molecule, target)
+        fig = visualize_predictions(
+            pred, molecules_with_target_removed[target], molecule, target
+        )
         model_name = get_title_for_name(name)
         fig.update_layout(
             title=f"{model_name}: Predictions for {molecule_name}",
@@ -384,7 +403,9 @@ def main(unused_argv: Sequence[str]) -> None:
     use_cache = FLAGS.use_cache
     seed = FLAGS.seed
 
-    visualize_atom_removals(workdir, outputdir, beta, step, molecule_str, use_cache, seed)
+    visualize_atom_removals(
+        workdir, outputdir, beta, step, molecule_str, use_cache, seed
+    )
 
 
 if __name__ == "__main__":
