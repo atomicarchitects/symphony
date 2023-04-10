@@ -30,7 +30,7 @@ import train  # noqa: E402
 import models  # noqa: E402
 
 
-MAX_NUM_ATOMS = 32
+MAX_NUM_ATOMS = 3
 
 FLAGS = flags.FLAGS
 
@@ -79,14 +79,14 @@ def generate_molecules(
         )
 
     # Generate with different seeds.
-    for seed in tqdm.tqdm(range(num_seeds), desc="Generating molecules"):
+    for seed in tqdm.tqdm(range(1), desc="Generating molecules"):
         molecule = ase.Atoms(
             positions=jnp.array([[0.0, 0.0, 0.0]]),
             numbers=jnp.array([6]),
         )
 
         rng = jax.random.PRNGKey(seed)
-        for _ in range(31):
+        for _ in range(MAX_NUM_ATOMS):
             step_rng, rng = jax.random.split(rng)
             fragment = input_pipeline.ase_atoms_to_jraph_graph(
                 molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
@@ -100,7 +100,7 @@ def generate_molecules(
             molecule = append_predictions(molecule, pred)
 
         # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
-        if molecule.numbers.shape[0] < MAX_NUM_ATOMS:
+        if molecule.numbers.shape[0] < 1000:
             logging.info("Generated %s", molecule.get_chemical_formula())
             ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
         else:

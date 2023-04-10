@@ -86,7 +86,6 @@ def load_model_at_step(
     This is a lightweight version of load_from_workdir, that only constructs the model and not the training state.
     """
 
-    print(step, f"checkpoints/params_{step}.pkl")
     if step == -1:
         params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
     else:

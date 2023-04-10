@@ -136,7 +136,6 @@ def visualize_atom_removals(
         name,
         f"beta={beta}",
         step_name,
-        step_name,
     )
     os.makedirs(outputdir, exist_ok=True)
 
