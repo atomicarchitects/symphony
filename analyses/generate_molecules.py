@@ -40,26 +40,14 @@ def generate_molecules(
 ):
     """Generates molecules from a trained model at the given workdir."""
 
-    if step == -1:
-        params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
-        step_name = "step=best"
-    else:
-        params_file = os.path.join(workdir, "checkpoints/params_{step}.pkl")
-        step_name = f"step={step}"
-
-    with open(params_file, "rb") as f:
-        params = pickle.load(f)
-    with open(workdir + "/config.yml", "rt") as config_file:
-        config = yaml.unsafe_load(config_file)
-
-    assert config is not None
-    config = ml_collections.ConfigDict(config)
-
     name = analysis.name_from_workdir(workdir)
-    model = train.create_model(config, run_in_evaluation_mode=True)
+    model, params, config = analysis.load_model_at_step(
+        workdir, step, run_in_evaluation_mode=True
+    )
     apply_fn = jax.jit(model.apply)
 
     # Create output directory.
+    step_name = "step=best" if step == -1 else f"step={step}"
     outputdir = os.path.join(outputdir, "molecules", "generated", name, f"beta={beta}", step_name)
     os.makedirs(outputdir, exist_ok=True)
     
