@@ -85,6 +85,7 @@ def get_datasets(
             batching_fn, output_signature=padded_graphs_spec
         )
 
+        datasets[split] = dataset_split
         datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache()
         datasets[split + "_eval_final"] = dataset_split.take(
             config.num_eval_steps_at_end_of_training
