@@ -442,10 +442,16 @@ def train_and_evaluate(
     logging.info("Starting training.")
     train_metrics = None
     for step in range(initial_step, config.num_train_steps + 1):
-        # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+        # Get a batch of graphs.
+        try:
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
+        except StopIteration:
+            logging.info("No more training data. Continuing with final evaluation.")
+            break
+
+        # Perform one step of training.
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             state, batch_metrics = train_step(
                 state,
                 graphs,
