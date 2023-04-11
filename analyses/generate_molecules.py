@@ -56,6 +56,7 @@ def generate_molecules(
     ) -> datatypes.Predictions:
         fragments = jraph.pad_with_graphs(fragment, n_node=32, n_edge=1024, n_graph=2)
         preds = apply_fn(params, rng, fragments, beta)
+
         # Remove the batch dimension.
         pred = jraph.unpad_with_graphs(preds)
         pred = pred._replace(
@@ -124,7 +125,7 @@ def generate_molecules(
                     visualizations_outputdir,
                     f"seed={seed}_step={step}.html",
                 )
-                fig.write_html(outputfile)
+                fig.write_html(outputfile, include_plotlyjs="cdn")
 
             # Append the new atom to the molecule.
             molecule = append_predictions(molecule, pred)
