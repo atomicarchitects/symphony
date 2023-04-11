@@ -48,6 +48,12 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
     return casted_dictionary
 
 
+def name_from_workdir(workdir: str) -> str:
+    """Returns the name of the model from the workdir."""
+    index = workdir.find("workdirs") + len("workdirs/")
+    return workdir[index:]
+
+
 def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
     """Flattens a nested config into a Pandas dataframe."""
 
@@ -61,7 +67,7 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
         assert config.num_channels == config.n_filters
         del config.n_atom_basis, config.n_filters
 
-    #config.num_train_molecules = config.train_molecules[1] - config.train_molecules[0]
+    # config.num_train_molecules = config.train_molecules[1] - config.train_molecules[0]
 
     def iterate_with_prefix(dictionary: Dict[str, Any], prefix: str):
         """Iterates through a nested dictionary, yielding the flattened and prefixed keys and values."""
@@ -80,8 +86,8 @@ def get_results_as_dataframe(
 ) -> Dict[str, pd.DataFrame]:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
-
-    results = {"val": pd.DataFrame(), "test": pd.DataFrame()}
+    splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
+    results = {split: pd.DataFrame() for split in splits}
     for model in models:
         for config_file_path in glob.glob(
             os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
@@ -95,17 +101,26 @@ def get_results_as_dataframe(
                 logging.warning(f"Skipping {workdir} because it is incomplete.")
                 continue
 
-            num_params = sum(jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params)))
+            num_params = sum(
+                jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
+            )
             config_df = config_to_dataframe(config)
-            other_df = pd.DataFrame.from_dict({
-                "model": [config.model.lower()],
-                "max_l": [config.max_ell],
-                "num_params": [num_params],
-                "num_train_molecules": [config.train_molecules[1] - config.train_molecules[0]],
-            })
+            other_df = pd.DataFrame.from_dict(
+                {
+                    "model": [config.model.lower()],
+                    "max_l": [config.max_ell],
+                    "num_interactions": [config.num_interactions],
+                    "num_channels": [config.num_channels],
+                    "num_params": [num_params],
+                    "num_train_molecules": [
+                        config.train_molecules[1] - config.train_molecules[0]
+                    ],
+                }
+            )
             for split in results:
                 metrics_for_split = {
-                    metric: [metrics_for_best_state[split][metric].item()] for metric in metrics
+                    metric: [metrics_for_best_state[split][metric].item()]
+                    for metric in metrics
                 }
                 metrics_df = pd.DataFrame.from_dict(metrics_for_split)
                 df = pd.merge(config_df, metrics_df, left_index=True, right_index=True)
@@ -153,7 +168,6 @@ def load_from_workdir(
     workdir: str,
     load_pickled_params: bool = True,
     init_graphs: Optional[jraph.GraphsTuple] = None,
-
 ) -> Tuple[
     ml_collections.ConfigDict,
     train_state.TrainState,
@@ -265,21 +279,20 @@ def dataset_to_mol_dict(dataset, save=True, model_path=None):
     return generated_dict
 
 
-def frag_to_mol_dict(generated_frag: datatypes.Fragments) -> Dict[int, Dict[str, np.ndarray]]:
-    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
+def frag_to_mol_dict(
+    generated_frag: datatypes.Fragments,
+) -> Dict[int, Dict[str, np.ndarray]]:
+    """from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet"""
 
-    generated = (
-        {}
-    )
+    generated = {}
     for mol in jraph.unbatch(generated_frag):
         l = mol.nodes.species.shape[0]
         if l not in generated:
             generated[l] = {
                 "_positions": np.array([mol.nodes.positions]),
-                "_atomic_numbers": np.array([list(map(
-                    lambda z: models.ATOMIC_NUMBERS[z],
-                    mol.nodes.species
-                ))]),
+                "_atomic_numbers": np.array(
+                    [list(map(lambda z: models.ATOMIC_NUMBERS[z], mol.nodes.species))]
+                ),
             }
         else:
             generated[l]["_positions"] = np.append(
@@ -289,10 +302,9 @@ def frag_to_mol_dict(generated_frag: datatypes.Fragments) -> Dict[int, Dict[str,
             )
             generated[l]["_atomic_numbers"] = np.append(
                 generated[l]["_atomic_numbers"],
-                np.array([list(map(
-                    lambda z: models.ATOMIC_NUMBERS[z],
-                    mol.nodes.species
-                ))]),
+                np.array(
+                    [list(map(lambda z: models.ATOMIC_NUMBERS[z], mol.nodes.species))]
+                ),
                 0,
             )
 
@@ -300,7 +312,7 @@ def frag_to_mol_dict(generated_frag: datatypes.Fragments) -> Dict[int, Dict[str,
 
 
 def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
-    '''
+    """
     Updates a dictionary of numpy.ndarray with values from another dictionary of the
     same kind. If a key is present in both dictionaries, the array of the second
     dictionary is appended to the array of the first one and saved under that key in
@@ -310,7 +322,7 @@ def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
         d_upd (dict of numpy.ndarray): dictionary with new values for updating
 
     Also from G-SchNet
-    '''
+    """
     for key in d_upd:
         if key not in d:
             d[key] = d_upd[key]

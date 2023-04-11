@@ -6,7 +6,7 @@ import re
 import os
 import sys
 
-sys.path.append('analyses')
+sys.path.append("analyses")
 
 from absl import logging
 import tensorflow as tf
@@ -30,9 +30,7 @@ def get_datasets(
     del rng
 
     # Get the raw datasets.
-    datasets = get_raw_qm9_datasets(
-        config
-    )
+    datasets = get_unbatched_qm9_datasets(config)
 
     # Convert to jraph.GraphsTuple.
     for split, dataset_split in datasets.items():
@@ -86,7 +84,9 @@ def get_datasets(
         )
         datasets[split] = dataset_split
         datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache()
-        datasets[split + "_eval_final"] = dataset_split.take(config.num_eval_steps_at_end_of_training).cache()
+        datasets[split + "_eval_final"] = dataset_split.take(
+            config.num_eval_steps_at_end_of_training
+        ).cache()
 
     return datasets
 
@@ -140,7 +140,7 @@ def estimate_padding_budget_for_num_graphs(
     return n_node, n_edge, n_graph
 
 
-def _deprecated_get_raw_qm9_datasets(
+def _deprecated_get_unbatched_qm9_datasets(
     rng: chex.PRNGKey,
     root_dir: str,
     num_train_files: int,
@@ -180,7 +180,7 @@ def _deprecated_get_raw_qm9_datasets(
     return datasets
 
 
-def get_raw_qm9_datasets(
+def get_unbatched_qm9_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
 ) -> Dict[str, tf.data.Dataset]:
@@ -191,7 +191,9 @@ def get_raw_qm9_datasets(
     # Root directory of the dataset.
     filenames = sorted(os.listdir(config.root_dir))
     filenames = [
-        os.path.join(config.root_dir, f) for f in filenames if f.startswith("fragments_seed")
+        os.path.join(config.root_dir, f)
+        for f in filenames
+        if f.startswith("fragments_seed")
     ]
 
     # Partition the filenames into train, val, and test.
@@ -223,24 +225,6 @@ def get_raw_qm9_datasets(
         dataset_split = dataset_split.shuffle(1000, seed=seed)
         datasets[split] = dataset_split
     return datasets
-
-
-def dataset_as_db(config: ml_collections.ConfigDict, dbpath: str):
-    datasets = get_raw_qm9_datasets(
-        config
-    )
-    compressor = utility_classes.ConnectivityCompressor()
-    with connect(dbpath) as conn:
-        for mol in datasets['train'].as_numpy_iterator():
-            atoms = Atoms(positions=mol['positions'], numbers=models.get_atomic_numbers(mol['species']))
-            # instantiate utility_classes.Molecule object
-            mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
-            # get connectivity matrix (detecting bond orders with Open Babel)
-            con_mat = mol.get_connectivity()
-            conn.write(
-                atoms,
-                data={'con_mat': compressor.compress(con_mat)}
-            )
 
 
 def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):

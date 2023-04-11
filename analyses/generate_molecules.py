@@ -21,12 +21,13 @@ import tqdm
 import yaml
 import chex
 
-sys.path.append('..')
+sys.path.append("..")
 
-import datatypes
-import input_pipeline
-import train
-import models
+import analyses.analysis as analysis
+import datatypes  # noqa: E402
+import input_pipeline  # noqa: E402
+import train  # noqa: E402
+import models  # noqa: E402
 
 FLAGS = flags.FLAGS
 
@@ -34,27 +35,29 @@ FLAGS = flags.FLAGS
 def generate_molecules(workdir: str, outputdir: str, beta: float):
     """Generates molecules from a trained model at the given workdir."""
 
-    with open(workdir + "/checkpoints/params.pkl", 'rb') as f:
+    with open(workdir + "/checkpoints/params.pkl", "rb") as f:
         params = pickle.load(f)
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
 
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    
-    index = workdir.find("workdirs") + len("workdirs/")
-    name = workdir[index:]
 
+    name = analysis.name_from_workdir(workdir)
     model = train.create_model(config, run_in_evaluation_mode=True)
     apply_fn = jax.jit(model.apply)
 
-    def get_predictions(frag: jraph.GraphsTuple, rng: chex.PRNGKey) -> datatypes.Predictions:
-        frags = jraph.pad_with_graphs(frag, 32, 1024, 2)
+    def get_predictions(
+        frag: jraph.GraphsTuple, rng: chex.PRNGKey
+    ) -> datatypes.Predictions:
+        frags = jraph.pad_with_graphs(frag, n_node=32, n_edge=1024, n_graph=2)
         preds = apply_fn(params, rng, frags, beta)
         pred = jraph.unpad_with_graphs(preds)
         return pred
 
-    def append_predictions(molecule: ase.Atoms, pred: datatypes.Predictions) -> ase.Atoms:
+    def append_predictions(
+        molecule: ase.Atoms, pred: datatypes.Predictions
+    ) -> ase.Atoms:
         focus = pred.globals.focus_indices.squeeze(0)
         pos_focus = molecule.positions[focus]
         pos_rel = pred.globals.position_vectors.squeeze(0)
@@ -65,7 +68,9 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
         new_position = pos_focus + pos_rel
 
         return ase.Atoms(
-            positions=jnp.concatenate([molecule.positions, new_position[None, :]], axis=0),
+            positions=jnp.concatenate(
+                [molecule.positions, new_position[None, :]], axis=0
+            ),
             numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
         )
 
@@ -74,7 +79,7 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
     # Generate with different seeds.
     for seed in tqdm.tqdm(range(64)):
         molecule = ase.Atoms(
-            positions=jnp.array([[0., 0., 0.]]),
+            positions=jnp.array([[0.0, 0.0, 0.0]]),
             numbers=jnp.array([6]),
         )
 
@@ -96,7 +101,7 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
             molecules.append(molecule)
 
     # Save molecules.
-    outputdir = os.path.join(outputdir, name, f"beta={beta}", "generated")
+    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}")
     os.makedirs(outputdir, exist_ok=True)
     for seed, molecule in enumerate(molecules):
         ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
@@ -146,10 +151,10 @@ def main(unused_argv: Sequence[str]) -> None:
 
 
 if __name__ == "__main__":
-    flags.DEFINE_string("workdir", None, "Workdir for molecules.")
+    flags.DEFINE_string("workdir", None, "Workdir for model.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses", "molecules"),
+        os.path.join(os.getcwd(), "analyses"),
         "Directory where molecules should be saved.",
     )
     flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")

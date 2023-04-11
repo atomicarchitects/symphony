@@ -369,7 +369,7 @@ def train_and_evaluate(
                 rng,
                 config.loss_kwargs,
             )
-        
+
         # Compute and write metrics.
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
@@ -430,7 +430,7 @@ def train_and_evaluate(
     )
     profile = periodic_actions.Profile(
         logdir=workdir,
-        num_profile_steps=5,
+        every_secs=10800,
     )
     hooks = [report_progress, profile]
 
@@ -491,6 +491,18 @@ def train_and_evaluate(
                 best_state = state
                 step_for_best_state = step
 
+            # Save the current state and best state seen so far.
+            with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
+                pickle.dump(state.params, f)
+            ckpt.save(
+                {
+                    "state": state,
+                    "step": step,
+                    "best_state": best_state,
+                    "step_for_best_state": step_for_best_state,
+                }
+            )
+
     # Once training is complete, return the best state and corresponding metrics.
     logging.info(
         "Evaluating best state from step %d at the end of training.",
@@ -510,13 +522,15 @@ def train_and_evaluate(
     # Checkpoint the best state and corresponding metrics seen during training.
     # Save pickled parameters for easy access during evaluation.
     with report_progress.timed("checkpoint"):
-        with open(pickled_params_file, "wb") as f:
+        with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
             pickle.dump(best_state.params, f)
         ckpt.save(
             {
+                "state": state,
+                "step": step,
                 "best_state": best_state,
-                "metrics_for_best_state": metrics_for_best_state,
                 "step_for_best_state": step_for_best_state,
+                "metrics_for_best_state": metrics_for_best_state,
             }
         )
 

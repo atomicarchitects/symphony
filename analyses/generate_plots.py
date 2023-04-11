@@ -41,10 +41,12 @@ def get_title_for_model(model: str) -> str:
 
 def get_title_for_split(split):
     """Returns the title for the given split."""
-    if split == "test":
-        return "Test"
-    elif split == "val":
+    if split == "train_eval_final":
+        return "Train"
+    elif split == "val_eval_final":
         return "Validation"
+    if split == "test_eval_final":
+        return "Test"
     return split.title()
 
 
@@ -67,7 +69,13 @@ def plot_performance_for_parameters(
             ncols=len(split_num_interactions),
             figsize=(len(split_num_interactions) * 4, 6),
             sharey=True,
+            squeeze=True,
         )
+        try:
+            len(axs)
+        except TypeError:
+            axs = [axs]
+
         fig.suptitle(
             get_title_for_model(model) + " on " + get_title_for_split(split) + " Set"
         )
@@ -130,7 +138,7 @@ def plot_performance_for_parameters(
         plt.savefig(outputfile, bbox_inches="tight")
         plt.close()
 
-    models = results["val"]["model"].drop_duplicates().sort_values().values
+    models = results["val_eval_final"]["model"].drop_duplicates().sort_values().values
     for model in models:
         for split in results:
             for metric in metrics:
@@ -156,7 +164,13 @@ def plot_performance_for_max_ell(
             ncols=len(split_num_interactions),
             figsize=(len(split_num_interactions) * 4, 6),
             sharey=True,
+            squeeze=True,
         )
+        try:
+            len(axs)
+        except TypeError:
+            axs = [axs]
+
         fig.suptitle(
             get_title_for_model(model) + " on " + get_title_for_split(split) + " Set"
         )
@@ -231,7 +245,7 @@ def plot_performance_for_max_ell(
         plt.savefig(outputfile, bbox_inches="tight")
         plt.close()
 
-    models = results["val"]["model"].drop_duplicates().sort_values().values
+    models = results["val_eval_final"]["model"].drop_duplicates().sort_values().values
     for model in models:
         for split in results:
             for metric in metrics:
@@ -287,7 +301,6 @@ def plot_sample_complexity_curves(
             shadow=False,
         )
 
-
         # Axes limits.
         min_y = results[split][metric].min()
         max_y = results[split][metric].max()
@@ -309,7 +322,7 @@ def plot_sample_complexity_curves(
         plt.savefig(outputfile, bbox_inches="tight")
         plt.close()
 
-    models = results["val"]["model"].drop_duplicates().sort_values().values
+    models = results["val_eval_final"]["model"].drop_duplicates().sort_values().values
     for model in models:
         for split in results:
             for metric in metrics:
@@ -324,18 +337,20 @@ def main(argv):
     basedir = os.path.abspath(FLAGS.basedir)
     results = analysis.get_results_as_dataframe(ALL_MODELS, ALL_METRICS, basedir)
     print(results)
+
     # Make plots.
     if os.path.basename(basedir).startswith("v"):
-
         # Extract version from basedir.
         version = os.path.basename(basedir)
-        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), version)
+        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "plots", version)
 
         plot_performance_for_max_ell(ALL_METRICS, results, outputdir)
         plot_performance_for_parameters(ALL_METRICS, results, outputdir)
 
     if os.path.basename(basedir) == "sample_complexity":
-        outputdir = os.path.join(os.path.abspath(FLAGS.outputdir), "extras", "sample_complexity")
+        outputdir = os.path.join(
+            os.path.abspath(FLAGS.outputdir), "plots", "extras", "sample_complexity"
+        )
 
         plot_sample_complexity_curves(ALL_METRICS, results, outputdir)
 
@@ -344,7 +359,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("basedir", None, "Directory where all workdirs are stored.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses", "plots"),
+        os.path.join(os.getcwd(), "analyses"),
         "Directory where plots should be saved.",
     )
 

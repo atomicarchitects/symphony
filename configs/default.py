@@ -43,17 +43,17 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 20000
+    config.num_train_steps = 400000
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
-    config.eval_every_steps = 1000
+    config.eval_every_steps = 5000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
-    config.max_n_graphs = 16
-    config.max_n_nodes = 192
-    config.max_n_edges = 1344
+    config.max_n_graphs = 8
+    config.max_n_nodes = 240
+    config.max_n_edges = 720
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-3
 
