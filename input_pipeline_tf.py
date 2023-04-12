@@ -6,8 +6,6 @@ import re
 import os
 import sys
 
-sys.path.append("analyses")
-
 from absl import logging
 import tensorflow as tf
 from ase import Atoms
@@ -19,8 +17,6 @@ import jraph
 import ml_collections
 
 import datatypes
-import models
-from analyses import utility_classes
 
 
 def get_datasets(
@@ -82,7 +78,11 @@ def get_datasets(
         dataset_split = tf.data.Dataset.from_generator(
             batching_fn, output_signature=padded_graphs_spec
         )
-        datasets[split] = dataset_split
+        # We repeat the training split indefinitely.
+        if split == "train":
+            datasets[split] = dataset_split.repeat()
+        else:
+            datasets[split] = dataset_split
         datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache()
         datasets[split + "_eval_final"] = dataset_split.take(
             config.num_eval_steps_at_end_of_training
@@ -148,7 +148,6 @@ def _deprecated_get_unbatched_qm9_datasets(
     num_test_files: int,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
-    print(root_dir)
     # Root directory of the dataset.
     filenames = os.listdir(root_dir)
     filenames = [os.path.join(root_dir, f) for f in filenames if "dataset_tf" in f]

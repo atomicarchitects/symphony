@@ -5,17 +5,16 @@ import ml_collections
 import os
 
 
-def get_root_dir() -> Optional[str]:
+def get_root_dir(dataset: str) -> Optional[str]:
     """Get the root directory for the QM9 dataset."""
-    hostname, username = os.uname()[1], os.environ.get("USER")
-    if hostname == "potato.mit.edu":
-        return "/home/ameyad/qm9_data_tf/data_tf2"
-    elif username == "ameyad":
-        return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
-    elif username == "songk":
-        return (
-            "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
-        )
+    if dataset == "qm9":
+        hostname, username = os.uname()[1], os.environ.get("USER")
+        if hostname == "potato.mit.edu":
+            return "/home/ameyad/qm9_data_tf/data_tf2"
+        elif username == "ameyad":
+            return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
+        elif username == "songk":
+            return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None
 
 
@@ -24,7 +23,8 @@ def get_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     # Dataset.
-    config.root_dir = get_root_dir()
+    config.dataset = "qm9"
+    config.root_dir = get_root_dir(config.get_ref("dataset"))
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)

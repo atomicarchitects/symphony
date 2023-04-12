@@ -3,67 +3,75 @@
 from typing import List, Sequence
 
 import os
-import pickle
 import sys
 
 from absl import flags
 from absl import app
+from absl import logging
 import ase
 import ase.data
 import ase.io
 import ase.visualize
 import jax
 import jax.numpy as jnp
-import jraph
-import ml_collections
 import numpy as np
+import jraph
 import tqdm
-import yaml
 import chex
 
 sys.path.append("..")
 
 import analyses.analysis as analysis
+import analyses.visualize_atom_removals as visualize_atom_removals
 import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
-import train  # noqa: E402
 import models  # noqa: E402
+
+
+MAX_NUM_ATOMS = 10
 
 FLAGS = flags.FLAGS
 
 
-def generate_molecules(workdir: str, outputdir: str, beta: float):
+def generate_molecules(
+    workdir: str, outputdir: str, beta: float, step: int, seeds: Sequence[int], visualize: bool
+):
     """Generates molecules from a trained model at the given workdir."""
 
-    with open(workdir + "/checkpoints/params.pkl", "rb") as f:
-        params = pickle.load(f)
-    with open(workdir + "/config.yml", "rt") as config_file:
-        config = yaml.unsafe_load(config_file)
-
-    assert config is not None
-    config = ml_collections.ConfigDict(config)
-
     name = analysis.name_from_workdir(workdir)
-    model = train.create_model(config, run_in_evaluation_mode=True)
+    model, params, config = analysis.load_model_at_step(
+        workdir, step, run_in_evaluation_mode=True
+    )
     apply_fn = jax.jit(model.apply)
 
+    # Create output directory.
+    step_name = "step=best" if step == -1 else f"step={step}"
+    molecules_outputdir = os.path.join(outputdir, "molecules", "generated", name, f"beta={beta}", step_name)
+    visualizations_outputdir = os.path.join(outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name)
+    os.makedirs(molecules_outputdir, exist_ok=True)
+    os.makedirs(visualizations_outputdir, exist_ok=True)
+
     def get_predictions(
-        frag: jraph.GraphsTuple, rng: chex.PRNGKey
+        fragment: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
-        frags = jraph.pad_with_graphs(frag, n_node=32, n_edge=1024, n_graph=2)
-        preds = apply_fn(params, rng, frags, beta)
+        fragments = jraph.pad_with_graphs(fragment, n_node=32, n_edge=1024, n_graph=2)
+        preds = apply_fn(params, rng, fragments, beta)
+        # Remove the batch dimension.
         pred = jraph.unpad_with_graphs(preds)
+        pred = pred._replace(
+            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+        )
         return pred
 
     def append_predictions(
         molecule: ase.Atoms, pred: datatypes.Predictions
     ) -> ase.Atoms:
-        focus = pred.globals.focus_indices.squeeze(0)
+        focus = pred.globals.focus_indices
         pos_focus = molecule.positions[focus]
-        pos_rel = pred.globals.position_vectors.squeeze(0)
+        pos_rel = pred.globals.position_vectors
 
         new_species = jnp.array(
-            models.ATOMIC_NUMBERS[pred.globals.target_species.squeeze(0).item()]
+            models.ATOMIC_NUMBERS[pred.globals.target_species.item()]
         )
         new_position = pos_focus + pos_rel
 
@@ -74,38 +82,58 @@ def generate_molecules(workdir: str, outputdir: str, beta: float):
             numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
         )
 
-    molecules = []
-
     # Generate with different seeds.
-    for seed in tqdm.tqdm(range(64)):
+    for seed in tqdm.tqdm(seeds, desc="Generating molecules"):
         molecule = ase.Atoms(
             positions=jnp.array([[0.0, 0.0, 0.0]]),
             numbers=jnp.array([6]),
         )
 
         rng = jax.random.PRNGKey(seed)
-        for _ in range(31):
+        for step in range(MAX_NUM_ATOMS):
             step_rng, rng = jax.random.split(rng)
-            frag = input_pipeline.ase_atoms_to_jraph_graph(
+            fragment = input_pipeline.ase_atoms_to_jraph_graph(
                 molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
             )
-            pred = get_predictions(frag, step_rng)
 
-            stop = pred.globals.stop.squeeze(0).item()
-            if stop:
+            # Run the model on the current molecule.
+            pred = get_predictions(fragment, step_rng)
+            # Check for any NaNs in the predictions.
+            # num_nans = sum(jax.tree_leaves(jax.tree_map(lambda x: jnp.isnan(x).sum(), pred)))
+            # if num_nans > 0:
+            #     print("NaNs in predictions. Skipping.")
+            #     print(pred)
+
+            # Check if we should stop.
+            stop = pred.globals.stop.item()
+            if stop or jnp.isnan(pred.globals.stop_probs):
                 break
 
+            # Save visualization of generation process.
+            if visualize:
+                fig = visualize_atom_removals.visualize_predictions(pred, molecule)
+                model_name = visualize_atom_removals.get_title_for_name(name)
+                fig.update_layout(
+                    title=f"{model_name}: Predictions for Seed {seed} at Step {step}",
+                    title_x=0.5,
+                )
+
+                # Save to file.
+                outputfile = os.path.join(
+                    visualizations_outputdir,
+                    f"seed={seed}_step={step}.html",
+                )
+                fig.write_html(outputfile)
+
+            # Append the new atom to the molecule.
             molecule = append_predictions(molecule, pred)
 
-        if molecule.numbers.shape[0] < 32:
-            molecules.append(molecule)
-
-    # Save molecules.
-    outputdir = os.path.join(outputdir, "molecules", name, f"beta={beta}")
-    os.makedirs(outputdir, exist_ok=True)
-    for seed, molecule in enumerate(molecules):
-        ase.io.write(f"{outputdir}/molecule_{seed}.xyz", molecule)
-    ase_to_mol_dict(molecules, file_name=f"{outputdir}/generated_molecules.mol_dict")
+        # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
+        if molecule.numbers.shape[0] < 1000:
+            logging.info("Generated %s", molecule.get_chemical_formula())
+            ase.io.write(os.path.join(molecules_outputdir, f"seed={seed}_molecule.xyz"), molecule)
+        else:
+            logging.info("Discarding %s because it is too long", molecule.get_chemical_formula())
 
 
 def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
@@ -143,11 +171,14 @@ def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
-    workdir = FLAGS.workdir
+    workdir = os.path.abspath(FLAGS.workdir)
     outputdir = FLAGS.outputdir
     beta = FLAGS.beta
-
-    generate_molecules(workdir, outputdir, beta)
+    step = FLAGS.step
+    seeds = [int(seed) for seed in FLAGS.seeds]
+    visualize = FLAGS.visualize
+    
+    generate_molecules(workdir, outputdir, beta, step, seeds, visualize)
 
 
 if __name__ == "__main__":
@@ -158,6 +189,20 @@ if __name__ == "__main__":
         "Directory where molecules should be saved.",
     )
     flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
-
+    flags.DEFINE_integer(
+        "step",
+        -1,
+        "Step number to load model from. The default of -1 corresponds to the best model.",
+    )
+    flags.DEFINE_list(
+        "seeds",
+        list(range(64)),
+        "Seeds to attempt to generate molecules from.",
+    )
+    flags.DEFINE_bool(
+        "visualize",
+        False,
+        "Whether to visualize the generation process step-by-step.",
+    )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

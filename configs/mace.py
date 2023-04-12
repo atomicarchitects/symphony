@@ -15,9 +15,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.r_max = 5
     config.num_interactions = 1
     config.avg_num_neighbors = 15.0
-    config.num_species = 5
     config.max_ell = 3
     config.num_basis_fns = 8
     config.activation = "softplus"
+    config.soft_normalization = 1e2
 
     return config

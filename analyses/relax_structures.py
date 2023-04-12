@@ -118,7 +118,7 @@ def main(unused_argv: Sequence[str]):
 
     workdir = FLAGS.workdir
     name = analysis.name_from_workdir(workdir)
-    moldir = os.path.join(FLAGS.outputdir, "molecules", name, f"beta={FLAGS.beta}")
+    moldir = os.path.join(FLAGS.outputdir, "molecules", "generated", name, f"beta={FLAGS.beta}")
 
     outputdir = os.path.join(FLAGS.outputdir, "relaxations", name, f"beta={FLAGS.beta}")
     os.makedirs(outputdir, exist_ok=True)

@@ -6,6 +6,8 @@ import pickle
 import sys
 from typing import Any, Dict, Optional, Sequence, Tuple
 
+import haiku as hk
+import ase
 import jax
 import jax.numpy as jnp
 import jraph
@@ -20,11 +22,16 @@ from flax.training import train_state
 
 sys.path.append("..")
 
+import qm9
 import datatypes  # noqa: E402
-import input_pipeline_tf  # noqa: E402
 import models  # noqa: E402
 import train  # noqa: E402
 from configs import default  # noqa: E402
+try:
+    import input_pipeline_tf  # noqa: E402
+except ImportError:
+    logging.warning("TensorFlow not installed. Skipping import of input_pipeline_tf.")
+    pass
 
 
 tf.config.experimental.set_visible_devices([], "GPU")
@@ -49,7 +56,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 
 def name_from_workdir(workdir: str) -> str:
-    """Returns the name of the model from the workdir."""
+    """Returns the full name of the model from the workdir."""
     index = workdir.find("workdirs") + len("workdirs/")
     return workdir[index:]
 
@@ -67,8 +74,6 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
         assert config.num_channels == config.n_filters
         del config.n_atom_basis, config.n_filters
 
-    # config.num_train_molecules = config.train_molecules[1] - config.train_molecules[0]
-
     def iterate_with_prefix(dictionary: Dict[str, Any], prefix: str):
         """Iterates through a nested dictionary, yielding the flattened and prefixed keys and values."""
         for k, v in dictionary.items():
@@ -79,6 +84,35 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
 
     config_dict = dict(iterate_with_prefix(config.to_dict(), "config."))
     return pd.DataFrame().from_dict(config_dict)
+
+
+def load_model_at_step(
+    workdir: str, step: int, run_in_evaluation_mode: bool
+) -> Tuple[ml_collections.ConfigDict, hk.Transformed, Dict[str, jnp.ndarray]]:
+    """Loads the model at a given step.
+
+    This is a lightweight version of load_from_workdir, that only constructs the model and not the training state.
+    """
+
+    if step == -1:
+        params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
+    else:
+        params_file = os.path.join(workdir, f"checkpoints/params_{step}.pkl")
+
+    try:
+        with open(params_file, "rb") as f:
+            params = pickle.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Could not find params file {params_file}")
+
+    with open(workdir + "/config.yml", "rt") as config_file:
+        config = yaml.unsafe_load(config_file)
+    assert config is not None
+    config = ml_collections.ConfigDict(config)
+
+    model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
+    params = jax.tree_map(jnp.asarray, params)
+    return model, params, config
 
 
 def get_results_as_dataframe(
@@ -250,7 +284,30 @@ def load_from_workdir(
     )
 
 
-def dataset_to_mol_dict(dataset, save=True, model_path=None):
+def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
+    """Returns a molecule from the given input string.
+
+    The input is interpreted either as an index for the QM9 dataset,
+    a name for ase.build.molecule(),
+    or a file with atomic numbers and coordinates for ase.io.read().
+    """
+    # A number is interpreted as a QM9 molecule index.
+    if molecule_str.isdigit():
+        dataset = qm9.load_qm9("qm9_data")
+        molecule = dataset[int(molecule_str)]
+        return molecule, f"qm9_index={molecule_str}"
+
+    # If the string is a valid molecule name, try to build it.
+    try:
+        molecule = ase.build.molecule(molecule_str)
+        return molecule, molecule.get_chemical_formula()
+
+    except (KeyError, ValueError):
+        filename = os.path.basename(molecule_str).split(".")[0]
+        return ase.io.read(molecule_str), filename
+
+
+def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):
     """Converts a dataset of Fragments to a dictionary of molecules."""
     generated_dict = {}
     data_iter = dataset.as_numpy_iterator()

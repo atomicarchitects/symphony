@@ -4,6 +4,7 @@ from typing import Sequence, Dict
 
 from absl import app
 from absl import flags
+from absl import logging
 import os
 import pandas as pd
 import numpy as np
@@ -182,7 +183,7 @@ def plot_performance_for_max_ell(
 
             # Skip empty dataframes.
             if not len(df_subset):
-                print(
+                logging.info(
                     f"Skipping model {model}, split {split}, num_interactions {num_interactions}"
                 )
                 continue
@@ -336,7 +337,7 @@ def main(argv):
     # Get results.
     basedir = os.path.abspath(FLAGS.basedir)
     results = analysis.get_results_as_dataframe(ALL_MODELS, ALL_METRICS, basedir)
-    print(results)
+    logging.info(results)
 
     # Make plots.
     if os.path.basename(basedir).startswith("v"):
