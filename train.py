@@ -8,7 +8,6 @@ from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
 import chex
 import e3nn_jax as e3nn
 import flax
-import flax.core
 import jax
 import jax.numpy as jnp
 import jraph
@@ -414,7 +413,6 @@ def train_and_evaluate(
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
-    pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
