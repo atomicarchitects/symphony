@@ -291,6 +291,11 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
     a name for ase.build.molecule(),
     or a file with atomic numbers and coordinates for ase.io.read().
     """
+    # If we believe the string is a file, try to read it.
+    if os.path.exists(molecule_str):
+        filename = os.path.basename(molecule_str).split(".")[0]
+        return ase.io.read(molecule_str), filename
+
     # A number is interpreted as a QM9 molecule index.
     if molecule_str.isdigit():
         dataset = qm9.load_qm9("qm9_data")
@@ -298,13 +303,8 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
         return molecule, f"qm9_index={molecule_str}"
 
     # If the string is a valid molecule name, try to build it.
-    try:
-        molecule = ase.build.molecule(molecule_str)
-        return molecule, molecule.get_chemical_formula()
-
-    except (KeyError, ValueError):
-        filename = os.path.basename(molecule_str).split(".")[0]
-        return ase.io.read(molecule_str), filename
+    molecule = ase.build.molecule(molecule_str)
+    return molecule, molecule.get_chemical_formula()
 
 
 def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):

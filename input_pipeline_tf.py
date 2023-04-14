@@ -68,6 +68,12 @@ def get_datasets(
     # Batch and pad each split separately.
     for split in ["train", "val", "test"]:
         dataset_split = datasets[split]
+
+        # We repeat the training split indefinitely.
+        if split == "train":
+            dataset_split = dataset_split.repeat()
+
+        # Now we batch and pad the graphs.
         batching_fn = functools.partial(
             jraph.dynamically_batch,
             graphs_tuple_iterator=iter(dataset_split),
@@ -78,11 +84,8 @@ def get_datasets(
         dataset_split = tf.data.Dataset.from_generator(
             batching_fn, output_signature=padded_graphs_spec
         )
-        # We repeat the training split indefinitely.
-        if split == "train":
-            datasets[split] = dataset_split.repeat()
-        else:
-            datasets[split] = dataset_split
+
+        datasets[split] = dataset_split
         datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache()
         datasets[split + "_eval_final"] = dataset_split.take(
             config.num_eval_steps_at_end_of_training

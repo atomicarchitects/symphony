@@ -389,9 +389,9 @@ def visualize_atom_removals(
         # Save to file.
         outputfile = os.path.join(
             outputdir,
-            f"{molecule_name}_target={target}.html",
+            f"{molecule_name}_seed={seed}_target={target}.html",
         )
-        fig.write_html(outputfile)
+        fig.write_html(outputfile, include_plotlyjs="cdn")
 
 
 def main(unused_argv: Sequence[str]) -> None:
