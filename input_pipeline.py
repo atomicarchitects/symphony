@@ -46,15 +46,19 @@ def get_raw_datasets(
 
     # Construct partitions of the dataset, to create each split.
     # Each partition is a list of indices into all_molecules.
-    rng, rng_shuffle = jax.random.split(rng)
-    indices = jax.random.permutation(rng_shuffle, len(all_molecules))
-    graphs_cumsum = np.cumsum(
-        [config.num_train_graphs, config.num_val_graphs, config.num_test_graphs]
-    )
+    # TODO is this what we're using?
+    # rng, rng_shuffle = jax.random.split(rng)
+    # indices = jax.random.permutation(rng_shuffle, len(all_molecules))
+    # graphs_cumsum = np.cumsum(
+    #     [config.num_train_graphs, config.num_val_graphs, config.num_test_graphs]
+    # )
     indices = {
-        "train": indices[: graphs_cumsum[0]],
-        "val": indices[graphs_cumsum[0] : graphs_cumsum[1]],
-        "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
+        # "train": indices[: graphs_cumsum[0]],
+        # "val": indices[graphs_cumsum[0] : graphs_cumsum[1]],
+        # "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
+        "train": range(*config.train_molecules),
+        "val": range(*config.val_molecules),
+        "test": range(*config.test_molecules)
     }
     molecules = {
         split: [all_molecules[i] for i in indices[split]]
@@ -455,15 +459,12 @@ def dataset_as_database(config: ml_collections.ConfigDict, dbpath: str) -> None:
         config=config,
     )
     compressor = utility_classes.ConnectivityCompressor()
+    counter = 0
     with ase.db.connect(dbpath) as conn:
-        for mol in molecules["train"].as_numpy_iterator():
-            atoms = ase.Atoms(
-                positions=mol["positions"],
-                numbers=atomic_numbers(mol["species"]),
-            )
-            conn.write(atoms)
+        for atoms in molecules["train"]:
             # instantiate utility_classes.Molecule object
             mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
             # get connectivity matrix (detecting bond orders with Open Babel)
             con_mat = mol.get_connectivity()
             conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
+            counter += 1

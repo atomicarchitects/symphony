@@ -189,7 +189,7 @@ def load_metrics_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir()
+    config.root_dir = default.get_root_dir("qm9")
 
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
@@ -225,7 +225,7 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir()
+    config.root_dir = default.get_root_dir("qm9")
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
