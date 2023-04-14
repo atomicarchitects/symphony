@@ -16,6 +16,8 @@ import datatypes
 import dynamic_batcher
 import qm9
 
+from analyses import utility_classes
+
 
 def get_raw_datasets(
     rng: chex.PRNGKey,
@@ -445,20 +447,23 @@ def _normalized_bitcount(xs, n: int):
 
 def dataset_as_database(config: ml_collections.ConfigDict, dbpath: str) -> None:
     """Converts the dataset to a ASE database."""
+
+    atomic_numbers = [1, 6, 7, 8, 9]
+
     _, _, molecules = get_raw_datasets(
         rng=jax.random.PRNGKey(0),
         config=config,
     )
-    compressor = ConnectivityCompressor()
-    with connect(dbpath) as conn:
-        for mol in datasets["train"].as_numpy_iterator():
-            atoms = Atoms(
+    compressor = utility_classes.ConnectivityCompressor()
+    with ase.db.connect(dbpath) as conn:
+        for mol in molecules["train"].as_numpy_iterator():
+            atoms = ase.Atoms(
                 positions=mol["positions"],
-                numbers=models.get_atomic_numbers(mol["species"]),
+                numbers=atomic_numbers(mol["species"]),
             )
             conn.write(atoms)
             # instantiate utility_classes.Molecule object
-            mol = Molecule(atoms.positions, atoms.numbers)
+            mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
             # get connectivity matrix (detecting bond orders with Open Babel)
             con_mat = mol.get_connectivity()
             conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
