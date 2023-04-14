@@ -8,7 +8,6 @@ from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
 import chex
 import e3nn_jax as e3nn
 import flax
-import flax.core
 import jax
 import jax.numpy as jnp
 import jraph
@@ -414,7 +413,6 @@ def train_and_evaluate(
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
-    pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     state = ckpt.restore_or_initialize(state)
     initial_step = int(state.step) + 1
@@ -442,10 +440,16 @@ def train_and_evaluate(
     logging.info("Starting training.")
     train_metrics = None
     for step in range(initial_step, config.num_train_steps + 1):
-        # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+        # Get a batch of graphs.
+        try:
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
+        except StopIteration:
+            logging.info("No more training data. Continuing with final evaluation.")
+            break
+
+        # Perform one step of training.
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             state, batch_metrics = train_step(
                 state,
                 graphs,
