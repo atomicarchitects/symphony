@@ -23,6 +23,7 @@ import input_pipeline_tf
 def get_raw_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
+    root_dir: Optional[str] = None,
 ) -> Tuple[Dict[str, chex.PRNGKey], jnp.ndarray, Dict[str, List[ase.Atoms]]]:
     """Constructs the splits for the QM9 dataset.
     Args:
@@ -32,7 +33,9 @@ def get_raw_datasets(
         An iterator of (batched and padded) fragments.
     """
     # Load all molecules.
-    all_molecules = qm9.load_qm9(config.root_dir)
+    if root_dir is None:
+        root_dir = config.root_dir
+    all_molecules = qm9.load_qm9(root_dir)
 
     # Atomic numbers map to elements H, C, N, O, F.
     atomic_numbers = jnp.array([1, 6, 7, 8, 9])
@@ -461,9 +464,9 @@ def dataset_as_database(config: ml_collections.ConfigDict, dataset: str, dbpath:
 
     atomic_numbers = [1, 6, 7, 8, 9]
 
-    molecules = input_pipeline_tf.get_unbatched_qm9_datasets(
+    molecules = get_raw_datasets(
+        rng=jax.random.PRNGKey(config.rng_seed),
         config=config,
-        seed=config.rng_seed,
     )
     compressor = utility_classes.ConnectivityCompressor()
     counter = 0
@@ -471,7 +474,6 @@ def dataset_as_database(config: ml_collections.ConfigDict, dataset: str, dbpath:
     with ase.db.connect(dbpath) as conn:
         for s in to_convert:
             for atoms in molecules[s]:
-                print(atoms)
                 # instantiate utility_classes.Molecule object
                 mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
                 # get connectivity matrix (detecting bond orders with Open Babel)
