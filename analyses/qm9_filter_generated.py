@@ -832,6 +832,7 @@ def _get_training_fingerprints(
         and the atoms per type string of each molecule listed in train_idx (preserving
         the order)
     """
+    print(train_idx)
     train_fps = []
     if use_con_mat:
         compressor = ConnectivityCompressor()
@@ -840,7 +841,10 @@ def _get_training_fingerprints(
             print("0.00%", end="\r", flush=True)
         for i, idx in enumerate(train_idx):
             idx = int(idx)
-            row = conn.get(idx + 1)
+            try:
+                row = conn.get(idx + 1)
+            except:
+                print(f"error getting idx={idx}")
             at = row.toatoms()
             pos = at.positions
             atomic_numbers = at.numbers

@@ -29,7 +29,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.root_dir = get_root_dir(config.get_ref("dataset"))
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
-    config.test_molecules = (53568, 133885)
+    config.test_molecules = (53568, 133920)
 
     # Optimizer.
     config.optimizer = "adam"

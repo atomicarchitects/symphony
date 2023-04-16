@@ -17,6 +17,7 @@ def download_url(url: str, root: str) -> str:
     """Download if file does not exist in root already. Returns path to file."""
     filename = url.rpartition("/")[2]
     file_path = os.path.join(root, filename)
+    print(file_path)
 
     try:
         from tqdm import tqdm
@@ -26,6 +27,9 @@ def download_url(url: str, root: str) -> str:
         progress = False
 
     try:
+        if os.path.exists(file_path):
+            logging.info(f"Using downloaded file: {file_path}")
+            return file_path
         data = urlopen(url)
     except URLError:
         # No internet connection

@@ -17,6 +17,7 @@ import dynamic_batcher
 import qm9
 
 from analyses import utility_classes
+import input_pipeline_tf
 
 
 def get_raw_datasets(
@@ -60,6 +61,7 @@ def get_raw_datasets(
         "val": range(*config.val_molecules),
         "test": range(*config.test_molecules)
     }
+    print(len(all_molecules))
     molecules = {
         split: [all_molecules[i] for i in indices[split]]
         for split in ["train", "val", "test"]
@@ -449,22 +451,30 @@ def _normalized_bitcount(xs, n: int):
     return jnp.bincount(xs, length=n) / len(xs)
 
 
-def dataset_as_database(config: ml_collections.ConfigDict, dbpath: str) -> None:
-    """Converts the dataset to a ASE database."""
+def dataset_as_database(config: ml_collections.ConfigDict, dataset: str, dbpath: str) -> None:
+    """Converts the dataset to a ASE database.
+    Args:
+        config (ml_collections.ConfigDict)
+        dataset (str): should be 'train', 'val', 'test', or 'all'
+        dbpath (str)
+    """
 
     atomic_numbers = [1, 6, 7, 8, 9]
 
-    _, _, molecules = get_raw_datasets(
-        rng=jax.random.PRNGKey(0),
+    molecules = input_pipeline_tf.get_unbatched_qm9_datasets(
         config=config,
+        seed=config.rng_seed,
     )
     compressor = utility_classes.ConnectivityCompressor()
     counter = 0
+    to_convert = ["train", "val", "test"] if dataset == "all" else [dataset]
     with ase.db.connect(dbpath) as conn:
-        for atoms in molecules["train"]:
-            # instantiate utility_classes.Molecule object
-            mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
-            # get connectivity matrix (detecting bond orders with Open Babel)
-            con_mat = mol.get_connectivity()
-            conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
-            counter += 1
+        for s in to_convert:
+            for atoms in molecules[s]:
+                print(atoms)
+                # instantiate utility_classes.Molecule object
+                mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
+                # get connectivity matrix (detecting bond orders with Open Babel)
+                con_mat = mol.get_connectivity()
+                conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
+                counter += 1
