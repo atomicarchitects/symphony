@@ -10,5 +10,5 @@ config, _, _, _ = analysis.load_from_workdir('/home/ameyad/spherical-harmonic-ne
 
 print("config loaded")
 
-input_pipeline.dataset_as_database(config, 'train', 'qm9_data/qm9-train.db')
-input_pipeline.dataset_as_database(config, 'all', 'qm9_data/qm9-all.db')
+input_pipeline.dataset_as_database(config, 'train', 'qm9_data/qm9-train.db', '/home/songk/qm9_data')
+input_pipeline.dataset_as_database(config, 'all', 'qm9_data/qm9-all.db', '/home/songk/qm9_data')

@@ -17,7 +17,6 @@ def download_url(url: str, root: str) -> str:
     """Download if file does not exist in root already. Returns path to file."""
     filename = url.rpartition("/")[2]
     file_path = os.path.join(root, filename)
-    print(file_path)
 
     try:
         from tqdm import tqdm

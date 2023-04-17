@@ -103,7 +103,12 @@ def load_model_at_step(
         with open(params_file, "rb") as f:
             params = pickle.load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find params file {params_file}")
+        try:
+            params_file = os.path.join(workdir, "checkpoints/params.pkl")
+            with open(params_file, "rb") as f:
+                params = pickle.load(f)
+        except:
+            raise FileNotFoundError(f"Could not find params file {params_file}")
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
@@ -244,7 +249,9 @@ def load_from_workdir(
         checkpoint_dir = os.path.join(workdir, "checkpoints")
         pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
         if not os.path.exists(pickled_params_file):
-            raise FileNotFoundError(f"No pickled params found at {pickled_params_file}")
+            pickled_params_file = os.path.join(checkpoint_dir, "params_best.pkl")
+            if not os.path.exists(pickled_params_file):
+                raise FileNotFoundError(f"No pickled params found at {pickled_params_file}")
 
         logging.info(
             "Initializing dummy model with pickled params found at %s",

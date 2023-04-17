@@ -832,7 +832,6 @@ def _get_training_fingerprints(
         and the atoms per type string of each molecule listed in train_idx (preserving
         the order)
     """
-    print(train_idx)
     train_fps = []
     if use_con_mat:
         compressor = ConnectivityCompressor()

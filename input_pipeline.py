@@ -62,9 +62,8 @@ def get_raw_datasets(
         # "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
         "train": range(*config.train_molecules),
         "val": range(*config.val_molecules),
-        "test": range(*config.test_molecules)
+        "test": range(config.test_molecules[0], min(config.test_molecules[1], len(all_molecules)))
     }
-    print(len(all_molecules))
     molecules = {
         split: [all_molecules[i] for i in indices[split]]
         for split in ["train", "val", "test"]
@@ -466,7 +465,7 @@ def dataset_as_database(config: ml_collections.ConfigDict, dataset: str, dbpath:
     atomic_numbers = [1, 6, 7, 8, 9]
 
     if root_dir is None: root_dir = config.root_dir
-    molecules = get_raw_datasets(
+    _, _, molecules = get_raw_datasets(
         rng=jax.random.PRNGKey(config.rng_seed),
         config=config,
         root_dir=root_dir
