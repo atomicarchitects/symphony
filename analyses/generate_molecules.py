@@ -18,6 +18,7 @@ import numpy as np
 import jraph
 import tqdm
 import chex
+import pickle
 
 sys.path.append("..")
 
@@ -56,6 +57,7 @@ def generate_molecules(
     os.makedirs(molecules_outputdir, exist_ok=True)
     visualizations_outputdir = os.path.join(outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name)
     os.makedirs(visualizations_outputdir, exist_ok=True)
+    molecule_list = []
 
     def get_predictions(
         fragment: jraph.GraphsTuple, rng: chex.PRNGKey
@@ -144,8 +146,10 @@ def generate_molecules(
             else:
                 outputfile = f"{init_molecule_name}_seed={seed}.xyz"
             ase.io.write(os.path.join(molecules_outputdir, outputfile), molecule)
+            molecule_list.append(molecule)
         else:
             logging.info("Discarding %s because it is too long", molecule.get_chemical_formula())
+    ase_to_mol_dict(molecule_list, file_name=os.path.join(molecules_outputdir, 'generated_molecules.mol_dict'))
 
 
 def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
