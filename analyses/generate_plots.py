@@ -19,7 +19,7 @@ import analyses.analysis as analysis
 
 
 ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
-ALL_MODELS = ["mace", "e3schnet"]
+ALL_MODELS = ["mace", "e3schnet", "nequip"]
 
 FLAGS = flags.FLAGS
 
@@ -273,8 +273,8 @@ def plot_sample_complexity_curves(
         )
 
         # Use log-log scale.
-        ax.set_xscale("log")
-        ax.set_yscale("log")
+        # ax.set_xscale("log")
+        # ax.set_yscale("log")
 
         # Extract results for this model.
         df_subset = results[split][results[split]["model"] == model]
@@ -305,11 +305,11 @@ def plot_sample_complexity_curves(
         # Axes limits.
         min_y = results[split][metric].min()
         max_y = results[split][metric].max()
-        ax.set_ylim(max(1e-9, min_y - 0.2), max_y + 0.2)
-        ax.set_yticks(np.arange(1, 10))
-        ax.set_yticklabels(np.arange(1, 10))
-        ax.set_xticks([2000, 4000, 8000, 16000, 32000, 64000])
-        ax.set_xticklabels([2000, 4000, 8000, 16000, 32000, 64000])
+        # ax.set_ylim(max(1e-9, min_y - 0.2), max_y + 0.2)
+        # ax.set_yticks(np.arange(1, 10))
+        # ax.set_yticklabels(np.arange(1, 10))
+        # ax.set_xticks([2000, 4000, 8000, 16000, 32000, 64000])
+        # ax.set_xticklabels([2000, 4000, 8000, 16000, 32000, 64000])
 
         # Labels and titles.
         ax.set_ylabel(get_title_for_metric(metric))
