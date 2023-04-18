@@ -14,6 +14,7 @@ import jraph
 import ml_collections
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 import yaml
 from absl import logging
 from clu import checkpoint
@@ -31,6 +32,9 @@ try:
 except ImportError:
     logging.warning("TensorFlow not installed. Skipping import of input_pipeline_tf.")
     pass
+
+
+tf.config.experimental.set_visible_devices([], "GPU")
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -99,7 +103,12 @@ def load_model_at_step(
         with open(params_file, "rb") as f:
             params = pickle.load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find params file {params_file}")
+        try:
+            params_file = os.path.join(workdir, "checkpoints/params.pkl")
+            with open(params_file, "rb") as f:
+                params = pickle.load(f)
+        except:
+            raise FileNotFoundError(f"Could not find params file {params_file}")
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
@@ -185,7 +194,7 @@ def load_metrics_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir()
+    config.root_dir = default.get_root_dir("qm9")
 
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
@@ -221,7 +230,7 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir()
+    config.root_dir = default.get_root_dir("qm9")
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
@@ -238,9 +247,11 @@ def load_from_workdir(
     # We only use the pickled parameters to initialize the model, so only the keys of the pickled parameters are important.
     if load_pickled_params:
         checkpoint_dir = os.path.join(workdir, "checkpoints")
-        pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
+        pickled_params_file = os.path.join(checkpoint_dir, "params_best.pkl")
         if not os.path.exists(pickled_params_file):
-            raise FileNotFoundError(f"No pickled params found at {pickled_params_file}")
+            pickled_params_file = os.path.join(checkpoint_dir, "params_best.pkl")
+            if not os.path.exists(pickled_params_file):
+                raise FileNotFoundError(f"No pickled params found at {pickled_params_file}")
 
         logging.info(
             "Initializing dummy model with pickled params found at %s",
@@ -305,7 +316,6 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
 
 def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):
     """Converts a dataset of Fragments to a dictionary of molecules."""
-
     generated_dict = {}
     data_iter = dataset.as_numpy_iterator()
     for graph in data_iter:

@@ -15,8 +15,7 @@ import sys
 
 sys.path.append("..")
 
-import analysis
-import input_pipeline_tf
+from analyses import analysis
 from schnetpack import Properties
 from utility_classes import Molecule, ConnectivityCompressor
 from utility_functions import run_threaded, print_atom_bond_ring_stats, update_dict
@@ -841,7 +840,10 @@ def _get_training_fingerprints(
             print("0.00%", end="\r", flush=True)
         for i, idx in enumerate(train_idx):
             idx = int(idx)
-            row = conn.get(idx + 1)
+            try:
+                row = conn.get(idx + 1)
+            except:
+                print(f"error getting idx={idx}")
             at = row.toatoms()
             pos = at.positions
             atomic_numbers = at.numbers
