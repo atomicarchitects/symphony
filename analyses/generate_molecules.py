@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence
+from typing import List, Sequence
 
 import os
 import sys
@@ -18,6 +18,7 @@ import numpy as np
 import jraph
 import tqdm
 import chex
+import pickle
 
 sys.path.append("..")
 
@@ -56,6 +57,7 @@ def generate_molecules(
     os.makedirs(molecules_outputdir, exist_ok=True)
     visualizations_outputdir = os.path.join(outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name)
     os.makedirs(visualizations_outputdir, exist_ok=True)
+    molecule_list = []
 
     def get_predictions(
         fragment: jraph.GraphsTuple, rng: chex.PRNGKey
@@ -144,9 +146,42 @@ def generate_molecules(
             else:
                 outputfile = f"{init_molecule_name}_seed={seed}.xyz"
             ase.io.write(os.path.join(molecules_outputdir, outputfile), molecule)
+            molecule_list.append(molecule)
         else:
             logging.info("Discarding %s because it is too long", molecule.get_chemical_formula())
+    ase_to_mol_dict(molecule_list, file_name=os.path.join(molecules_outputdir, 'generated_molecules.mol_dict'))
 
+
+def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
+    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
+
+    generated = (
+        {}
+    )
+    for mol in molecules:
+        l = mol.get_atomic_numbers().shape[0]
+        if l not in generated:
+            generated[l] = {
+                "_positions": np.array([mol.get_positions()]),
+                "_atomic_numbers": np.array([mol.get_atomic_numbers()]),
+            }
+        else:
+            generated[l]["_positions"] = np.append(
+                generated[l]["_positions"],
+                np.array([mol.get_positions()]),
+                0,
+            )
+            generated[l]["_atomic_numbers"] = np.append(
+                generated[l]["_atomic_numbers"],
+                np.array([mol.get_atomic_numbers()]),
+                0,
+            )
+
+    if save:
+        with open(file_name, "wb") as f:
+            pickle.dump(generated, f)
+
+    return generated
 
 
 def main(unused_argv: Sequence[str]) -> None:
