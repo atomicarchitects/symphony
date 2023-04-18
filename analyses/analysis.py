@@ -247,7 +247,7 @@ def load_from_workdir(
     # We only use the pickled parameters to initialize the model, so only the keys of the pickled parameters are important.
     if load_pickled_params:
         checkpoint_dir = os.path.join(workdir, "checkpoints")
-        pickled_params_file = os.path.join(checkpoint_dir, "params.pkl")
+        pickled_params_file = os.path.join(checkpoint_dir, "params_best.pkl")
         if not os.path.exists(pickled_params_file):
             pickled_params_file = os.path.join(checkpoint_dir, "params_best.pkl")
             if not os.path.exists(pickled_params_file):
