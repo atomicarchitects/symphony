@@ -64,9 +64,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
                 // config.learning_rate_schedule_kwargs.decay_steps
             )
             learning_rate_or_schedule = optax.sgdr_schedule(
-                cosine_kwargs=[
-                    config.learning_rate_schedule_kwargs for _ in range(num_cycles)
-                ]
+                cosine_kwargs=(config.learning_rate_schedule_kwargs for _ in range(num_cycles))
             )
     else:
         learning_rate_or_schedule = config.learning_rate
