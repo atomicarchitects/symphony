@@ -415,10 +415,10 @@ class NequIP(hk.Module):
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
         for _ in range(self.num_interactions):
-            node_feats = nequip_jax.NEQUIPLayerHaiku(
+            node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
                 num_species=self.num_species,
-                max_ell=self.max_ell,
+                #max_ell=self.max_ell,
                 output_irreps=self.output_irreps,
                 even_activation=self.even_activation,
                 odd_activation=self.odd_activation,
