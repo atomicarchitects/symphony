@@ -273,7 +273,7 @@ def plot_sample_complexity_curves(
         )
 
         # Use log-log scale.
-        # ax.set_xscale("log")
+        ax.set_xscale("log")
         # ax.set_yscale("log")
 
         # Extract results for this model.
@@ -305,7 +305,7 @@ def plot_sample_complexity_curves(
         # Axes limits.
         min_y = results[split][metric].min()
         max_y = results[split][metric].max()
-        # ax.set_ylim(max(1e-9, min_y - 0.2), max_y + 0.2)
+        # ax.set_ylim(max(1e-2, min_y - 0.2), max_y + 0.2)
         # ax.set_yticks(np.arange(1, 10))
         # ax.set_yticklabels(np.arange(1, 10))
         # ax.set_xticks([2000, 4000, 8000, 16000, 32000, 64000])
