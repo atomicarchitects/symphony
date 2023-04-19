@@ -440,43 +440,18 @@ def train_and_evaluate(
     logging.info("Starting training.")
     train_metrics = None
     for step in range(initial_step, config.num_train_steps + 1):
-        # Get a batch of graphs.
-        try:
-            graphs = next(train_iter)
-            graphs = datatypes.Fragments.from_graphstuple(graphs)
-        except StopIteration:
-            logging.info("No more training data. Continuing with final evaluation.")
-            break
-
-        # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-            state, batch_metrics = train_step(
-                state,
-                graphs,
-                loss_kwargs=config.loss_kwargs,
-            )
-
-        # Update metrics.
-        if train_metrics is None:
-            train_metrics = batch_metrics
-        else:
-            train_metrics = train_metrics.merge(batch_metrics)
-
-        # Quick indication that training is happening.
-        logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
-        for hook in hooks:
-            hook(step)
 
         # Log, if required.
-        is_last_step = step == config.num_train_steps
-        if step % config.log_every_steps == 0 or is_last_step:
-            writer.write_scalars(
-                step, add_prefix_to_keys(train_metrics.compute(), "train")
-            )
+        first_or_last_step = (step in [initial_step, config.num_train_steps])
+        if step % config.log_every_steps == 0 or first_or_last_step:
+            if train_metrics is not None:
+                writer.write_scalars(
+                    step, add_prefix_to_keys(train_metrics.compute(), "train")
+                )
             train_metrics = None
 
         # Evaluate on validation and test splits, if required.
-        if step % config.eval_every_steps == 0 or is_last_step:
+        if step % config.eval_every_steps == 0 or first_or_last_step:
             eval_state = eval_state.replace(params=state.params)
 
             # Evaluate on validation and test splits.
@@ -506,6 +481,34 @@ def train_and_evaluate(
                     "step_for_best_state": step_for_best_state,
                 }
             )
+    
+        # Get a batch of graphs.
+        try:
+            graphs = next(train_iter)
+            graphs = datatypes.Fragments.from_graphstuple(graphs)
+        except StopIteration:
+            logging.info("No more training data. Continuing with final evaluation.")
+            break
+
+        # Perform one step of training.
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+            state, batch_metrics = train_step(
+                state,
+                graphs,
+                loss_kwargs=config.loss_kwargs,
+            )
+
+        # Update metrics.
+        if train_metrics is None:
+            train_metrics = batch_metrics
+        else:
+            train_metrics = train_metrics.merge(batch_metrics)
+
+        # Quick indication that training is happening.
+        logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
+        for hook in hooks:
+            hook(step)
+
 
     # Once training is complete, return the best state and corresponding metrics.
     logging.info(
