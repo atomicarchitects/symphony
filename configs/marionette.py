@@ -11,13 +11,13 @@ def get_config() -> ml_collections.ConfigDict:
 
     config.model = "MarioNette"
     config.num_channels = 128
-    config.r_max = 5
+    config.r_max = 5.0
     config.avg_num_neighbors = 15.0
     config.num_interactions = 1
     config.max_ell = 3
-    config.even_activation = "swish"
+    config.even_activation = "gelu"
     config.odd_activation = "tanh"
-    config.activation = "swish"
+    config.activation = "gelu"
     config.mlp_n_layers = 2
     config.num_basis_fns = 8
     config.soft_normalization = 1e5
