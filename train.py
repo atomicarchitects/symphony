@@ -198,15 +198,30 @@ def generation_loss(
 
         # Compute f(r*, rhat*) which is our model predictions for the target positions.
         target_positions = e3nn.IrrepsArray("1o", target_positions)
-        target_positions_logits = jax.vmap(
-            functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.globals.position_coeffs, target_positions)
-        target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
+        vector = 1000.0 * target_positions / e3nn.norm(target_positions)
+        log_q = e3nn.to_s2grid(
+            vector,
+            preds.globals.position_logits.res_beta,
+            preds.globals.position_logits.res_alpha,
+            quadrature=preds.globals.position_logits.quadrature,
+            p_val=1,
+            p_arg=-1,
+        )
+        q = log_q.apply(lambda x: jnp.exp(x - log_q.grid_values.max()))
+        q = q / q.integrate()
+
+        target_positions_logits = (
+            (q[:, None] * preds.globals.position_logits).integrate().array.squeeze(-1)
+        )
         assert target_positions_logits.shape == (num_graphs, num_radii)
 
+        lower_bound = (q * q.apply(jnp.log)).integrate().array.squeeze(-1)
+        assert lower_bound.shape == (num_graphs,)
+
         loss_position = jax.vmap(
-            lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
+            lambda lw, qr, fr, Zr, c: lw - jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
         )(
+            lower_bound,
             true_radius_weights,
             target_positions_logits,
             sphere_normalizing_factors,
