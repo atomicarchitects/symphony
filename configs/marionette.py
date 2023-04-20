@@ -1,0 +1,25 @@
+"""Defines the default hyperparameters and training configuration for the GraphMLP model."""
+
+import ml_collections
+
+from configs import default
+
+
+def get_config() -> ml_collections.ConfigDict:
+    """Get the hyperparameter configuration for the MarioNette model."""
+    config = default.get_config()
+
+    config.model = "MarioNette"
+    config.num_channels = 128
+    config.r_max = 5
+    config.avg_num_neighbors = 15.0
+    config.num_interactions = 1
+    config.max_ell = 3
+    config.even_activation = "swish"
+    config.odd_activation = "tanh"
+    config.activation = "swish"
+    config.mlp_n_layers = 2
+    config.num_basis_fns = 8
+    config.soft_normalization = 1e5
+
+    return config

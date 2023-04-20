@@ -908,7 +908,7 @@ def create_model(
                 num_interactions=config.num_interactions,
                 even_activation=get_activation(config.even_activation),
                 odd_activation=get_activation(config.odd_activation),
-                mlp_activation=get_activation(config.mlp_activation),
+                mlp_activation=get_activation(config.activation),
                 mlp_n_hidden=config.num_channels,
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
