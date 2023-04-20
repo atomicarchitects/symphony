@@ -19,6 +19,7 @@ import jraph
 import tqdm
 import chex
 import pickle
+from plotly import graph_objects as go
 
 sys.path.append("..")
 
@@ -91,6 +92,8 @@ def generate_molecules(
             ),
             numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
         )
+    
+    figs = []
 
     # Generate with different seeds.
     for seed in tqdm.tqdm(seeds, desc="Generating molecules"):
@@ -128,6 +131,7 @@ def generate_molecules(
                     title=f"{model_name}: Predictions for Seed {seed} at Step {step}",
                     title_x=0.5,
                 )
+                figs.append(fig)
 
                 # Save to file.
                 outputfile = os.path.join(
@@ -138,6 +142,60 @@ def generate_molecules(
 
             # Append the new atom to the molecule.
             molecule = append_predictions(molecule, pred)
+
+        # Get figure containing all generation steps.
+        if visualize:
+            all_traces = []
+            steps = []
+            for fig in figs:
+                all_traces.extend(fig.data)
+            ct = 0
+            for fig in figs:
+                steps.append(dict(
+                    method='restyle',
+                    args=[{
+                        'visible': [True if ct <= i < ct + len(fig.data) else False for i in range(len(all_traces))]
+                    }],
+                ))
+                ct += len(fig.data)
+
+            axis = dict(
+                showbackground=False,
+                showticklabels=False,
+                showgrid=False,
+                zeroline=False,
+                title="",
+                nticks=3,
+            )
+            layout = dict(
+                sliders=[dict(steps=steps)],
+                title=f"{model_name}: Predictions for Seed {seed}",
+                title_x=0.5,
+                width=1500,
+                height=800,
+                scene=dict(
+                    xaxis=dict(**axis),
+                    yaxis=dict(**axis),
+                    zaxis=dict(**axis),
+                    aspectmode="data",
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="right",
+                    x=0.1,
+                ),
+            )
+            fig_all = go.Figure(data=all_traces, layout=layout)
+
+            # Save to file.
+            outputfile = os.path.join(
+                visualizations_outputdir,
+                f"{init_molecule_name}_seed={seed}.html",
+            )
+            fig_all.write_html(outputfile, include_plotlyjs="cdn")
 
         # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
         if molecule.numbers.shape[0] < 1000:
