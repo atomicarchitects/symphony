@@ -13,12 +13,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_channels = 128
     config.r_max = 5.0
     config.avg_num_neighbors = 15.0
-    config.num_interactions = 1
-    config.max_ell = 3
+    config.num_interactions = 4
+    config.max_ell = 5
     config.even_activation = "gelu"
     config.odd_activation = "tanh"
     config.activation = "gelu"
-    config.mlp_n_layers = 2
+    config.mlp_n_layers = 3
     config.num_basis_fns = 8
     config.soft_normalization = 1e5
 
