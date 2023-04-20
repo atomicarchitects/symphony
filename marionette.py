@@ -22,6 +22,7 @@ class MarioNetteLayerFlax(flax.linen.Module):
     soft_normalization: float = 1e5
     even_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.gelu
     odd_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.tanh
+    mlp_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.gelu
     mlp_n_hidden: int = 64
     mlp_n_layers: int = 2
     n_radial_basis: int = 8
@@ -57,6 +58,7 @@ class MarioNetteLayerHaiku(hk.Module):
         soft_normalization: float = 1e5,
         even_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.gelu,
         odd_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.tanh,
+        mlp_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.gelu,
         mlp_n_hidden: int = 64,
         mlp_n_layers: int = 2,
         n_radial_basis: int = 8,
@@ -70,6 +72,7 @@ class MarioNetteLayerHaiku(hk.Module):
         self.soft_normalization = soft_normalization
         self.even_activation = even_activation
         self.odd_activation = odd_activation
+        self.mlp_activation = mlp_activation
         self.mlp_n_hidden = mlp_n_hidden
         self.mlp_n_layers = mlp_n_layers
         self.n_radial_basis = n_radial_basis
