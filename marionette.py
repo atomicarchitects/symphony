@@ -20,9 +20,8 @@ class MarioNetteLayerFlax(flax.linen.Module):
     output_irreps: e3nn.Irreps = 64 * e3nn.Irreps("0e + 1o + 2e")
     interaction_irreps: e3nn.Irreps = 64 * e3nn.Irreps("0e + 1o + 2e")
     soft_normalization: float = 1e5
-    # even_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.swish
-    # odd_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.tanh
-    # mlp_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.swish
+    even_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.gelu
+    odd_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.tanh
     mlp_n_hidden: int = 64
     mlp_n_layers: int = 2
     n_radial_basis: int = 8
@@ -56,9 +55,8 @@ class MarioNetteLayerHaiku(hk.Module):
         output_irreps: e3nn.Irreps = 64 * e3nn.Irreps("0e + 1o + 2e"),
         interaction_irreps: e3nn.Irreps = 64 * e3nn.Irreps("0e + 1o + 2e"),
         soft_normalization: float = 1e5,
-        # even_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.swish,
-        # odd_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.tanh,
-        # mlp_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.swish,
+        even_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.gelu,
+        odd_activation: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.tanh,
         mlp_n_hidden: int = 64,
         mlp_n_layers: int = 2,
         n_radial_basis: int = 8,
@@ -70,6 +68,8 @@ class MarioNetteLayerHaiku(hk.Module):
         self.output_irreps = output_irreps
         self.interaction_irreps = interaction_irreps
         self.soft_normalization = soft_normalization
+        self.even_activation = even_activation
+        self.odd_activation = odd_activation
         self.mlp_n_hidden = mlp_n_hidden
         self.mlp_n_layers = mlp_n_layers
         self.n_radial_basis = n_radial_basis
@@ -157,12 +157,7 @@ def _impl(
     node_feats = Linear(interaction_irreps, name="linear_down")(node_feats)
 
     # Activation
-    node_feats = e3nn.concatenate(
-        [
-            node_feats,
-            e3nn.tensor_square(node_feats.mul_to_axis()).axis_to_mul(),
-        ]
-    )
+    node_feats = activation(node_feats, self.even_activation, self.odd_activation)
     node_feats = Linear(output_irreps, name="linear_out")(node_feats)
 
     # Soft normalization
@@ -173,6 +168,25 @@ def _impl(
     assert node_feats.irreps == output_irreps
     assert node_feats.shape == (n_node, output_irreps.dim)
     return node_feats
+
+
+def activation(
+    x: e3nn.IrrepsArray, even_activation, odd_activation
+) -> e3nn.IrrepsArray:
+    x = e3nn.scalar_activation(
+        x,
+        [
+            {1: even_activation, -1: odd_activation}[ir.p] if ir.l == 0 else None
+            for _, ir in x.irreps
+        ],
+    )
+    x = e3nn.concatenate(
+        [
+            x,
+            e3nn.tensor_square(x.mul_to_axis()).axis_to_mul(),
+        ]
+    )
+    return x
 
 
 def soft_normalization(x: e3nn.IrrepsArray, max_norm: float = 1.0) -> e3nn.IrrepsArray:
