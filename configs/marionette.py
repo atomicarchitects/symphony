@@ -10,7 +10,7 @@ def get_config() -> ml_collections.ConfigDict:
     config = default.get_config()
 
     config.model = "MarioNette"
-    config.num_channels = 128
+    config.num_channels = 64
     config.r_max = 5.0
     config.avg_num_neighbors = 15.0
     config.num_interactions = 4
@@ -21,5 +21,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.mlp_n_layers = 3
     config.num_basis_fns = 8
     config.soft_normalization = 1e5
+    config.use_bessel = True
 
     return config

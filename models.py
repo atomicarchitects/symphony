@@ -419,7 +419,7 @@ class NequIP(hk.Module):
             node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
                 num_species=self.num_species,
-                #max_ell=self.max_ell,
+                # max_ell=self.max_ell,
                 output_irreps=self.output_irreps,
                 even_activation=self.even_activation,
                 odd_activation=self.odd_activation,
@@ -428,7 +428,9 @@ class NequIP(hk.Module):
                 mlp_n_layers=self.mlp_n_layers,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
-        alpha = jnp.array([0.5 ** ir.l for mul, ir in node_feats.irreps for _ in range(mul)])
+        alpha = jnp.array(
+            [0.5**ir.l for mul, ir in node_feats.irreps for _ in range(mul)]
+        )
         node_feats = node_feats * alpha
         return node_feats
 
@@ -449,6 +451,7 @@ class MarioNette(hk.Module):
         mlp_n_hidden: int,
         mlp_n_layers: int,
         n_radial_basis: int,
+        use_bessel: bool,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -465,6 +468,7 @@ class MarioNette(hk.Module):
         self.mlp_n_hidden = mlp_n_hidden
         self.mlp_n_layers = mlp_n_layers
         self.n_radial_basis = n_radial_basis
+        self.use_bessel = use_bessel
 
     def __call__(
         self,
@@ -494,6 +498,7 @@ class MarioNette(hk.Module):
                 mlp_n_hidden=self.mlp_n_hidden,
                 mlp_n_layers=self.mlp_n_layers,
                 n_radial_basis=self.n_radial_basis,
+                use_bessel=self.use_bessel,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
         return node_feats
 
@@ -914,6 +919,7 @@ def create_model(
                 mlp_n_hidden=config.num_channels,
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
+                use_bessel=config.use_bessel,
             )
         elif config.model == "E3SchNet":
             node_embedder = E3SchNet(

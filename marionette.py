@@ -26,6 +26,7 @@ class MarioNetteLayerFlax(flax.linen.Module):
     mlp_n_hidden: int = 64
     mlp_n_layers: int = 2
     n_radial_basis: int = 8
+    use_bessel: bool = True
 
     @flax.linen.compact
     def __call__(
@@ -62,6 +63,7 @@ class MarioNetteLayerHaiku(hk.Module):
         mlp_n_hidden: int = 64,
         mlp_n_layers: int = 2,
         n_radial_basis: int = 8,
+        use_bessel: bool = True,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -76,6 +78,7 @@ class MarioNetteLayerHaiku(hk.Module):
         self.mlp_n_hidden = mlp_n_hidden
         self.mlp_n_layers = mlp_n_layers
         self.n_radial_basis = n_radial_basis
+        self.use_bessel = use_bessel
 
     def __call__(
         self,
@@ -135,12 +138,19 @@ def _impl(
 
     # Radial part
     lengths = e3nn.norm(vectors).array  # [n_edges, 1]
+    if self.use_bessel:
+        radial = e3nn.bessel(lengths[:, 0], self.n_radial_basis) * e3nn.soft_envelope(
+            lengths
+        )  # [n_edges, n_radial_basis]
+    else:
+        radial = e3nn.soft_envelope(lengths)  # [n_edges, 1]
+
     mix = MultiLayerPerceptron(
         self.mlp_n_layers * (self.mlp_n_hidden,) + (w_unused_flat.size,),
         self.mlp_activation,
         output_activation=False,
     )(
-        e3nn.bessel(lengths[:, 0], self.n_radial_basis) * e3nn.soft_envelope(lengths),
+        radial
     )  # [n_edges, w_unused_flat.size]
 
     # Discard 0 length edges that come from graph padding
