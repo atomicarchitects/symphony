@@ -31,15 +31,7 @@ from models import create_model
 
 
 @flax.struct.dataclass
-class TrainMetrics(metrics.Collection):
-    total_loss: metrics.Average.from_output("total_loss")
-    focus_loss: metrics.Average.from_output("focus_loss")
-    atom_type_loss: metrics.Average.from_output("atom_type_loss")
-    position_loss: metrics.Average.from_output("position_loss")
-
-
-@flax.struct.dataclass
-class EvalMetrics(metrics.Collection):
+class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     focus_loss: metrics.Average.from_output("focus_loss")
     atom_type_loss: metrics.Average.from_output("atom_type_loss")
@@ -83,6 +75,7 @@ def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
+    target_position_scaling_constant: float
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -151,23 +144,19 @@ def generation_loss(
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_max = jnp.max(
-            preds.globals.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+        position_logits = preds.globals.position_logits
+        position_logits_max = jnp.max(
+            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        sphere_normalizing_factors = preds.globals.position_logits.apply(
-            lambda pos: jnp.exp(pos - position_max)
-        ).integrate()
-        sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
+        position_logits = position_logits.apply(lambda x: x - position_logits_max)
 
-        # sphere_normalizing_factors is of shape (num_graphs, num_radii)
-        assert sphere_normalizing_factors.shape == (
+        # Compute the normalizing factors for each radius.
+        radius_normalizing_factors = position_logits.apply(jnp.exp).integrate()
+        radius_normalizing_factors = radius_normalizing_factors.array.squeeze(axis=-1)
+        assert radius_normalizing_factors.shape == (
             num_graphs,
             num_radii,
         )
-
-        # position_max is of shape (num_graphs,)
-        position_max = position_max.squeeze(axis=(-3, -2, -1))
-        assert position_max.shape == (num_graphs,)
 
         # These are the target positions for each graph.
         # We need to compare these predicted positions to the target positions.
@@ -185,7 +174,7 @@ def generation_loss(
             )(models.RADII)
         )(target_positions)
 
-        # Normalize to get a probability distribution.
+        # Normalize to get a probability distribution over radii.
         true_radius_weights += 1e-10
         true_radius_weights = true_radius_weights / jnp.sum(
             true_radius_weights, axis=-1, keepdims=True
@@ -194,24 +183,48 @@ def generation_loss(
         # true_radius_weights is of shape (num_graphs, num_radii)
         assert true_radius_weights.shape == (num_graphs, num_radii)
 
-        # Compute f(r*, rhat*) which is our model predictions for the target positions.
-        target_positions = e3nn.IrrepsArray("1o", target_positions)
-        target_positions_logits = jax.vmap(
-            functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.globals.position_coeffs, target_positions)
-        target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
-        assert target_positions_logits.shape == (num_graphs, num_radii)
+        # Compute the true distribution over positions,
+        # described by a smooth approximation of a delta function at the target positions.
+        norms = jnp.linalg.norm(target_positions, axis=-1, keepdims=True)
+        target_positions_unit_vectors = target_positions / jnp.where(norms == 0,  1, norms)
+        target_positions_unit_vectors = e3nn.IrrepsArray("1o", target_positions_unit_vectors)
+        res_beta, res_alpha, quadrature = position_logits.res_beta, position_logits.res_alpha, position_logits.quadrature
+        log_true_angular_dist = e3nn.to_s2grid(
+            target_position_scaling_constant * target_positions_unit_vectors,
+            res_beta,
+            res_alpha,
+            quadrature=quadrature,
+            p_val=1,
+            p_arg=-1,
+        )
+        assert log_true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
+    
+        log_true_angular_dist_max = jnp.max(
+            log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
+        )
+        true_angular_dist = log_true_angular_dist.apply(lambda x: jnp.exp(x - log_true_angular_dist_max))
+        true_angular_dist = true_angular_dist / true_angular_dist.integrate()
+        assert true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
+
+        # Integrate the true angular distribution with the predicted logits.
+        target_positions_cross_entropy = (true_angular_dist[:, None, :, :] * position_logits).integrate().array.squeeze(axis=-1)
+        assert target_positions_cross_entropy.shape == (num_graphs, num_radii)
+
+        # Compute the lower bound on the loss.
+        log_true_angular_dist = true_angular_dist.apply(lambda x: jnp.log(jnp.where(x == 0, 1.0, x)))
+        lower_bounds = -(log_true_angular_dist * true_angular_dist).integrate().array.squeeze(-1)
+        assert lower_bounds.shape == (num_graphs,)
 
         loss_position = jax.vmap(
-            lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
+            lambda qr, fr, Zr, lb: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) - lb
         )(
             true_radius_weights,
-            target_positions_logits,
-            sphere_normalizing_factors,
-            position_max,
+            target_positions_cross_entropy,
+            radius_normalizing_factors,
+            lower_bounds,
         )
-
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     # If this is the last step in the generation process, we do not have to predict atom type and position.
@@ -262,7 +275,7 @@ def train_step(
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    batch_metrics = TrainMetrics.single_from_model_output(
+    batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
@@ -288,7 +301,7 @@ def evaluate_step(
 
     # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
-    return EvalMetrics.single_from_model_output(
+    return Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
@@ -372,6 +385,7 @@ def train_and_evaluate(
             eval_metrics[split] = eval_metrics[split].compute()
             writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
         writer.flush()
+
         return eval_metrics
 
     # Create writer for logs.
@@ -474,7 +488,6 @@ def train_and_evaluate(
             ckpt.save(
                 {
                     "state": state,
-                    "step": step,
                     "best_state": best_state,
                     "step_for_best_state": step_for_best_state,
                 }
@@ -532,7 +545,6 @@ def train_and_evaluate(
         ckpt.save(
             {
                 "state": state,
-                "step": step,
                 "best_state": best_state,
                 "step_for_best_state": step_for_best_state,
                 "metrics_for_best_state": metrics_for_best_state,
