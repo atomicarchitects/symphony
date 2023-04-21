@@ -49,8 +49,8 @@ def generate_molecules(
     model, params, config = analysis.load_model_at_step(
         workdir, step, run_in_evaluation_mode=True
     )
-    logging.info(config.to_dict())
     apply_fn = jax.jit(model.apply)
+    logging.info(config.to_dict())
 
     # Create output directories.
     step_name = "step=best" if step == -1 else f"step={step}"

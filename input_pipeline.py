@@ -16,8 +16,8 @@ import datatypes
 import dynamic_batcher
 import qm9
 
-from analyses import utility_classes
-import input_pipeline_tf
+#from analyses import utility_classes
+#import input_pipeline_tf
 
 
 def get_raw_datasets(
