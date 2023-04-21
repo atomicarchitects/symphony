@@ -31,15 +31,7 @@ from models import create_model
 
 
 @flax.struct.dataclass
-class TrainMetrics(metrics.Collection):
-    total_loss: metrics.Average.from_output("total_loss")
-    focus_loss: metrics.Average.from_output("focus_loss")
-    atom_type_loss: metrics.Average.from_output("atom_type_loss")
-    position_loss: metrics.Average.from_output("position_loss")
-
-
-@flax.struct.dataclass
-class EvalMetrics(metrics.Collection):
+class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     focus_loss: metrics.Average.from_output("focus_loss")
     atom_type_loss: metrics.Average.from_output("atom_type_loss")
@@ -185,7 +177,7 @@ def generation_loss(
             )(models.RADII)
         )(target_positions)
 
-        # Normalize to get a probability distribution.
+        # Normalize to get a probability distribution over radii.
         true_radius_weights += 1e-10
         true_radius_weights = true_radius_weights / jnp.sum(
             true_radius_weights, axis=-1, keepdims=True
@@ -262,7 +254,7 @@ def train_step(
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
-    batch_metrics = TrainMetrics.single_from_model_output(
+    batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
@@ -288,7 +280,7 @@ def evaluate_step(
 
     # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
-    return EvalMetrics.single_from_model_output(
+    return Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
