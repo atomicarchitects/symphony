@@ -20,6 +20,7 @@ import tqdm
 import chex
 import pickle
 from plotly import graph_objects as go
+from plotly.subplots import make_subplots
 
 sys.path.append("..")
 
@@ -150,6 +151,7 @@ def generate_molecules(
             for fig in figs:
                 all_traces.extend(fig.data)
             ct = 0
+            start_indices = [0]
             for fig in figs:
                 steps.append(dict(
                     method='restyle',
@@ -158,6 +160,7 @@ def generate_molecules(
                     }],
                 ))
                 ct += len(fig.data)
+                start_indices.append(ct)
 
             axis = dict(
                 showbackground=False,
@@ -188,7 +191,13 @@ def generate_molecules(
                     x=0.1,
                 ),
             )
-            fig_all = go.Figure(data=all_traces, layout=layout)
+
+            fig_all = make_subplots(rows=1, cols=2, specs=[[{'type': 'scene'}, {'type': 'xy'}]])
+            for i, trace in enumerate(all_traces):
+                visible = True if i < start_indices[1] else False
+                trace.update(visible=visible)
+                fig_all.add_trace(trace, row=1, col=2 if i + 1 in start_indices else 1)
+            fig_all.update_layout(layout)
 
             # Save to file.
             outputfile = os.path.join(
