@@ -38,8 +38,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
         "learning_rate"
     )
-    config.learning_rate_schedule_kwargs.warmup_steps = 100
-    config.learning_rate_schedule_kwargs.decay_steps = 1000
+    config.learning_rate_schedule_kwargs.warmup_steps = 2000
+    config.learning_rate_schedule_kwargs.decay_steps = 50000
 
     # Training.
     config.rng_seed = 0
