@@ -158,7 +158,6 @@ def generation_loss(
             num_radii,
         )
 
-
         # These are the target positions for each graph.
         # We need to compare these predicted positions to the target positions.
         target_positions = graphs.globals.target_positions
@@ -186,8 +185,9 @@ def generation_loss(
 
         # Compute the true distribution over positions,
         # described by a smooth approximation of a delta function at the target positions.
-        target_positions = e3nn.IrrepsArray("1o", target_positions)
-        target_positions_unit_vectors = target_positions / e3nn.norm(target_positions)
+        norms = jnp.linalg.norm(target_positions, axis=-1, keepdims=True)
+        target_positions_unit_vectors = target_positions / jnp.where(norms == 0,  1, norms)
+        target_positions_unit_vectors = e3nn.IrrepsArray("1o", target_positions_unit_vectors)
         res_beta, res_alpha, quadrature = position_logits.res_beta, position_logits.res_alpha, position_logits.quadrature
         log_true_angular_dist = e3nn.to_s2grid(
             target_position_scaling_constant * target_positions_unit_vectors,
@@ -197,16 +197,21 @@ def generation_loss(
             p_val=1,
             p_arg=-1,
         )
-        log_true_angular_dist = log_true_angular_dist.apply(lambda x: x - log_true_angular_dist.grid_values.max())
-        true_angular_dist = log_true_angular_dist.apply(jnp.exp)
+        assert log_true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
+    
+        log_true_angular_dist_max = jnp.max(
+            log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
+        )
+        true_angular_dist = log_true_angular_dist.apply(lambda x: jnp.exp(x - log_true_angular_dist_max))
         true_angular_dist = true_angular_dist / true_angular_dist.integrate()
         assert true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
 
         # Integrate the true angular distribution with the predicted logits.
-        target_positions_logits = (true_angular_dist[:, None, :, :] * position_logits).integrate().array.squeeze(axis=-1)
-        assert target_positions_logits.shape == (num_graphs, num_radii), target_positions_logits.shape
+        target_positions_cross_entropy = (true_angular_dist[:, None, :, :] * position_logits).integrate().array.squeeze(axis=-1)
+        assert target_positions_cross_entropy.shape == (num_graphs, num_radii)
 
         # Compute the lower bound on the loss.
+        log_true_angular_dist = true_angular_dist.apply(lambda x: jnp.log(jnp.where(x == 0, 1.0, x)))
         lower_bounds = -(log_true_angular_dist * true_angular_dist).integrate().array.squeeze(-1)
         assert lower_bounds.shape == (num_graphs,)
 
@@ -214,7 +219,7 @@ def generation_loss(
             lambda qr, fr, Zr, lb: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) - lb
         )(
             true_radius_weights,
-            target_positions_logits,
+            target_positions_cross_entropy,
             radius_normalizing_factors,
             lower_bounds,
         )
