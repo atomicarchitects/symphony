@@ -143,23 +143,20 @@ def generation_loss(
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_max = jnp.max(
-            preds.globals.position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+        position_logits = preds.globals.position_logits
+        position_logits_max = jnp.max(
+            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
-        sphere_normalizing_factors = preds.globals.position_logits.apply(
-            lambda pos: jnp.exp(pos - position_max)
-        ).integrate()
-        sphere_normalizing_factors = sphere_normalizing_factors.array.squeeze(axis=-1)
+        position_logits = position_logits.apply(lambda x: x - position_logits_max)
 
-        # sphere_normalizing_factors is of shape (num_graphs, num_radii)
-        assert sphere_normalizing_factors.shape == (
+        # Compute the normalizing factors for each radius.
+        radius_normalizing_factors = position_logits.apply(jnp.exp).integrate()
+        radius_normalizing_factors = radius_normalizing_factors.array.squeeze(axis=-1)
+        assert radius_normalizing_factors.shape == (
             num_graphs,
             num_radii,
         )
 
-        # position_max is of shape (num_graphs,)
-        position_max = position_max.squeeze(axis=(-3, -2, -1))
-        assert position_max.shape == (num_graphs,)
 
         # These are the target positions for each graph.
         # We need to compare these predicted positions to the target positions.
@@ -186,24 +183,38 @@ def generation_loss(
         # true_radius_weights is of shape (num_graphs, num_radii)
         assert true_radius_weights.shape == (num_graphs, num_radii)
 
-        # Compute f(r*, rhat*) which is our model predictions for the target positions.
+        # Compute the true distribution over positions,
+        # described by a smooth approximation of a delta function at the target positions.
         target_positions = e3nn.IrrepsArray("1o", target_positions)
-        target_positions_logits = jax.vmap(
-            functools.partial(e3nn.to_s2point, normalization="integral")
-        )(preds.globals.position_coeffs, target_positions)
-        target_positions_logits = target_positions_logits.array.squeeze(axis=-1)
-        assert target_positions_logits.shape == (num_graphs, num_radii)
+        target_positions_unit_vectors = target_positions / e3nn.norm(target_positions)
+        scaling_const = 1000
+        res_beta, res_alpha, quadrature = position_logits.res_beta, position_logits.res_alpha, position_logits.quadrature
+        log_true_angular_dist = e3nn.to_s2grid(
+            scaling_const * target_positions_unit_vectors,
+            res_beta,
+            res_alpha,
+            quadrature=quadrature,
+            p_val=1,
+            p_arg=-1,
+        )
+        true_angular_dist = log_true_angular_dist.apply(lambda x: jnp.exp(x - log_true_angular_dist.grid_values.max()))
+        true_angular_dist = true_angular_dist / true_angular_dist.integrate()
+        assert true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
+
+        # Integrate the true angular distribution with the logits.
+        position_logits.grid_values = (true_angular_dist[:, None, :, :].grid_values * position_logits.grid_values)
+        target_positions_logits = position_logits.integrate().array.squeeze(axis=-1)
+        assert target_positions_logits.shape == (num_graphs, num_radii), target_positions_logits.shape
 
         loss_position = jax.vmap(
-            lambda qr, fr, Zr, c: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) + c
+            lambda qr, fr, Zr: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr))
         )(
             true_radius_weights,
             target_positions_logits,
-            sphere_normalizing_factors,
-            position_max,
+            radius_normalizing_factors,
         )
-
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     # If this is the last step in the generation process, we do not have to predict atom type and position.
