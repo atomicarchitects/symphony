@@ -75,6 +75,7 @@ def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
+    target_position_scaling_constant: float
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -187,31 +188,35 @@ def generation_loss(
         # described by a smooth approximation of a delta function at the target positions.
         target_positions = e3nn.IrrepsArray("1o", target_positions)
         target_positions_unit_vectors = target_positions / e3nn.norm(target_positions)
-        scaling_const = 1000
         res_beta, res_alpha, quadrature = position_logits.res_beta, position_logits.res_alpha, position_logits.quadrature
         log_true_angular_dist = e3nn.to_s2grid(
-            scaling_const * target_positions_unit_vectors,
+            target_position_scaling_constant * target_positions_unit_vectors,
             res_beta,
             res_alpha,
             quadrature=quadrature,
             p_val=1,
             p_arg=-1,
         )
-        true_angular_dist = log_true_angular_dist.apply(lambda x: jnp.exp(x - log_true_angular_dist.grid_values.max()))
+        log_true_angular_dist = log_true_angular_dist.apply(lambda x: x - log_true_angular_dist.grid_values.max())
+        true_angular_dist = log_true_angular_dist.apply(jnp.exp)
         true_angular_dist = true_angular_dist / true_angular_dist.integrate()
         assert true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
 
-        # Integrate the true angular distribution with the logits.
-        position_logits.grid_values = (true_angular_dist[:, None, :, :].grid_values * position_logits.grid_values)
-        target_positions_logits = position_logits.integrate().array.squeeze(axis=-1)
+        # Integrate the true angular distribution with the predicted logits.
+        target_positions_logits = (true_angular_dist[:, None, :, :] * position_logits).integrate().array.squeeze(axis=-1)
         assert target_positions_logits.shape == (num_graphs, num_radii), target_positions_logits.shape
 
+        # Compute the lower bound on the loss.
+        lower_bounds = -(log_true_angular_dist * true_angular_dist).integrate().array.squeeze(-1)
+        assert lower_bounds.shape == (num_graphs,)
+
         loss_position = jax.vmap(
-            lambda qr, fr, Zr: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr))
+            lambda qr, fr, Zr, lb: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) - lb
         )(
             true_radius_weights,
             target_positions_logits,
             radius_normalizing_factors,
+            lower_bounds,
         )
         assert loss_position.shape == (num_graphs,)
 

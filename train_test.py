@@ -92,7 +92,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,)),
-            target_positions=jnp.zeros((num_graphs, 3)),
+            target_positions=jnp.ones((num_graphs, 3)),
             target_species_probability=jnp.ones((num_graphs, num_elements))
             / num_elements,
         ),
@@ -114,6 +114,7 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
+            target_position_scaling_constant=1000,
         )
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
@@ -125,6 +126,7 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
+            target_position_scaling_constant=1000,
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -141,12 +143,14 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
+            target_position_scaling_constant=1000,
         )
         num_radii = models.RADII.shape[0]
+        lb = -0.0005
         expected_position_loss = jnp.asarray(
             [
-                -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
-                -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
+                lb + -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
+                lb + -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
             ]
         )
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
@@ -154,10 +158,6 @@ class TrainTest(parameterized.TestCase):
     @parameterized.parameters("mace", "e3schnet", "nequip")
     def test_train_and_evaluate(self, config_name: str):
         """Tests that training and evaluation runs without errors."""
-
-        if config_name != "nequip":
-            # Skip tests for models that are not implemented.
-            return
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
