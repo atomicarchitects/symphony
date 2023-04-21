@@ -7,6 +7,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 import e3nn_jax as e3nn
 import jax
+import jax.profiler
 import jax.numpy as jnp
 import scipy
 import ml_collections
@@ -172,6 +173,9 @@ class TrainTest(parameterized.TestCase):
 
         # Training should proceed without any errors.
         train.train_and_evaluate(config, workdir)
+
+        # Save device memory profile.
+        # jax.profiler.save_device_memory_profile(f"{config_name}.prof")
 
 
 if __name__ == "__main__":

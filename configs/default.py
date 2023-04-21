@@ -10,11 +10,13 @@ def get_root_dir(dataset: str) -> Optional[str]:
     if dataset == "qm9":
         hostname, username = os.uname()[1], os.environ.get("USER")
         if hostname == "potato.mit.edu":
+            if username == "songk":
+                return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
             return "/home/ameyad/qm9_data_tf/data_tf2"
         elif username == "ameyad":
             return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
         elif username == "songk":
-            return "/home/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
+            return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None
 
 

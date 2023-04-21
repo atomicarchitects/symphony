@@ -364,6 +364,7 @@ def train_and_evaluate(
             eval_metrics[split] = eval_metrics[split].compute()
             writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
         writer.flush()
+
         return eval_metrics
 
     # Create writer for logs.
@@ -466,7 +467,6 @@ def train_and_evaluate(
             ckpt.save(
                 {
                     "state": state,
-                    "step": step,
                     "best_state": best_state,
                     "step_for_best_state": step_for_best_state,
                 }
@@ -524,7 +524,6 @@ def train_and_evaluate(
         ckpt.save(
             {
                 "state": state,
-                "step": step,
                 "best_state": best_state,
                 "step_for_best_state": step_for_best_state,
                 "metrics_for_best_state": metrics_for_best_state,
