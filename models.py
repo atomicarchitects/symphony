@@ -13,6 +13,7 @@ import ml_collections
 import nequip_jax
 
 import datatypes
+from marionette import MarioNetteLayerHaiku
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -432,6 +433,71 @@ class NequIP(hk.Module):
         return node_feats
 
 
+class MarioNette(hk.Module):
+    def __init__(
+        self,
+        num_species: int,
+        r_max: float,
+        avg_num_neighbors: float,
+        init_embedding_dims: int,
+        output_irreps: str,
+        soft_normalization: float,
+        num_interactions: int,
+        even_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        mlp_n_hidden: int,
+        mlp_n_layers: int,
+        n_radial_basis: int,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.num_species = num_species
+        self.r_max = r_max
+        self.avg_num_neighbors = avg_num_neighbors
+        self.init_embedding_dims = init_embedding_dims
+        self.output_irreps = output_irreps
+        self.soft_normalization = soft_normalization
+        self.num_interactions = num_interactions
+        self.even_activation = even_activation
+        self.odd_activation = odd_activation
+        self.mlp_activation = mlp_activation
+        self.mlp_n_hidden = mlp_n_hidden
+        self.mlp_n_layers = mlp_n_layers
+        self.n_radial_basis = n_radial_basis
+
+    def __call__(
+        self,
+        graphs: datatypes.Fragments,
+    ):
+        relative_positions = (
+            graphs.nodes.positions[graphs.receivers]
+            - graphs.nodes.positions[graphs.senders]
+        )
+        relative_positions = relative_positions / self.r_max
+        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
+
+        species = graphs.nodes.species
+        node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
+        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
+
+        for _ in range(self.num_interactions):
+            node_feats = MarioNetteLayerHaiku(
+                avg_num_neighbors=self.avg_num_neighbors,
+                num_species=self.num_species,
+                output_irreps=self.output_irreps,
+                interaction_irreps=self.output_irreps,
+                soft_normalization=self.soft_normalization,
+                even_activation=self.even_activation,
+                odd_activation=self.odd_activation,
+                mlp_activation=self.mlp_activation,
+                mlp_n_hidden=self.mlp_n_hidden,
+                mlp_n_layers=self.mlp_n_layers,
+                n_radial_basis=self.n_radial_basis,
+            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+        return node_feats
+
+
 class FocusPredictor(hk.Module):
     """Predicts focus logits for each node."""
 
@@ -829,6 +895,22 @@ def create_model(
                 even_activation=get_activation(config.even_activation),
                 odd_activation=get_activation(config.odd_activation),
                 mlp_activation=get_activation(config.mlp_activation),
+                mlp_n_hidden=config.num_channels,
+                mlp_n_layers=config.mlp_n_layers,
+                n_radial_basis=config.num_basis_fns,
+            )
+        elif config.model == "MarioNette":
+            node_embedder = MarioNette(
+                num_species=num_species,
+                r_max=config.r_max,
+                avg_num_neighbors=config.avg_num_neighbors,
+                init_embedding_dims=config.num_channels,
+                output_irreps=config.num_channels * e3nn.s2_irreps(config.max_ell),
+                soft_normalization=config.soft_normalization,
+                num_interactions=config.num_interactions,
+                even_activation=get_activation(config.even_activation),
+                odd_activation=get_activation(config.odd_activation),
+                mlp_activation=get_activation(config.activation),
                 mlp_n_hidden=config.num_channels,
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
