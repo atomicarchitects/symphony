@@ -625,15 +625,15 @@ def check_valency(
             'connectivity', a numpy.ndarray (key 'valid_mol') that marks whether a
             molecule has passed (entry=1) or failed (entry=0) the valency check if
             filter_by_valency is True (otherwise it will be 1 everywhere), and a numpy.ndarray
-            (key 'valid_atom') that marks the fraction of atoms in each molecule that pass
-            the valency check if filter_by_valency is True (otherwise it will be 1 everywhere)
+            (key 'valid_atom') that marks the number of atoms in each molecule that pass
+            the valency check if filter_by_valency is True (otherwise it will be n_atoms everywhere)
     """
     n_atoms = len(numbers[0])
     n_mols = len(numbers)
     thresh = n_mols if n_mols < 30 else 30
     connectivity = np.zeros((len(positions), n_atoms, n_atoms))
     valid_mol = np.ones(len(positions), dtype=bool)
-    valid_atom = np.ones(len(positions))
+    valid_atom = np.ones(len(positions)) * n_atoms
     mols = []
     for i, (pos, num) in enumerate(zip(positions, numbers)):
         mol = Molecule(pos, num, store_positions=False)
@@ -658,7 +658,7 @@ def check_valency(
                     con_mat = mol.get_connectivity()
                     nums = num[random_ord]
             valid_mol[i] = val
-            valid_atom[i] = np.sum(np.equal(np.sum(con_mat, axis=0), valence[nums]) / len(nums))
+            valid_atom[i] = np.sum(np.equal(np.sum(con_mat, axis=0), valence[nums]))
 
             if ((i + 1) % thresh == 0) and not print_file and prog_str is not None:
                 print("\033[K", end="\r", flush=True)
