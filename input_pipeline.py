@@ -455,36 +455,36 @@ def _normalized_bitcount(xs, n: int):
     return jnp.bincount(xs, length=n) / len(xs)
 
 
-def dataset_as_database(
-    config: ml_collections.ConfigDict,
-    dataset: str,
-    dbpath: str,
-    root_dir: Optional[str] = None,
-) -> None:
-    """Converts the dataset to a ASE database.
-    Args:
-        config (ml_collections.ConfigDict)
-        dataset (str): should be 'train', 'val', 'test', or 'all'
-        dbpath (str)
-        root_dir (str, optional): root dir for qm9
-    """
+# def dataset_as_database(
+#     config: ml_collections.ConfigDict,
+#     dataset: str,
+#     dbpath: str,
+#     root_dir: Optional[str] = None,
+# ) -> None:
+#     """Converts the dataset to a ASE database.
+#     Args:
+#         config (ml_collections.ConfigDict)
+#         dataset (str): should be 'train', 'val', 'test', or 'all'
+#         dbpath (str)
+#         root_dir (str, optional): root dir for qm9
+#     """
 
-    atomic_numbers = [1, 6, 7, 8, 9]
+#     atomic_numbers = [1, 6, 7, 8, 9]
 
-    if root_dir is None:
-        root_dir = config.root_dir
-    _, _, molecules = get_raw_datasets(
-        rng=jax.random.PRNGKey(config.rng_seed), config=config, root_dir=root_dir
-    )
-    compressor = utility_classes.ConnectivityCompressor()
-    counter = 0
-    to_convert = ["train", "val", "test"] if dataset == "all" else [dataset]
-    with ase.db.connect(dbpath) as conn:
-        for s in to_convert:
-            for atoms in molecules[s]:
-                # instantiate utility_classes.Molecule object
-                mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
-                # get connectivity matrix (detecting bond orders with Open Babel)
-                con_mat = mol.get_connectivity()
-                conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
-                counter += 1
+#     if root_dir is None:
+#         root_dir = config.root_dir
+#     _, _, molecules = get_raw_datasets(
+#         rng=jax.random.PRNGKey(config.rng_seed), config=config, root_dir=root_dir
+#     )
+#     compressor = utility_classes.ConnectivityCompressor()
+#     counter = 0
+#     to_convert = ["train", "val", "test"] if dataset == "all" else [dataset]
+#     with ase.db.connect(dbpath) as conn:
+#         for s in to_convert:
+#             for atoms in molecules[s]:
+#                 # instantiate utility_classes.Molecule object
+#                 mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
+#                 # get connectivity matrix (detecting bond orders with Open Babel)
+#                 con_mat = mol.get_connectivity()
+#                 conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
+#                 counter += 1

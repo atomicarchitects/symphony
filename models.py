@@ -450,6 +450,8 @@ class MarioNette(hk.Module):
         mlp_n_layers: int,
         n_radial_basis: int,
         use_bessel: bool,
+        alpha: float,
+        alphal: float,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -467,6 +469,8 @@ class MarioNette(hk.Module):
         self.mlp_n_layers = mlp_n_layers
         self.n_radial_basis = n_radial_basis
         self.use_bessel = use_bessel
+        self.alpha = alpha
+        self.alphal = alphal
 
     def __call__(
         self,
@@ -498,7 +502,8 @@ class MarioNette(hk.Module):
                 n_radial_basis=self.n_radial_basis,
                 use_bessel=self.use_bessel,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
-        alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
+
+        alpha = self.alpha * (self.alphal ** jnp.array(node_feats.irreps.ls))
         node_feats = node_feats * alpha
         return node_feats
 
@@ -920,6 +925,8 @@ def create_model(
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
                 use_bessel=config.use_bessel,
+                alpha=config.alpha,
+                alphal=config.alphal,
             )
         elif config.model == "E3SchNet":
             node_embedder = E3SchNet(
