@@ -138,20 +138,17 @@ def _impl(
 
     # Radial part
     lengths = e3nn.norm(vectors).array  # [n_edges, 1]
+    radial = e3nn.soft_envelope(lengths)  # [n_edges, 1]
     if self.use_bessel:
-        radial = e3nn.bessel(lengths[:, 0], self.n_radial_basis) * e3nn.soft_envelope(
-            lengths
+        radial = (
+            e3nn.bessel(lengths[:, 0], self.n_radial_basis) * radial
         )  # [n_edges, n_radial_basis]
-    else:
-        radial = e3nn.soft_envelope(lengths)  # [n_edges, 1]
 
     mix = MultiLayerPerceptron(
         self.mlp_n_layers * (self.mlp_n_hidden,) + (w_unused_flat.size,),
         self.mlp_activation,
         output_activation=False,
-    )(
-        radial
-    )  # [n_edges, w_unused_flat.size]
+    )(radial)
 
     # Discard 0 length edges that come from graph padding
     mix = jnp.where(lengths == 0.0, 0.0, mix)
@@ -159,6 +156,7 @@ def _impl(
     # vmap over edges
     w = jax.vmap(unflatten, (0, None))(mix, w_unused)
     messages = jax.vmap(conv.apply)(w, messages, vectors)
+    assert messages.shape == (n_edge, messages.irreps.dim)
 
     # Message passing
     zeros = e3nn.IrrepsArray.zeros(
