@@ -16,7 +16,7 @@ import logging
 import models
 import datatypes
 import train
-from configs import mace, e3schnet, nequip
+from configs import mace, e3schnet, nequip, marionette
 
 try:
     import profile_nn_jax
@@ -30,6 +30,7 @@ _ALL_CONFIGS = {
     "e3schnet": e3schnet.get_config(),
     "mace": mace.get_config(),
     "nequip": nequip.get_config(),
+    "marionette": marionette.get_config(),
 }
 
 
@@ -92,7 +93,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,)),
-            target_positions=jnp.zeros((num_graphs, 3)),
+            target_positions=jnp.ones((num_graphs, 3)),
             target_species_probability=jnp.ones((num_graphs, num_elements))
             / num_elements,
         ),
@@ -114,6 +115,7 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
+            target_position_scaling_constant=1000,
         )
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
@@ -125,6 +127,7 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
+            target_position_scaling_constant=1000,
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -136,25 +139,62 @@ class TrainTest(parameterized.TestCase):
             atom_type_loss, expected_atom_type_loss, places=5
         )
 
-    def test_position_loss(self):
+    @parameterized.parameters(1.0, 10.0, 100.0, 1000.0)
+    def test_position_loss(self, target_position_scaling_constant: float):
         _, (_, _, position_loss) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
+            target_position_scaling_constant=target_position_scaling_constant,
+        )
+        target_positions = self.graphs.globals.target_positions
+        position_logits = self.preds.globals.position_logits
+        norms = jnp.linalg.norm(target_positions, axis=-1, keepdims=True)
+        target_positions_unit_vectors = target_positions / jnp.where(
+            norms == 0, 1, norms
+        )
+        target_positions_unit_vectors = e3nn.IrrepsArray(
+            "1o", target_positions_unit_vectors
+        )
+        res_beta, res_alpha, quadrature = (
+            position_logits.res_beta,
+            position_logits.res_alpha,
+            position_logits.quadrature,
+        )
+        log_true_angular_dist = e3nn.to_s2grid(
+            target_position_scaling_constant * target_positions_unit_vectors,
+            res_beta,
+            res_alpha,
+            quadrature=quadrature,
+            p_val=1,
+            p_arg=-1,
+        )
+        log_true_angular_dist_max = jnp.max(
+            log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
+        )
+        true_angular_dist = log_true_angular_dist.apply(
+            lambda x: jnp.exp(x - log_true_angular_dist_max)
+        )
+        true_angular_dist = true_angular_dist / true_angular_dist.integrate()
+
+        log_true_angular_dist = true_angular_dist.apply(
+            lambda x: jnp.log(jnp.where(x == 0, 1.0, x))
+        )
+        lower_bounds = (
+            -(log_true_angular_dist * true_angular_dist).integrate().array.squeeze(-1)
         )
         num_radii = models.RADII.shape[0]
-        expected_position_loss = jnp.asarray(
-            [
-                -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
-                -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii),
-            ]
+
+        expected_position_loss = (
+            -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - lower_bounds
         )
+
+        self.assertTrue(jnp.all(position_loss >= 0))
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("mace", "e3schnet", "nequip")
+    @parameterized.parameters("mace", "e3schnet", "nequip", "marionette")
     def test_train_and_evaluate(self, config_name: str):
         """Tests that training and evaluation runs without errors."""
-
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
         jax.config.update("jax_debug_infs", True)

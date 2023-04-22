@@ -40,12 +40,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
         "learning_rate"
     )
-    config.learning_rate_schedule_kwargs.warmup_steps = 100
-    config.learning_rate_schedule_kwargs.decay_steps = 1000
+    config.learning_rate_schedule_kwargs.warmup_steps = 2000
+    config.learning_rate_schedule_kwargs.decay_steps = 50000
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 400000
+    config.num_train_steps = 1_000_000
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
@@ -58,6 +58,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-3
+    config.loss_kwargs.target_position_scaling_constant = 1e3
 
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()
