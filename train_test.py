@@ -45,7 +45,7 @@ def update_dummy_config(
     config.eval_every_steps = 50
     config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
     if train_on_split_smaller_than_chunk:
-        config.train_molecules = (0, 5)
+        config.train_molecules = (0, 10)
     return ml_collections.FrozenConfigDict(config)
 
 
