@@ -177,3 +177,5 @@ notebooks/gen
 loss_outputs
 *.html
 cached/
+
+*.prof
