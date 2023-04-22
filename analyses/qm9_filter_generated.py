@@ -983,7 +983,7 @@ def _compare_fingerprints(
     """
     idx_known = stat_heads.index("known")
     idx_equals = stat_heads.index("equals")
-    idx_val = stat_heads.index("valid")
+    idx_val = stat_heads.index("valid_mol")
     n_val_mols, n_test_mols = thresh
     # get indices of valid molecules
     idcs = np.where(stats[:, idx_val] == 1)[0]
@@ -1049,7 +1049,7 @@ def collect_bond_and_ring_stats(mols, stats, stat_heads):
         dict (str->numpy.ndarray): dictionary containing the updated statistics array
             under 'stats'
     """
-    idx_val = stat_heads.index("valid")
+    idx_val = stat_heads.index("valid_mol")
     for i, mol in enumerate(mols):
         if stats[i, idx_val] != 1:
             continue
@@ -1135,7 +1135,8 @@ if __name__ == "__main__":
     stat_heads = [
         "n_atoms",
         "id",
-        "valid",
+        "valid_mol",
+        "valid_atom",
         "duplicating",
         "n_duplicates",
         "known",
@@ -1367,8 +1368,8 @@ if __name__ == "__main__":
                 continue
             d = res[key]
             start = i
-            end = i + len(d["valid"])
-            idcs = np.where(d["valid"])[0]
+            end = i + len(d["valid_mol"])
+            idcs = np.where(d["valid_mol"])[0]
             if len(idcs) < 1:
                 i = end
                 continue
