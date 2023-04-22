@@ -26,6 +26,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
+    config.train_on_small_split = False
     config.root_dir = get_root_dir(config.get_ref("dataset"))
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
@@ -34,7 +35,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Optimizer.
     config.optimizer = "adam"
     config.learning_rate = 1e-3
-    config.learning_rate_schedule = "sgdr"
+    config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
     config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
     config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
