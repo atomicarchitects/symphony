@@ -179,3 +179,4 @@ loss_outputs
 cached/
 
 *.prof
+*.txt
