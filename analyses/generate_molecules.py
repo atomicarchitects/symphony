@@ -35,14 +35,20 @@ FLAGS = flags.FLAGS
 
 
 def generate_molecules(
-    workdir: str, outputdir: str, beta: float, step: int, seeds: Sequence[int],
+    workdir: str,
+    outputdir: str,
+    beta: float,
+    step: int,
+    seeds: Sequence[int],
     init_molecule: str,
-    visualize: bool
+    visualize: bool,
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Create initial molecule, if provided.
     init_molecule, init_molecule_name = analysis.construct_molecule(init_molecule)
-    logging.info(f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}")
+    logging.info(
+        f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
+    )
 
     # Load model.
     name = analysis.name_from_workdir(workdir)
@@ -54,9 +60,13 @@ def generate_molecules(
 
     # Create output directories.
     step_name = "step=best" if step == -1 else f"step={step}"
-    molecules_outputdir = os.path.join(outputdir, "molecules", "generated", name, f"beta={beta}", step_name)
+    molecules_outputdir = os.path.join(
+        outputdir, "molecules", "generated", name, f"beta={beta}", step_name
+    )
     os.makedirs(molecules_outputdir, exist_ok=True)
-    visualizations_outputdir = os.path.join(outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name)
+    visualizations_outputdir = os.path.join(
+        outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name
+    )
     os.makedirs(visualizations_outputdir, exist_ok=True)
     molecule_list = []
 
@@ -114,7 +124,11 @@ def generate_molecules(
                 break
 
             # Check for any NaNs in the predictions.
-            num_nans = sum(jax.tree_util.tree_leaves(jax.tree_util.tree_map(lambda x: jnp.isnan(x).sum(), pred)))
+            num_nans = sum(
+                jax.tree_util.tree_leaves(
+                    jax.tree_util.tree_map(lambda x: jnp.isnan(x).sum(), pred)
+                )
+            )
             if num_nans > 0:
                 logging.info("NaNs in predictions. Stopping generation...")
                 nan_found = True
@@ -149,16 +163,19 @@ def generate_molecules(
             ase.io.write(os.path.join(molecules_outputdir, outputfile), molecule)
             molecule_list.append(molecule)
         else:
-            logging.info("Discarding %s because it is too long", molecule.get_chemical_formula())
-    ase_to_mol_dict(molecule_list, file_name=os.path.join(molecules_outputdir, 'generated_molecules.mol_dict'))
+            logging.info(
+                "Discarding %s because it is too long", molecule.get_chemical_formula()
+            )
+    ase_to_mol_dict(
+        molecule_list,
+        file_name=os.path.join(molecules_outputdir, "generated_molecules.mol_dict"),
+    )
 
 
 def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
-    '''from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet'''
+    """from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet"""
 
-    generated = (
-        {}
-    )
+    generated = {}
     for mol in molecules:
         l = mol.get_atomic_numbers().shape[0]
         if l not in generated:
@@ -195,7 +212,7 @@ def main(unused_argv: Sequence[str]) -> None:
     seeds = [int(seed) for seed in FLAGS.seeds]
     init = FLAGS.init
     visualize = FLAGS.visualize
-    
+
     generate_molecules(workdir, outputdir, beta, step, seeds, init, visualize)
 
 

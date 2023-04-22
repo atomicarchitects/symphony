@@ -16,8 +16,8 @@ import datatypes
 import dynamic_batcher
 import qm9
 
-#from analyses import utility_classes
-#import input_pipeline_tf
+# from analyses import utility_classes
+# import input_pipeline_tf
 
 
 def get_raw_datasets(
@@ -62,7 +62,9 @@ def get_raw_datasets(
         # "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
         "train": range(*config.train_molecules),
         "val": range(*config.val_molecules),
-        "test": range(config.test_molecules[0], min(config.test_molecules[1], len(all_molecules)))
+        "test": range(
+            config.test_molecules[0], min(config.test_molecules[1], len(all_molecules))
+        ),
     }
     molecules = {
         split: [all_molecules[i] for i in indices[split]]
@@ -453,7 +455,12 @@ def _normalized_bitcount(xs, n: int):
     return jnp.bincount(xs, length=n) / len(xs)
 
 
-def dataset_as_database(config: ml_collections.ConfigDict, dataset: str, dbpath: str, root_dir: Optional[str] = None) -> None:
+def dataset_as_database(
+    config: ml_collections.ConfigDict,
+    dataset: str,
+    dbpath: str,
+    root_dir: Optional[str] = None,
+) -> None:
     """Converts the dataset to a ASE database.
     Args:
         config (ml_collections.ConfigDict)
@@ -464,11 +471,10 @@ def dataset_as_database(config: ml_collections.ConfigDict, dataset: str, dbpath:
 
     atomic_numbers = [1, 6, 7, 8, 9]
 
-    if root_dir is None: root_dir = config.root_dir
+    if root_dir is None:
+        root_dir = config.root_dir
     _, _, molecules = get_raw_datasets(
-        rng=jax.random.PRNGKey(config.rng_seed),
-        config=config,
-        root_dir=root_dir
+        rng=jax.random.PRNGKey(config.rng_seed), config=config, root_dir=root_dir
     )
     compressor = utility_classes.ConnectivityCompressor()
     counter = 0

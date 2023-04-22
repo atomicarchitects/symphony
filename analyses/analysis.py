@@ -27,6 +27,7 @@ import datatypes  # noqa: E402
 import models  # noqa: E402
 import train  # noqa: E402
 from configs import default  # noqa: E402
+
 try:
     import input_pipeline_tf  # noqa: E402
 except ImportError:
@@ -251,7 +252,9 @@ def load_from_workdir(
         if not os.path.exists(pickled_params_file):
             pickled_params_file = os.path.join(checkpoint_dir, "params_best.pkl")
             if not os.path.exists(pickled_params_file):
-                raise FileNotFoundError(f"No pickled params found at {pickled_params_file}")
+                raise FileNotFoundError(
+                    f"No pickled params found at {pickled_params_file}"
+                )
 
         logging.info(
             "Initializing dummy model with pickled params found at %s",
