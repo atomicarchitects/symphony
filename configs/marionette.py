@@ -22,5 +22,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_basis_fns = 8
     config.soft_normalization = 1e5
     config.use_bessel = True
+    config.alpha = 1.0
+    config.alphal = 0.5
 
     return config
