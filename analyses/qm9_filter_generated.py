@@ -9,6 +9,7 @@ import pickle
 import os
 import argparse
 from openbabel import openbabel as ob
+import pandas as pd
 import pybel
 import time
 import sys
@@ -1430,7 +1431,15 @@ if __name__ == "__main__":
             for pos, num, con_mat in zip(all_pos, all_numbers, all_con_mats):
                 at = Atoms(num, positions=pos)
                 conn.write(at, data={"con_mat": con_mat})
-    # store gathered statistics in separate file
+    # store gathered statistics in metrics dataframe
+    stats_df = pd.DataFrame(res["stats"].squeeze(), columns=res["stat_heads"].squeeze())
+    metric_df_dict = analysis.get_results_as_dataframe(
+        [''], ['total_loss', 'focus_loss', 'atom_type_loss', 'position_loss'], args.model_path
+    )
+    metric_df_dict['train_eval_final'] = pd.concat([metric_df_dict['train_eval_final']], axis=1)
+    with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
+        pickle.dump(metric_df_dict, f)
+
     np.savez_compressed(
         os.path.splitext(target_db)[0] + f"_statistics.npz",
         stats=res["stats"],
