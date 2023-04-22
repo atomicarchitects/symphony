@@ -428,9 +428,7 @@ class NequIP(hk.Module):
                 mlp_n_layers=self.mlp_n_layers,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
-        alpha = jnp.array(
-            [0.5**ir.l for mul, ir in node_feats.irreps for _ in range(mul)]
-        )
+        alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
         node_feats = node_feats * alpha
         return node_feats
 
@@ -500,6 +498,8 @@ class MarioNette(hk.Module):
                 n_radial_basis=self.n_radial_basis,
                 use_bessel=self.use_bessel,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+        alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
+        node_feats = node_feats * alpha
         return node_feats
 
 
