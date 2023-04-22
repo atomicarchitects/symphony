@@ -208,7 +208,14 @@ def get_unbatched_qm9_datasets(
         return [f for f in filenames if filter_file(f, start, end)]
 
     # Number of molecules for training can be smaller than the chunk size.
-    train_molecules = (config.train_molecules[0], max(config.train_molecules[1], 2976))
+    train_on_split_smaller_than_chunk = config.get("train_on_split_smaller_than_chunk")
+    if train_on_split_smaller_than_chunk:
+        train_molecules = (
+            config.train_molecules[0],
+            max(config.train_molecules[1], 2976),
+        )
+    else:
+        train_molecules = config.train_molecules
     files_by_split = {
         "train": filter_by_molecule_number(filenames, *train_molecules),
         "val": filter_by_molecule_number(filenames, *config.val_molecules),
@@ -218,9 +225,14 @@ def get_unbatched_qm9_datasets(
     element_spec = tf.data.Dataset.load(filenames[0]).element_spec
     datasets = {}
     for split, files_split in files_by_split.items():
-        if split == "train" and config.get("train_on_small_split"):
-            logging.info("Training on a small split of the training set.")
-            assert config.train_molecules[0] == 0
+        if split == "train" and train_on_split_smaller_than_chunk:
+            logging.info(
+                "Training on a split of the training set smaller than a single chunk."
+            )
+            if config.train_molecules[0] != 0:
+                raise ValueError(
+                    "config.train_molecules[0] must be 0 if train_on_split_smaller_than_chunk is True."
+                )
 
             dataset_split = tf.data.Dataset.load(files_split[0])
             num_molecules_seen = 0
@@ -238,6 +250,8 @@ def get_unbatched_qm9_datasets(
                 )
 
             dataset_split = dataset_split.take(num_steps_to_take)
+
+        # This is usually the case.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
             dataset_split = dataset_split.interleave(

@@ -26,7 +26,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
-    config.train_on_small_split = False
+    config.train_on_split_smaller_than_chunk = False
     config.root_dir = get_root_dir(config.get_ref("dataset"))
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)

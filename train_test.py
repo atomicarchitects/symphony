@@ -35,7 +35,7 @@ _ALL_CONFIGS = {
 
 
 def update_dummy_config(
-    config: ml_collections.ConfigDict, train_on_small_split: bool
+    config: ml_collections.ConfigDict, train_on_split_smaller_than_chunk: bool
 ) -> ml_collections.FrozenConfigDict:
     """Updates the dummy config."""
     config = ml_collections.ConfigDict(config)
@@ -43,8 +43,8 @@ def update_dummy_config(
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 50
-    config.train_on_small_split = train_on_small_split
-    if train_on_small_split:
+    config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
+    if train_on_split_smaller_than_chunk:
         config.train_molecules = (0, 5)
     return ml_collections.FrozenConfigDict(config)
 
@@ -197,8 +197,12 @@ class TrainTest(parameterized.TestCase):
         self.assertTrue(jnp.all(position_loss >= 0))
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.product(config_name=["nequip"], train_on_small_split=[True, False])
-    def test_train_and_evaluate(self, config_name: str, train_on_small_split: bool):
+    @parameterized.product(
+        config_name=["nequip"], train_on_split_smaller_than_chunk=[True, False]
+    )
+    def test_train_and_evaluate(
+        self, config_name: str, train_on_split_smaller_than_chunk: bool
+    ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
@@ -206,7 +210,7 @@ class TrainTest(parameterized.TestCase):
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
-        config = update_dummy_config(config, train_on_small_split)
+        config = update_dummy_config(config, train_on_split_smaller_than_chunk)
         config = ml_collections.FrozenConfigDict(config)
 
         # Create a temporary directory where metrics are written.
