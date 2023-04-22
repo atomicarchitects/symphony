@@ -16,7 +16,7 @@ import datatypes
 import dynamic_batcher
 import qm9
 
-# from analyses import utility_classes
+from analyses import utility_classes
 # import input_pipeline_tf
 
 
