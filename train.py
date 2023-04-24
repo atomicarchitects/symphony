@@ -472,6 +472,7 @@ def train_and_evaluate(
 
     # We will record the best model seen during training.
     best_state = None
+    step_for_best_state = initial_step
     min_val_loss = jnp.inf
 
     # Begin training loop.
