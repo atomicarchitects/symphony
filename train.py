@@ -77,7 +77,7 @@ def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
-    target_position_scaling_constant: float,
+    target_position_inverse_temperature: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -152,6 +152,9 @@ def generation_loss(
         )
         position_logits = position_logits.apply(lambda x: x - position_logits_max)
 
+        # Multiply by inverse temperature.
+        position_logits = position_logits.apply(lambda x: x * target_position_inverse_temperature)
+
         # Compute the normalizing factors for each radius.
         radius_normalizing_factors = position_logits.apply(jnp.exp).integrate()
         radius_normalizing_factors = radius_normalizing_factors.array.squeeze(axis=-1)
@@ -200,7 +203,7 @@ def generation_loss(
             position_logits.quadrature,
         )
         log_true_angular_dist = e3nn.to_s2grid(
-            target_position_scaling_constant * target_positions_unit_vectors,
+            target_position_inverse_temperature * target_positions_unit_vectors,
             res_beta,
             res_alpha,
             quadrature=quadrature,

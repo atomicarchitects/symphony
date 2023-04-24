@@ -120,7 +120,7 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
-            target_position_scaling_constant=1000,
+            target_position_inverse_temperature=1000,
         )
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
@@ -132,7 +132,7 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
-            target_position_scaling_constant=1000,
+            target_position_inverse_temperature=1000,
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -145,12 +145,12 @@ class TrainTest(parameterized.TestCase):
         )
 
     @parameterized.parameters(1.0, 10.0, 100.0, 1000.0)
-    def test_position_loss(self, target_position_scaling_constant: float):
+    def test_position_loss(self, target_position_inverse_temperature: float):
         _, (_, _, position_loss) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
-            target_position_scaling_constant=target_position_scaling_constant,
+            target_position_inverse_temperature=target_position_inverse_temperature,
         )
         target_positions = self.graphs.globals.target_positions
         position_logits = self.preds.globals.position_logits
@@ -167,7 +167,7 @@ class TrainTest(parameterized.TestCase):
             position_logits.quadrature,
         )
         log_true_angular_dist = e3nn.to_s2grid(
-            target_position_scaling_constant * target_positions_unit_vectors,
+            target_position_inverse_temperature * target_positions_unit_vectors,
             res_beta,
             res_alpha,
             quadrature=quadrature,

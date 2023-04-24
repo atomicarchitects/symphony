@@ -59,7 +59,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 5e-2
-    config.loss_kwargs.target_position_scaling_constant = 5e1
+    config.loss_kwargs.target_position_inverse_temperature = 5e1
 
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()
