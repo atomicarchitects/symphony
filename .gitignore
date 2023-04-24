@@ -179,3 +179,5 @@ loss_outputs
 cached/
 
 *.prof
+
+.vscode
