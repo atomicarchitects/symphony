@@ -15,14 +15,14 @@ FLAGS = flags.FLAGS
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
-    qm9_dir = os.path.abspath(FLAGS.qm9_dir)
+    qm9dir = os.path.abspath(FLAGS.qm9dir)
     workdir = FLAGS.workdir
     outputdir = FLAGS.outputdir
     datasets = FLAGS.datasets
 
     config, _, _, _ = analysis.load_from_workdir(workdir)
 
-    analysis.dataset_as_database(config, datasets, outputdir, qm9_dir)
+    analysis.dataset_as_database(config, datasets, outputdir, qm9dir)
 
 
 if __name__ == "__main__":
@@ -36,6 +36,11 @@ if __name__ == "__main__":
         "datasets",
         "all",
         "The data split(s) that should be saved in the database (train, val, test, all)",
+    )
+    flags.DEFINE_string(
+        "qm9dir",
+        os.path.join(os.getcwd(), "qm9_data"),
+        "Directory where QM9 data is stored."
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)
