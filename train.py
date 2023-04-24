@@ -256,7 +256,7 @@ def generation_loss(
     # If this is the last step in the generation process, we do not have to predict atom type and position.
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss() * (1 - graphs.globals.stop)
-    loss_position = position_loss() * (1 - graphs.globals.stop)
+    loss_position = jnp.where(graphs.n_node < 4, 0, position_loss() * (1 - graphs.globals.stop))
 
     total_loss = loss_focus + loss_atom_type + loss_position
     return total_loss, (
