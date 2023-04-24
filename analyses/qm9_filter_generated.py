@@ -9,6 +9,7 @@ import pickle
 import os
 import argparse
 from openbabel import openbabel as ob
+import pandas as pd
 import pybel
 import time
 import sys
@@ -108,14 +109,14 @@ def get_parser():
     return main_parser
 
 
-def remove_disconnected(connectivity_batch, valid=None):
+def remove_disconnected(connectivity_batch, valid_mol=None):
     """
     Identify structures which are actually more than one molecule (as they consist of
     disconnected structures) and mark them as invalid.
 
     Args:
         connectivity_batch (numpy.ndarray): batch of connectivity matrices
-        valid (numpy.ndarray, optional): array of the same length as connectivity_batch
+        valid_mol (numpy.ndarray, optional): array of the same length as connectivity_batch
             which flags molecules as valid, if None all connectivity matrices are
             considered to correspond to valid molecules in the beginning (default:
             None)
@@ -126,12 +127,12 @@ def remove_disconnected(connectivity_batch, valid=None):
             structures will now be marked as invalid in contrast to the flag in input
             argument valid)
     """
-    if valid is None:
-        valid = np.ones(len(connectivity_batch), dtype=bool)
+    if valid_mol is None:
+        valid_mol = np.ones(len(connectivity_batch), dtype=bool)
     # find disconnected parts for every given connectivity matrix
     for i, con_mat in enumerate(connectivity_batch):
         # only work with molecules categorized as valid
-        if not valid[i]:
+        if not valid_mol[i]:
             continue
         seen, queue = {0}, collections.deque([0])
         while queue:
@@ -143,8 +144,8 @@ def remove_disconnected(connectivity_batch, valid=None):
         # if the seen nodes do not include all nodes, there are disconnected
         #  parts and the molecule is invalid
         if seen != {*range(len(con_mat))}:
-            valid[i] = False
-    return {"valid": valid}
+            valid_mol[i] = False
+    return {"valid_mol": valid_mol}
 
 
 def filter_unique(mols, valid=None, use_bits=False):
@@ -622,15 +623,18 @@ def check_valency(
         dict (str->list/numpy.ndarray): a dictionary containing a list of
             utility_classes.Molecule ojbects under the key 'mols', a numpy.ndarray with
             the corresponding (n_atoms x n_atoms) connectivity matrices under the key
-            'connectivity', and a numpy.ndarray (key 'valid') that marks whether a
+            'connectivity', a numpy.ndarray (key 'valid_mol') that marks whether a
             molecule has passed (entry=1) or failed (entry=0) the valency check if
-            filter_by_valency is True (otherwise it will be 1 everywhere)
+            filter_by_valency is True (otherwise it will be 1 everywhere), and a numpy.ndarray
+            (key 'valid_atom') that marks the number of atoms in each molecule that pass
+            the valency check if filter_by_valency is True (otherwise it will be n_atoms everywhere)
     """
     n_atoms = len(numbers[0])
     n_mols = len(numbers)
     thresh = n_mols if n_mols < 30 else 30
     connectivity = np.zeros((len(positions), n_atoms, n_atoms))
-    valid = np.ones(len(positions), dtype=bool)
+    valid_mol = np.ones(len(positions), dtype=bool)
+    valid_atom = np.ones(len(positions)) * n_atoms
     mols = []
     for i, (pos, num) in enumerate(zip(positions, numbers)):
         mol = Molecule(pos, num, store_positions=False)
@@ -654,7 +658,8 @@ def check_valency(
                     mol = Molecule(pos[random_ord], num[random_ord])
                     con_mat = mol.get_connectivity()
                     nums = num[random_ord]
-            valid[i] = val
+            valid_mol[i] = val
+            valid_atom[i] = np.sum(np.equal(np.sum(con_mat, axis=0), valence[nums]))
 
             if ((i + 1) % thresh == 0) and not print_file and prog_str is not None:
                 print("\033[K", end="\r", flush=True)
@@ -671,7 +676,7 @@ def check_valency(
             mol.get_mirror_can()
             mol.remove_unpicklable_attributes(restorable=False)
         mols += [mol]
-    return {"mols": mols, "connectivity": connectivity, "valid": valid}
+    return {"mols": mols, "connectivity": connectivity, "valid_mol": valid_mol, "valid_atom": valid_atom}
 
 
 def filter_new(
@@ -979,7 +984,7 @@ def _compare_fingerprints(
     """
     idx_known = stat_heads.index("known")
     idx_equals = stat_heads.index("equals")
-    idx_val = stat_heads.index("valid")
+    idx_val = stat_heads.index("valid_mol")
     n_val_mols, n_test_mols = thresh
     # get indices of valid molecules
     idcs = np.where(stats[:, idx_val] == 1)[0]
@@ -1045,7 +1050,7 @@ def collect_bond_and_ring_stats(mols, stats, stat_heads):
         dict (str->numpy.ndarray): dictionary containing the updated statistics array
             under 'stats'
     """
-    idx_val = stat_heads.index("valid")
+    idx_val = stat_heads.index("valid_mol")
     for i, mol in enumerate(mols):
         if stats[i, idx_val] != 1:
             continue
@@ -1126,12 +1131,13 @@ if __name__ == "__main__":
 
     # initial setup of array for statistics and some counters
     n_generated = 0
-    n_valid = 0
+    n_valid_mol = 0
     n_non_unique = 0
     stat_heads = [
         "n_atoms",
         "id",
-        "valid",
+        "valid_mol",
+        "valid_atom",
         "duplicating",
         "n_duplicates",
         "known",
@@ -1205,7 +1211,8 @@ if __name__ == "__main__":
             results = {
                 "connectivity": np.zeros((n_mols, n_atoms, n_atoms)),
                 "mols": [None for _ in range(n_mols)],
-                "valid": np.ones(n_mols, dtype=bool),
+                "valid_mol": np.ones(n_mols, dtype=bool),
+                "valid_atom": np.ones(n_mols, dtype=bool),
             }
             results = run_threaded(
                 check_valency,
@@ -1222,7 +1229,8 @@ if __name__ == "__main__":
             )
         connectivity = results["connectivity"]
         mols = results["mols"]
-        valid = results["valid"]
+        valid_mol = results["valid_mol"]
+        valid_atom = results["valid_atom"]
 
         # detect molecules with disconnected parts if desired
         if "disconnected" in args.filters:
@@ -1230,17 +1238,17 @@ if __name__ == "__main__":
                 print("\033[K", end="\r", flush=True)
                 print(prog_str("connectedness") + "...", end="\r", flush=True)
             if args.threads <= 0:
-                valid = remove_disconnected(connectivity, valid)["valid"]
+                valid_mol = remove_disconnected(connectivity, valid_mol)["valid_mol"]
             else:
-                results = {"valid": valid}
+                results = {"valid_mol": valid_mol}
                 run_threaded(
                     remove_disconnected,
-                    {"connectivity_batch": connectivity, "valid": valid},
+                    {"connectivity_batch": connectivity, "valid_mol": valid_mol},
                     {},
                     results,
                     n_threads=args.threads,
                 )
-                valid = results["valid"]
+                valid_mol = results["valid_mol"]
 
         # identify molecules with identical fingerprints
         if not print_file:
@@ -1248,12 +1256,12 @@ if __name__ == "__main__":
             print(prog_str("uniqueness") + "...", end="\r", flush=True)
         if args.threads <= 0:
             still_valid, duplicating, duplicate_count = filter_unique(
-                mols, valid, use_bits=False
+                mols, valid_mol, use_bits=False
             )
         else:
             still_valid, duplicating, duplicate_count = filter_unique_threaded(
                 mols,
-                valid,
+                valid_mol,
                 n_threads=args.threads,
                 n_mols_per_thread=5,
                 print_file=print_file,
@@ -1261,32 +1269,33 @@ if __name__ == "__main__":
             )
         n_non_unique += np.sum(duplicate_count)
         if "unique" in args.filters:
-            valid = still_valid  # remove non-unique from valid if desired
+            valid_mol = still_valid  # remove non-unique from valid if desired
 
         # store connectivity matrices
         d.update(
             {
                 "connectivity": connectivity_compressor.compress_batch(connectivity),
-                "valid": valid,
+                "valid_mol": valid_mol,
             }
         )
 
         # collect statistics of generated data
-        n_generated += len(valid)
-        n_valid += np.sum(valid)
+        n_generated += len(valid_mol)
+        n_valid_mol += np.sum(valid_mol)
         n_of_types = [np.sum(all_numbers == i, axis=1) for i in [6, 7, 8, 9, 1]]
         stats_new = np.stack(
             (
-                np.ones(len(valid)) * n_atoms,  # n_atoms
-                np.arange(0, len(valid)),  # id
-                valid,  # valid
+                np.ones(len(valid_mol)) * n_atoms,  # n_atoms
+                np.arange(0, len(valid_mol)),  # id
+                valid_mol,  # valid molecules
+                valid_atom,  # valid atoms (atoms with correct valence)
                 duplicating,  # id of duplicated molecule
                 duplicate_count,  # number of duplicates
-                -np.ones(len(valid)),  # known
-                -np.ones(len(valid)),  # equals
+                -np.ones(len(valid_mol)),  # known
+                -np.ones(len(valid_mol)),  # equals
                 *n_of_types,  # n_atoms per type
-                *np.zeros((19, len(valid))),  # n_bonds per type pairs
-                *np.zeros((7, len(valid))),  # ring counts for 3-8 & >8
+                *np.zeros((19, len(valid_mol))),  # n_bonds per type pairs
+                *np.zeros((7, len(valid_mol))),  # ring counts for 3-8 & >8
             ),
             axis=0,
         )
@@ -1318,7 +1327,7 @@ if __name__ == "__main__":
     res.update(
         {
             "n_generated": n_generated,
-            "n_valid": n_valid,
+            "n_valid_mol": n_valid_mol,
             "stats": stats,
             "stat_heads": stat_heads,
         }
@@ -1329,9 +1338,9 @@ if __name__ == "__main__":
         f"Number of duplicate molecules: {n_non_unique}"
     )
     if "unique" in args.filters:
-        print(f"Number of unique and valid molecules: {n_valid}")
+        print(f"Number of unique and valid molecules: {n_valid_mol}")
     else:
-        print(f"Number of valid molecules (including duplicates): {n_valid}")
+        print(f"Number of valid molecules (including duplicates): {n_valid_mol}")
 
     # filter molecules which were seen during training
     if args.model_path is not None:
@@ -1360,8 +1369,8 @@ if __name__ == "__main__":
                 continue
             d = res[key]
             start = i
-            end = i + len(d["valid"])
-            idcs = np.where(d["valid"])[0]
+            end = i + len(d["valid_mol"])
+            idcs = np.where(d["valid_mol"])[0]
             if len(idcs) < 1:
                 i = end
                 continue
@@ -1408,7 +1417,7 @@ if __name__ == "__main__":
         conn.metadata = {
             "n_generated": int(n_generated),
             "n_non_unique": int(n_non_unique),
-            "n_valid": int(n_valid),
+            "n_valid": int(n_valid_mol),
             "non_unique_removed_from_valid": "unique" in args.filters,
         }
         # store molecules
@@ -1422,7 +1431,15 @@ if __name__ == "__main__":
             for pos, num, con_mat in zip(all_pos, all_numbers, all_con_mats):
                 at = Atoms(num, positions=pos)
                 conn.write(at, data={"con_mat": con_mat})
-    # store gathered statistics in separate file
+    # store gathered statistics in metrics dataframe
+    stats_df = pd.DataFrame(res["stats"].squeeze(), columns=res["stat_heads"].squeeze())
+    metric_df_dict = analysis.get_results_as_dataframe(
+        [''], ['total_loss', 'focus_loss', 'atom_type_loss', 'position_loss'], args.model_path
+    )
+    metric_df_dict['train_eval_final'] = pd.concat([metric_df_dict['train_eval_final']], axis=1)
+    with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
+        pickle.dump(metric_df_dict, f)
+
     np.savez_compressed(
         os.path.splitext(target_db)[0] + f"_statistics.npz",
         stats=res["stats"],

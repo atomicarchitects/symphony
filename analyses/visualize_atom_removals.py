@@ -363,6 +363,7 @@ def visualize_atom_removals(
 
     # Loop over all possible targets.
     logging.info("Visualizing predictions...")
+    figs = []
     for target in tqdm.tqdm(range(len(molecule)), desc="Targets"):
         # We have to remove the batch dimension.
         # Also, correct the focus indices due to batching.
@@ -392,6 +393,66 @@ def visualize_atom_removals(
             f"{molecule_name}_seed={seed}_target={target}.html",
         )
         fig.write_html(outputfile, include_plotlyjs="cdn")
+
+        figs.append(fig)
+    
+    all_traces = []
+    steps = []
+    for fig in figs:
+        all_traces.extend(fig.data)
+    ct = 0
+    start_indices = [0]
+    for fig in figs:
+        steps.append(dict(
+            method='restyle',
+            args=[{
+                'visible': [True if ct <= i < ct + len(fig.data) else False for i in range(len(all_traces))]
+            }],
+        ))
+        ct += len(fig.data)
+        start_indices.append(ct)
+
+    axis = dict(
+        showbackground=False,
+        showticklabels=False,
+        showgrid=False,
+        zeroline=False,
+        title="",
+        nticks=3,
+    )
+    layout = dict(
+        sliders=[dict(steps=steps)],
+        title=f"{model_name}: Predictions for Seed {seed}",
+        title_x=0.5,
+        width=1500,
+        height=800,
+        scene=dict(
+            xaxis=dict(**axis),
+            yaxis=dict(**axis),
+            zaxis=dict(**axis),
+            aspectmode="data",
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.1,
+        ),
+    )
+
+    fig_all = plotly.subplots.make_subplots(rows=1, cols=2, specs=[[{'type': 'scene'}, {'type': 'xy'}]])
+    for i, trace in enumerate(all_traces):
+        visible = True if i < start_indices[1] else False
+        trace.update(visible=visible)
+        fig_all.add_trace(trace, row=1, col=2 if i + 1 in start_indices or i + 2 in start_indices else 1)
+    fig_all.update_layout(layout)
+
+    outputfile = f"{molecule_name}_seed={seed}.html"
+    fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
+    return fig_all
 
 
 def main(unused_argv: Sequence[str]) -> None:
