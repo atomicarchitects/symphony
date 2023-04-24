@@ -404,7 +404,7 @@ def dataset_as_database(
     config: ml_collections.ConfigDict,
     dataset: str,
     outputdir: str,
-    qm9_dir: Optional[str] = None,
+    qm9dir: Optional[str] = None,
 ) -> None:
     """Converts the dataset to a ASE database.
     Args:
@@ -414,10 +414,10 @@ def dataset_as_database(
         root_dir (str, optional): root dir for qm9
     """
 
-    if root_dir is None:
-        root_dir = config.root_dir
+    if qm9dir is None:
+        qm9dir = config.root_dir
     _, _, molecules = input_pipeline.get_raw_datasets(
-        rng=jax.random.PRNGKey(config.rng_seed), config=config, root_dir=qm9_dir
+        rng=jax.random.PRNGKey(config.rng_seed), config=config, root_dir=qm9dir
     )
     compressor = utility_classes.ConnectivityCompressor()
     counter = 0
