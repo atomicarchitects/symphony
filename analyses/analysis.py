@@ -24,6 +24,8 @@ sys.path.append("..")
 
 import qm9
 import datatypes  # noqa: E402
+import input_pipeline
+import utility_classes
 import models  # noqa: E402
 import train  # noqa: E402
 from configs import default  # noqa: E402
