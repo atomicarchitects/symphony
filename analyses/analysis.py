@@ -398,37 +398,3 @@ def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
         else:
             for k in d_upd[key]:
                 d[key][k] = np.append(d[key][k], d_upd[key][k], 0)
-
-
-def dataset_as_database(
-    config: ml_collections.ConfigDict,
-    dataset: str,
-    outputdir: str,
-    qm9dir: Optional[str] = None,
-) -> None:
-    """Converts the dataset to a ASE database.
-    Args:
-        config (ml_collections.ConfigDict)
-        dataset (str): should be 'train', 'val', 'test', or 'all'
-        dbpath (str): path to save the ASE database to
-        root_dir (str, optional): root dir for qm9
-    """
-
-    if qm9dir is None:
-        qm9dir = config.root_dir
-    _, _, molecules = input_pipeline.get_raw_datasets(
-        rng=jax.random.PRNGKey(config.rng_seed), config=config, root_dir=qm9dir
-    )
-    compressor = utility_classes.ConnectivityCompressor()
-    counter = 0
-    to_convert = ["train", "val", "test"] if dataset == "all" else [dataset]
-    dbpath = os.path.join(outputdir, f"qm9_{dataset}.db")
-    with ase.db.connect(dbpath) as conn:
-        for s in to_convert:
-            for atoms in molecules[s]:
-                # instantiate utility_classes.Molecule object
-                mol = utility_classes.Molecule(atoms.positions, atoms.numbers)
-                # get connectivity matrix (detecting bond orders with Open Babel)
-                con_mat = mol.get_connectivity()
-                conn.write(atoms, data={"con_mat": compressor.compress(con_mat)})
-                counter += 1
