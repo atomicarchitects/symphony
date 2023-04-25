@@ -198,7 +198,7 @@ class TrainTest(parameterized.TestCase):
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
     @parameterized.product(
-        config_name=["nequip"], train_on_split_smaller_than_chunk=[True]
+        config_name=["nequip"], train_on_split_smaller_than_chunk=[True, False]
     )
     def test_train_and_evaluate(
         self, config_name: str, train_on_split_smaller_than_chunk: bool

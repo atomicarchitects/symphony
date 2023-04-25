@@ -1,4 +1,4 @@
-"""Defines the default hyperparameters and training configuration for the GraphMLP model."""
+"""Defines the default hyperparameters and training configuration for the MarioNette model."""
 
 import ml_collections
 

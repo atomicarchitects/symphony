@@ -1,4 +1,4 @@
-"""Defines the default hyperparameters and training configuration for the GraphMLP model."""
+"""Defines the default hyperparameters and training configuration for the NequIP model."""
 
 import ml_collections
 

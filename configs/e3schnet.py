@@ -6,7 +6,7 @@ from configs import default
 
 
 def get_config() -> ml_collections.ConfigDict:
-    """Get the hyperparameter configuration for the MACE model."""
+    """Get the hyperparameter configuration for the E3SchNet model."""
     config = default.get_config()
 
     # E3SchNet hyperparameters.
