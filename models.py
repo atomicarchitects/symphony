@@ -428,6 +428,7 @@ class NequIP(hk.Module):
                 mlp_n_layers=self.mlp_n_layers,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+
         alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
         node_feats = node_feats * alpha
         return node_feats

@@ -11,11 +11,11 @@ def get_config() -> ml_collections.ConfigDict:
 
     # NequIP hyperparameters.
     config.model = "NequIP"
-    config.num_channels = 128
+    config.num_channels = 32
     config.r_max = 5
-    config.avg_num_neighbors = 15.0
-    config.num_interactions = 1
-    config.max_ell = 3
+    config.avg_num_neighbors = 300.0  # NequIP is not properly normalized.
+    config.num_interactions = 4
+    config.max_ell = 1
     config.even_activation = "swish"
     config.odd_activation = "tanh"
     config.mlp_activation = "swish"
