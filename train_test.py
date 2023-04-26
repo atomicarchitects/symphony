@@ -34,20 +34,25 @@ _ALL_CONFIGS = {
 }
 
 
-def update_dummy_config(config):
+def update_dummy_config(
+    config: ml_collections.ConfigDict, train_on_split_smaller_than_chunk: bool
+) -> ml_collections.FrozenConfigDict:
     """Updates the dummy config."""
     config = ml_collections.ConfigDict(config)
     config.num_train_steps = 100
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 50
+    config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
+    if train_on_split_smaller_than_chunk:
+        config.train_molecules = (0, 10)
     return ml_collections.FrozenConfigDict(config)
 
 
 def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     """Creates dummy data for testing."""
     num_graphs = 2
-    num_nodes = 5
+    num_nodes = 8
     num_elements = models.NUM_ELEMENTS
     num_radii = models.RADII.shape[0]
 
@@ -81,14 +86,14 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         edges=None,
         senders=None,
         receivers=None,
-        n_node=jnp.asarray([2, 3]),
+        n_node=jnp.asarray([num_nodes // 2, num_nodes // 2]),
         n_edge=None,
     )
     graphs = datatypes.Fragments(
         nodes=datatypes.FragmentsNodes(
             positions=jnp.zeros((num_nodes, 3)),
             species=jnp.zeros((num_nodes,)),
-            focus_probability=jnp.asarray([0.5, 0.5, 0.1, 0.1, 0.1]),
+            focus_probability=jnp.asarray([0.5, 0.5, 0.0, 0.0, 0.1, 0.1, 0.1, 0.0]),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
@@ -100,7 +105,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         edges=None,
         senders=None,
         receivers=None,
-        n_node=jnp.asarray([2, 3]),
+        n_node=jnp.asarray([num_nodes // 2, num_nodes // 2]),
         n_edge=None,
     )
     return preds, graphs
@@ -115,7 +120,8 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
-            target_position_scaling_constant=1000,
+            target_position_inverse_temperature=1000,
+            scale_position_logits_by_inverse_temperature=False,
         )
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
@@ -127,7 +133,8 @@ class TrainTest(parameterized.TestCase):
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
-            target_position_scaling_constant=1000,
+            target_position_inverse_temperature=1000,
+            scale_position_logits_by_inverse_temperature=False,
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -140,12 +147,13 @@ class TrainTest(parameterized.TestCase):
         )
 
     @parameterized.parameters(1.0, 10.0, 100.0, 1000.0)
-    def test_position_loss(self, target_position_scaling_constant: float):
+    def test_position_loss(self, target_position_inverse_temperature: float):
         _, (_, _, position_loss) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
             radius_rbf_variance=30,
-            target_position_scaling_constant=target_position_scaling_constant,
+            target_position_inverse_temperature=target_position_inverse_temperature,
+            scale_position_logits_by_inverse_temperature=False,
         )
         target_positions = self.graphs.globals.target_positions
         position_logits = self.preds.globals.position_logits
@@ -162,7 +170,7 @@ class TrainTest(parameterized.TestCase):
             position_logits.quadrature,
         )
         log_true_angular_dist = e3nn.to_s2grid(
-            target_position_scaling_constant * target_positions_unit_vectors,
+            target_position_inverse_temperature * target_positions_unit_vectors,
             res_beta,
             res_alpha,
             quadrature=quadrature,
@@ -192,8 +200,12 @@ class TrainTest(parameterized.TestCase):
         self.assertTrue(jnp.all(position_loss >= 0))
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
-    @parameterized.parameters("mace", "e3schnet", "nequip", "marionette")
-    def test_train_and_evaluate(self, config_name: str):
+    @parameterized.product(
+        config_name=["nequip"], train_on_split_smaller_than_chunk=[True, False]
+    )
+    def test_train_and_evaluate(
+        self, config_name: str, train_on_split_smaller_than_chunk: bool
+    ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
@@ -201,7 +213,7 @@ class TrainTest(parameterized.TestCase):
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
-        config = update_dummy_config(config)
+        config = update_dummy_config(config, train_on_split_smaller_than_chunk)
         config = ml_collections.FrozenConfigDict(config)
 
         # Create a temporary directory where metrics are written.

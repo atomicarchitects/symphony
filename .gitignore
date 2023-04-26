@@ -181,3 +181,4 @@ cached/
 *.prof
 
 .vscode
+*.txt

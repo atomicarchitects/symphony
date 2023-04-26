@@ -77,7 +77,8 @@ def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
-    target_position_scaling_constant: float,
+    target_position_inverse_temperature: float,
+    scale_position_logits_by_inverse_temperature: bool,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -152,6 +153,10 @@ def generation_loss(
         )
         position_logits = position_logits.apply(lambda x: x - position_logits_max)
 
+        # Multiply by inverse temperature.
+        if scale_position_logits_by_inverse_temperature:
+            position_logits = position_logits.apply(lambda x: x * target_position_inverse_temperature)
+
         # Compute the normalizing factors for each radius.
         radius_normalizing_factors = position_logits.apply(jnp.exp).integrate()
         radius_normalizing_factors = radius_normalizing_factors.array.squeeze(axis=-1)
@@ -200,7 +205,7 @@ def generation_loss(
             position_logits.quadrature,
         )
         log_true_angular_dist = e3nn.to_s2grid(
-            target_position_scaling_constant * target_positions_unit_vectors,
+            target_position_inverse_temperature * target_positions_unit_vectors,
             res_beta,
             res_alpha,
             quadrature=quadrature,
@@ -256,7 +261,7 @@ def generation_loss(
     # If this is the last step in the generation process, we do not have to predict atom type and position.
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss() * (1 - graphs.globals.stop)
-    loss_position = position_loss() * (1 - graphs.globals.stop)
+    loss_position = jnp.where(graphs.n_node < 4, 0, position_loss() * (1 - graphs.globals.stop))
 
     total_loss = loss_focus + loss_atom_type + loss_position
     return total_loss, (
@@ -472,6 +477,7 @@ def train_and_evaluate(
 
     # We will record the best model seen during training.
     best_state = None
+    step_for_best_state = initial_step
     min_val_loss = jnp.inf
 
     # Begin training loop.

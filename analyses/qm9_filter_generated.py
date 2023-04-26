@@ -9,8 +9,8 @@ import pickle
 import os
 import argparse
 from openbabel import openbabel as ob
+from openbabel import pybel
 import pandas as pd
-import pybel
 import time
 import sys
 

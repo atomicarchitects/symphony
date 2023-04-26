@@ -26,6 +26,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
+    config.train_on_split_smaller_than_chunk = False
     config.root_dir = get_root_dir(config.get_ref("dataset"))
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
@@ -34,7 +35,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Optimizer.
     config.optimizer = "adam"
     config.learning_rate = 1e-3
-    config.learning_rate_schedule = "sgdr"
+    config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
     config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
     config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
@@ -57,8 +58,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
-    config.loss_kwargs.radius_rbf_variance = 1e-3
-    config.loss_kwargs.target_position_scaling_constant = 1e3
+    config.loss_kwargs.radius_rbf_variance = 5e-2
+    config.loss_kwargs.target_position_inverse_temperature = 5e1
+    config.loss_kwargs.scale_position_logits_by_inverse_temperature = False
 
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()
