@@ -36,6 +36,21 @@ MAX_NUM_ATOMS = 30
 FLAGS = flags.FLAGS
 
 
+def nan_analysis(pred: datatypes.Predictions):
+
+    global_attrs = ["stop_probs", "stop", "focus_indices", "target_species_logits", "target_species_probs", "target_species", "position_coeffs", "position_logits", "position_probs", "position_vectors"]
+    for attr in global_attrs:
+        attr_value = getattr(pred.globals, attr)
+        try:
+            num_nans = jnp.isnan(attr_value).sum()
+        except:
+            try:
+                num_nans = jnp.isnan(attr_value.array).sum()
+            except:
+                num_nans = jnp.isnan(attr_value.grid_values).sum()
+        print(f"{attr} has {num_nans} nans")
+
+
 def generate_molecules(
     workdir: str,
     outputdir: str,
@@ -66,10 +81,11 @@ def generate_molecules(
         outputdir, "molecules", "generated", name, f"beta={beta}", step_name
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
-    visualizations_outputdir = os.path.join(
-        outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name
-    )
-    os.makedirs(visualizations_outputdir, exist_ok=True)
+    if visualize:
+        visualizations_outputdir = os.path.join(
+            outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name
+        )
+        os.makedirs(visualizations_outputdir, exist_ok=True)
     molecule_list = []
 
     def get_predictions(
@@ -104,7 +120,6 @@ def generate_molecules(
             numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
         )
     
-    figs = []
 
     # Generate with different seeds.
     for seed in tqdm.tqdm(seeds, desc="Generating molecules"):
@@ -113,6 +128,7 @@ def generate_molecules(
         nan_found = False
 
         # Add atoms step-by-step.
+        figs = []
         for step in range(MAX_NUM_ATOMS):
             step_rng, rng = jax.random.split(rng)
             fragment = input_pipeline.ase_atoms_to_jraph_graph(
@@ -122,10 +138,16 @@ def generate_molecules(
             # Run the model on the current molecule.
             pred = get_predictions(fragment, step_rng)
 
-            # Check if we should stop.
-            stop = pred.globals.stop.item()
-            if stop:
-                break
+            # Save visualization of generation process.
+            if visualize:
+                fig = analysis.visualize_predictions(pred, molecule)
+                # Save to file.
+                outputfile = os.path.join(
+                    visualizations_outputdir,
+                    f"{init_molecule_name}_seed={seed}_step={step}.html",
+                )
+                fig.write_html(outputfile, include_plotlyjs="cdn")
+                figs.append(fig)
 
             # Check for any NaNs in the predictions.
             num_nans = sum(
@@ -134,91 +156,17 @@ def generate_molecules(
                 )
             )
             if num_nans > 0:
-                logging.info("NaNs in predictions. Stopping generation...")
+                logging.info("NaNs in predictions at step %d. Stopping generation...", step)
                 nan_found = True
                 break
 
-            # Save visualization of generation process.
-            if visualize:
-                fig = visualize_atom_removals.visualize_predictions(pred, molecule)
-                model_name = visualize_atom_removals.get_title_for_name(name)
-                fig.update_layout(
-                    title=f"{model_name}: Predictions for Seed {seed} at Step {step}",
-                    title_x=0.5,
-                )
-                figs.append(fig)
-
-                # Save to file.
-                outputfile = os.path.join(
-                    visualizations_outputdir,
-                    f"{init_molecule_name}_seed={seed}_step={step}.html",
-                )
-                fig.write_html(outputfile, include_plotlyjs="cdn")
+            # Check if we should stop.
+            stop = pred.globals.stop.item()
+            if stop:
+                break
 
             # Append the new atom to the molecule.
             molecule = append_predictions(molecule, pred)
-
-        # Get figure containing all generation steps.
-        if visualize:
-            all_traces = []
-            steps = []
-            for fig in figs:
-                all_traces.extend(fig.data)
-            ct = 0
-            start_indices = [0]
-            for fig in figs:
-                steps.append(dict(
-                    method='restyle',
-                    args=[{
-                        'visible': [True if ct <= i < ct + len(fig.data) else False for i in range(len(all_traces))]
-                    }],
-                ))
-                ct += len(fig.data)
-                start_indices.append(ct)
-
-            axis = dict(
-                showbackground=False,
-                showticklabels=False,
-                showgrid=False,
-                zeroline=False,
-                title="",
-                nticks=3,
-            )
-            layout = dict(
-                sliders=[dict(steps=steps)],
-                title=f"{model_name}: Predictions for Seed {seed}",
-                title_x=0.5,
-                width=1500,
-                height=800,
-                scene=dict(
-                    xaxis=dict(**axis),
-                    yaxis=dict(**axis),
-                    zaxis=dict(**axis),
-                    aspectmode="data",
-                ),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                legend=dict(
-                    yanchor="top",
-                    y=0.99,
-                    xanchor="right",
-                    x=0.1,
-                ),
-            )
-
-            fig_all = make_subplots(rows=1, cols=2, specs=[[{'type': 'scene'}, {'type': 'xy'}]])
-            for i, trace in enumerate(all_traces):
-                visible = True if i < start_indices[1] else False
-                trace.update(visible=visible)
-                fig_all.add_trace(trace, row=1, col=2 if i + 1 in start_indices else 1)
-            fig_all.update_layout(layout)
-
-            # Save to file.
-            outputfile = os.path.join(
-                visualizations_outputdir,
-                f"{init_molecule_name}_seed={seed}.html",
-            )
-            fig_all.write_html(outputfile, include_plotlyjs="cdn")
 
         # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
         if molecule.numbers.shape[0] < 1000:
@@ -233,6 +181,26 @@ def generate_molecules(
             logging.info(
                 "Discarding %s because it is too long", molecule.get_chemical_formula()
             )
+
+        if visualize:
+            # Combine visualizations.
+            fig_all = analysis.combine_visualizations(figs)
+            
+            # Add title.
+            model_name = analysis.get_title_for_name(name)
+            fig_all.update_layout(
+                title=f"{model_name}: Predictions for Seed {seed}",
+                title_x=0.5,
+            )
+            
+            # Save to file.
+            outputfile = os.path.join(
+                visualizations_outputdir,
+                f"{init_molecule_name}_seed={seed}.html",
+            )
+            fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
+    # Save the mol_dict over all seeds.
     ase_to_mol_dict(
         molecule_list,
         file_name=os.path.join(molecules_outputdir, "generated_molecules.mol_dict"),
