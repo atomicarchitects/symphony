@@ -60,6 +60,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 5e-2
     config.loss_kwargs.target_position_inverse_temperature = 5e1
+    config.loss_kwargs.scale_position_logits_by_inverse_temperature = False
 
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()

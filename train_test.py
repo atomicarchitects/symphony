@@ -52,7 +52,7 @@ def update_dummy_config(
 def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     """Creates dummy data for testing."""
     num_graphs = 2
-    num_nodes = 5
+    num_nodes = 8
     num_elements = models.NUM_ELEMENTS
     num_radii = models.RADII.shape[0]
 
@@ -86,14 +86,14 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         edges=None,
         senders=None,
         receivers=None,
-        n_node=jnp.asarray([2, 3]),
+        n_node=jnp.asarray([num_nodes // 2, num_nodes // 2]),
         n_edge=None,
     )
     graphs = datatypes.Fragments(
         nodes=datatypes.FragmentsNodes(
             positions=jnp.zeros((num_nodes, 3)),
             species=jnp.zeros((num_nodes,)),
-            focus_probability=jnp.asarray([0.5, 0.5, 0.1, 0.1, 0.1]),
+            focus_probability=jnp.asarray([0.5, 0.5, 0.0, 0.0, 0.1, 0.1, 0.1, 0.0]),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
@@ -105,7 +105,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         edges=None,
         senders=None,
         receivers=None,
-        n_node=jnp.asarray([2, 3]),
+        n_node=jnp.asarray([num_nodes // 2, num_nodes // 2]),
         n_edge=None,
     )
     return preds, graphs
@@ -121,6 +121,7 @@ class TrainTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=30,
             target_position_inverse_temperature=1000,
+            scale_position_logits_by_inverse_temperature=False,
         )
         expected_focus_loss = jnp.asarray(
             [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
@@ -133,6 +134,7 @@ class TrainTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=30,
             target_position_inverse_temperature=1000,
+            scale_position_logits_by_inverse_temperature=False,
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -151,6 +153,7 @@ class TrainTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=30,
             target_position_inverse_temperature=target_position_inverse_temperature,
+            scale_position_logits_by_inverse_temperature=False,
         )
         target_positions = self.graphs.globals.target_positions
         position_logits = self.preds.globals.position_logits
@@ -198,7 +201,7 @@ class TrainTest(parameterized.TestCase):
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
     @parameterized.product(
-        config_name=["nequip"], train_on_split_smaller_than_chunk=[True]
+        config_name=["nequip"], train_on_split_smaller_than_chunk=[True, False]
     )
     def test_train_and_evaluate(
         self, config_name: str, train_on_split_smaller_than_chunk: bool

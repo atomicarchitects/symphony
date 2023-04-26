@@ -78,6 +78,7 @@ def generation_loss(
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
     target_position_inverse_temperature: float,
+    scale_position_logits_by_inverse_temperature: bool,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -153,7 +154,8 @@ def generation_loss(
         position_logits = position_logits.apply(lambda x: x - position_logits_max)
 
         # Multiply by inverse temperature.
-        position_logits = position_logits.apply(lambda x: x * target_position_inverse_temperature)
+        if scale_position_logits_by_inverse_temperature:
+            position_logits = position_logits.apply(lambda x: x * target_position_inverse_temperature)
 
         # Compute the normalizing factors for each radius.
         radius_normalizing_factors = position_logits.apply(jnp.exp).integrate()
