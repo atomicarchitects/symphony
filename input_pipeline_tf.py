@@ -19,12 +19,13 @@ import datatypes
 def get_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
+    shuffle: bool = True,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads and preprocesses the QM9 dataset as tf.data.Datasets for each split."""
     del rng
 
     # Get the raw datasets.
-    datasets = get_unbatched_qm9_datasets(config)
+    datasets = get_unbatched_qm9_datasets(config, shuffle=shuffle)
 
     # Convert to jraph.GraphsTuple.
     for split, dataset_split in datasets.items():
@@ -183,6 +184,7 @@ def _deprecated_get_unbatched_qm9_datasets(
 def get_unbatched_qm9_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
+    shuffle: bool = True,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
     # Set the seed for reproducibility.
@@ -259,7 +261,8 @@ def get_unbatched_qm9_datasets(
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
-        dataset_split = dataset_split.shuffle(1000, seed=seed)
+        if shuffle:
+            dataset_split = dataset_split.shuffle(1000, seed=seed)
         datasets[split] = dataset_split
     return datasets
 
