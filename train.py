@@ -78,7 +78,6 @@ def generation_loss(
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
     target_position_inverse_temperature: float,
-    scale_position_logits_by_inverse_temperature: bool,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -91,7 +90,7 @@ def generation_loss(
     num_elements = models.NUM_ELEMENTS
 
     def focus_loss() -> jnp.ndarray:
-        # focus_logits is of shape (num_nodes,)
+        """Computes the loss over focus probabilities."""
         assert (
             preds.nodes.focus_logits.shape
             == graphs.nodes.focus_probability.shape
@@ -101,7 +100,9 @@ def generation_loss(
         n_node = graphs.n_node
         focus_logits = preds.nodes.focus_logits
 
-        # Compute sum(qv * fv) for each graph, where fv is the focus_logits for node v.
+        # Compute sum(qv * fv) for each graph,
+        # where fv is the focus_logits for node v,
+        # and qv is the focus_probability for node v.
         loss_focus = e3nn.scatter_sum(
             -graphs.nodes.focus_probability * focus_logits, nel=n_node
         )
@@ -122,7 +123,7 @@ def generation_loss(
         return loss_focus
 
     def atom_type_loss() -> jnp.ndarray:
-        # target_species_logits is of shape (num_graphs, num_elements)
+        """Computes the loss over atom types."""
         assert (
             preds.globals.target_species_logits.shape
             == graphs.globals.target_species_probability.shape
@@ -138,130 +139,108 @@ def generation_loss(
         return loss_atom_type
 
     def position_loss() -> jnp.ndarray:
-        # position_coeffs is an e3nn.IrrepsArray of shape (num_graphs, num_radii, dim(irreps))
+        """Computes the loss over position probabilities."""
+        
         assert preds.globals.position_coeffs.array.shape == (
             num_graphs,
             num_radii,
             preds.globals.position_coeffs.irreps.dim,
         )
 
-        # Integrate the position signal over each sphere to get the normalizing factors for the radii.
-        # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         position_logits = preds.globals.position_logits
-        position_logits_max = jnp.max(
-            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
-        )
-        position_logits = position_logits.apply(lambda x: x - position_logits_max)
-
-        # Multiply by inverse temperature.
-        if scale_position_logits_by_inverse_temperature:
-            position_logits = position_logits.apply(lambda x: x * target_position_inverse_temperature)
-
-        # Compute the normalizing factors for each radius.
-        radius_normalizing_factors = position_logits.apply(jnp.exp).integrate()
-        radius_normalizing_factors = radius_normalizing_factors.array.squeeze(axis=-1)
-        assert radius_normalizing_factors.shape == (
-            num_graphs,
-            num_radii,
-        )
-
-        # These are the target positions for each graph.
-        # We need to compare these predicted positions to the target positions.
-        target_positions = graphs.globals.target_positions
-        assert target_positions.shape == (num_graphs, 3)
-
-        # Get radius weights from the true distribution,
-        # described by a RBF kernel around the target positions.
-        true_radius_weights = jax.vmap(
-            lambda target_position: jax.vmap(
-                lambda radius: jnp.exp(
-                    -((radius - jnp.linalg.norm(target_position)) ** 2)
-                    / (2 * radius_rbf_variance)
-                )
-            )(models.RADII)
-        )(target_positions)
-
-        # Normalize to get a probability distribution over radii.
-        true_radius_weights += 1e-10
-        true_radius_weights = true_radius_weights / jnp.sum(
-            true_radius_weights, axis=-1, keepdims=True
-        )
-
-        # true_radius_weights is of shape (num_graphs, num_radii)
-        assert true_radius_weights.shape == (num_graphs, num_radii)
-
-        # Compute the true distribution over positions,
-        # described by a smooth approximation of a delta function at the target positions.
-        norms = jnp.linalg.norm(target_positions, axis=-1, keepdims=True)
-        target_positions_unit_vectors = target_positions / jnp.where(
-            norms == 0, 1, norms
-        )
-        target_positions_unit_vectors = e3nn.IrrepsArray(
-            "1o", target_positions_unit_vectors
-        )
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
             position_logits.quadrature,
         )
-        log_true_angular_dist = e3nn.to_s2grid(
-            target_position_inverse_temperature * target_positions_unit_vectors,
-            res_beta,
-            res_alpha,
-            quadrature=quadrature,
-            p_val=1,
-            p_arg=-1,
-        )
-        assert log_true_angular_dist.grid_values.shape == (
-            num_graphs,
-            res_beta,
-            res_alpha,
-        )
+    
+        def safe_log(x: jnp.ndarray) -> jnp.ndarray:
+            """Computes the log of x, replacing 0 with 1 for numerical stability."""
+            return jnp.log(jnp.where(x == 0, 1.0, x))
 
-        log_true_angular_dist_max = jnp.max(
-            log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
-        )
-        true_angular_dist = log_true_angular_dist.apply(
-            lambda x: jnp.exp(x - log_true_angular_dist_max)
-        )
-        true_angular_dist = true_angular_dist / true_angular_dist.integrate()
-        assert true_angular_dist.grid_values.shape == (num_graphs, res_beta, res_alpha)
+        def kl_divergence_on_spheres(true_radius_weights: jnp.ndarray, log_true_angular_coeffs: e3nn.IrrepsArray, log_predicted_dist: e3nn.SphericalSignal) -> jnp.ndarray:
+            """Compute the KL divergence between two distributions on the sphere."""
+            # Convert coefficients to a distribution on the sphere.
+            log_true_angular_dist = e3nn.to_s2grid(
+                log_true_angular_coeffs,
+                res_beta,
+                res_alpha,
+                quadrature=quadrature,
+                p_val=1,
+                p_arg=-1,
+            )
 
-        # Integrate the true angular distribution with the predicted logits.
-        target_positions_cross_entropy = (
-            (true_angular_dist[:, None, :, :] * position_logits)
-            .integrate()
-            .array.squeeze(axis=-1)
-        )
-        assert target_positions_cross_entropy.shape == (num_graphs, num_radii)
+            # Subtract the maximum value for numerical stability.
+            log_true_angular_dist_max = jnp.max(
+                log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
+            )
+            log_true_angular_dist = log_true_angular_dist.apply(lambda x: x - log_true_angular_dist_max)            
 
-        # Compute the lower bound on the loss.
-        # Note that we cannot reuse log_true_angular_dist from above
-        # because true_angular_dist is now normalized.
-        log_true_angular_dist = true_angular_dist.apply(
-            lambda x: jnp.log(jnp.where(x == 0, 1.0, x))
-        )
-        lower_bounds = (
-            -(log_true_angular_dist * true_angular_dist).integrate().array.squeeze(-1)
-        )
-        assert lower_bounds.shape == (num_graphs,)
+            # Convert to a probability distribution, by taking the exponential and normalizing.
+            true_angular_dist = log_true_angular_dist.apply(jnp.exp)
+            true_angular_dist = true_angular_dist / true_angular_dist.integrate()
 
-        loss_position = jax.vmap(
-            lambda qr, fr, Zr, lb: -jnp.sum(qr * fr) + jnp.log(jnp.sum(Zr)) - lb
-        )(
-            true_radius_weights,
-            target_positions_cross_entropy,
-            radius_normalizing_factors,
-            lower_bounds,
-        )
+            # Check that shapes are correct.
+            assert true_angular_dist.grid_values.shape == (res_beta, res_alpha), true_angular_dist.grid_values.shape
+            assert true_radius_weights.shape == (num_radii,)
+    
+            # Mix in the radius weights to get a distribution over all spheres.
+            true_dist = true_radius_weights * true_angular_dist[None, :, :]
+            # Now, compute the unnormalized predicted distribution over all spheres.
+            # Subtract the maximum value for numerical stability.
+            log_predicted_dist_max = jnp.max(log_predicted_dist.grid_values)
+            log_predicted_dist = log_predicted_dist.apply(lambda x: x - log_predicted_dist_max)
+            
+            # Compute the cross-entropy including a normalizing factor to account for the fact that the predicted distribution is not normalized.
+            cross_entropy = -(true_dist * log_predicted_dist).integrate().array.sum()
+            normalizing_factor = jnp.log(log_predicted_dist.apply(jnp.exp).integrate().array.sum())
+
+            # Compute the self-entropy of the true distribution.
+            self_entropy = -(true_dist * true_dist.apply(safe_log)).integrate().array.sum()
+
+            # This should be non-negative, upto numerical precision.
+            return cross_entropy + normalizing_factor - self_entropy
+
+        def target_position_to_radius_weights(target_position: jnp.ndarray) -> jnp.ndarray:
+            """Returns the radial distribution for a target position."""
+            radius_weights = jax.vmap(
+                lambda radius: jnp.exp(
+                    -((radius - jnp.linalg.norm(target_position)) ** 2)
+                    / (2 * radius_rbf_variance)
+                )
+            )(models.RADII)
+            radius_weights += 1e-10
+            return radius_weights / jnp.sum(radius_weights)
+    
+        def target_position_to_log_angular_coeffs(target_position: jnp.ndarray) -> e3nn.IrrepsArray:
+            """Returns the temperature-scaled angular distribution for a target position."""
+            # Compute the true distribution over positions,
+            # described by a smooth approximation of a delta function at the target positions.
+            norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
+            target_position_unit_vector = target_position / jnp.where(
+                norm == 0, 1, norm
+            )
+            target_position_unit_vector = e3nn.IrrepsArray(
+                "1o", target_position_unit_vector
+            )
+            return target_position_inverse_temperature * target_position_unit_vector
+
+        target_positions = graphs.globals.target_positions
+        true_radius_weights = jax.vmap(target_position_to_radius_weights)(target_positions)
+        log_true_angular_coeffs = jax.vmap(target_position_to_log_angular_coeffs)(target_positions)
+        log_predicted_dist = position_logits
+        
+        loss_position = jax.vmap(kl_divergence_on_spheres)(true_radius_weights, log_true_angular_coeffs, log_predicted_dist)
         assert loss_position.shape == (num_graphs,)
-
         return loss_position
 
     # If this is the last step in the generation process, we do not have to predict atom type and position.
     loss_focus = focus_loss()
     loss_atom_type = atom_type_loss() * (1 - graphs.globals.stop)
-    loss_position = jnp.where(graphs.n_node < 4, 0, position_loss() * (1 - graphs.globals.stop))
+    loss_position = position_loss() * (1 - graphs.globals.stop)
+
+    # Ignore position loss for graphs with less than, or equal to 3 atoms.
+    loss_position = jnp.where(graphs.n_node <= 3, 0, loss_position)
 
     total_loss = loss_focus + loss_atom_type + loss_position
     return total_loss, (
