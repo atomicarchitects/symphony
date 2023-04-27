@@ -54,13 +54,27 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     num_graphs = 2
     num_nodes = 8
     num_elements = models.NUM_ELEMENTS
-    num_radii = models.RADII.shape[0]
+    n_node = jnp.asarray([num_nodes // 2, num_nodes // 2])
 
     # Dummy predictions and graphs.
-    position_coeffs = e3nn.IrrepsArray("0e", jnp.ones((num_graphs, num_radii, 1)))
+    coeffs_array = jnp.asarray([[1., 0., 0., 0.],
+                                [2., 0., 0., 0.]])
+    coeffs_array = jnp.repeat(coeffs_array[:, None, :], repeats=len(models.RADII), axis=1)
+    position_coeffs = e3nn.IrrepsArray("0e + 1o", coeffs_array)
+    position_logits = e3nn.to_s2grid(
+        position_coeffs,
+        res_beta=180,
+        res_alpha=359,
+        quadrature="gausslegendre",
+        normalization="integral",
+        p_val=1,
+        p_arg=-1,
+    )
     preds = datatypes.Predictions(
         nodes=datatypes.NodePredictions(
-            focus_logits=jnp.ones((num_nodes,)), focus_probs=None, embeddings=None
+            focus_logits=jnp.ones((num_nodes,)),
+            focus_probs=None,
+            embeddings=None
         ),
         globals=datatypes.GlobalPredictions(
             stop=None,
@@ -72,23 +86,17 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             target_species_probs=None,
             target_species=None,
             position_coeffs=position_coeffs,
-            position_logits=e3nn.to_s2grid(
-                position_coeffs,
-                res_beta=10,
-                res_alpha=9,
-                quadrature="gausslegendre",
-                p_val=1,
-                p_arg=-1,
-            ),
+            position_logits=position_logits,
             position_probs=None,
             position_vectors=None,
         ),
         edges=None,
         senders=None,
         receivers=None,
-        n_node=jnp.asarray([num_nodes // 2, num_nodes // 2]),
+        n_node=n_node,
         n_edge=None,
     )
+
     graphs = datatypes.Fragments(
         nodes=datatypes.FragmentsNodes(
             positions=jnp.zeros((num_nodes, 3)),
@@ -105,7 +113,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         edges=None,
         senders=None,
         receivers=None,
-        n_node=jnp.asarray([num_nodes // 2, num_nodes // 2]),
+        n_node=n_node,
         n_edge=None,
     )
     return preds, graphs
@@ -119,12 +127,12 @@ class TrainTest(parameterized.TestCase):
         _, (focus_loss, _, _) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
-            radius_rbf_variance=30,
+            radius_rbf_variance=1e-3,
             target_position_inverse_temperature=1000,
-            scale_position_logits_by_inverse_temperature=False,
         )
+        # sum(-qv * fv) + log(1 + sum(exp(fv)))
         expected_focus_loss = jnp.asarray(
-            [-1 + jnp.log(1 + 2 * jnp.e), -0.3 + jnp.log(1 + 3 * jnp.e)]
+            [-1 + jnp.log(1 + 4 * jnp.e), -0.3 + jnp.log(1 + 4 * jnp.e)]
         )
         self.assertSequenceAlmostEqual(focus_loss, expected_focus_loss, places=5)
 
@@ -132,9 +140,8 @@ class TrainTest(parameterized.TestCase):
         _, (_, atom_type_loss, _) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
-            radius_rbf_variance=30,
+            radius_rbf_variance=1e-3,
             target_position_inverse_temperature=1000,
-            scale_position_logits_by_inverse_temperature=False,
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -146,56 +153,30 @@ class TrainTest(parameterized.TestCase):
             atom_type_loss, expected_atom_type_loss, places=5
         )
 
-    @parameterized.parameters(1.0, 10.0, 100.0, 1000.0)
+    @parameterized.parameters(1., 10., 100., 1000.)
     def test_position_loss(self, target_position_inverse_temperature: float):
         _, (_, _, position_loss) = train.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
-            radius_rbf_variance=30,
+            radius_rbf_variance=1e-3,
             target_position_inverse_temperature=target_position_inverse_temperature,
-            scale_position_logits_by_inverse_temperature=False,
         )
-        target_positions = self.graphs.globals.target_positions
-        position_logits = self.preds.globals.position_logits
-        norms = jnp.linalg.norm(target_positions, axis=-1, keepdims=True)
-        target_positions_unit_vectors = target_positions / jnp.where(
-            norms == 0, 1, norms
-        )
-        target_positions_unit_vectors = e3nn.IrrepsArray(
-            "1o", target_positions_unit_vectors
-        )
-        res_beta, res_alpha, quadrature = (
-            position_logits.res_beta,
-            position_logits.res_alpha,
-            position_logits.quadrature,
-        )
-        log_true_angular_dist = e3nn.to_s2grid(
-            target_position_inverse_temperature * target_positions_unit_vectors,
-            res_beta,
-            res_alpha,
-            quadrature=quadrature,
-            p_val=1,
-            p_arg=-1,
-        )
-        log_true_angular_dist_max = jnp.max(
-            log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
-        )
-        true_angular_dist = log_true_angular_dist.apply(
-            lambda x: jnp.exp(x - log_true_angular_dist_max)
-        )
-        true_angular_dist = true_angular_dist / true_angular_dist.integrate()
 
-        log_true_angular_dist = true_angular_dist.apply(
-            lambda x: jnp.log(jnp.where(x == 0, 1.0, x))
-        )
-        lower_bounds = (
-            -(log_true_angular_dist * true_angular_dist).integrate().array.squeeze(-1)
-        )
-        num_radii = models.RADII.shape[0]
-
-        expected_position_loss = (
-            -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - lower_bounds
-        )
+        # Precomputed self-entropies for the different inverse temperatures.
+        SELF_ENTROPIES = {
+            1.: 4.02192,
+            10.: 1.8630707,
+            100.: -0.43951172,
+            1000.: -2.7420683,
+        }
+        self_entropy = SELF_ENTROPIES[target_position_inverse_temperature]
+        
+        # Since the predicted distribution is uniform, we can easily compute the expected position loss.
+        num_radii = len(models.RADII)
+        expected_position_loss = jnp.asarray([
+            -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - self_entropy,
+            -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - self_entropy,
+        ])
 
         self.assertTrue(jnp.all(position_loss >= 0))
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
