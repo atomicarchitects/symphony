@@ -37,8 +37,18 @@ FLAGS = flags.FLAGS
 
 
 def nan_analysis(pred: datatypes.Predictions):
-
-    global_attrs = ["stop_probs", "stop", "focus_indices", "target_species_logits", "target_species_probs", "target_species", "position_coeffs", "position_logits", "position_probs", "position_vectors"]
+    global_attrs = [
+        "stop_probs",
+        "stop",
+        "focus_indices",
+        "target_species_logits",
+        "target_species_probs",
+        "target_species",
+        "position_coeffs",
+        "position_logits",
+        "position_probs",
+        "position_vectors",
+    ]
     for attr in global_attrs:
         attr_value = getattr(pred.globals, attr)
         try:
@@ -119,7 +129,6 @@ def generate_molecules(
             ),
             numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
         )
-    
 
     # Generate with different seeds.
     for seed in tqdm.tqdm(seeds, desc="Generating molecules"):
@@ -138,17 +147,6 @@ def generate_molecules(
             # Run the model on the current molecule.
             pred = get_predictions(fragment, step_rng)
 
-            # Save visualization of generation process.
-            if visualize:
-                fig = analysis.visualize_predictions(pred, molecule)
-                # Save to file.
-                outputfile = os.path.join(
-                    visualizations_outputdir,
-                    f"{init_molecule_name}_seed={seed}_step={step}.html",
-                )
-                fig.write_html(outputfile, include_plotlyjs="cdn")
-                figs.append(fig)
-
             # Check for any NaNs in the predictions.
             num_nans = sum(
                 jax.tree_util.tree_leaves(
@@ -156,9 +154,16 @@ def generate_molecules(
                 )
             )
             if num_nans > 0:
-                logging.info("NaNs in predictions at step %d. Stopping generation...", step)
+                logging.info(
+                    "NaNs in predictions at step %d. Stopping generation...", step
+                )
                 nan_found = True
                 break
+
+            # Save visualization of generation process.
+            if visualize:
+                fig = analysis.visualize_predictions(pred, molecule)
+                figs.append(fig)
 
             # Check if we should stop.
             stop = pred.globals.stop.item()
@@ -185,14 +190,14 @@ def generate_molecules(
         if visualize:
             # Combine visualizations.
             fig_all = analysis.combine_visualizations(figs)
-            
+
             # Add title.
             model_name = analysis.get_title_for_name(name)
             fig_all.update_layout(
                 title=f"{model_name}: Predictions for Seed {seed}",
                 title_x=0.5,
             )
-            
+
             # Save to file.
             outputfile = os.path.join(
                 visualizations_outputdir,

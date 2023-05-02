@@ -132,17 +132,17 @@ def visualize_atom_removals(
         )
 
         figs.append(fig)
-    
+
     # Combine all figures into one.
     fig_all = analysis.combine_visualizations(figs)
-    
+
     # Add title.
     model_name = analysis.get_title_for_name(name)
     fig_all.update_layout(
         title=f"{model_name}: Predictions for {molecule_name}",
         title_x=0.5,
     )
-    
+
     # Save to file.
     outputfile = os.path.join(
         outputdir,
