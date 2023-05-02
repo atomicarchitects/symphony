@@ -3,44 +3,45 @@
 # https://github.com/atomistic-machine-learning/G-SchNet #
 ##########################################################
 
-import numpy as np
-import collections
-import pickle
-import os
 import argparse
+import collections
+import os
+import pickle
+import time
+import sys
+
+from ase import Atoms
+from ase.db import connect
+from multiprocessing import Process, Queue
+import numpy as np
 from openbabel import openbabel as ob
 from openbabel import pybel
 import pandas as pd
-import time
-import sys
+from schnetpack import Properties
 
 sys.path.append("..")
 
 from analyses import analysis
-from schnetpack import Properties
-from utility_classes import Molecule, ConnectivityCompressor
-from utility_functions import run_threaded, print_atom_bond_ring_stats, update_dict
-from multiprocessing import Process, Queue
-from ase import Atoms
-from ase.db import connect
+from analyses.utility_classes import Molecule, ConnectivityCompressor
+from analyses.utility_functions import run_threaded, print_atom_bond_ring_stats, update_dict
 
 
 def get_parser():
     """Setup parser for command line arguments"""
     main_parser = argparse.ArgumentParser()
     main_parser.add_argument(
-        "data_path",
+        "mol_path",
         help="Path to generated molecules in .mol_dict format, "
         'a database called "generated_molecules.db" with the '
         "filtered molecules along with computed statistics "
-        '("generated_molecules_statistics.npz") will be '
+        '("generated_molecules_statistics.pkl") will be '
         "stored in the same directory as the input file/s "
         "(if the path points to a directory, all .mol_dict "
         "files in the directory will be merged and filtered "
         "in one pass)",
     )
     main_parser.add_argument(
-        "--train_data_path",
+        "--data_path",
         help="Path to training data base (if provided, "
         "generated molecules can be compared/matched with "
         "those in the training data set)",
@@ -680,7 +681,7 @@ def check_valency(
 
 
 def filter_new(
-    mols, stats, stat_heads, model_path, train_data_path, print_file=False, n_threads=0
+    mols, stats, stat_heads, model_path, data_path, print_file=False, n_threads=0
 ):
     """
     Check whether generated molecules correspond to structures in the training database
@@ -697,7 +698,7 @@ def filter_new(
             rings of size 5)
         model_path (str): path to the folder containing the trained model used to
             generate the molecules
-        train_data_path (str): full path to the training database
+        data_path (str): full path to the training database
         print_file (bool, optional): set True to limit printing (e.g. if it is
             redirected to a file instead of displayed in a terminal, default: False)
         n_threads (int, optional): number of additional threads to use (default: 0)
@@ -709,13 +710,13 @@ def filter_new(
         2 if it corresponds to a validation structure, and 3 if it corresponds to a
         test structure, stats['equals'] is -1 if stats['known'] is 0 and otherwise
         holds the index of the corresponding training/validation/test structure in
-        the database at train_data_path)
+        the database at data_path)
     """
     print(f"\n\n2. Checking which molecules are new...")
     idx_known = stat_heads.index("known")
 
     # load training data
-    dbpath = train_data_path
+    dbpath = data_path
     if not os.path.isfile(dbpath):
         print(
             f"The provided training data base {dbpath} is no file, please specify "
@@ -1068,37 +1069,37 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_file = args.print_file
 
-    # read input file or fuse dictionaries if data_path is a folder
-    if not os.path.isdir(args.data_path):
-        if not os.path.isfile(args.data_path):
+    # read input file or fuse dictionaries if mol_path is a folder
+    if not os.path.isdir(args.mol_path):
+        if not os.path.isfile(args.mol_path):
             print(
-                f"\n\nThe specified data path ({args.data_path}) is neither a file "
+                f"\n\nThe specified data path ({args.mol_path}) is neither a file "
                 f"nor a directory! Please specify a different data path."
             )
             raise FileNotFoundError
         else:
-            with open(args.data_path, "rb") as f:
+            with open(args.mol_path, "rb") as f:
                 res = pickle.load(f)  # read input file
             target_db = os.path.join(
-                os.path.dirname(args.data_path), "generated_molecules.db"
+                os.path.dirname(args.mol_path), "generated_molecules.db"
             )
     else:
-        print(f"\n\nFusing .mol_dict files in folder {args.data_path}...")
-        mol_files = [f for f in os.listdir(args.data_path) if f.endswith(".mol_dict")]
+        print(f"\n\nFusing .mol_dict files in folder {args.mol_path}...")
+        mol_files = [f for f in os.listdir(args.mol_path) if f.endswith(".mol_dict")]
         if len(mol_files) == 0:
             print(
-                f"Could not find any .mol_dict files at {args.data_path}! Please "
+                f"Could not find any .mol_dict files at {args.mol_path}! Please "
                 f"specify a different data path!"
             )
             raise FileNotFoundError
         res = {}
         for file in mol_files:
-            with open(os.path.join(args.data_path, file), "rb") as f:
+            with open(os.path.join(args.mol_path, file), "rb") as f:
                 cur_res = pickle.load(f)
                 update_dict(res, cur_res)
         res = dict(sorted(res.items()))  # sort dictionary keys
         print(f"...done!")
-        target_db = os.path.join(args.data_path, "generated_molecules.db")
+        target_db = os.path.join(args.mol_path, "generated_molecules.db")
 
     # compute array with valence of provided atom types
     max_type = max(args.valence[::2])
@@ -1349,7 +1350,7 @@ if __name__ == "__main__":
             stats,
             stat_heads,
             args.model_path,
-            args.train_data_path,
+            args.data_path,
             print_file=print_file,
             n_threads=args.threads,
         )
@@ -1457,12 +1458,6 @@ if __name__ == "__main__":
     with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
         pickle.dump(metric_df_dict, f)
 
-    np.savez_compressed(
-        os.path.splitext(target_db)[0] + f"_statistics.npz",
-        stats=res["stats"],
-        stat_heads=res["stat_heads"],
-    )
-
     # print average atom, bond, and ring count statistics of generated molecules
     # stored in the database and of the training molecules
-    print_atom_bond_ring_stats(target_db, args.model_path, args.train_data_path)
+    print_atom_bond_ring_stats(target_db, args.model_path, args.data_path)

@@ -3,19 +3,19 @@
 # https://github.com/atomistic-machine-learning/G-SchNet #
 ##########################################################
 
-import torch
 import os
 import json
 import numpy as np
+import torch
+from torch.autograd import Variable
 import torch.nn.functional as F
 
 from multiprocessing import Queue
 from scipy.spatial.distance import pdist, squareform
-from torch.autograd import Variable
-
 from schnetpack import Properties
-import analysis
-from utility_classes import ProcessQ, IndexProvider
+
+import analyses.analysis as analysis
+from analyses.utility_classes import ProcessQ, IndexProvider
 
 
 def boolean_string(s):
