@@ -7,7 +7,7 @@ import operator
 import re
 import numpy as np
 from openbabel import openbabel as ob
-import pybel
+from openbabel import pybel
 from multiprocessing import Process
 from rdkit import Chem
 from scipy.spatial.distance import squareform
