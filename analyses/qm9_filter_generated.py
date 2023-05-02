@@ -677,7 +677,12 @@ def check_valency(
             mol.get_mirror_can()
             mol.remove_unpicklable_attributes(restorable=False)
         mols += [mol]
-    return {"mols": mols, "connectivity": connectivity, "valid_mol": valid_mol, "valid_atom": valid_atom}
+    return {
+        "mols": mols,
+        "connectivity": connectivity,
+        "valid_mol": valid_mol,
+        "valid_atom": valid_atom,
+    }
 
 
 def filter_new(
@@ -1432,29 +1437,67 @@ if __name__ == "__main__":
             for pos, num, con_mat in zip(all_pos, all_numbers, all_con_mats):
                 at = Atoms(num, positions=pos)
                 conn.write(at, data={"con_mat": con_mat})
-    
+
     # store gathered statistics in metrics dataframe
-    stats_df = pd.DataFrame(np.array(res["stats"]).T, columns=np.array(res["stat_heads"]).squeeze())
+    stats_df = pd.DataFrame(
+        np.array(res["stats"]).T, columns=np.array(res["stat_heads"]).squeeze()
+    )
     metric_df_dict = analysis.get_results_as_dataframe(
-        [''], ['total_loss', 'focus_loss', 'atom_type_loss', 'position_loss'], args.model_path
+        [""],
+        ["total_loss", "focus_loss", "atom_type_loss", "position_loss"],
+        args.model_path,
     )
     cum_stats = {
-        'valid_mol': stats_df['valid_mol'].sum() / len(stats_df),
-        'valid_atom': stats_df['valid_atom'].sum() / stats_df['n_atoms'].sum(),
-        'n_duplicates': stats_df['duplicating'].apply(lambda x: x != -1).sum(),
-        'known': stats_df['known'].apply(lambda x: x > 0).sum() / len(stats_df),
-        'known_train': stats_df['known'].apply(lambda x: x == 1).sum() / len(stats_df),
-        'known_val': stats_df['known'].apply(lambda x: x == 2).sum() / len(stats_df),
-        'known_test': stats_df['known'].apply(lambda x: x == 3).sum() / len(stats_df),
+        "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
+        "valid_atom": stats_df["valid_atom"].sum() / stats_df["n_atoms"].sum(),
+        "n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
+        "known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
+        "known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
+        "known_val": stats_df["known"].apply(lambda x: x == 2).sum() / len(stats_df),
+        "known_test": stats_df["known"].apply(lambda x: x == 3).sum() / len(stats_df),
     }
-    ring_bond_cols = ["C", "N", "O", "F", "H", "H1C", "H1N", "H1O", "C1C", "C2C", "C3C", "C1N", "C2N", "C3N", "C1O", "C2O", "C1F", "N1N", "N2N", "N1O", "N2O", "N1F", "O1O", "O1F", "R3", "R4", "R5", "R6", "R7", "R8", "R>8",]
+    ring_bond_cols = [
+        "C",
+        "N",
+        "O",
+        "F",
+        "H",
+        "H1C",
+        "H1N",
+        "H1O",
+        "C1C",
+        "C2C",
+        "C3C",
+        "C1N",
+        "C2N",
+        "C3N",
+        "C1O",
+        "C2O",
+        "C1F",
+        "N1N",
+        "N2N",
+        "N1O",
+        "N2O",
+        "N1F",
+        "O1O",
+        "O1F",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7",
+        "R8",
+        "R>8",
+    ]
     for col_name in ring_bond_cols:
         cum_stats[col_name] = stats_df[col_name].sum()
 
-    cum_stats_df = pd.DataFrame(cum_stats, columns=list(cum_stats.keys()) + ring_bond_cols, index=[0])
-    
-    metric_df_dict['generated_stats_overall'] = cum_stats_df
-    metric_df_dict['generated_stats'] = stats_df
+    cum_stats_df = pd.DataFrame(
+        cum_stats, columns=list(cum_stats.keys()) + ring_bond_cols, index=[0]
+    )
+
+    metric_df_dict["generated_stats_overall"] = cum_stats_df
+    metric_df_dict["generated_stats"] = stats_df
     with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
         pickle.dump(metric_df_dict, f)
 
