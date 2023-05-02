@@ -17,6 +17,7 @@ import utility_classes
 
 FLAGS = flags.FLAGS
 
+
 def dataset_as_database(
     config: ml_collections.ConfigDict,
     dataset: str,
@@ -79,7 +80,7 @@ if __name__ == "__main__":
     flags.DEFINE_string(
         "qm9dir",
         os.path.join(os.getcwd(), "qm9_data"),
-        "Directory where QM9 data is stored."
+        "Directory where QM9 data is stored.",
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

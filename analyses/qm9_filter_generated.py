@@ -676,7 +676,12 @@ def check_valency(
             mol.get_mirror_can()
             mol.remove_unpicklable_attributes(restorable=False)
         mols += [mol]
-    return {"mols": mols, "connectivity": connectivity, "valid_mol": valid_mol, "valid_atom": valid_atom}
+    return {
+        "mols": mols,
+        "connectivity": connectivity,
+        "valid_mol": valid_mol,
+        "valid_atom": valid_atom,
+    }
 
 
 def filter_new(
@@ -1434,9 +1439,13 @@ if __name__ == "__main__":
     # store gathered statistics in metrics dataframe
     stats_df = pd.DataFrame(res["stats"].squeeze(), columns=res["stat_heads"].squeeze())
     metric_df_dict = analysis.get_results_as_dataframe(
-        [''], ['total_loss', 'focus_loss', 'atom_type_loss', 'position_loss'], args.model_path
+        [""],
+        ["total_loss", "focus_loss", "atom_type_loss", "position_loss"],
+        args.model_path,
     )
-    metric_df_dict['train_eval_final'] = pd.concat([metric_df_dict['train_eval_final']], axis=1)
+    metric_df_dict["train_eval_final"] = pd.concat(
+        [metric_df_dict["train_eval_final"]], axis=1
+    )
     with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
         pickle.dump(metric_df_dict, f)
 

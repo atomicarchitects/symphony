@@ -24,7 +24,7 @@ from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
 
-#import analyses.utility_classes as utility_classes
+# import analyses.utility_classes as utility_classes
 
 sys.path.append("..")
 
@@ -37,6 +37,7 @@ from configs import default  # noqa: E402
 
 try:
     import input_pipeline_tf  # noqa: E402
+
     tf.config.experimental.set_visible_devices([], "GPU")
 except ImportError:
     logging.warning("TensorFlow not installed. Skipping import of input_pipeline_tf.")
@@ -85,12 +86,19 @@ def combine_visualizations(figs: Sequence[go.Figure]) -> go.Figure:
     ct = 0
     start_indices = [0]
     for fig in figs:
-        steps.append(dict(
-            method='restyle',
-            args=[{
-                'visible': [True if ct <= i < ct + len(fig.data) else False for i in range(len(all_traces))]
-            }],
-        ))
+        steps.append(
+            dict(
+                method="restyle",
+                args=[
+                    {
+                        "visible": [
+                            True if ct <= i < ct + len(fig.data) else False
+                            for i in range(len(all_traces))
+                        ]
+                    }
+                ],
+            )
+        )
         ct += len(fig.data)
         start_indices.append(ct)
 
@@ -123,7 +131,9 @@ def combine_visualizations(figs: Sequence[go.Figure]) -> go.Figure:
         ),
     )
 
-    fig_all = plotly.subplots.make_subplots(rows=1, cols=2, specs=[[{'type': 'scene'}, {'type': 'xy'}]])
+    fig_all = plotly.subplots.make_subplots(
+        rows=1, cols=2, specs=[[{"type": "scene"}, {"type": "xy"}]]
+    )
     for i, trace in enumerate(all_traces):
         visible = True if i < start_indices[1] else False
         trace.update(visible=visible)
@@ -220,6 +230,7 @@ def visualize_predictions(
             legendrank=1,
         )
     )
+
     # Highlight the target atom.
     if target is not None:
         mol_trace.append(
@@ -238,8 +249,9 @@ def visualize_predictions(
         )
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
+    position_coeffs = pred.globals.position_coeffs
     position_logits = e3nn.to_s2grid(
-        pred.globals.position_coeffs,
+        position_coeffs,
         50,
         99,
         quadrature="gausslegendre",
@@ -247,9 +259,10 @@ def visualize_predictions(
         p_val=1,
         p_arg=-1,
     )
-    position_probs = position_logits.apply(
-        lambda x: jnp.exp(x - position_logits.grid_values.max())
+    position_logits = position_logits.apply(
+        lambda x: x - position_logits.grid_values.max()
     )
+    position_probs = position_logits.apply(jnp.exp)
 
     cmin = 0.0
     cmax = position_probs.grid_values.max().item()
@@ -268,10 +281,32 @@ def visualize_predictions(
             cmax=cmax,
             name="Position Probabilities",
             legendgroup="Position Probabilities",
-            showlegend=(i == 0),
+            showlegend=True,
         )
         mol_trace.append(surface_r)
 
+    # Plot spherical harmonic projections.
+    radius_probs = position_probs.integrate().array
+    radius_probs /= radius_probs.sum()
+    radius_probs = radius_probs.squeeze(axis=-1)
+    most_likely_radius_index = radius_probs.argmax().item()
+    most_likely_radius = RADII[most_likely_radius_index]
+    most_likely_radius_coeffs = position_coeffs[most_likely_radius_index]
+    most_likely_radius_sig = e3nn.to_s2grid(
+        most_likely_radius_coeffs, 50, 69, quadrature="soft", p_val=1, p_arg=-1
+    )
+    spherical_harmonics = go.Surface(
+        most_likely_radius_sig.plotly_surface(
+            scale_radius_by_amplitude=True,
+            radius=most_likely_radius,
+            translation=focus_position,
+        ),
+        name="Spherical Harmonic Projections",
+        showlegend=True,
+    )
+    mol_trace.append(spherical_harmonics)
+
+    # All of the above is on the left subplot.
     for trace in mol_trace:
         fig.add_trace(trace, row=1, col=1)
 
