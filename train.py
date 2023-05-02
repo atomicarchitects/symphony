@@ -140,7 +140,7 @@ def generation_loss(
 
     def position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities."""
-        
+
         assert preds.globals.position_coeffs.array.shape == (
             num_graphs,
             num_radii,
@@ -153,12 +153,16 @@ def generation_loss(
             position_logits.res_alpha,
             position_logits.quadrature,
         )
-    
+
         def safe_log(x: jnp.ndarray) -> jnp.ndarray:
             """Computes the log of x, replacing 0 with 1 for numerical stability."""
             return jnp.log(jnp.where(x == 0, 1.0, x))
 
-        def kl_divergence_on_spheres(true_radius_weights: jnp.ndarray, log_true_angular_coeffs: e3nn.IrrepsArray, log_predicted_dist: e3nn.SphericalSignal) -> jnp.ndarray:
+        def kl_divergence_on_spheres(
+            true_radius_weights: jnp.ndarray,
+            log_true_angular_coeffs: e3nn.IrrepsArray,
+            log_predicted_dist: e3nn.SphericalSignal,
+        ) -> jnp.ndarray:
             """Compute the KL divergence between two distributions on the sphere."""
             # Convert coefficients to a distribution on the sphere.
             log_true_angular_dist = e3nn.to_s2grid(
@@ -174,34 +178,47 @@ def generation_loss(
             log_true_angular_dist_max = jnp.max(
                 log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
             )
-            log_true_angular_dist = log_true_angular_dist.apply(lambda x: x - log_true_angular_dist_max)            
+            log_true_angular_dist = log_true_angular_dist.apply(
+                lambda x: x - log_true_angular_dist_max
+            )
 
             # Convert to a probability distribution, by taking the exponential and normalizing.
             true_angular_dist = log_true_angular_dist.apply(jnp.exp)
             true_angular_dist = true_angular_dist / true_angular_dist.integrate()
 
             # Check that shapes are correct.
-            assert true_angular_dist.grid_values.shape == (res_beta, res_alpha), true_angular_dist.grid_values.shape
+            assert true_angular_dist.grid_values.shape == (
+                res_beta,
+                res_alpha,
+            ), true_angular_dist.grid_values.shape
             assert true_radius_weights.shape == (num_radii,)
-    
+
             # Mix in the radius weights to get a distribution over all spheres.
             true_dist = true_radius_weights * true_angular_dist[None, :, :]
             # Now, compute the unnormalized predicted distribution over all spheres.
             # Subtract the maximum value for numerical stability.
             log_predicted_dist_max = jnp.max(log_predicted_dist.grid_values)
-            log_predicted_dist = log_predicted_dist.apply(lambda x: x - log_predicted_dist_max)
-            
+            log_predicted_dist = log_predicted_dist.apply(
+                lambda x: x - log_predicted_dist_max
+            )
+
             # Compute the cross-entropy including a normalizing factor to account for the fact that the predicted distribution is not normalized.
             cross_entropy = -(true_dist * log_predicted_dist).integrate().array.sum()
-            normalizing_factor = jnp.log(log_predicted_dist.apply(jnp.exp).integrate().array.sum())
+            normalizing_factor = jnp.log(
+                log_predicted_dist.apply(jnp.exp).integrate().array.sum()
+            )
 
             # Compute the self-entropy of the true distribution.
-            self_entropy = -(true_dist * true_dist.apply(safe_log)).integrate().array.sum()
+            self_entropy = (
+                -(true_dist * true_dist.apply(safe_log)).integrate().array.sum()
+            )
 
             # This should be non-negative, upto numerical precision.
             return cross_entropy + normalizing_factor - self_entropy
 
-        def target_position_to_radius_weights(target_position: jnp.ndarray) -> jnp.ndarray:
+        def target_position_to_radius_weights(
+            target_position: jnp.ndarray,
+        ) -> jnp.ndarray:
             """Returns the radial distribution for a target position."""
             radius_weights = jax.vmap(
                 lambda radius: jnp.exp(
@@ -211,8 +228,10 @@ def generation_loss(
             )(models.RADII)
             radius_weights += 1e-10
             return radius_weights / jnp.sum(radius_weights)
-    
-        def target_position_to_log_angular_coeffs(target_position: jnp.ndarray) -> e3nn.IrrepsArray:
+
+        def target_position_to_log_angular_coeffs(
+            target_position: jnp.ndarray,
+        ) -> e3nn.IrrepsArray:
             """Returns the temperature-scaled angular distribution for a target position."""
             # Compute the true distribution over positions,
             # described by a smooth approximation of a delta function at the target positions.
@@ -226,11 +245,17 @@ def generation_loss(
             return target_position_inverse_temperature * target_position_unit_vector
 
         target_positions = graphs.globals.target_positions
-        true_radius_weights = jax.vmap(target_position_to_radius_weights)(target_positions)
-        log_true_angular_coeffs = jax.vmap(target_position_to_log_angular_coeffs)(target_positions)
+        true_radius_weights = jax.vmap(target_position_to_radius_weights)(
+            target_positions
+        )
+        log_true_angular_coeffs = jax.vmap(target_position_to_log_angular_coeffs)(
+            target_positions
+        )
         log_predicted_dist = position_logits
-        
-        loss_position = jax.vmap(kl_divergence_on_spheres)(true_radius_weights, log_true_angular_coeffs, log_predicted_dist)
+
+        loss_position = jax.vmap(kl_divergence_on_spheres)(
+            true_radius_weights, log_true_angular_coeffs, log_predicted_dist
+        )
         assert loss_position.shape == (num_graphs,)
         return loss_position
 

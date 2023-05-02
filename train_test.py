@@ -57,9 +57,10 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     n_node = jnp.asarray([num_nodes // 2, num_nodes // 2])
 
     # Dummy predictions and graphs.
-    coeffs_array = jnp.asarray([[1., 0., 0., 0.],
-                                [2., 0., 0., 0.]])
-    coeffs_array = jnp.repeat(coeffs_array[:, None, :], repeats=len(models.RADII), axis=1)
+    coeffs_array = jnp.asarray([[1.0, 0.0, 0.0, 0.0], [2.0, 0.0, 0.0, 0.0]])
+    coeffs_array = jnp.repeat(
+        coeffs_array[:, None, :], repeats=len(models.RADII), axis=1
+    )
     position_coeffs = e3nn.IrrepsArray("0e + 1o", coeffs_array)
     position_logits = e3nn.to_s2grid(
         position_coeffs,
@@ -72,9 +73,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     )
     preds = datatypes.Predictions(
         nodes=datatypes.NodePredictions(
-            focus_logits=jnp.ones((num_nodes,)),
-            focus_probs=None,
-            embeddings=None
+            focus_logits=jnp.ones((num_nodes,)), focus_probs=None, embeddings=None
         ),
         globals=datatypes.GlobalPredictions(
             stop=None,
@@ -153,7 +152,7 @@ class TrainTest(parameterized.TestCase):
             atom_type_loss, expected_atom_type_loss, places=5
         )
 
-    @parameterized.parameters(1., 10., 100., 1000.)
+    @parameterized.parameters(1.0, 10.0, 100.0, 1000.0)
     def test_position_loss(self, target_position_inverse_temperature: float):
         _, (_, _, position_loss) = train.generation_loss(
             preds=self.preds,
@@ -164,19 +163,21 @@ class TrainTest(parameterized.TestCase):
 
         # Precomputed self-entropies for the different inverse temperatures.
         SELF_ENTROPIES = {
-            1.: 4.02192,
-            10.: 1.8630707,
-            100.: -0.43951172,
-            1000.: -2.7420683,
+            1.0: 4.02192,
+            10.0: 1.8630707,
+            100.0: -0.43951172,
+            1000.0: -2.7420683,
         }
         self_entropy = SELF_ENTROPIES[target_position_inverse_temperature]
-        
+
         # Since the predicted distribution is uniform, we can easily compute the expected position loss.
         num_radii = len(models.RADII)
-        expected_position_loss = jnp.asarray([
-            -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - self_entropy,
-            -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - self_entropy,
-        ])
+        expected_position_loss = jnp.asarray(
+            [
+                -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - self_entropy,
+                -1 + jnp.log(4 * jnp.pi * jnp.e * num_radii) - self_entropy,
+            ]
+        )
 
         self.assertTrue(jnp.all(position_loss >= 0))
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
