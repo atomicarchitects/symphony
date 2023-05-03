@@ -301,7 +301,7 @@ def visualize_predictions(
             scale_radius_by_amplitude=True,
             radius=most_likely_radius,
             translation=focus_position,
-            set_radius_as_maximum=True,
+            normalize_radius_by_max_amplitude=True,
         ),
         name="Spherical Harmonics for Logits",
         showlegend=True,
