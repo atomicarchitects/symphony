@@ -22,6 +22,7 @@ from schnetpack import Properties
 sys.path.append("..")
 
 from analyses import analysis
+from analyses.check_valency import check_valency
 from analyses.utility_classes import Molecule, ConnectivityCompressor
 from analyses.utility_functions import run_threaded, print_atom_bond_ring_stats, update_dict
 
@@ -582,107 +583,6 @@ def _process_duplicates(dups, n_mols):
         duplicating[np.array(wrongly_assigned_originals, dtype=int)] = original
         duplicate_count[original] += 1
     return duplicating, duplicate_count
-
-
-def check_valency(
-    positions,
-    numbers,
-    valence,
-    filter_by_valency=True,
-    print_file=True,
-    prog_str=None,
-    picklable_mols=False,
-):
-    """
-    Build utility_classes.Molecule objects from provided atom positions and types
-    of a set of molecules and assess whether they are meeting the valency
-    constraints or not (i.e. all of their atoms have the correct number of bonds).
-    Note that all input molecules need to have the same number of atoms.
-
-    Args:
-        positions (list of numpy.ndarray): list of positions of atoms in euclidean
-            space (n_atoms x 3) for each molecule
-        numbers (numpy.ndarray): list of nuclear charges/types of atoms
-            (e.g. 1 for hydrogens, 6 for carbons etc.) for each molecule
-        valence (numpy.ndarray): list of valency of each atom type where the index in
-            the list corresponds to the type (e.g. [0, 1, 0, 0, 0, 0, 4, 3, 2, 1] for
-            qm9 molecules as H=type 1 has valency of 1, C=type 6 has valency of 4,
-            N=type 7 has valency of 3 etc.)
-        filter_by_valency (bool, optional): whether molecules that fail the valency
-            check should be marked as invalid, else all input molecules will be
-            classified as valid but the connectivity matrix is still computed and
-            returned (default: True)
-        print_file (bool, optional): set True to suppress printing of progress string
-            (default: True)
-        prog_str (str, optional): specify a custom progress string (default: None)
-        picklable_mols (bool, optional): set True to remove all the information in
-            the returned list of utility_classes.Molecule objects that can not be
-            serialized with pickle (e.g. the underlying Open Babel ob.Mol object,
-            default: False)
-
-    Returns:
-        dict (str->list/numpy.ndarray): a dictionary containing a list of
-            utility_classes.Molecule ojbects under the key 'mols', a numpy.ndarray with
-            the corresponding (n_atoms x n_atoms) connectivity matrices under the key
-            'connectivity', a numpy.ndarray (key 'valid_mol') that marks whether a
-            molecule has passed (entry=1) or failed (entry=0) the valency check if
-            filter_by_valency is True (otherwise it will be 1 everywhere), and a numpy.ndarray
-            (key 'valid_atom') that marks the number of atoms in each molecule that pass
-            the valency check if filter_by_valency is True (otherwise it will be n_atoms everywhere)
-    """
-    n_atoms = len(numbers[0])
-    n_mols = len(numbers)
-    thresh = n_mols if n_mols < 30 else 30
-    connectivity = np.zeros((len(positions), n_atoms, n_atoms))
-    valid_mol = np.ones(len(positions), dtype=bool)
-    valid_atom = np.ones(len(positions)) * n_atoms
-    mols = []
-    for i, (pos, num) in enumerate(zip(positions, numbers)):
-        mol = Molecule(pos, num, store_positions=False)
-        con_mat = mol.get_connectivity()
-        random_ord = range(len(pos))
-        # filter incorrect valence if desired
-        if filter_by_valency:
-            nums = num
-            # try to fix connectivity if it isn't correct already
-            for _ in range(10):
-                if np.all(np.sum(con_mat, axis=0) == valence[nums]):
-                    val = True
-                    break
-                else:
-                    val = False
-                    con_mat = mol.get_fixed_connectivity()
-                    if np.all(np.sum(con_mat, axis=0) == valence[nums]):
-                        val = True
-                        break
-                    random_ord = np.random.permutation(range(len(pos)))
-                    mol = Molecule(pos[random_ord], num[random_ord])
-                    con_mat = mol.get_connectivity()
-                    nums = num[random_ord]
-            valid_mol[i] = val
-            valid_atom[i] = np.sum(np.equal(np.sum(con_mat, axis=0), valence[nums]))
-
-            if ((i + 1) % thresh == 0) and not print_file and prog_str is not None:
-                print("\033[K", end="\r", flush=True)
-                print(
-                    f"{prog_str} ({100 * (i + 1) / n_mols:.2f}%)", end="\r", flush=True
-                )
-
-        # reverse random order and save fixed connectivity matrix
-        rand_ord_rev = np.argsort(random_ord)
-        connectivity[i] = con_mat[rand_ord_rev][:, rand_ord_rev]
-        if picklable_mols:
-            mol.get_fp_bits()
-            mol.get_can()
-            mol.get_mirror_can()
-            mol.remove_unpicklable_attributes(restorable=False)
-        mols += [mol]
-    return {
-        "mols": mols,
-        "connectivity": connectivity,
-        "valid_mol": valid_mol,
-        "valid_atom": valid_atom,
-    }
 
 
 def filter_new(
