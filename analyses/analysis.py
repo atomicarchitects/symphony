@@ -264,6 +264,7 @@ def visualize_predictions(
     )
     position_probs = position_logits.apply(jnp.exp)
 
+    count = 0
     cmin = 0.0
     cmax = position_probs.grid_values.max().item()
     for i in range(len(RADII)):
@@ -273,6 +274,7 @@ def visualize_predictions(
         if prob_r.grid_values.max() < 1e-2 * cmax:
             continue
 
+        count += 1
         surface_r = go.Surface(
             **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
             colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
@@ -281,15 +283,14 @@ def visualize_predictions(
             cmax=cmax,
             name="Position Probabilities",
             legendgroup="Position Probabilities",
-            showlegend=True,
+            showlegend=(count == 1),
         )
         mol_trace.append(surface_r)
 
-    # Plot spherical harmonic projections.
-    radius_probs = position_probs.integrate().array
-    radius_probs /= radius_probs.sum()
-    radius_probs = radius_probs.squeeze(axis=-1)
-    most_likely_radius_index = radius_probs.argmax().item()
+    # Plot spherical harmonic projections of logits.
+    # Find closest index in RADII to the sampled positions.
+    radius = jnp.linalg.norm(pred.globals.position_vectors, axis=-1)
+    most_likely_radius_index = jnp.abs(RADII - radius).argmin()
     most_likely_radius = RADII[most_likely_radius_index]
     most_likely_radius_coeffs = position_coeffs[most_likely_radius_index]
     most_likely_radius_sig = e3nn.to_s2grid(
@@ -300,8 +301,9 @@ def visualize_predictions(
             scale_radius_by_amplitude=True,
             radius=most_likely_radius,
             translation=focus_position,
+            set_radius_as_maximum=True,
         ),
-        name="Spherical Harmonic Projections",
+        name="Spherical Harmonics for Logits",
         showlegend=True,
     )
     mol_trace.append(spherical_harmonics)
