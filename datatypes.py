@@ -14,13 +14,12 @@ class FragmentsGlobals(NamedTuple):
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
     target_positions: jnp.ndarray  # [n_graph, 3] float array (only for training)
     target_species: jnp.ndarray  # [n_graph] int array (only for training)
-    target_species_probability: jnp.ndarray  # [n_graph, n_species] float array (only for training)
 
 
 class FragmentsNodes(NamedTuple):
     positions: jnp.ndarray  # [n_node, 3] float array
     species: jnp.ndarray  # [n_node] int array
-    focus_probability: jnp.ndarray  # [n_node] float array (only for training)
+    target_species_probs: jnp.ndarray  # [n_node, n_species] float array
 
 
 class Fragments(jraph.GraphsTuple):
