@@ -29,15 +29,11 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         """Computes the loss over atom types."""
-        assert (
-            preds.nodes.target_species_logits.shape
-            == graphs.nodes.target_species_probs.shape
-            == (num_nodes, num_elements)
-        )
-
         logits = preds.nodes.target_species_logits
         target = graphs.nodes.target_species_probs
         # stop = graphs.globals.stop (= 1 - sum(target))
+
+        assert logits.shape == target.shape == (num_nodes, num_elements)
 
         max = e3nn.scatter_max(jnp.max(logits, axis=1), nel=n_node, initial=0.0)
         max_ext = e3nn.scatter_max(
@@ -46,6 +42,8 @@ def generation_loss(
             map_back=True,
             initial=0.0,
         )
+        assert max.shape == (num_graphs,)
+        assert max_ext.shape == (num_nodes, 1)
 
         loss_atom_type = -(
             -max + e3nn.scatter_sum(jnp.sum(target * logits, axis=-1), nel=n_node)
