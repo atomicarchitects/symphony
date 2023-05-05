@@ -19,7 +19,7 @@ class FragmentsGlobals(NamedTuple):
 class FragmentsNodes(NamedTuple):
     positions: jnp.ndarray  # [n_node, 3] float array
     species: jnp.ndarray  # [n_node] int array
-    target_species_probs: jnp.ndarray  # [n_node, n_species] float array
+    target_species_probs: jnp.ndarray  # [n_node, n_species] float array (only for training)
 
 
 class Fragments(jraph.GraphsTuple):

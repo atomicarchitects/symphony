@@ -332,7 +332,11 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance):
         (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
     ]
 
-    species_probability = _normalized_bitcount(graph.nodes.species[targets], n_species)
+    species_probability = (
+        jnp.zeros((graph.nodes.positions.shape[0], n_species))
+        .at[first_node]
+        .set(_normalized_bitcount(graph.nodes.species[targets], n_species))
+    )
 
     # pick a random target
     rng, k = jax.random.split(rng)
@@ -341,7 +345,6 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance):
     sample = _into_fragment(
         graph,
         visited=jnp.array([first_node]),
-        focus_probability=jnp.array([1.0]),
         focus_node=first_node,
         target_species_probability=species_probability,
         target_node=target,
@@ -361,20 +364,24 @@ def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
     min_dist = dist[mask].min()
     mask = mask & (dist < min_dist + nn_tolerance)
 
-    focus_probability = _normalized_bitcount(senders[mask], n_nodes)
+    # target_species_probability
+    def f(focus_node):
+        targets = receivers[(senders == focus_node) & mask]
+        return jnp.bincount(graph.nodes.species[targets], length=n_species)
+
+    target_species_probability = jax.vmap(f)(jnp.arange(n_nodes))
+    target_species_probability = target_species_probability / jnp.sum(
+        target_species_probability
+    )
 
     # pick a random focus node
     rng, k = jax.random.split(rng)
+    focus_probability = _normalized_bitcount(senders[mask], n_nodes)
     focus_node = jax.random.choice(k, n_nodes, p=focus_probability)
-
-    # target_species_probability
-    targets = receivers[(senders == focus_node) & mask]
-    target_species_probability = _normalized_bitcount(
-        graph.nodes.species[targets], n_species
-    )
 
     # pick a random target
     rng, k = jax.random.split(rng)
+    targets = receivers[(senders == focus_node) & mask]
     target_node = jax.random.choice(k, targets)
 
     new_visited = jnp.concatenate([visited, jnp.array([target_node])])
@@ -382,7 +389,6 @@ def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
     sample = _into_fragment(
         graph,
         visited,
-        focus_probability,
         focus_node,
         target_species_probability,
         target_node,
@@ -393,12 +399,12 @@ def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
 
 
 def _make_last_fragment(graph, n_species):
+    n_nodes = len(graph.nodes.positions)
     return _into_fragment(
         graph,
         visited=jnp.arange(len(graph.nodes.positions)),
-        focus_probability=jnp.zeros((len(graph.nodes.positions),)),
         focus_node=0,
-        target_species_probability=jnp.zeros((n_species,)),
+        target_species_probability=jnp.zeros((n_nodes, n_species)),
         target_node=0,
         stop=True,
     )
@@ -407,31 +413,26 @@ def _make_last_fragment(graph, n_species):
 def _into_fragment(
     graph,
     visited,
-    focus_probability,
     focus_node,
     target_species_probability,
     target_node,
     stop,
 ):
+    pos = graph.nodes.positions
     nodes = datatypes.FragmentsNodes(
-        positions=graph.nodes.positions,
+        positions=pos,
         species=graph.nodes.species,
-        focus_probability=focus_probability,
+        target_species_probs=target_species_probability,
     )
     globals = datatypes.FragmentsGlobals(
         stop=jnp.array([stop], dtype=bool),  # [1]
-        target_species_probability=target_species_probability[None],  # [1, n_species]
         target_species=graph.nodes.species[target_node][None],  # [1]
-        target_positions=(
-            graph.nodes.positions[target_node] - graph.nodes.positions[focus_node]
-        )[
-            None
-        ],  # [1, 3]
+        target_positions=(pos[target_node] - pos[focus_node])[None],  # [1, 3]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 
     if stop:
-        assert len(visited) == len(graph.nodes.positions)
+        assert len(visited) == len(pos)
         return graph
     else:
         # put focus node at the beginning
