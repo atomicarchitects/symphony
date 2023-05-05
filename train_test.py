@@ -35,7 +35,8 @@ _ALL_CONFIGS = {
 
 
 def update_dummy_config(
-    config: ml_collections.ConfigDict, train_on_split_smaller_than_chunk: bool
+    config: ml_collections.ConfigDict, train_on_split_smaller_than_chunk: bool,
+    position_loss_type: str
 ) -> ml_collections.FrozenConfigDict:
     """Updates the dummy config."""
     config = ml_collections.ConfigDict(config)
@@ -44,6 +45,7 @@ def update_dummy_config(
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 50
     config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
+    config.loss_kwargs.position_loss_type = position_loss_type
     if train_on_split_smaller_than_chunk:
         config.train_molecules = (0, 10)
     return ml_collections.FrozenConfigDict(config)
@@ -128,6 +130,8 @@ class TrainTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=1000,
+            ignore_position_loss_for_small_fragments=True,
+            position_loss_type="kl_divergence",
         )
         # sum(-qv * fv) + log(1 + sum(exp(fv)))
         expected_focus_loss = jnp.asarray(
@@ -141,6 +145,8 @@ class TrainTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=1000,
+            ignore_position_loss_for_small_fragments=True,
+            position_loss_type="kl_divergence",
         )
         expected_atom_type_loss = jnp.asarray(
             [
@@ -159,6 +165,8 @@ class TrainTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=target_position_inverse_temperature,
+            ignore_position_loss_for_small_fragments=True,
+            position_loss_type="kl_divergence",
         )
 
         # Precomputed self-entropies for the different inverse temperatures.
@@ -183,10 +191,13 @@ class TrainTest(parameterized.TestCase):
         self.assertSequenceAlmostEqual(position_loss, expected_position_loss, places=4)
 
     @parameterized.product(
-        config_name=["nequip"], train_on_split_smaller_than_chunk=[True, False]
+        config_name=["nequip"],
+        train_on_split_smaller_than_chunk=[False],
+        position_loss_type=["l2", "kl_divergence"]
     )
     def test_train_and_evaluate(
-        self, config_name: str, train_on_split_smaller_than_chunk: bool
+        self, config_name: str, train_on_split_smaller_than_chunk: bool,
+        position_loss_type: str
     ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
@@ -195,7 +206,7 @@ class TrainTest(parameterized.TestCase):
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
-        config = update_dummy_config(config, train_on_split_smaller_than_chunk)
+        config = update_dummy_config(config, train_on_split_smaller_than_chunk, position_loss_type)
         config = ml_collections.FrozenConfigDict(config)
 
         # Create a temporary directory where metrics are written.
