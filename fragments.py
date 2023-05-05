@@ -13,6 +13,8 @@ def generate_fragments(
     graph: jraph.GraphsTuple,
     n_species: int,
     nn_tolerance: float = 0.01,
+    max_radius: float = 2.03,
+    mode: str = "nn",
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -21,10 +23,12 @@ def generate_fragments(
         graph: The molecular graph.
         atomic_numbers: The atomic numbers of the target species.
         nn_tolerance: Tolerance for the nearest neighbours.
+        max_radius: The maximum distance of the focus-target
 
     Returns:
         A sequence of fragments.
     """
+    assert mode in ["nn", "radius"]
     n = len(graph.nodes.positions)
 
     assert (
@@ -39,13 +43,13 @@ def generate_fragments(
     )  # [n_edge]
 
     rng, visited_nodes, frag = _make_first_fragment(
-        rng, graph, dist, n_species, nn_tolerance
+        rng, graph, dist, n_species, nn_tolerance, max_radius, mode
     )
     yield frag
 
     for _ in range(n - 2):
         rng, visited_nodes, frag = _make_middle_fragment(
-            rng, visited_nodes, graph, dist, n_species, nn_tolerance
+            rng, visited_nodes, graph, dist, n_species, nn_tolerance, max_radius, mode
         )
         yield frag
 
@@ -54,17 +58,21 @@ def generate_fragments(
     yield _make_last_fragment(graph, n_species)
 
 
-def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance):
+def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, mode):
     # pick a random initial node
     rng, k = jax.random.split(rng)
     first_node = jax.random.randint(
         k, shape=(), minval=0, maxval=len(graph.nodes.positions)
     )
 
-    min_dist = dist[graph.senders == first_node].min()
-    targets = graph.receivers[
-        (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
-    ]
+    if mode == "nn":
+        min_dist = dist[graph.senders == first_node].min()
+        targets = graph.receivers[
+            (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
+        ]
+        del min_dist
+    if mode == "radius":
+        targets = graph.receivers[(graph.senders == first_node) & (dist < max_radius)]
 
     species_probability = (
         jnp.zeros((graph.nodes.positions.shape[0], n_species))
@@ -89,14 +97,20 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance):
     return rng, visited, sample
 
 
-def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
+def _make_middle_fragment(
+    rng, visited, graph, dist, n_species, nn_tolerance, max_radius, mode
+):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
 
     mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
 
-    min_dist = dist[mask].min()
-    mask = mask & (dist < min_dist + nn_tolerance)
+    if mode == "nn":
+        min_dist = dist[mask].min()
+        mask = mask & (dist < min_dist + nn_tolerance)
+        del min_dist
+    if mode == "radius":
+        mask = mask & (dist < max_radius)
 
     n = jnp.zeros((n_nodes, n_species))
     for focus_node in range(n_nodes):
