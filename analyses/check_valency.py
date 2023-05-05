@@ -7,6 +7,7 @@ import argparse
 import os
 import pickle
 import numpy as np
+import pandas as pd
 from schnetpack import Properties
 from analyses.analysis import update_dict
 
@@ -35,13 +36,6 @@ def get_parser():
         help="the valence of atom types in the form "
         "[type1 valence type2 valence ...] "
         "(default: %(default)s)",
-    )
-    main_parser.add_argument(
-        "--filter_by_valency",
-        type=bool,
-        default=True,
-        help="If True, molecules that fail the valency "
-        "check are marked as invalid (default: %(default)s)",
     )
     main_parser.add_argument(
         "--print_file",
@@ -171,9 +165,6 @@ if __name__ == "__main__":
         else:
             with open(args.mol_path, "rb") as f:
                 res = pickle.load(f)  # read input file
-            target_db = os.path.join(
-                os.path.dirname(args.mol_path), "generated_molecules.db"
-            )
     else:
         print(f"\n\nFusing .mol_dict files in folder {args.mol_path}...")
         mol_files = [f for f in os.listdir(args.mol_path) if f.endswith(".mol_dict")]
@@ -190,7 +181,6 @@ if __name__ == "__main__":
                 update_dict(res, cur_res)
         res = dict(sorted(res.items()))  # sort dictionary keys
         print(f"...done!")
-        target_db = os.path.join(args.mol_path, "generated_molecules.db")
 
     # compute array with valence of provided atom types
     max_type = max(args.valence[::2])
@@ -204,13 +194,10 @@ if __name__ == "__main__":
             valence_str += f"type {i}: {valence[i]}, "
     print(f"\nTarget valence:\n{valence_str[:-2]}\n")
 
-    # initial setup of array for statistics and some counters
-    n_generated = 0
-    n_valid_mol = 0
-    n_non_unique = 0
-    
-    valid_stats = {}
-    # construct connectivity matrix and fingerprints for filtering
+    n_atoms_list = np.array([], dtype=np.int32)
+    valid_mols = np.array([])
+    valid_atoms = np.array([])
+
     for n_atoms in res:
         if not isinstance(n_atoms, int) or n_atoms == 0:
             continue
@@ -233,15 +220,14 @@ if __name__ == "__main__":
             all_pos,
             all_numbers,
             valence,
-            args.filter_by_valency,
+            True,
             print_file,
             prog_str(work_str),
         )
-        connectivity = results["connectivity"]
-        mols = results["mols"]
-        valid_mol = results["valid_mol"]
-        valid_atom = results["valid_atom"]
-        valid_stats[n_atoms] = [valid_mol, valid_atom]
-    print(valid_stats)
+        n_atoms_list = np.concatenate([n_atoms_list, np.ones(n_mols) * n_atoms])
+        valid_mols = np.concatenate([valid_mols, results["valid_mol"]])
+        valid_atoms = np.concatenate([valid_atoms, results["valid_atom"]])
+    valid_stats = pd.DataFrame({"n_atoms": n_atoms_list, "valid_mol": valid_mols, "valid_atoms": valid_atoms})
+    valid_stats["valid_atoms_frac"] = valid_stats["valid_atoms"] / valid_stats["n_atoms"]
     with open('valency-results.pkl', 'wb') as f:
         pickle.dump(valid_stats, f)

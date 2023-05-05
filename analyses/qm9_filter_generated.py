@@ -985,9 +985,6 @@ if __name__ == "__main__":
         else:
             with open(args.mol_path, "rb") as f:
                 res = pickle.load(f)  # read input file
-            target_db = os.path.join(
-                os.path.dirname(args.mol_path), "generated_molecules.db"
-            )
     else:
         print(f"\n\nFusing .mol_dict files in folder {args.mol_path}...")
         mol_files = [f for f in os.listdir(args.mol_path) if f.endswith(".mol_dict")]
@@ -1004,7 +1001,8 @@ if __name__ == "__main__":
                 update_dict(res, cur_res)
         res = dict(sorted(res.items()))  # sort dictionary keys
         print(f"...done!")
-        target_db = os.path.join(args.mol_path, "generated_molecules.db")
+
+    target_db = os.path.join(args.mol_path, "generated_molecules.db")
 
     # compute array with valence of provided atom types
     max_type = max(args.valence[::2])
