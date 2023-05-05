@@ -39,13 +39,19 @@ def generation_loss(
         target = graphs.nodes.target_species_probs
         # stop = graphs.globals.stop (= 1 - sum(target))
 
-        max = e3nn.scatter_max(logits, nel=n_node, initial=0.0)
-        max_ext = e3nn.scatter_max(logits, nel=n_node, map_back=True, initial=0.0)
+        max = e3nn.scatter_max(jnp.max(logits, axis=1), nel=n_node, initial=0.0)
+        max_ext = e3nn.scatter_max(
+            jnp.max(logits, axis=1, keepdims=True),
+            nel=n_node,
+            map_back=True,
+            initial=0.0,
+        )
 
         loss_atom_type = -(
             -max + e3nn.scatter_sum(jnp.sum(target * logits, axis=-1), nel=n_node)
         ) + jnp.log(
-            jnp.exp(-max) + e3nn.scatter_sum(jnp.exp(logits - max_ext), nel=n_node)
+            jnp.exp(-max)
+            + e3nn.scatter_sum(jnp.sum(jnp.exp(logits - max_ext), axis=1), nel=n_node)
         )
         assert loss_atom_type.shape == (num_graphs,)
         return loss_atom_type
