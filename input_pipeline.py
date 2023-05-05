@@ -364,15 +364,13 @@ def _make_middle_fragment(rng, visited, graph, dist, n_species, nn_tolerance):
     min_dist = dist[mask].min()
     mask = mask & (dist < min_dist + nn_tolerance)
 
-    # target_species_probability
-    def f(focus_node):
+    n = jnp.zeros((n_nodes, n_species))
+    for focus_node in range(n_nodes):
         targets = receivers[(senders == focus_node) & mask]
-        return jnp.bincount(graph.nodes.species[targets], length=n_species)
-
-    target_species_probability = jax.vmap(f)(jnp.arange(n_nodes))
-    target_species_probability = target_species_probability / jnp.sum(
-        target_species_probability
-    )
+        n = n.at[focus_node].set(
+            jnp.bincount(graph.nodes.species[targets], length=n_species)
+        )
+    target_species_probability = n / jnp.sum(n)
 
     # pick a random focus node
     rng, k = jax.random.split(rng)

@@ -81,7 +81,7 @@ def segment_softmax_with_zero(
     zero_probs = jnp.exp(-maxs) / (partition + jnp.exp(-maxs))
 
     assert probs.shape == (num_elements, num_logits)
-    assert zero_probs.shape == (num_elements,)
+    assert zero_probs.shape == (num_segments,)
     return probs, zero_probs
 
 

@@ -179,8 +179,5 @@ def generation_loss(
     loss_atom_type = atom_type_loss()
     loss_position = position_loss() * (1 - graphs.globals.stop)
 
-    # Ignore position loss for graphs with less than, or equal to 3 atoms.
-    loss_position = jnp.where(graphs.n_node <= 3, 0, loss_position)
-
     total_loss = loss_atom_type + loss_position
     return total_loss, (loss_atom_type, loss_position)
