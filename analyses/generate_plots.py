@@ -9,6 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from schnetpack import Properties
 import seaborn as sns
 
 import sys
@@ -328,6 +329,37 @@ def plot_sample_complexity_curves(
         for split in results:
             for metric in metrics:
                 plot_metric(model, metric, split)
+
+
+def plot_atom_type_hist(
+        mol_path: str, outputdir: str, model: str
+):
+    """Creates a histogram of atom types for a given set of generated molecules."""
+    mol_dict = analysis.get_mol_dict(mol_path)
+
+    atom_type_list = np.array([])
+    for n_atoms in mol_dict:
+        for atoms in mol_dict[n_atoms][Properties.Z]:
+            atom_type_list = np.concatenate([atom_type_list, atoms])
+
+    atom_type_counts = {'H': 0, 'C': 0, 'N': 0, 'O': 0, 'F': 0}
+    element_numbers = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}
+    for atom_type in atom_type_list:
+        atom_type_counts[element_numbers[atom_type]] += 1
+
+    plt.bar(atom_type_counts.keys(), atom_type_counts.values())
+    # TODO make `model` auto-detected from path
+    plt.title(
+        f"{get_title_for_model(model)}: Distribution of Atom Types in Generated Molecules"
+    )
+
+    # Save figure.
+    os.makedirs(outputdir, exist_ok=True)
+    outputfile = os.path.join(
+        outputdir, f"{model}_atom_types.png"
+    )
+    plt.savefig(outputfile, bbox_inches="tight")
+    plt.close()
 
 
 def main(argv):
