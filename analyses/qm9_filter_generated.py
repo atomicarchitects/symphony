@@ -974,33 +974,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_file = args.print_file
 
-    # read input file or fuse dictionaries if mol_path is a folder
-    if not os.path.isdir(args.mol_path):
-        if not os.path.isfile(args.mol_path):
-            print(
-                f"\n\nThe specified data path ({args.mol_path}) is neither a file "
-                f"nor a directory! Please specify a different data path."
-            )
-            raise FileNotFoundError
-        else:
-            with open(args.mol_path, "rb") as f:
-                res = pickle.load(f)  # read input file
-    else:
-        print(f"\n\nFusing .mol_dict files in folder {args.mol_path}...")
-        mol_files = [f for f in os.listdir(args.mol_path) if f.endswith(".mol_dict")]
-        if len(mol_files) == 0:
-            print(
-                f"Could not find any .mol_dict files at {args.mol_path}! Please "
-                f"specify a different data path!"
-            )
-            raise FileNotFoundError
-        res = {}
-        for file in mol_files:
-            with open(os.path.join(args.mol_path, file), "rb") as f:
-                cur_res = pickle.load(f)
-                update_dict(res, cur_res)
-        res = dict(sorted(res.items()))  # sort dictionary keys
-        print(f"...done!")
+    res = analysis.get_mol_dict(args.mol_path)
 
     target_db = os.path.join(args.mol_path, "generated_molecules.db")
 

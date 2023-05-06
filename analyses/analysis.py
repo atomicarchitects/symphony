@@ -772,3 +772,35 @@ def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
         else:
             for k in d_upd[key]:
                 d[key][k] = np.append(d[key][k], d_upd[key][k], 0)
+
+
+def get_mol_dict(mol_path):
+    '''Read input file or fuse dictionaries if mol_path is a folder'''
+    if not os.path.isdir(mol_path):
+        if not os.path.isfile(mol_path):
+            print(
+                f"\n\nThe specified data path ({mol_path}) is neither a file "
+                f"nor a directory! Please specify a different data path."
+            )
+            raise FileNotFoundError
+        else:
+            with open(mol_path, "rb") as f:
+                res = pickle.load(f)  # read input file
+    else:
+        print(f"\n\nFusing .mol_dict files in folder {mol_path}...")
+        mol_files = [f for f in os.listdir(mol_path) if f.endswith(".mol_dict")]
+        if len(mol_files) == 0:
+            print(
+                f"Could not find any .mol_dict files at {mol_path}! Please "
+                f"specify a different data path!"
+            )
+            raise FileNotFoundError
+        res = {}
+        for file in mol_files:
+            with open(os.path.join(mol_path, file), "rb") as f:
+                cur_res = pickle.load(f)
+                update_dict(res, cur_res)
+        res = dict(sorted(res.items()))  # sort dictionary keys
+
+        print(f"...done!")
+        return res

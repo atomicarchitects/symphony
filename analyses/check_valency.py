@@ -9,8 +9,8 @@ import pickle
 import numpy as np
 import pandas as pd
 from schnetpack import Properties
-from analyses.analysis import update_dict
 
+from analyses.analysis import update_dict
 from analyses.utility_classes import Molecule
 
 
