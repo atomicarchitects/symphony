@@ -12,18 +12,20 @@ import qm9  # noqa: E402
 
 
 def main(
-    chunk: int = 2976,
-    num_seeds: int = 8,
-    root_dir: str = "data",
-    mode: str = "nn",
+    chunk: int,
+    start_seed: int,
+    end_seed: int,
+    root_dir: str,
+    mode: str,
 ):
     qm9_data = qm9.load_qm9("qm9_data")
-    processes = []
+    starts = list(range(0, len(qm9_data), chunk))
+    del qm9_data
 
     execution_time = []
-    starts = list(range(0, len(qm9_data), chunk))
+    processes = []
 
-    for seed in range(num_seeds):
+    for seed in range(start_seed, end_seed):
         for start in starts:
             end = start + chunk
             path = f"{root_dir}/fragments_{seed:02d}_{start:06d}_{end:06d}"
@@ -69,7 +71,7 @@ def main(
             execution_time.append(t1 - t0)
             print(f"Execution time: {t1 - t0:.0f} seconds")
             done = len(execution_time)
-            todo = len(starts) * num_seeds - done
+            todo = len(starts) * (end_seed - start_seed) - done
             print(
                 f"Estimated time remaining: {todo * np.mean(execution_time):.0f} seconds"
             )
@@ -82,7 +84,8 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--chunk", type=int, default=2976)
-    parser.add_argument("--num_seeds", type=int, default=8)
+    parser.add_argument("--start_seed", type=int, default=0)
+    parser.add_argument("--end_seed", type=int, default=8)
     parser.add_argument("--root_dir", type=str, default="data")
     parser.add_argument("--mode", type=str, default="nn")
     args = parser.parse_args()
