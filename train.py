@@ -32,7 +32,6 @@ from models import create_model
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
-    focus_loss: metrics.Average.from_output("focus_loss")
     atom_type_loss: metrics.Average.from_output("atom_type_loss")
     position_loss: metrics.Average.from_output("position_loss")
 
@@ -92,23 +91,22 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rng=None)
-        total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+        total_loss, (atom_type_loss, position_loss) = generation_loss(
             preds=preds, graphs=graphs, **loss_kwargs
         )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
-        return mean_loss, (total_loss, focus_loss, atom_type_loss, position_loss, mask)
+        return mean_loss, (total_loss, atom_type_loss, position_loss, mask)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_loss, atom_type_loss, position_loss, mask),
+        (total_loss, atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
-        focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
         position_loss=position_loss,
         mask=mask,
@@ -126,7 +124,7 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
     preds = get_predictions(eval_state, graphs, rng)
-    total_loss, (focus_loss, atom_type_loss, position_loss) = generation_loss(
+    total_loss, (atom_type_loss, position_loss) = generation_loss(
         preds=preds, graphs=graphs, **loss_kwargs
     )
 
@@ -134,7 +132,6 @@ def evaluate_step(
     mask = jraph.get_graph_padding_mask(graphs)
     return Metrics.single_from_model_output(
         total_loss=total_loss,
-        focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
         position_loss=position_loss,
         mask=mask,
