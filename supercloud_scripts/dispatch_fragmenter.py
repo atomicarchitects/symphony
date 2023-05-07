@@ -1,9 +1,10 @@
 import argparse
 import os
 import subprocess
-
-# import time
 import sys
+import time
+
+import numpy as np
 
 sys.path.append("..")
 
@@ -14,8 +15,11 @@ def main(chunk: int = 2976, num_seeds: int = 8, root_dir: str = "data"):
     qm9_data = qm9.load_qm9("qm9_data")
     processes = []
 
+    execution_time = []
+    starts = list(range(0, len(qm9_data), chunk))
+
     for seed in range(num_seeds):
-        for start in range(0, len(qm9_data), chunk):
+        for start in starts:
             end = start + chunk
             path = f"{root_dir}/fragments_{seed:02d}_{start:06d}_{end:06d}"
 
@@ -24,6 +28,7 @@ def main(chunk: int = 2976, num_seeds: int = 8, root_dir: str = "data"):
                 continue
 
             print(f"Dispatching {path}")
+            t0 = time.time()
 
             # run non-blocking
             p = subprocess.Popen(
@@ -52,6 +57,15 @@ def main(chunk: int = 2976, num_seeds: int = 8, root_dir: str = "data"):
 
             # actually wait for the process to finish
             p.wait()
+
+            t1 = time.time()
+            execution_time.append(t1 - t0)
+            print(f"Execution time: {t1 - t0:.0f} seconds")
+            done = len(execution_time)
+            todo = len(starts) * num_seeds - done
+            print(
+                f"Estimated time remaining: {todo * np.mean(execution_time):.0f} seconds"
+            )
 
     print("Waiting for processes to finish...")
     for p in processes:
