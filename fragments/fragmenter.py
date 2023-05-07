@@ -16,9 +16,9 @@ import qm9  # noqa: E402
 
 
 def main(
-    seed: int = 0,
-    start: int = 0,
-    end: int = 3000,
+    seed: int,
+    start: int,
+    end: int,
     output: str = "fragments.pkl",
     mode: str = "nn",
 ):
@@ -106,8 +106,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--start", type=int, default=None)
-    parser.add_argument("--end", type=int, default=None)
+    parser.add_argument("--start", type=int)
+    parser.add_argument("--end", type=int)
     parser.add_argument("--output", type=str, default="fragments")
     parser.add_argument("--mode", type=str, default="nn")
     args = parser.parse_args()

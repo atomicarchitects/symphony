@@ -1,10 +1,13 @@
 import argparse
 import os
-import subprocess
+
+# import subprocess
 import sys
 import time
 
 import numpy as np
+
+import fragmenter
 
 sys.path.append("..")
 
@@ -38,34 +41,42 @@ def main(
             t0 = time.time()
 
             # run non-blocking
-            p = subprocess.Popen(
-                [
-                    # "srun",
-                    # "--mem=4G",
-                    # "--ntasks=1",
-                    # "--cpus-per-task=8",
-                    # "--gres=gpu:1",
-                    "python",
-                    "fragmenter.py",
-                    "--seed",
-                    str(seed),
-                    "--start",
-                    str(start),
-                    "--end",
-                    str(end),
-                    "--output",
-                    path,
-                    "--mode",
-                    mode,
-                ]
-            )
-            processes.append(p)
+            # p = subprocess.Popen(
+            #     [
+            #         # "srun",
+            #         # "--mem=4G",
+            #         # "--ntasks=1",
+            #         # "--cpus-per-task=8",
+            #         # "--gres=gpu:1",
+            #         "python",
+            #         "fragmenter.py",
+            #         "--seed",
+            #         str(seed),
+            #         "--start",
+            #         str(start),
+            #         "--end",
+            #         str(end),
+            #         "--output",
+            #         path,
+            #         "--mode",
+            #         mode,
+            #     ]
+            # )
+            # processes.append(p)
 
             # wait a bit to avoid overloading the scheduler
             # time.sleep(10.0)
 
             # actually wait for the process to finish
-            p.wait()
+            # p.wait()
+
+            fragmenter.main(
+                seed=seed,
+                start=start,
+                end=end,
+                output=path,
+                mode=mode,
+            )
 
             t1 = time.time()
             execution_time.append(t1 - t0)
