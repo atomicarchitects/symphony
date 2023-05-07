@@ -15,7 +15,13 @@ import input_pipeline  # noqa: E402
 import qm9  # noqa: E402
 
 
-def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragments.pkl"):
+def main(
+    seed: int = 0,
+    start: int = 0,
+    end: int = 3000,
+    output: str = "fragments.pkl",
+    mode: str = "nn",
+):
     seed = jax.random.PRNGKey(seed)
     molecules = qm9.load_qm9("qm9_data")
 
@@ -26,7 +32,6 @@ def main(seed: int = 0, start: int = 0, end: int = 3000, output: str = "fragment
     nn_tolerance = 0.125  # Angstroms
     cutoff = 5.0  # Angstroms
     max_radius = 2.03  # Angstroms
-    mode = "radius"
 
     signature = {
         # nodes
@@ -104,5 +109,6 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, default=None)
     parser.add_argument("--end", type=int, default=None)
     parser.add_argument("--output", type=str, default="fragments")
+    parser.add_argument("--mode", type=str, default="nn")
     args = parser.parse_args()
     main(**vars(args))

@@ -11,7 +11,12 @@ sys.path.append("..")
 import qm9  # noqa: E402
 
 
-def main(chunk: int = 2976, num_seeds: int = 8, root_dir: str = "data"):
+def main(
+    chunk: int = 2976,
+    num_seeds: int = 8,
+    root_dir: str = "data",
+    mode: str = "nn",
+):
     qm9_data = qm9.load_qm9("qm9_data")
     processes = []
 
@@ -48,6 +53,8 @@ def main(chunk: int = 2976, num_seeds: int = 8, root_dir: str = "data"):
                     str(end),
                     "--output",
                     path,
+                    "--mode",
+                    mode,
                 ]
             )
             processes.append(p)
@@ -77,5 +84,6 @@ if __name__ == "__main__":
     parser.add_argument("--chunk", type=int, default=2976)
     parser.add_argument("--num_seeds", type=int, default=8)
     parser.add_argument("--root_dir", type=str, default="data")
+    parser.add_argument("--mode", type=str, default="nn")
     args = parser.parse_args()
     main(**vars(args))
