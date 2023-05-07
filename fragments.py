@@ -42,20 +42,30 @@ def generate_fragments(
         axis=1,
     )  # [n_edge]
 
-    rng, visited_nodes, frag = _make_first_fragment(
-        rng, graph, dist, n_species, nn_tolerance, max_radius, mode
-    )
-    yield frag
-
-    for _ in range(n - 2):
-        rng, visited_nodes, frag = _make_middle_fragment(
-            rng, visited_nodes, graph, dist, n_species, nn_tolerance, max_radius, mode
+    try:
+        rng, visited_nodes, frag = _make_first_fragment(
+            rng, graph, dist, n_species, nn_tolerance, max_radius, mode
         )
         yield frag
 
-    assert len(visited_nodes) == n
+        for _ in range(n - 2):
+            rng, visited_nodes, frag = _make_middle_fragment(
+                rng,
+                visited_nodes,
+                graph,
+                dist,
+                n_species,
+                nn_tolerance,
+                max_radius,
+                mode,
+            )
+            yield frag
+    except ValueError:
+        pass
+    else:
+        assert len(visited_nodes) == n
 
-    yield _make_last_fragment(graph, n_species)
+        yield _make_last_fragment(graph, n_species)
 
 
 def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, mode):
@@ -73,6 +83,9 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, 
         del min_dist
     if mode == "radius":
         targets = graph.receivers[(graph.senders == first_node) & (dist < max_radius)]
+
+    if len(targets) == 0:
+        raise ValueError("No targets found.")
 
     species_probability = (
         jnp.zeros((graph.nodes.positions.shape[0], n_species))
@@ -118,6 +131,10 @@ def _make_middle_fragment(
         n = n.at[focus_node].set(
             jnp.bincount(graph.nodes.species[targets], length=n_species)
         )
+
+    if jnp.sum(n) == 0:
+        raise ValueError("No targets found.")
+
     target_species_probability = n / jnp.sum(n)
 
     # pick a random focus node
