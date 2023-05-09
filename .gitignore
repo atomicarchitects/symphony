@@ -183,3 +183,5 @@ cached/
 
 .vscode
 *.txt
+*.xyz
+*.mol_dict
