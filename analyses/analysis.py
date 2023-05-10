@@ -1,6 +1,7 @@
 """Loads the model from a workdir to perform analysis."""
 
 import glob
+import itertools
 import os
 import pickle
 import sys
@@ -771,3 +772,12 @@ def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
         else:
             for k in d_upd[key]:
                 d[key][k] = np.append(d[key][k], d_upd[key][k], 0)
+
+def get_interatomic_distances(molecule: ase.Atoms) -> np.ndarray:
+    """Returns the interatomic distances of the given molecule."""
+    distances = []
+    for atom1, atom2 in itertools.combinations(molecule.positions, 2):
+        distances.append(np.linalg.norm(atom1 - atom2))
+    return np.array(distances)
+
+# def check_distances(molecule: ase.Atoms)
