@@ -60,7 +60,7 @@ def get_interatomic_distances(positions) -> np.ndarray:
     return np.array(distances)
 
 
-def check_distances(positions, min_dist: 0.9, max_dist: 10) -> bool:
+def check_distances(positions, min_dist: 1, max_dist: 10) -> bool:
     """
     Checks if the molecule has any interatomic distances outside the given range.
     Args:
