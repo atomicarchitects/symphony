@@ -776,13 +776,17 @@ class Predictor(hk.Module):
             focus_node_embeddings, target_species
         )
 
+        # Scale by inverse temperature.
+        position_coeffs = inverse_temperature * position_coeffs
+        position_logits = inverse_temperature * position_logits
+
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         max_logit = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
         position_probs = position_logits.apply(
-            lambda logit: jnp.exp(inverse_temperature * (logit - max_logit))
+            lambda logit: jnp.exp(logit - max_logit)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         radii_probs = position_probs.integrate().array.squeeze(
