@@ -296,12 +296,22 @@ def generation_loss(
             log_predicted_dist_coeffs: e3nn.SphericalSignal,
         ):
             """Computes the L2 loss between the logits of two distributions on the spheres."""
-            diff_norms = e3nn.norm(
-                log_true_angular_coeffs - log_predicted_dist_coeffs,
+            assert log_true_angular_coeffs.irreps == log_predicted_dist_coeffs.irreps
+
+            log_true_radius_weights = jnp.log(true_radius_weights)[:, None]
+            log_true_dist_coeffs_array = jnp.tile(log_true_angular_coeffs.array, (num_radii, 1))
+            log_true_dist_coeffs_array = jnp.concatenate([log_true_radius_weights + log_true_dist_coeffs_array[:, :1], log_true_dist_coeffs_array[:, 1:]], axis=1)
+            log_true_dist_coeffs = e3nn.IrrepsArray(log_predicted_dist_coeffs.irreps, log_true_dist_coeffs_array)
+
+            assert log_true_dist_coeffs.shape == log_predicted_dist_coeffs.shape, (log_true_dist_coeffs.shape, log_predicted_dist_coeffs.shape)
+
+            norms_of_differences = e3nn.norm(
+                log_true_dist_coeffs - log_predicted_dist_coeffs,
                 per_irrep=False,
                 squared=True,
             ).array.squeeze(-1)
-            return jnp.sum(true_radius_weights * diff_norms)
+
+            return jnp.sum(norms_of_differences)
 
         position_coeffs = preds.globals.position_coeffs
         target_positions = graphs.globals.target_positions
