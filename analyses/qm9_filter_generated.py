@@ -24,7 +24,7 @@ sys.path.append("..")
 from analyses import analysis
 from analyses.check_valency import check_valency
 from analyses.utility_classes import Molecule, ConnectivityCompressor
-from analyses.utility_functions import run_threaded, print_atom_bond_ring_stats, update_dict
+from analyses.utility_functions import run_threaded
 
 
 def get_parser():
@@ -1372,7 +1372,3 @@ if __name__ == "__main__":
     metric_df_dict["generated_stats"] = stats_df
     with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
         pickle.dump(metric_df_dict, f)
-
-    # print average atom, bond, and ring count statistics of generated molecules
-    # stored in the database and of the training molecules
-    print_atom_bond_ring_stats(target_db, args.model_path, args.data_path)

@@ -5,6 +5,7 @@
 
 import os
 import json
+import pickle
 import numpy as np
 import torch
 from torch.autograd import Variable
@@ -199,7 +200,7 @@ def print_equally_spaced(head, value, space=13):
     print(f"{head}:{space}{value}")
 
 
-def print_accumulated_staticstics(
+def print_accumulated_statistics(
     stats,
     stat_heads,
     name="generated",
@@ -281,7 +282,7 @@ def print_accumulated_staticstics(
             )
 
 
-def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path):
+def print_atom_bond_ring_stats(generated_data_path, model_path):
     """
     Print average atom, bond, and ring count statistics of generated molecules
     in the provided database and reference training molecules.
@@ -289,13 +290,11 @@ def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path)
     Args:
         generated_data_path (str): path to database with generated molecules
         model_path (str): path to directory containing the model used to generate the
-            molecules (it should contain a split.npz file which is used to identify
-            training, validation, and test molecules and an args.json file containing
-            the arguments of the training procedure)
+            molecules
         train_data_path (str): path to database with training data molecules
     """
     # load data of generated molecules
-    stats_path = os.path.splitext(generated_data_path)[0] + f"_statistics.npz"
+    stats_path = os.path.splitext(generated_data_path)[0] + f"_statistics.pkl"
     if not os.path.isfile(stats_path):
         print(
             f"Statistics of generated molecules not found (expected it at "
@@ -303,22 +302,10 @@ def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path)
             f"holding the generated molecules!"
         )
         return
-    stats_dict = np.load(stats_path)
-    stats = stats_dict["stats"]
-    stat_heads = stats_dict["stat_heads"]
-
-    # load data of training molecules
-    training_stats_path = os.path.splitext(train_data_path)[0] + f"_statistics.npz"
-    if not os.path.isfile(training_stats_path):
-        print(
-            f"Statistics of training data not found (expected it at "
-            f"{training_stats_path}).\nWill only print statistics of generated "
-            f"molecules..."
-        )
-        have_train_stats = False
-    else:
-        have_train_stats = True
-        train_stat_dict = np.load(training_stats_path)
+    with open(stats_path, "rb") as f:
+        stats_dict = pickle.load(f)
+    stats = stats_dict["generated_stats"]["stats"]
+    stat_heads = stats_dict["generated_stats"].columns
 
     # load split file to identify training, validation, and test molecules
     config, _, _, _ = analysis.load_from_workdir(model_path)
@@ -326,18 +313,11 @@ def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path)
 
     # Atom type statistics
     descr = " concerning atom types"
-    print_accumulated_staticstics(stats, stat_heads, name="generated molecules" + descr)
-    if have_train_stats:
-        print_accumulated_staticstics(
-            train_stat_dict["stats"],
-            train_stat_dict["stat_heads"],
-            name="training molecules" + descr,
-            set=train_idx,
-        )
+    print_accumulated_statistics(stats, stat_heads, name="generated molecules" + descr)
 
     # Atom bond statistics
     descr = " concerning atom bonds"
-    print_accumulated_staticstics(
+    print_accumulated_statistics(
         stats,
         stat_heads,
         fields=(),
@@ -361,52 +341,17 @@ def print_atom_bond_ring_stats(generated_data_path, model_path, train_data_path)
             "Triple": ["C3C", "C3N"],
         },
     )
-    if have_train_stats:
-        print_accumulated_staticstics(
-            train_stat_dict["stats"],
-            train_stat_dict["stat_heads"],
-            fields=(),
-            name="training molecules" + descr,
-            set=train_idx,
-            additive_fields={
-                "Single": [
-                    "H1C",
-                    "H1N",
-                    "H1O",
-                    "C1C",
-                    "C1N",
-                    "C1O",
-                    "C1F",
-                    "N1N",
-                    "N1O",
-                    "N1F",
-                    "O1O",
-                    "O1F",
-                ],
-                "Double": ["C2C", "C2N", "C2O", "N2N", "N2O"],
-                "Triple": ["C3C", "C3N"],
-            },
-        )
 
     # Ring statistics
     descr = " concerning ring structures"
     fields = ["R3", "R4", "R5", "R6", "R7", "R8", "R>8"]
-    print_accumulated_staticstics(
+    print_accumulated_statistics(
         stats,
         stat_heads,
         fields=fields,
         name="generated molecules" + descr,
         print_stats=["molecules_with"],
     )
-    if have_train_stats:
-        print_accumulated_staticstics(
-            train_stat_dict["stats"],
-            train_stat_dict["stat_heads"],
-            fields=fields,
-            name="training molecules" + descr,
-            set=train_idx,
-            print_stats=["molecules_with"],
-        )
 
 
 def get_random_walk(mol_dict, stop_token=10, seed=None):
