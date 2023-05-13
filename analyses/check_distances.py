@@ -15,6 +15,15 @@ from schnetpack import Properties
 from analyses.analysis import update_dict
 
 
+BOND_LENGTHS = [
+    [0.7,  1.1,  1.0,  0.97, 0.91],
+    [1.1,  1.2,  1.17, 1.1,  1.27],
+    [1.0,  1.17, 1.09, 1.15, 1.3],
+    [0.97, 1.1,  1.15, 1.2,  1.35],
+    [0.91, 1.27, 1.3,  1.35, 1.4]
+]
+
+
 def get_parser():
     """Setup parser for command line arguments"""
     main_parser = argparse.ArgumentParser()

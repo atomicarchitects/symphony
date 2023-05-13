@@ -33,9 +33,7 @@ def get_parser():
     main_parser.add_argument(
         "mol_path",
         help="Path to generated molecules in .mol_dict format, "
-        'a database called "generated_molecules.db" with the '
-        "filtered molecules along with computed statistics "
-        '("generated_molecules_statistics.pkl") will be '
+        'computed statistics ("generated_molecules_statistics.pkl") will be '
         "stored in the same directory as the input file/s "
         "(if the path points to a directory, all .mol_dict "
         "files in the directory will be merged and filtered "
@@ -976,8 +974,6 @@ if __name__ == "__main__":
 
     res = analysis.get_mol_dict(args.mol_path)
 
-    target_db = os.path.join(args.mol_path, "generated_molecules.db")
-
     # compute array with valence of provided atom types
     max_type = max(args.valence[::2])
     valence = np.zeros(max_type + 1, dtype=int)
@@ -1276,40 +1272,6 @@ if __name__ == "__main__":
         shrunk_res["stats"] = shrunk_stats
         res = shrunk_res
 
-    # store results in new database
-    # get filename that is not yet taken for db
-    if os.path.isfile(target_db):
-        file_name, _ = os.path.splitext(target_db)
-        expand = 0
-        while True:
-            expand += 1
-            new_file_name = file_name + "_" + str(expand)
-            if os.path.isfile(new_file_name + ".db"):
-                continue
-            else:
-                target_db = new_file_name + ".db"
-                break
-    # open db
-    with connect(target_db) as conn:
-        # store metadata
-        conn.metadata = {
-            "n_generated": int(n_generated),
-            "n_non_unique": int(n_non_unique),
-            "n_valid": int(n_valid_mol),
-            "non_unique_removed_from_valid": "unique" in args.filters,
-        }
-        # store molecules
-        for n_atoms in res:
-            if isinstance(n_atoms, str) or n_atoms == 0:
-                continue
-            d = res[n_atoms]
-            all_pos = d[Properties.R]
-            all_numbers = d[Properties.Z]
-            all_con_mats = d["connectivity"]
-            for pos, num, con_mat in zip(all_pos, all_numbers, all_con_mats):
-                at = Atoms(num, positions=pos)
-                conn.write(at, data={"con_mat": con_mat})
-
     # store gathered statistics in metrics dataframe
     stats_df = pd.DataFrame(
         np.array(res["stats"]).T, columns=np.array(res["stat_heads"]).squeeze()
@@ -1370,5 +1332,19 @@ if __name__ == "__main__":
 
     metric_df_dict["generated_stats_overall"] = cum_stats_df
     metric_df_dict["generated_stats"] = stats_df
-    with open(os.path.splitext(target_db)[0] + f"_statistics.pkl", "wb") as f:
+
+    # store results in pickle file
+    stats_path = os.path.join(args.mol_path, "generated_molecules_statistics.pkl")
+    if os.path.isfile(stats_path):
+        file_name, _ = os.path.splitext(stats_path)
+        expand = 0
+        while True:
+            expand += 1
+            new_file_name = file_name + "_" + str(expand)
+            if os.path.isfile(new_file_name + ".pkl"):
+                continue
+            else:
+                stats_path = new_file_name + ".pkl"
+                break
+    with open(stats_path, "wb") as f:
         pickle.dump(metric_df_dict, f)

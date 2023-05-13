@@ -4,7 +4,6 @@ from typing import Tuple
 import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
-import optax
 
 import datatypes
 import models
@@ -26,53 +25,32 @@ def generation_loss(
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
-
-    def focus_loss() -> jnp.ndarray:
-        """Computes the loss over focus probabilities."""
-        assert (
-            preds.nodes.focus_logits.shape
-            == graphs.nodes.focus_probability.shape
-            == (num_nodes,)
-        )
-
-        n_node = graphs.n_node
-        focus_logits = preds.nodes.focus_logits
-
-        # Compute sum(qv * fv) for each graph,
-        # where fv is the focus_logits for node v,
-        # and qv is the focus_probability for node v.
-        loss_focus = e3nn.scatter_sum(
-            -graphs.nodes.focus_probability * focus_logits, nel=n_node
-        )
-
-        # This is basically log(1 + sum(exp(fv))) for each graph.
-        # But we subtract out the maximum fv per graph for numerical stability.
-        focus_logits_max = e3nn.scatter_max(focus_logits, nel=n_node, initial=0.0)
-        focus_logits_max_expanded = e3nn.scatter_max(
-            focus_logits, nel=n_node, map_back=True, initial=0.0
-        )
-        focus_logits -= focus_logits_max_expanded
-        loss_focus += focus_logits_max + jnp.log(
-            jnp.exp(-focus_logits_max)
-            + e3nn.scatter_sum(jnp.exp(focus_logits), nel=n_node)
-        )
-
-        assert loss_focus.shape == (num_graphs,)
-        return loss_focus
+    n_node = graphs.n_node
 
     def atom_type_loss() -> jnp.ndarray:
         """Computes the loss over atom types."""
-        assert (
-            preds.globals.target_species_logits.shape
-            == graphs.globals.target_species_probability.shape
-            == (num_graphs, num_elements)
-        )
+        logits = preds.nodes.target_species_logits
+        target = graphs.nodes.target_species_probs
+        # stop = graphs.globals.stop (= 1 - sum(target))
 
-        loss_atom_type = optax.softmax_cross_entropy(
-            logits=preds.globals.target_species_logits,
-            labels=graphs.globals.target_species_probability,
-        )
+        assert logits.shape == target.shape == (num_nodes, num_elements)
 
+        max = e3nn.scatter_max(jnp.max(logits, axis=1), nel=n_node, initial=0.0)
+        max_ext = e3nn.scatter_max(
+            jnp.max(logits, axis=1, keepdims=True),
+            nel=n_node,
+            map_back=True,
+            initial=0.0,
+        )
+        assert max.shape == (num_graphs,)
+        assert max_ext.shape == (num_nodes, 1)
+
+        loss_atom_type = -(
+            -max + e3nn.scatter_sum(jnp.sum(target * logits, axis=-1), nel=n_node)
+        ) + jnp.log(
+            jnp.exp(-max)
+            + e3nn.scatter_sum(jnp.sum(jnp.exp(logits - max_ext), axis=1), nel=n_node)
+        )
         assert loss_atom_type.shape == (num_graphs,)
         return loss_atom_type
 
@@ -198,16 +176,8 @@ def generation_loss(
         return loss_position
 
     # If this is the last step in the generation process, we do not have to predict atom type and position.
-    loss_focus = focus_loss()
-    loss_atom_type = atom_type_loss() * (1 - graphs.globals.stop)
+    loss_atom_type = atom_type_loss()
     loss_position = position_loss() * (1 - graphs.globals.stop)
 
-    # Ignore position loss for graphs with less than, or equal to 3 atoms.
-    loss_position = jnp.where(graphs.n_node <= 3, 0, loss_position)
-
-    total_loss = loss_focus + loss_atom_type + loss_position
-    return total_loss, (
-        loss_focus,
-        loss_atom_type,
-        loss_position,
-    )
+    total_loss = loss_atom_type + loss_position
+    return total_loss, (loss_atom_type, loss_position)
