@@ -298,10 +298,14 @@ def generation_loss(
             """Computes the L2 loss between the logits of two distributions on the spheres."""
             assert log_true_angular_coeffs.irreps == log_predicted_dist_coeffs.irreps
 
-            log_true_radius_weights = jnp.log(true_radius_weights)[:, None]
-            log_true_dist_coeffs_array = jnp.tile(log_true_angular_coeffs.array, (num_radii, 1))
-            log_true_dist_coeffs_array = jnp.concatenate([log_true_radius_weights + log_true_dist_coeffs_array[:, :1], log_true_dist_coeffs_array[:, 1:]], axis=1)
-            log_true_dist_coeffs = e3nn.IrrepsArray(log_predicted_dist_coeffs.irreps, log_true_dist_coeffs_array)
+            log_true_radius_weights = jnp.log(true_radius_weights)
+            log_true_radius_weights = e3nn.IrrepsArray("0e", log_true_radius_weights[:, None])
+
+            log_true_angular_coeffs_tiled = jnp.tile(log_true_angular_coeffs.array, (num_radii, 1))
+            log_true_angular_coeffs_tiled = e3nn.IrrepsArray(log_true_angular_coeffs.irreps, log_true_angular_coeffs_tiled)
+
+            log_true_dist_coeffs = e3nn.concatenate([log_true_radius_weights, log_true_angular_coeffs_tiled], axis=1)
+            log_true_dist_coeffs = e3nn.sum(log_true_dist_coeffs.regroup(), axis=-1)
 
             assert log_true_dist_coeffs.shape == log_predicted_dist_coeffs.shape, (log_true_dist_coeffs.shape, log_predicted_dist_coeffs.shape)
 
