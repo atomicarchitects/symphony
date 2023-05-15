@@ -101,7 +101,11 @@ def generate_molecules(
     def get_predictions(
         fragment: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
+<<<<<<< HEAD
         fragments = jraph.pad_with_graphs(fragment, n_node=40, n_edge=2048, n_graph=2)
+=======
+        fragments = jraph.pad_with_graphs(fragment, n_node=40, n_edge=1600, n_graph=2)
+>>>>>>> 3b3b5d9db5a6c2bfd2ea7dab6501b0dfb53db91c
         preds = apply_fn(params, rng, fragments, beta)
 
         # Remove the batch dimension.
