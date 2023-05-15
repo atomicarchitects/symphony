@@ -195,8 +195,10 @@ def get_unbatched_qm9_datasets(
     filenames = [
         os.path.join(config.root_dir, f)
         for f in filenames
-        if f.startswith("fragments_seed")
+        if f.startswith("fragments_")
     ]
+    if len(filenames) == 0:
+        raise ValueError(f"No files found in {config.root_dir}.")
 
     # Partition the filenames into train, val, and test.
     def filter_by_molecule_number(
@@ -278,15 +280,12 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
         nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
-            focus_probability=get_tensor_spec(graph.nodes.focus_probability),
+            target_species_probs=get_tensor_spec(graph.nodes.target_species_probs),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=get_tensor_spec(graph.globals.stop),
             target_positions=get_tensor_spec(graph.globals.target_positions),
             target_species=get_tensor_spec(graph.globals.target_species),
-            target_species_probability=get_tensor_spec(
-                graph.globals.target_species_probability
-            ),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -300,7 +299,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     """Converts a dictionary of tf.Tensors to a GraphsTuple."""
     positions = graph["positions"]
     species = graph["species"]
-    focus_probability = graph["focus_probability"]
+    target_species_probs = graph["target_species_probs"]
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
@@ -309,11 +308,12 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     stop = graph["stop"]
     target_positions = graph["target_positions"]
     target_species = graph["target_species"]
-    target_species_probability = graph["target_species_probability"]
 
     return jraph.GraphsTuple(
         nodes=datatypes.FragmentsNodes(
-            positions=positions, species=species, focus_probability=focus_probability
+            positions=positions,
+            species=species,
+            target_species_probs=target_species_probs,
         ),
         edges=edges,
         receivers=receivers,
@@ -322,7 +322,6 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             stop=stop,
             target_positions=target_positions,
             target_species=target_species,
-            target_species_probability=target_species_probability,
         ),
         n_node=n_node,
         n_edge=n_edge,

@@ -9,9 +9,12 @@ def get_root_dir(dataset: str) -> Optional[str]:
     """Get the root directory for the QM9 dataset."""
     if dataset == "qm9":
         hostname, username = os.uname()[1], os.environ.get("USER")
+        if hostname == "radish":
+            return "/data/NFS/radish/qm9_fragments/radius"
         if hostname == "potato.mit.edu":
             if username == "songk":
                 return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
+            return "/radish/qm9_fragments/radius"
             return "/home/ameyad/qm9_data_tf/data_tf2"
         elif username == "ameyad":
             return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
