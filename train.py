@@ -152,6 +152,23 @@ def generation_loss(
         radius_weights += 1e-10
         return radius_weights / jnp.sum(radius_weights)
 
+    def target_position_to_log_angular_coeffs(
+        target_position: jnp.ndarray,
+    ) -> e3nn.IrrepsArray:
+        """Returns the temperature-scaled angular distribution for a target position."""
+        # Compute the true distribution over positions,
+        # described by a smooth approximation of a delta function at the target positions.
+        norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
+        target_position_unit_vector = target_position / jnp.where(
+            norm == 0, 1, norm
+        )
+        return target_position_inverse_temperature * e3nn.s2_dirac(
+            target_position_unit_vector,
+            lmax=preds.globals.position_coeffs.irreps.lmax,
+            p_val=1,
+            p_arg=-1,
+        )
+
     def position_loss_with_kl_divergence() -> jnp.ndarray:
         """Computes the loss over position probabilities using the KL divergence."""
 
@@ -165,21 +182,6 @@ def generation_loss(
         def safe_log(x: jnp.ndarray) -> jnp.ndarray:
             """Computes the log of x, replacing 0 with 1 for numerical stability."""
             return jnp.log(jnp.where(x == 0, 1.0, x))
-
-        def target_position_to_log_angular_coeffs(
-            target_position: jnp.ndarray,
-        ) -> e3nn.IrrepsArray:
-            """Returns the temperature-scaled angular distribution for a target position."""
-            # Compute the true distribution over positions,
-            # described by a smooth approximation of a delta function at the target positions.
-            norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
-            target_position_unit_vector = target_position / jnp.where(
-                norm == 0, 1, norm
-            )
-            target_position_unit_vector = e3nn.IrrepsArray(
-                "1o", target_position_unit_vector
-            )
-            return target_position_inverse_temperature * target_position_unit_vector
 
         def kl_divergence_on_spheres(
             true_radius_weights: jnp.ndarray,
@@ -268,26 +270,6 @@ def generation_loss(
 
     def position_loss_with_l2() -> jnp.ndarray:
         """Computes the loss over position probabilities using the L2 loss on the logits."""
-
-        def target_position_to_log_angular_coeffs(
-            target_position: jnp.ndarray,
-        ) -> e3nn.IrrepsArray:
-            """Returns the temperature-scaled angular distribution for a target position."""
-            # Compute the true distribution over positions,
-            # described by a smooth approximation of a delta function at the target positions.
-            norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
-            target_position_unit_vector = target_position / jnp.where(
-                norm == 0, 1, norm
-            )
-            target_position_unit_vector = e3nn.IrrepsArray(
-                "1o", target_position_unit_vector
-            )
-            return target_position_inverse_temperature * e3nn.s2_dirac(
-                target_position_unit_vector,
-                lmax=position_coeffs.irreps.lmax,
-                p_val=1,
-                p_arg=-1,
-            )
 
         def l2_loss_on_spheres(
             true_radius_weights: jnp.ndarray,
