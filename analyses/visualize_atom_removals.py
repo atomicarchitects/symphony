@@ -101,7 +101,7 @@ def visualize_atom_removals(
     # Create the output directory where HTML files will be saved.
     step_name = "step=best" if step == -1 else f"step={step}"
     outputdir = os.path.join(
-        FLAGS.outputdir,
+        outputdir,
         "visualizations",
         "atom_removal",
         name,
@@ -149,6 +149,8 @@ def visualize_atom_removals(
         f"{molecule_name}_seed={seed}.html",
     )
     fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
+    return fig_all
 
 
 def main(unused_argv: Sequence[str]) -> None:

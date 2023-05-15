@@ -27,7 +27,6 @@ from flax.training import train_state
 import datatypes
 import input_pipeline_tf
 import models
-from models import create_model
 
 
 @flax.struct.dataclass
@@ -535,7 +534,7 @@ def train_and_evaluate(
     logging.info("Initializing network.")
     train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    net = create_model(config, run_in_evaluation_mode=False)
+    net = models.create_model(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
@@ -552,7 +551,7 @@ def train_and_evaluate(
     # Create a corresponding evaluation state.
     # We set run_in_evaluation_mode as False,
     # because we want to evaluate how the model performs on unseen data.
-    eval_net = create_model(config, run_in_evaluation_mode=False)
+    eval_net = models.create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.

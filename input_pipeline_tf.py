@@ -212,10 +212,7 @@ def get_unbatched_qm9_datasets(
     # Number of molecules for training can be smaller than the chunk size.
     train_on_split_smaller_than_chunk = config.get("train_on_split_smaller_than_chunk")
     if train_on_split_smaller_than_chunk:
-        train_molecules = (
-            config.train_molecules[0],
-            max(config.train_molecules[1], 2976),
-        )
+        train_molecules = (0, 2976)
     else:
         train_molecules = config.train_molecules
     files_by_split = {
@@ -231,9 +228,9 @@ def get_unbatched_qm9_datasets(
             logging.info(
                 "Training on a split of the training set smaller than a single chunk."
             )
-            if config.train_molecules[0] != 0:
+            if config.train_molecules[1] >= 2976:
                 raise ValueError(
-                    "config.train_molecules[0] must be 0 if train_on_split_smaller_than_chunk is True."
+                    "config.train_molecules[1] must be less than 2976 if train_on_split_smaller_than_chunk is True."
                 )
 
             dataset_split = tf.data.Dataset.load(files_split[0])
@@ -241,8 +238,10 @@ def get_unbatched_qm9_datasets(
             num_steps_to_take = None
             for step, molecule in enumerate(dataset_split):
                 if molecule["n_node"][0] == 1:
+                    if num_molecules_seen == config.train_molecules[0]:
+                        num_steps_to_skip = step
                     if num_molecules_seen == config.train_molecules[1]:
-                        num_steps_to_take = step
+                        num_steps_to_take = step - num_steps_to_skip
                         break
                     num_molecules_seen += 1
 
@@ -251,7 +250,7 @@ def get_unbatched_qm9_datasets(
                     "Could not find the correct number of molecules in the first chunk."
                 )
 
-            dataset_split = dataset_split.take(num_steps_to_take)
+            dataset_split = dataset_split.skip(num_steps_to_skip).take(num_steps_to_take)
 
         # This is usually the case.
         else:
