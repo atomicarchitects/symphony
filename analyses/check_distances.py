@@ -15,13 +15,25 @@ from schnetpack import Properties
 from analyses.analysis import update_dict
 
 
-BOND_LENGTHS = [
-    [0.7,  1.1,  1.0,  0.97, 0.91],
-    [1.1,  1.2,  1.17, 1.1,  1.27],
-    [1.0,  1.17, 1.09, 1.15, 1.3],
-    [0.97, 1.1,  1.15, 1.2,  1.35],
-    [0.91, 1.27, 1.3,  1.35, 1.4]
-]
+# Bond lengths from:
+# http://www.wiredchemist.com/chemistry/data/bond_energies_lengths.html
+# And:
+# http://chemistry-reference.com/tables/Bond%20Lengths%20and%20Enthalpies.pdf
+bonds1 = {'H': {'H': 74, 'C': 109, 'N': 101, 'O': 96, 'F': 92,},
+          'C': {'H': 109, 'C': 154, 'N': 147, 'O': 143, 'F': 135,},
+          'N': {'H': 101, 'C': 147, 'N': 145, 'O': 140, 'F': 136,},
+          'O': {'H': 96, 'C': 143, 'N': 140, 'O': 148, 'F': 142,},
+          'F': {'H': 92, 'C': 135, 'N': 136, 'O': 142, 'F': 142,}
+          }
+
+bonds2 = {'C': {'C': 134, 'N': 129, 'O': 120},
+          'N': {'C': 129, 'N': 125, 'O': 121},
+          'O': {'C': 120, 'N': 121, 'O': 121},
+        }
+
+bonds3 = {'C': {'C': 120, 'N': 116, 'O': 113},
+          'N': {'C': 116, 'N': 110},
+          'O': {'C': 113}}
 
 
 def get_parser():
@@ -40,13 +52,7 @@ def get_parser():
     )
     main_parser.add_argument(
         "--min_dist",
-        default=0.9,
-        type=float,
-        help="minimum interatomic distance (default: %(default)s)",
-    )
-    main_parser.add_argument(
-        "--max_dist",
-        default=10.0,
+        default=1.0,
         type=float,
         help="minimum interatomic distance (default: %(default)s)",
     )
@@ -69,22 +75,18 @@ def get_interatomic_distances(positions) -> np.ndarray:
     return np.array(distances)
 
 
-def check_distances(positions, min_dist: 1, max_dist: 10) -> bool:
+def check_distances(positions, min_dist: 1) -> bool:
     """
-    Checks if the molecule has any interatomic distances outside the given range.
+    Checks if the molecule has any interatomic distances less than the specified distance.
     Args:
-        positions (list of numpy.ndarray): list of positions of atoms in euclidean
-            space (n_atoms x 3) for each molecule
+        positions (numpy.ndarray): list of positions of atoms in euclidean
+            space (n_atoms x 3)
         min_dist (float): minimum allowed interatomic distance (in angstroms)
-        max_dist (float): maximum allowed interatomic distance (in angstroms)
     Returns:
-        a list containing 
+        True if all interatomic distances are greater than the minimum distance, False otherwise
     """
-    dist_valid = []
-    for mol_positions in positions:
-        distances = get_interatomic_distances(mol_positions)
-        dist_valid.append(np.all(distances > min_dist) and np.all(distances < max_dist))
-    return dist_valid
+    distances = get_interatomic_distances(positions)
+    return np.all(distances > min_dist)
 
 
 if __name__ == "__main__":
@@ -122,10 +124,8 @@ if __name__ == "__main__":
 
     # get distance bounds
     min_dist = args.min_dist
-    max_dist = args.max_dist
-
     # print the chosen settings
-    print(f"\nMinimum valid distance:\n{min_dist}\nMaximum distance:\n{max_dist}\n")
+    print(f"\nMinimum valid distance:\n{min_dist}\n")
 
     n_atoms_list = np.array([], dtype=np.int32)
     valid_dists = np.array([])
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         n_mols = len(all_pos)
 
         # check distances
-        valid_dists = np.concatenate([valid_dists, check_distances(all_pos, min_dist, max_dist)])
+        valid_dists = np.concatenate([valid_dists, check_distances(all_pos, min_dist)])
         n_atoms_list = np.concatenate([n_atoms_list, np.ones(n_mols) * n_atoms])
 
     valid_stats = pd.DataFrame({"n_atoms": n_atoms_list, "valid_distances": valid_dists})
