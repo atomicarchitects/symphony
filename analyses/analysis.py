@@ -483,11 +483,14 @@ def load_model_at_step(
         with open(params_file, "rb") as f:
             params = pickle.load(f)
     except FileNotFoundError:
-        try:
-            params_file = os.path.join(workdir, "checkpoints/params.pkl")
-            with open(params_file, "rb") as f:
-                params = pickle.load(f)
-        except:
+        if step == -1:
+            try:
+                params_file = os.path.join(workdir, "checkpoints/params.pkl")
+                with open(params_file, "rb") as f:
+                    params = pickle.load(f)
+            except:
+                raise FileNotFoundError(f"Could not find params file {params_file}")
+        else:
             raise FileNotFoundError(f"Could not find params file {params_file}")
 
     with open(workdir + "/config.yml", "rt") as config_file:
