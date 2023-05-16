@@ -2,7 +2,7 @@
 import os
 import pickle
 import sys
-from typing import Optional, Sequence
+from typing import Optional, Sequence, List, Tuple
 
 import ase
 import ase.build
@@ -42,6 +42,200 @@ ATOMIC_SIZES = {
     8: 30,  # O
     9: 30,  # F
 }
+
+def _remove_target_atoms(molecule: ase.Atoms, cutoff: float) -> Tuple[List[ase.Atoms], List[jraph.GraphsTuple]]:
+    """Removes each atom in the molecule and returns the resulting fragments."""
+    molecules_with_target_removed = []
+    fragments = []
+    for target in range(len(molecule)):
+        molecule_with_target_removed = ase.Atoms(
+            positions=np.concatenate(
+                [molecule.positions[:target], molecule.positions[target + 1 :]]
+            ),
+            numbers=np.concatenate(
+                [molecule.numbers[:target], molecule.numbers[target + 1 :]]
+            ),
+        )
+        fragment = input_pipeline.ase_atoms_to_jraph_graph(
+            molecule_with_target_removed,
+            ATOMIC_NUMBERS,
+            cutoff,
+        )
+
+        molecules_with_target_removed.append(molecule_with_target_removed)
+        fragments.append(fragment)
+    return molecules_with_target_removed, fragments
+
+
+def visualize_atom_removals_against_steps(
+    workdir: str,
+    outputdir: str,
+    beta: float,
+    steps: Sequence[int],
+    target: int,
+    molecule_str: str,
+    use_cache: bool,
+    seed: int,
+):
+    """Generates visualizations of the predictions when removing each atom from a molecule."""
+    # Remove the target atom
+    molecule, molecule_name = analysis.construct_molecule(molecule_str)
+    name = analysis.name_from_workdir(workdir)
+
+    molecules_with_target_removed = None
+    figs = []
+    for step in steps:
+        model, params, config = analysis.load_model_at_step(
+            workdir, step, run_in_evaluation_mode=True
+        )
+        if molecules_with_target_removed is None:
+            molecules_with_target_removed, fragments = _remove_target_atoms(molecule, cutoff=config.nn_cutoff)
+
+        # We don't actually need a PRNG key, since we're not sampling.
+        logging.info("Computing predictions...")
+        rng = jax.random.PRNGKey(seed)
+        preds = jax.jit(model.apply)(params, rng, jraph.batch(fragments), beta)
+        preds = jax.tree_map(np.asarray, preds)
+        preds = jraph.unbatch(preds)
+        logging.info("Predictions computed.")
+
+        # Create the output directory where HTML files will be saved.
+        step_name = "step=best" if step == -1 else f"step={step}"
+        outputdir = os.path.join(
+            outputdir,
+            "visualizations",
+            "atom_removal",
+            name,
+            f"beta={beta}",
+            step_name,
+        )
+        os.makedirs(outputdir, exist_ok=True)
+
+        # Loop over all possible targets.
+        logging.info("Visualizing predictions...")
+        # We have to remove the batch dimension.
+        # Also, correct the focus indices due to batching.
+        pred = preds[target]._replace(
+            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
+        )
+        corrected_focus_indices = pred.globals.focus_indices - sum(
+            p.n_node.item() for i, p in enumerate(preds) if i < target
+        )
+        pred = pred._replace(
+            globals=pred.globals._replace(focus_indices=corrected_focus_indices)
+        )
+
+        # Visualize predictions for this target.
+        fig = analysis.visualize_predictions(
+            pred, molecules_with_target_removed[target], molecule, target
+        )
+        figs.append(fig)
+
+    # Combine all figures into one.
+    fig_all = analysis.combine_visualizations(figs)
+
+    # Add title.
+    model_name = analysis.get_title_for_name(name)
+    fig_all.update_layout(
+        title=f"{model_name}: Predictions for {molecule_name}",
+        title_x=0.5,
+    )
+
+    # Save to file.
+    outputfile = os.path.join(
+        outputdir,
+        f"{molecule_name}_seed={seed}_against_steps.html",
+    )
+    fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
+    return fig_all
+
+
+# symm4ml specific
+def visualize_atom_removals_against_l(
+    workdir: str,
+    outputdir: str,
+    beta: float,
+    step: int,
+    ls: Sequence[int],
+    target: int,
+    molecule_str: str,
+    use_cache: bool,
+    seed: int,
+):
+    """Generates visualizations of the predictions when removing each atom from a molecule."""
+    # Remove the target atom
+    molecule, molecule_name = analysis.construct_molecule(molecule_str)
+    name = analysis.name_from_workdir(workdir)
+
+    molecules_with_target_removed = None
+    figs = []
+    for l_max in ls:
+        model, params, config = analysis.load_model_at_step(
+            os.path.join(workdir, f'l={l_max}'), step, run_in_evaluation_mode=True
+        )
+        if molecules_with_target_removed is None:
+            molecules_with_target_removed, fragments = _remove_target_atoms(molecule, cutoff=config.nn_cutoff)
+
+        # We don't actually need a PRNG key, since we're not sampling.
+        logging.info("Computing predictions...")
+        rng = jax.random.PRNGKey(seed)
+        preds = jax.jit(model.apply)(params, rng, jraph.batch(fragments), beta)
+        preds = jax.tree_map(np.asarray, preds)
+        preds = jraph.unbatch(preds)
+        logging.info("Predictions computed.")
+
+        # Create the output directory where HTML files will be saved.
+        step_name = "step=best" if step == -1 else f"step={step}"
+        outputdir = os.path.join(
+            outputdir,
+            "visualizations",
+            "atom_removal",
+            name,
+            f'l={l_max}',
+            f"beta={beta}",
+            step_name,
+        )
+        os.makedirs(outputdir, exist_ok=True)
+
+        # Loop over all possible targets.
+        logging.info("Visualizing predictions...")
+        # We have to remove the batch dimension.
+        # Also, correct the focus indices due to batching.
+        pred = preds[target]._replace(
+            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
+        )
+        corrected_focus_indices = pred.globals.focus_indices - sum(
+            p.n_node.item() for i, p in enumerate(preds) if i < target
+        )
+        pred = pred._replace(
+            globals=pred.globals._replace(focus_indices=corrected_focus_indices)
+        )
+
+        # Visualize predictions for this target.
+        fig = analysis.visualize_predictions(
+            pred, molecules_with_target_removed[target], molecule, target
+        )
+        figs.append(fig)
+
+    # Combine all figures into one.
+    fig_all = analysis.combine_visualizations(figs)
+
+    # Add title.
+    model_name = analysis.get_title_for_name(name)
+    fig_all.update_layout(
+        title=f"{model_name}: Predictions for {molecule_name}",
+        title_x=0.5,
+    )
+
+    # Save to file.
+    outputfile = os.path.join(
+        outputdir,
+        f"{molecule_name}_seed={seed}_against_l.html",
+    )
+    fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
+    return fig_all
 
 
 def visualize_atom_removals(
@@ -101,7 +295,7 @@ def visualize_atom_removals(
     # Create the output directory where HTML files will be saved.
     step_name = "step=best" if step == -1 else f"step={step}"
     outputdir = os.path.join(
-        FLAGS.outputdir,
+        outputdir,
         "visualizations",
         "atom_removal",
         name,
@@ -149,6 +343,8 @@ def visualize_atom_removals(
         f"{molecule_name}_seed={seed}.html",
     )
     fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
+    return fig_all
 
 
 def main(unused_argv: Sequence[str]) -> None:
