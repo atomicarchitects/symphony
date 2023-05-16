@@ -1119,7 +1119,7 @@ if __name__ == "__main__":
     )
     cum_stats = {
         "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
-        "valid_atom": stats_df["valid_atom"].sum() / stats_df["n_atoms"].sum(),
+        "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
         "n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
         "known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
         "known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
