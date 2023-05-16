@@ -942,14 +942,17 @@ if __name__ == "__main__":
 
     molecules = []
 
-    if not os.path.isfile(args.mol_path):
+    mol_path = args.mol_path
+    if os.path.isdir(args.mol_path):
+        mol_path = os.path.join(args.mol_path, 'generated_molecules.db')
+    if not os.path.isfile(mol_path):
         print(
-            f"\n\nThe specified data path ({args.mol_path}) is neither a file "
+            f"\n\nThe specified data path ({mol_path}) is neither a file "
             f"nor a directory! Please specify a different data path."
         )
         raise FileNotFoundError
     else:
-        with connect(args.mol_path) as conn:
+        with connect(mol_path) as conn:
             for row in conn.select():
                 molecules.append(row.toatoms())
 
