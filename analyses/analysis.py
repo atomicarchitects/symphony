@@ -626,8 +626,8 @@ def load_from_workdir(
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
 
-    net = train.create_model(config, run_in_evaluation_mode=False)
-    eval_net = train.create_model(config, run_in_evaluation_mode=True)
+    net = models.create_model(config, run_in_evaluation_mode=False)
+    eval_net = models.create_model(config, run_in_evaluation_mode=True)
 
     # If we have pickled parameters already, we don't need init_graphs to initialize the model.
     # Note that we restore the model parameters from the checkpoint anyways.
@@ -703,8 +703,7 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
     return molecule, molecule.get_chemical_formula()
 
 
-def construct_pybel_mol(mol: ase.Atoms) -> ob.OBMol:
-    """Constructs a Pybel molecule from an ASE molecule."""
+def construct_obmol(mol: ase.Atoms) -> ob.OBMol:
     obmol = ob.OBMol()
     obmol.BeginModify()
 
@@ -719,118 +718,11 @@ def construct_pybel_mol(mol: ase.Atoms) -> ob.OBMol:
     obmol.PerceiveBondOrders()
 
     obmol.EndModify()
+    return obmol
+
+
+def construct_pybel_mol(mol: ase.Atoms) -> pybel.Molecule:
+    """Constructs a Pybel molecule from an ASE molecule."""
+    obmol = construct_obmol(mol)
 
     return pybel.Molecule(obmol)
-
-
-def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):
-    """Converts a dataset of Fragments to a dictionary of molecules."""
-    generated_dict = {}
-    data_iter = dataset.as_numpy_iterator()
-    for graph in data_iter:
-        frag = datatypes.Fragments.from_graphstuple(graph)
-        frag = jax.tree_map(jnp.asarray, frag)
-        update_dict(generated_dict, frag_to_mol_dict(frag))
-    if save:
-        gen_path = os.path.join(model_path, "generated/")
-        if not os.path.exists(gen_path):
-            os.makedirs(gen_path)
-        # get untaken filename and store results
-        file_name = os.path.join(gen_path, file_name)
-        if os.path.isfile(file_name + ".mol_dict"):
-            expand = 0
-            while True:
-                expand += 1
-                new_file_name = file_name + "_" + str(expand)
-                if os.path.isfile(new_file_name + ".mol_dict"):
-                    continue
-                else:
-                    file_name = new_file_name
-                    break
-        with open(file_name + ".mol_dict", "wb") as f:
-            pickle.dump(generated_dict, f)
-    return generated_dict
-
-
-def frag_to_mol_dict(
-    generated_frag: datatypes.Fragments,
-) -> Dict[int, Dict[str, np.ndarray]]:
-    """from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet"""
-
-    generated = {}
-    for mol in jraph.unbatch(generated_frag):
-        l = mol.nodes.species.shape[0]
-        if l not in generated:
-            generated[l] = {
-                "_positions": np.array([mol.nodes.positions]),
-                "_atomic_numbers": np.array(
-                    [list(map(lambda z: models.ATOMIC_NUMBERS[z], mol.nodes.species))]
-                ),
-            }
-        else:
-            generated[l]["_positions"] = np.append(
-                generated[l]["_positions"],
-                np.array([mol.nodes.positions]),
-                0,
-            )
-            generated[l]["_atomic_numbers"] = np.append(
-                generated[l]["_atomic_numbers"],
-                np.array(
-                    [list(map(lambda z: models.ATOMIC_NUMBERS[z], mol.nodes.species))]
-                ),
-                0,
-            )
-
-    return generated
-
-
-def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
-    """
-    Updates a dictionary of numpy.ndarray with values from another dictionary of the
-    same kind. If a key is present in both dictionaries, the array of the second
-    dictionary is appended to the array of the first one and saved under that key in
-    the first dictionary.
-    Args:
-        d (dict of numpy.ndarray): dictionary to be updated
-        d_upd (dict of numpy.ndarray): dictionary with new values for updating
-
-    Also from G-SchNet
-    """
-    for key in d_upd:
-        if key not in d:
-            d[key] = d_upd[key]
-        else:
-            for k in d_upd[key]:
-                d[key][k] = np.append(d[key][k], d_upd[key][k], 0)
-
-
-def get_mol_dict(mol_path):
-    '''Read input file or fuse dictionaries if mol_path is a folder'''
-    if not os.path.isdir(mol_path):
-        if not os.path.isfile(mol_path):
-            print(
-                f"\n\nThe specified data path ({mol_path}) is neither a file "
-                f"nor a directory! Please specify a different data path."
-            )
-            raise FileNotFoundError
-        else:
-            with open(mol_path, "rb") as f:
-                res = pickle.load(f)  # read input file
-    else:
-        print(f"\n\nFusing .mol_dict files in folder {mol_path}...")
-        mol_files = [f for f in os.listdir(mol_path) if f.endswith(".mol_dict")]
-        if len(mol_files) == 0:
-            print(
-                f"Could not find any .mol_dict files at {mol_path}! Please "
-                f"specify a different data path!"
-            )
-            raise FileNotFoundError
-        res = {}
-        for file in mol_files:
-            with open(os.path.join(mol_path, file), "rb") as f:
-                cur_res = pickle.load(f)
-                update_dict(res, cur_res)
-        res = dict(sorted(res.items()))  # sort dictionary keys
-
-        print(f"...done!")
-        return res

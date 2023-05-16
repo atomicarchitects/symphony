@@ -5,6 +5,7 @@
 
 import argparse
 import collections
+import logging
 import os
 import pickle
 import time
@@ -19,6 +20,7 @@ from openbabel import pybel
 import pandas as pd
 from schnetpack import Properties
 import tqdm
+import yaml
 
 sys.path.append("..")
 
@@ -159,11 +161,14 @@ def filter_unique(mols, valid=None, use_bits=False):
         found = False
         if mol_key in accepted_dict:
             for j, mol2 in accepted_dict[mol_key]:
-                # compare fingerprints and canonical smiles representation
-                if mol1.tanimoto_similarity(mol2, use_bits=use_bits) >= 1:
+                # compare fingerprints
+                fp1, smiles1, symbols1 = get_fingerprint(mol1, use_bits=use_bits)
+                fp2, smiles2, symbols2 = get_fingerprint(mol2, use_bits=use_bits)
+                if tanimoto_similarity(fp1, fp2, use_bits=use_bits) >= 1:
+                    # compare canonical smiles representation
                     if (
-                        mol1.get_can() == mol2.get_can()
-                        or mol1.get_can() == mol2.get_mirror_can()
+                        symbols1 == symbols1
+                        or get_mirror_can(mol) == symbols1
                     ):
                         found = True
                         valid[i] = False
@@ -313,29 +318,22 @@ def filter_unique_threaded(
     return still_valid, duplicating, duplicate_count
 
 
-def _get_atoms_per_type_str(mol):
+def _get_atoms_per_type_str(mol, type_infos = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}):
     """
     Get a string representing the atomic composition of a molecule (i.e. the number
     of atoms per type in the molecule, e.g. H2C3O1, where the order of types is
     determined by increasing nuclear charge).
 
     Args:
-        mol (utility_classes.Molecule or numpy.ndarray: the molecule (or an array of
-            its atomic numbers)
+        mol (ase.Atoms): molecule
 
     Returns:
         str: the atomic composition of the molecule
     """
-    if isinstance(mol, Molecule):
-        n_atoms_per_type = mol.get_n_atoms_per_type()
-    else:
-        # assume atomic numbers were provided
-        n_atoms_per_type = np.bincount(mol, minlength=10)[
-            np.array(list(Molecule.type_infos.keys()), dtype=int)
-        ]
+    n_atoms_per_type = np.bincount(mol.numbers, minlength=10)
     s = ""
-    for t, n in zip(Molecule.type_infos.keys(), n_atoms_per_type):
-        s += f'{Molecule.type_infos[t]["name"]}{int(n):d}'
+    for t, n in zip(type_infos.keys(), n_atoms_per_type):
+        s += f'{type_infos[t]}{int(n):d}'
     return s
 
 
@@ -560,7 +558,7 @@ def filter_new(
     generated molecules accordingly.
 
     Args:
-        mols (list of utility_classes.Molecule): generated molecules
+        mols (list of ase.Atoms): generated molecules
         stats (numpy.ndarray): statistics of all generated molecules where columns
             correspond to molecules and rows correspond to available statistics
             (n_statistics x n_molecules)
@@ -598,7 +596,16 @@ def filter_new(
 
     if not os.path.exists(model_path):
         raise FileNotFoundError
-    config, _, _, _ = analysis.load_from_workdir(model_path)
+    
+    # Load config.
+    saved_config_path = os.path.join(model_path, "config.yml")
+    if not os.path.exists(saved_config_path):
+        raise FileNotFoundError(f"No saved config found at {model_path}")
+
+    logging.info("Saved config found at %s", saved_config_path)
+    with open(saved_config_path, "r") as config_file:
+        config = yaml.unsafe_load(config_file)
+
     train_idx = np.array(range(config.train_molecules[0], config.train_molecules[1]))
     val_idx = np.array(range(config.val_molecules[0], config.val_molecules[1]))
     test_idx = np.array(range(config.test_molecules[0], config.test_molecules[1]))
@@ -722,27 +729,24 @@ def _get_training_fingerprints(
             except:
                 print(f"error getting idx={idx}")
             at = row.toatoms()
-            pos = at.positions
-            atomic_numbers = at.numbers
             if use_con_mat:
                 con_mat = compressor.decompress(row.data["con_mat"])
             else:
                 con_mat = None
-            train_fps += [get_fingerprint(pos, atomic_numbers, use_bits, con_mat)]
+            train_fps += [get_fingerprint(at, use_bits)]
             if (i % 100 == 0 or i + 1 == len(train_idx)) and not print_file:
                 print("\033[K", end="\r", flush=True)
                 print(f"{100 * (i + 1) / len(train_idx):.2f}%", end="\r", flush=True)
     return {"fingerprints": train_fps}
 
 
-def get_fingerprint(pos, atomic_numbers, use_bits=False, con_mat=None):
+def get_fingerprint(ase_mol, use_bits=False):
     """
     Compute the molecular fingerprint (Open Babel FP2), canonical smiles
     representation, and number of atoms per type (e.g. H2O1) of a molecule.
 
     Args:
-        pos (numpy.ndarry): positions of the atoms (n_atoms x 3)
-        atomic_numbers (numpy.ndarray): types of the atoms (n_atoms)
+        ase_mol (ase.Atoms): molecule
         use_bits (bool, optional): set True to return the non-zero bits in the
             fingerprint instead of the pybel.Fingerprint object (default: False)
         con_mat (numpy.ndarray, optional): connectivity matrix of the molecule
@@ -757,32 +761,16 @@ def get_fingerprint(pos, atomic_numbers, use_bits=False, con_mat=None):
             atoms per type, e.g. H2C3O1, ordered by increasing atom type (nuclear
             charge)
     """
-    if con_mat is not None:
-        mol = Molecule(pos, atomic_numbers, con_mat)
-        idc_lists = np.where(con_mat != 0)
-        mol._update_bond_orders(idc_lists)
-        mol = pybel.Molecule(mol.get_obmol())
-    else:
-        obmol = ob.OBMol()
-        obmol.BeginModify()
-        for p, n in zip(pos, atomic_numbers):
-            obatom = obmol.NewAtom()
-            obatom.SetAtomicNum(int(n))
-            obatom.SetVector(*p.tolist())
-        # infer bonds and bond order
-        obmol.ConnectTheDots()
-        obmol.PerceiveBondOrders()
-        obmol.EndModify()
-        mol = pybel.Molecule(obmol)
+    mol = analysis.construct_pybel_mol(ase_mol)
     # use pybel to get fingerprint
     if use_bits:
         return (
             {*mol.calcfp().bits},
             mol.write("can"),
-            _get_atoms_per_type_str(atomic_numbers),
+            _get_atoms_per_type_str(ase_mol),
         )
     else:
-        return mol.calcfp(), mol.write("can"), _get_atoms_per_type_str(atomic_numbers)
+        return mol.calcfp(), mol.write("can"), _get_atoms_per_type_str(ase_mol)
 
 
 def _get_training_fingerprints_dict(fps):
@@ -810,6 +798,66 @@ def _get_training_fingerprints_dict(fps):
     return fp_dict
 
 
+def get_mirror_can(mol):
+        """
+        Retrieve the canonical SMILES representation of the mirrored molecule (the
+        z-coordinates are flipped).
+
+        Args:
+            mol (ase.Atoms): molecule
+
+        Returns:
+             String: canonical SMILES string of the mirrored molecule
+        """
+        # calculate canonical SMILES of mirrored molecule
+        flipped = _flip_z(mol)  # flip z to mirror molecule using x-y plane
+        mirror_can = pybel.Molecule(flipped).write("can")
+        return mirror_can
+
+
+def _flip_z(mol):
+    """
+    Flips the z-coordinates of atom positions (to get a mirrored version of the
+    molecule).
+
+    Args:
+        mol (ase.Atoms): molecule
+    Returns:
+        an OBMol object where the z-coordinates of the atoms have been flipped
+    """
+    obmol = analysis.construct_obmol(mol)
+    for atom in ob.OBMolAtomIter(obmol):
+        x, y, z = atom.x(), atom.y(), atom.z()
+        atom.SetVector(x, y, -z)
+    obmol.ConnectTheDots()
+    obmol.PerceiveBondOrders()
+    return obmol
+
+
+def tanimoto_similarity(mol, other_mol, use_bits=True):
+        """
+        Get the Tanimoto (fingerprint) similarity to another molecule.
+
+        Args:
+         mol (pybel.Fingerprint/list of bits set):
+            representation of the second molecule
+         other_mol (pybel.Fingerprint/list of bits set):
+            representation of the second molecule
+         use_bits (bool, optional): set True to calculate Tanimoto similarity
+            from bits set in the fingerprint (default: True)
+
+        Returns:
+             float: Tanimoto similarity to the other molecule
+        """
+        if use_bits:
+            n_equal = len(mol.intersection(other_mol))
+            if len(mol) + len(other_mol) == 0:  # edge case with no set bits
+                return 1.0
+            return n_equal / (len(mol) + len(other_mol) - n_equal)
+        else:
+            return mol | other_mol
+
+
 def _compare_fingerprints(
     mols,
     train_fps,
@@ -827,7 +875,7 @@ def _compare_fingerprints(
     molecule it corresponds, if any).
 
     Args:
-        mols (list of utility_classes.Molecule): generated molecules
+        mols (list of ase.Atoms): generated molecules
         train_fps (dict (str->list of tuple)): dictionary with fingerprints of
             training/validation/test data as returned by _get_training_fingerprints_dict
         train_idx (list of int): list that maps the index of fingerprints in the
@@ -864,19 +912,20 @@ def _compare_fingerprints(
         print(f"0.00%", end="", flush=True)
     for i, idx in enumerate(idcs):
         mol = mols[idx]
-        mol_key = _get_atoms_per_type_str(mol)
+        mol_key = str(mol.symbols)
         # for now the molecule is considered to be new
         stats[idx, idx_known] = 0
         if np.sum(mol.numbers != 1) > max_heavy_atoms:
             continue  # cannot be in dataset
         if mol_key in train_fps:
             for fp_train in train_fps[mol_key]:
-                # compare fingerprint
-                if mol.tanimoto_similarity(fp_train[0], use_bits=use_bits) >= 1:
+                # compare fingerprints
+                fingerprint, smiles, symbols = get_fingerprint(mol, use_bits=use_bits)
+                if tanimoto_similarity(fingerprint, fp_train[0], use_bits=use_bits) >= 1:
                     # compare canonical smiles representation
                     if (
-                        mol.get_can() == fp_train[1]
-                        or mol.get_mirror_can() == fp_train[1]
+                        symbols == fp_train[1]
+                        or get_mirror_can(mol) == fp_train[1]
                     ):
                         # store index of match
                         j = fp_train[-1]
@@ -977,6 +1026,10 @@ if __name__ == "__main__":
         "n_atoms",
         "valid_mol",
         "valid_atoms",
+        "duplicating",
+        "n_duplicates",
+        "known",
+        "equals",
         "C",
         "N",
         "O",
@@ -1023,11 +1076,6 @@ if __name__ == "__main__":
                 valence,
             )
         else:
-            results = {
-                "valid_mol": False,
-                "valid_atoms": 0,
-            }
-            # TODO fix this
             results = run_threaded(
                 check_valence,
                 {"mol": mol},
@@ -1045,6 +1093,10 @@ if __name__ == "__main__":
                 n_atoms,  # n_atoms
                 valid_mol,  # valid molecules
                 valid_atoms,  # valid atoms (atoms with correct valence)
+                0,  # duplicating
+                0,  # n_duplicates
+                0,  # known
+                0,  # equals
                 *n_of_types,  # n_atoms per type
                 *np.zeros((19, )),  # n_bonds per type pairs
                 *np.zeros((7, )),  # ring counts for 3-8 & >8
@@ -1054,17 +1106,19 @@ if __name__ == "__main__":
         stats_new = stats_new.reshape(stats_new.shape[0], 1)
         stats = np.hstack((stats, stats_new))
 
-    # if args.threads <= 0:
-    #         still_valid, duplicating, duplicate_count = filter_unique(
-    #             molecules, n_valid_mol, use_bits=False
-    #         )
-    # else:
-    #     still_valid, duplicating, duplicate_count = filter_unique_threaded(
-    #         molecules,
-    #         n_valid_mol,
-    #         n_threads=args.threads,
-    #         n_mols_per_thread=5,
-    #     )
+    if args.threads <= 0:
+            still_valid, duplicating, duplicate_count = filter_unique(
+                molecules, use_bits=False
+            )
+    else:
+        still_valid, duplicating, duplicate_count = filter_unique_threaded(
+            molecules,
+            n_threads=args.threads,
+            n_mols_per_thread=5,
+        )
+
+    print(duplicating)
+    print(duplicate_count)
 
     if not print_file:
         print("\033[K", end="\r", flush=True)
@@ -1090,7 +1144,7 @@ if __name__ == "__main__":
     print(
         f"Number of generated molecules: {n_generated}\n"
         # TODO is this correct?
-        # f"Number of duplicate molecules: {n_generated - len(still_valid)}"
+        f"Number of duplicate molecules: {n_generated - len(still_valid)}"
     )
     # if "unique" in args.filters:
     #     print(f"Number of unique and valid molecules: {n_valid_mol}")
@@ -1098,16 +1152,16 @@ if __name__ == "__main__":
     print(f"Number of valid molecules (including duplicates): {n_valid_mol}")
 
     # filter molecules which were seen during training
-    # if args.model_path is not None:
-    #     stats = filter_new(
-    #         all_mols,
-    #         stats,
-    #         stat_heads,
-    #         args.model_path,
-    #         args.data_path,
-    #         print_file=print_file,
-    #         n_threads=args.threads,
-    #     )
+    if args.model_path is not None:
+        stats = filter_new(
+            all_mols,
+            stats,
+            stat_heads,
+            args.model_path,
+            args.data_path,
+            print_file=print_file,
+            n_threads=args.threads,
+        )
 
     # store gathered statistics in metrics dataframe
     stats_df = pd.DataFrame(
