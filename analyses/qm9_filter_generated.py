@@ -1119,15 +1119,15 @@ if __name__ == "__main__":
         args.model_path,
     )
     # TODO add the known stats back in
-    #cum_stats = {
-    #    "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
-    #    "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
+    cum_stats = {
+        "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
+        "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
         #"n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
         #"known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
         #"known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
         #"known_val": stats_df["known"].apply(lambda x: x == 2).sum() / len(stats_df),
         #"known_test": stats_df["known"].apply(lambda x: x == 3).sum() / len(stats_df),
-    #}
+    }
     ring_bond_cols = [
         "C",
         "N",
@@ -1161,14 +1161,14 @@ if __name__ == "__main__":
         "R8",
         "R>8",
     ]
-    #for col_name in ring_bond_cols:
-    #    cum_stats[col_name] = stats_df[col_name].sum()
+    for col_name in ring_bond_cols:
+        cum_stats[col_name] = stats_df[col_name].sum()
 
-    #cum_stats_df = pd.DataFrame(
-    #    cum_stats, columns=list(cum_stats.keys()) + ring_bond_cols, index=[0]
-    #)
+    cum_stats_df = pd.DataFrame(
+        cum_stats, columns=list(cum_stats.keys()), index=[0]
+    )
 
-    #metric_df_dict["generated_stats_overall"] = cum_stats_df
+    metric_df_dict["generated_stats_overall"] = cum_stats_df
     metric_df_dict["generated_stats"] = stats_df
 
     # store results in pickle file
