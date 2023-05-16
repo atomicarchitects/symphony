@@ -1053,17 +1053,17 @@ if __name__ == "__main__":
         )
         stats = np.hstack((stats, stats_new))
 
-    if args.threads <= 0:
-            still_valid, duplicating, duplicate_count = filter_unique(
-                molecules, valid_mol, use_bits=False
-            )
-    else:
-        still_valid, duplicating, duplicate_count = filter_unique_threaded(
-            molecules,
-            valid_mol,
-            n_threads=args.threads,
-            n_mols_per_thread=5,
-        )
+    # if args.threads <= 0:
+    #         still_valid, duplicating, duplicate_count = filter_unique(
+    #             molecules, n_valid_mol, use_bits=False
+    #         )
+    # else:
+    #     still_valid, duplicating, duplicate_count = filter_unique_threaded(
+    #         molecules,
+    #         n_valid_mol,
+    #         n_threads=args.threads,
+    #         n_mols_per_thread=5,
+    #     )
 
     if not print_file:
         print("\033[K", end="\r", flush=True)
@@ -1089,7 +1089,7 @@ if __name__ == "__main__":
     print(
         f"Number of generated molecules: {n_generated}\n"
         # TODO is this correct?
-        f"Number of duplicate molecules: {n_generated - len(still_valid)}"
+        # f"Number of duplicate molecules: {n_generated - len(still_valid)}"
     )
     # if "unique" in args.filters:
     #     print(f"Number of unique and valid molecules: {n_valid_mol}")
@@ -1097,16 +1097,16 @@ if __name__ == "__main__":
     print(f"Number of valid molecules (including duplicates): {n_valid_mol}")
 
     # filter molecules which were seen during training
-    if args.model_path is not None:
-        stats = filter_new(
-            all_mols,
-            stats,
-            stat_heads,
-            args.model_path,
-            args.data_path,
-            print_file=print_file,
-            n_threads=args.threads,
-        )
+    # if args.model_path is not None:
+    #     stats = filter_new(
+    #         all_mols,
+    #         stats,
+    #         stat_heads,
+    #         args.model_path,
+    #         args.data_path,
+    #         print_file=print_file,
+    #         n_threads=args.threads,
+    #     )
 
     # store gathered statistics in metrics dataframe
     stats_df = pd.DataFrame(
