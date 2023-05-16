@@ -25,7 +25,8 @@ from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
 
-# import analyses.utility_classes as utility_classes
+from openbabel import pybel
+from openbabel import openbabel as ob
 
 sys.path.append("..")
 
@@ -700,6 +701,26 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
     # If the string is a valid molecule name, try to build it.
     molecule = ase.build.molecule(molecule_str)
     return molecule, molecule.get_chemical_formula()
+
+
+def construct_pybel_mol(mol: ase.Atoms) -> ob.OBMol:
+    """Constructs a Pybel molecule from an ASE molecule."""
+    obmol = ob.OBMol()
+    obmol.BeginModify()
+
+    # set positions and atomic numbers of all atoms in the molecule
+    for p, n in zip(mol.positions, mol.numbers):
+        obatom = obmol.NewAtom()
+        obatom.SetAtomicNum(int(n))
+        obatom.SetVector(*p.tolist())
+
+    # infer bonds and bond order
+    obmol.ConnectTheDots()
+    obmol.PerceiveBondOrders()
+
+    obmol.EndModify()
+
+    return pybel.Molecule(obmol)
 
 
 def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):

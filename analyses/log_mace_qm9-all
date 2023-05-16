@@ -1,19 +1,0 @@
-
-
-Fusing .mol_dict files in folder molecules/generated/v5/mace/interactions=4/l=5/channels=32/beta=1.0/step=best/...
-...done!
-
-
-1. Filtering molecules according to valency, connectedness, and uniqueness...
-
-Target valence:
-type 1: 1, type 6: 4, type 7: 3, type 8: 2, type 9: 1
-
-[KChecking valence for molecules of length 3 (0.00%)[KChecking valence for molecules of length 3 (100.00%)[KChecking connectedness for molecules of length 3...[KChecking uniqueness for molecules of length 3...[KChecking valence for molecules of length 4 (0.00%)[KChecking valence for molecules of length 4 (100.00%)[KChecking connectedness for molecules of length 4...[KChecking uniqueness for molecules of length 4...[KChecking valence for molecules of length 5 (0.00%)[KChecking valence for molecules of length 5 (100.00%)[KChecking connectedness for molecules of length 5...[KChecking uniqueness for molecules of length 5...[KChecking valence for molecules of length 6 (0.00%)[KChecking valence for molecules of length 6 (100.00%)[KChecking connectedness for molecules of length 6...[KChecking uniqueness for molecules of length 6...[KNeeded 0h00m00s.
-Number of generated molecules: 64
-Number of duplicate molecules: 0
-Number of unique and valid molecules: 1
-
-
-2. Checking which molecules are new...
-Using data base at ../qm9_data/qm9-all.db...
