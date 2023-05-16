@@ -1027,6 +1027,7 @@ if __name__ == "__main__":
                 "valid_mol": False,
                 "valid_atoms": 0,
             }
+            # TODO fix this
             results = run_threaded(
                 check_valence,
                 {"mol": mol},
@@ -1034,23 +1035,23 @@ if __name__ == "__main__":
                 results,
                 n_threads=args.threads,
             )
-        valid_mol = results["valid_mol"]
-        valid_atoms = results["valid_atoms"]
+        valid_mol, valid_atoms = results
 
         # collect statistics of generated data
         n_valid_mol += int(valid_mol)
-        n_of_types = [np.sum(mol.numbers == i, axis=1) for i in [6, 7, 8, 9, 1]]
+        n_of_types = [np.sum(mol.numbers == i) for i in [6, 7, 8, 9, 1]]
         stats_new = np.stack(
             (
                 n_atoms,  # n_atoms
                 valid_mol,  # valid molecules
                 valid_atoms,  # valid atoms (atoms with correct valence)
                 *n_of_types,  # n_atoms per type
-                *np.zeros((19, len(valid_mol))),  # n_bonds per type pairs
-                *np.zeros((7, len(valid_mol))),  # ring counts for 3-8 & >8
+                *np.zeros((19, )),  # n_bonds per type pairs
+                *np.zeros((7, )),  # ring counts for 3-8 & >8
             ),
             axis=0,
         )
+        stats_new = stats_new.reshape(stats_new.shape[0], 1)
         stats = np.hstack((stats, stats_new))
 
     # if args.threads <= 0:
@@ -1118,15 +1119,15 @@ if __name__ == "__main__":
         args.model_path,
     )
     # TODO add the known stats back in
-    cum_stats = {
-        "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
-        "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
+    #cum_stats = {
+    #    "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
+    #    "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
         #"n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
         #"known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
         #"known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
         #"known_val": stats_df["known"].apply(lambda x: x == 2).sum() / len(stats_df),
         #"known_test": stats_df["known"].apply(lambda x: x == 3).sum() / len(stats_df),
-    }
+    #}
     ring_bond_cols = [
         "C",
         "N",
@@ -1160,14 +1161,14 @@ if __name__ == "__main__":
         "R8",
         "R>8",
     ]
-    for col_name in ring_bond_cols:
-        cum_stats[col_name] = stats_df[col_name].sum()
+    #for col_name in ring_bond_cols:
+    #    cum_stats[col_name] = stats_df[col_name].sum()
 
-    cum_stats_df = pd.DataFrame(
-        cum_stats, columns=list(cum_stats.keys()) + ring_bond_cols, index=[0]
-    )
+    #cum_stats_df = pd.DataFrame(
+    #    cum_stats, columns=list(cum_stats.keys()) + ring_bond_cols, index=[0]
+    #)
 
-    metric_df_dict["generated_stats_overall"] = cum_stats_df
+    #metric_df_dict["generated_stats_overall"] = cum_stats_df
     metric_df_dict["generated_stats"] = stats_df
 
     # store results in pickle file
