@@ -190,9 +190,10 @@ def visualize_predictions(
     focus = pred.globals.focus_indices.item()
     focus_position = input_molecule.positions[focus]
     stop_prob = pred.globals.stop_probs.item()
-    if jnp.isnan(stop_prob):
+    if np.isnan(stop_prob):
         stop_prob = 1
-    focus_probs = (1 - stop_prob) * pred.nodes.focus_probs
+    target_species_probs = (1 - stop_prob) * pred.nodes.target_species_probs
+    focus_probs = np.sum(target_species_probs, axis=1)
 
     mol_trace.append(
         go.Scatter3d(
@@ -320,7 +321,7 @@ def visualize_predictions(
     # Plot target species probabilities.
     predicted_target_species = pred.globals.target_species.item()
     predicted_target_element = ELEMENTS[predicted_target_species]
-    species_probs = pred.globals.target_species_probs.tolist()
+    species_probs = pred.nodes.target_species_probs[focus].tolist()
 
     # We highlight the true target if provided.
     if target is not None:
@@ -483,11 +484,14 @@ def load_model_at_step(
         with open(params_file, "rb") as f:
             params = pickle.load(f)
     except FileNotFoundError:
-        try:
-            params_file = os.path.join(workdir, "checkpoints/params.pkl")
-            with open(params_file, "rb") as f:
-                params = pickle.load(f)
-        except:
+        if step == -1:
+            try:
+                params_file = os.path.join(workdir, "checkpoints/params.pkl")
+                with open(params_file, "rb") as f:
+                    params = pickle.load(f)
+            except:
+                raise FileNotFoundError(f"Could not find params file {params_file}")
+        else:
             raise FileNotFoundError(f"Could not find params file {params_file}")
 
     with open(workdir + "/config.yml", "rt") as config_file:
