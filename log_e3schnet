@@ -1,82 +1,0 @@
-
-
-Fusing .mol_dict files in folder analyses/molecules/v5/e3schnet/interactions=4/l=5/channels=32/beta=1.0/generated...
-...done!
-
-
-1. Filtering molecules according to valency, connectedness, and uniqueness...
-
-Target valence:
-type 1: 1, type 6: 4, type 7: 3, type 8: 2, type 9: 1
-
-[KChecking valence for molecules of length 5 (0.00%)[KChecking valence for molecules of length 5 (100.00%)[KChecking connectedness for molecules of length 5...[KChecking uniqueness for molecules of length 5...[KChecking valence for molecules of length 6 (0.00%)[KChecking valence for molecules of length 6 (100.00%)[KChecking connectedness for molecules of length 6...[KChecking uniqueness for molecules of length 6...[KChecking valence for molecules of length 7 (0.00%)[KChecking valence for molecules of length 7 (100.00%)[KChecking connectedness for molecules of length 7...[KChecking uniqueness for molecules of length 7...[KChecking valence for molecules of length 8 (0.00%)[KChecking valence for molecules of length 8 (100.00%)[KChecking connectedness for molecules of length 8...[KChecking uniqueness for molecules of length 8...[KChecking valence for molecules of length 9 (0.00%)[KChecking valence for molecules of length 9 (100.00%)[KChecking connectedness for molecules of length 9...[KChecking uniqueness for molecules of length 9...[KChecking valence for molecules of length 10 (0.00%)[KChecking valence for molecules of length 10 (100.00%)[KChecking connectedness for molecules of length 10...[KChecking uniqueness for molecules of length 10...[KChecking valence for molecules of length 12 (0.00%)[KChecking valence for molecules of length 12 (100.00%)[KChecking connectedness for molecules of length 12...[KChecking uniqueness for molecules of length 12...[KChecking valence for molecules of length 13 (0.00%)[KChecking valence for molecules of length 13 (100.00%)[KChecking connectedness for molecules of length 13...[KChecking uniqueness for molecules of length 13...[KChecking valence for molecules of length 14 (0.00%)[KChecking valence for molecules of length 14 (100.00%)[KChecking connectedness for molecules of length 14...[KChecking uniqueness for molecules of length 14...[KChecking valence for molecules of length 15 (0.00%)[KChecking valence for molecules of length 15 (100.00%)[KChecking connectedness for molecules of length 15...[KChecking uniqueness for molecules of length 15...[KChecking valence for molecules of length 16 (0.00%)[KChecking valence for molecules of length 16 (100.00%)[KChecking connectedness for molecules of length 16...[KChecking uniqueness for molecules of length 16...[KChecking valence for molecules of length 17 (0.00%)[KChecking valence for molecules of length 17 (100.00%)[KChecking connectedness for molecules of length 17...[KChecking uniqueness for molecules of length 17...[KChecking valence for molecules of length 18 (0.00%)[KChecking valence for molecules of length 18 (100.00%)[KChecking connectedness for molecules of length 18...[KChecking uniqueness for molecules of length 18...[KChecking valence for molecules of length 19 (0.00%)[KChecking valence for molecules of length 19 (100.00%)[KChecking connectedness for molecules of length 19...[KChecking uniqueness for molecules of length 19...[KChecking valence for molecules of length 20 (0.00%)[KChecking valence for molecules of length 20 (100.00%)[KChecking connectedness for molecules of length 20...[KChecking uniqueness for molecules of length 20...[KChecking valence for molecules of length 21 (0.00%)[KChecking valence for molecules of length 21 (100.00%)[KChecking connectedness for molecules of length 21...[KChecking uniqueness for molecules of length 21...[KChecking valence for molecules of length 22 (0.00%)[KChecking valence for molecules of length 22 (100.00%)[KChecking connectedness for molecules of length 22...[KChecking uniqueness for molecules of length 22...[KChecking valence for molecules of length 23 (0.00%)[KChecking valence for molecules of length 23 (100.00%)[KChecking connectedness for molecules of length 23...[KChecking uniqueness for molecules of length 23...[KNeeded 0h00m04s.
-Number of generated molecules: 58
-Number of duplicate molecules: 0
-Number of unique and valid molecules: 10
-
-
-2. Checking which molecules are new...
-Using data base at qm9_data/qm9-train.db...
-
-Computing fingerprints of training data...
-0.00%[K0.01%[K0.60%[K1.20%[K1.80%[K2.40%[K2.99%[K3.59%[K4.19%[K4.78%[K5.38%[K5.98%[K6.58%[K7.17%[K7.77%[K8.37%[K8.97%[K9.56%[K10.16%[K10.76%[K11.36%[K11.95%[K12.55%[K13.15%[K13.75%[K14.34%[K14.94%[K15.54%[K16.14%[K16.73%[K17.33%[K17.93%[K18.52%[K19.12%[K19.72%[K20.32%[K20.91%[K21.51%[K22.11%[K22.71%[K23.30%[K23.90%[K24.50%[K25.10%[K25.69%[K26.29%[K26.89%[K27.49%[K28.08%[K28.68%[K29.28%[K29.87%[K30.47%[K31.07%[K31.67%[K32.26%[K32.86%[K33.46%[K34.06%[K34.65%[K35.25%[K35.85%[K36.45%[K37.04%[K37.64%[K38.24%[K38.84%[K39.43%[K40.03%[K40.63%[K41.22%[K41.82%[K42.42%[K43.02%[K43.61%[K44.21%[K44.81%[K45.41%[K46.00%[K46.60%[K47.20%[K47.80%[K48.39%[K48.99%[K49.59%[K50.19%[K50.78%[K51.38%[K51.98%[K52.57%[K53.17%[K53.77%[K54.37%[K54.96%[K55.56%[K56.16%[K56.76%[K57.35%[K57.95%[K58.55%[K59.15%[K59.74%[K60.34%[K60.94%[K61.54%[K62.13%[K62.73%[K63.33%[K63.92%[K64.52%[K65.12%[K65.72%[K66.31%[K66.91%[K67.51%[K68.11%[K68.70%[K69.30%[K69.90%[K70.50%[K71.09%[K71.69%[K72.29%[K72.89%[K73.48%[K74.08%[K74.68%[K75.27%[K75.87%[K76.47%[K77.07%[K77.66%[K78.26%[K78.86%[K79.46%[K80.05%[K80.65%[K81.25%[K81.85%[K82.44%[K83.04%[K83.64%[K84.24%[K84.83%[K85.43%[K86.03%[K86.62%[K87.22%[K87.82%[K88.42%[K89.01%[K89.61%[K90.21%[K90.81%[K91.40%[K92.00%[K92.60%[K93.20%[K93.79%[K94.39%[K94.99%[K95.59%[K96.18%[K96.78%[K97.38%[K97.97%[K98.57%[K99.17%[K99.77%[K100.00%...133920 fingerprints computed in 0h00m58s!
-
-Comparing fingerprints...
-0.00%[K50.00%[K... needed 0h00m00s.
-Number of new molecules: 8
-Number of molecules matching training data: 2
-Number of molecules matching validation data: 0
-Number of molecules matching test data: 1
-Statistics of training data not found (expected it at qm9_data/qm9-train_statistics.npz).
-Will only print statistics of generated molecules...
-
-Accumulated statistics of generated molecules concerning atom types:
-
-Mean absolute values...
-H:       3.90
-C:       4.00
-N:       1.50
-O:       2.00
-F:       0.00
-All:    11.40
-
-Mean percentage...
-H:       0.33
-C:       0.34
-N:       0.13
-O:       0.19
-F:       0.00
-
-Accumulated statistics of generated molecules concerning atom bonds:
-
-Mean absolute values...
-Single:  8.70
-Double:  1.70
-Triple:  0.70
-All:    11.10
-
-Mean percentage...
-Single:  0.77
-Double:  0.18
-Triple:  0.06
-
-Accumulated statistics of generated molecules concerning ring structures:
-
-Mean absolute values...
-R3:      0.20
-R4:      0.00
-R5:      0.50
-R6:      0.00
-R7:      0.00
-R8:      0.00
-R>8:     0.00
-All:     0.70
-
-Molecules with...
-R3:         2  (0.20%)
-R4:         0  (0.00%)
-R5:         5  (0.50%)
-R6:         0  (0.00%)
-R7:         0  (0.00%)
-R8:         0  (0.00%)
-R>8:        0  (0.00%)
