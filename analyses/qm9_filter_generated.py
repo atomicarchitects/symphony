@@ -18,7 +18,6 @@ import numpy as np
 from openbabel import openbabel as ob
 from openbabel import pybel
 import pandas as pd
-from schnetpack import Properties
 import tqdm
 import yaml
 
@@ -26,7 +25,6 @@ sys.path.append("..")
 
 from analyses import analysis
 from analyses.check_valence import check_valence
-from analyses.utility_classes import Molecule, ConnectivityCompressor
 from analyses.utility_functions import run_threaded
 
 
@@ -88,7 +86,7 @@ def filter_unique(mols, valid=None, use_bits=False):
     conformers of the same molecular graph cannot be distinguished).
 
     Args:
-        mols (list of utility_classes.Molecule): list of all generated molecules
+        mols (list of ase.Atoms): list of all generated molecules
         valid (numpy.ndarray, optional): array of the same length as mols which flags
             molecules as valid (invalid molecules are not considered in the comparison
             process), if None, all molecules in mols are considered as valid (default:
@@ -152,7 +150,7 @@ def filter_unique_threaded(
     different spatial conformers of the same molecular graph cannot be distinguished).
 
     Args:
-        mols (list of utility_classes.Molecule): list of all generated molecules
+        mols (list of ase.Atoms): list of all generated molecules
         valid (numpy.ndarray, optional): array of the same length as mols which flags
             molecules as valid (invalid molecules are not considered in the comparison
             process), if None, all molecules in mols are considered as valid (default:
@@ -365,7 +363,7 @@ def _filter_mini_batch(mols, valid, start, amount):
     molecules.
 
     Args:
-        mols (list of utility_classes.Molecule): list of all generated molecules
+        mols (list of ase.Atoms): list of all generated molecules
         valid (numpy.ndarray): array of the same length as mols which flags molecules as
             valid (invalid molecules are not put into a mini-batch but skipped)
         start (int): index of the first molecule in mols that should be put into a
@@ -434,7 +432,7 @@ def _filter_worker(q_in, q_out, all_mols):
             list holds the index of an identified duplicate structure and the index
             of the original structure that it duplicates, and 3rd a dictionary with
             the indices of candidates that were identified as originals)
-        all_mols (list of utility_classes.Molecule): list with all generated molecules
+        all_mols (list of ase.Atoms): list with all generated molecules
     """
     accepted_dict = {}
     while True:
