@@ -1011,6 +1011,7 @@ if __name__ == "__main__":
     ]
     stats = np.empty((len(stat_heads), 0))
     all_mols = []
+    valid = []  # True if molecule is valid w.r.t valence, False otherwise
 
     start_time = time.time()
     for mol in tqdm.tqdm(molecules):
@@ -1052,20 +1053,22 @@ if __name__ == "__main__":
         )
         stats_new = stats_new.reshape(stats_new.shape[0], 1)
         stats = np.hstack((stats, stats_new))
+        valid.append(valid_mol)
 
     if args.threads <= 0:
             still_valid, duplicating, duplicate_count = filter_unique(
-                molecules, use_bits=False
+                molecules, valid=valid, use_bits=False
             )
     else:
         still_valid, duplicating, duplicate_count = filter_unique_threaded(
             molecules,
+            valid,
             n_threads=args.threads,
             n_mols_per_thread=5,
         )
 
-    print(duplicating)
-    print(duplicate_count)
+    stats[3] = np.array(duplicating)
+    stats[4] = np.array(duplicate_count)
 
     if not print_file:
         print("\033[K", end="\r", flush=True)
@@ -1090,8 +1093,7 @@ if __name__ == "__main__":
 
     print(
         f"Number of generated molecules: {n_generated}\n"
-        # TODO is this correct?
-        f"Number of duplicate molecules: {n_generated - len(still_valid)}"
+        f"Number of duplicate molecules: {sum(duplicate_count)}"
     )
     # if "unique" in args.filters:
     #     print(f"Number of unique and valid molecules: {n_valid_mol}")
