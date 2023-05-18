@@ -1,6 +1,7 @@
 """Loads the model from a workdir to perform analysis."""
 
 import glob
+import itertools
 import os
 import pickle
 import sys
@@ -24,7 +25,8 @@ from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
 
-# import analyses.utility_classes as utility_classes
+from openbabel import pybel
+from openbabel import openbabel as ob
 
 sys.path.append("..")
 
@@ -624,8 +626,8 @@ def load_from_workdir(
     # Set up dummy variables to obtain the structure.
     rng, init_rng = jax.random.split(rng)
 
-    net = train.create_model(config, run_in_evaluation_mode=False)
-    eval_net = train.create_model(config, run_in_evaluation_mode=True)
+    net = models.create_model(config, run_in_evaluation_mode=False)
+    eval_net = models.create_model(config, run_in_evaluation_mode=True)
 
     # If we have pickled parameters already, we don't need init_graphs to initialize the model.
     # Note that we restore the model parameters from the checkpoint anyways.
@@ -701,82 +703,26 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
     return molecule, molecule.get_chemical_formula()
 
 
-def to_mol_dict(dataset, save: bool = True, model_path: Optional[str] = None):
-    """Converts a dataset of Fragments to a dictionary of molecules."""
-    generated_dict = {}
-    data_iter = dataset.as_numpy_iterator()
-    for graph in data_iter:
-        frag = datatypes.Fragments.from_graphstuple(graph)
-        frag = jax.tree_map(jnp.asarray, frag)
-        update_dict(generated_dict, frag_to_mol_dict(frag))
-    if save:
-        gen_path = os.path.join(model_path, "generated/")
-        if not os.path.exists(gen_path):
-            os.makedirs(gen_path)
-        # get untaken filename and store results
-        file_name = os.path.join(gen_path, file_name)
-        if os.path.isfile(file_name + ".mol_dict"):
-            expand = 0
-            while True:
-                expand += 1
-                new_file_name = file_name + "_" + str(expand)
-                if os.path.isfile(new_file_name + ".mol_dict"):
-                    continue
-                else:
-                    file_name = new_file_name
-                    break
-        with open(file_name + ".mol_dict", "wb") as f:
-            pickle.dump(generated_dict, f)
-    return generated_dict
+def construct_obmol(mol: ase.Atoms) -> ob.OBMol:
+    obmol = ob.OBMol()
+    obmol.BeginModify()
+
+    # set positions and atomic numbers of all atoms in the molecule
+    for p, n in zip(mol.positions, mol.numbers):
+        obatom = obmol.NewAtom()
+        obatom.SetAtomicNum(int(n))
+        obatom.SetVector(*p.tolist())
+
+    # infer bonds and bond order
+    obmol.ConnectTheDots()
+    obmol.PerceiveBondOrders()
+
+    obmol.EndModify()
+    return obmol
 
 
-def frag_to_mol_dict(
-    generated_frag: datatypes.Fragments,
-) -> Dict[int, Dict[str, np.ndarray]]:
-    """from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet"""
+def construct_pybel_mol(mol: ase.Atoms) -> pybel.Molecule:
+    """Constructs a Pybel molecule from an ASE molecule."""
+    obmol = construct_obmol(mol)
 
-    generated = {}
-    for mol in jraph.unbatch(generated_frag):
-        l = mol.nodes.species.shape[0]
-        if l not in generated:
-            generated[l] = {
-                "_positions": np.array([mol.nodes.positions]),
-                "_atomic_numbers": np.array(
-                    [list(map(lambda z: models.ATOMIC_NUMBERS[z], mol.nodes.species))]
-                ),
-            }
-        else:
-            generated[l]["_positions"] = np.append(
-                generated[l]["_positions"],
-                np.array([mol.nodes.positions]),
-                0,
-            )
-            generated[l]["_atomic_numbers"] = np.append(
-                generated[l]["_atomic_numbers"],
-                np.array(
-                    [list(map(lambda z: models.ATOMIC_NUMBERS[z], mol.nodes.species))]
-                ),
-                0,
-            )
-
-    return generated
-
-
-def update_dict(d: Dict[Any, np.ndarray], d_upd: Dict[Any, np.ndarray]) -> None:
-    """
-    Updates a dictionary of numpy.ndarray with values from another dictionary of the
-    same kind. If a key is present in both dictionaries, the array of the second
-    dictionary is appended to the array of the first one and saved under that key in
-    the first dictionary.
-    Args:
-        d (dict of numpy.ndarray): dictionary to be updated
-        d_upd (dict of numpy.ndarray): dictionary with new values for updating
-
-    Also from G-SchNet
-    """
-    for key in d_upd:
-        if key not in d:
-            d[key] = d_upd[key]
-        else:
-            for k in d_upd[key]:
-                d[key][k] = np.append(d[key][k], d_upd[key][k], 0)
+    return pybel.Molecule(obmol)

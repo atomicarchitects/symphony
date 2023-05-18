@@ -10,6 +10,7 @@ from absl import app
 from absl import logging
 import ase
 import ase.data
+from ase.db import connect
 import ase.io
 import ase.visualize
 import jax
@@ -101,11 +102,7 @@ def generate_molecules(
     def get_predictions(
         fragment: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
-<<<<<<< HEAD
-        fragments = jraph.pad_with_graphs(fragment, n_node=40, n_edge=2048, n_graph=2)
-=======
-        fragments = jraph.pad_with_graphs(fragment, n_node=40, n_edge=1600, n_graph=2)
->>>>>>> 3b3b5d9db5a6c2bfd2ea7dab6501b0dfb53db91c
+        fragments = jraph.pad_with_graphs(fragment, n_node=80, n_edge=4096, n_graph=2)
         preds = apply_fn(params, rng, fragments, beta)
 
         # Remove the batch dimension.
@@ -209,11 +206,11 @@ def generate_molecules(
             )
             fig_all.write_html(outputfile, include_plotlyjs="cdn")
 
-    # Save the mol_dict over all seeds.
-    ase_to_mol_dict(
-        molecule_list,
-        file_name=os.path.join(molecules_outputdir, "generated_molecules.mol_dict"),
-    )
+    # Save the generated molecules as an ASE database.
+    output_db = os.path.join(molecules_outputdir, "generated_molecules.db")
+    with connect(output_db) as conn:
+        for mol in molecule_list:
+            conn.write(mol)
 
 
 def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
