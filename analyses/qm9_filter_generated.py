@@ -79,45 +79,6 @@ def get_parser():
     return main_parser
 
 
-def remove_disconnected(connectivity_batch, valid_mol=None):
-    """
-    Identify structures which are actually more than one molecule (as they consist of
-    disconnected structures) and mark them as invalid.
-
-    Args:
-        connectivity_batch (numpy.ndarray): batch of connectivity matrices
-        valid_mol (numpy.ndarray, optional): array of the same length as connectivity_batch
-            which flags molecules as valid, if None all connectivity matrices are
-            considered to correspond to valid molecules in the beginning (default:
-            None)
-
-    Returns:
-        dict (str->numpy.ndarray): a dictionary containing an array which marks
-            molecules as valid under the key 'valid' (identified disconnected
-            structures will now be marked as invalid in contrast to the flag in input
-            argument valid)
-    """
-    if valid_mol is None:
-        valid_mol = np.ones(len(connectivity_batch), dtype=bool)
-    # find disconnected parts for every given connectivity matrix
-    for i, con_mat in enumerate(connectivity_batch):
-        # only work with molecules categorized as valid
-        if not valid_mol[i]:
-            continue
-        seen, queue = {0}, collections.deque([0])
-        while queue:
-            vertex = queue.popleft()
-            for node in np.argwhere(con_mat[vertex] > 0).flatten():
-                if node not in seen:
-                    seen.add(node)
-                    queue.append(node)
-        # if the seen nodes do not include all nodes, there are disconnected
-        #  parts and the molecule is invalid
-        if seen != {*range(len(con_mat))}:
-            valid_mol[i] = False
-    return {"valid_mol": valid_mol}
-
-
 def filter_unique(mols, valid=None, use_bits=False):
     """
     Identify duplicate molecules among a large amount of generated structures.
@@ -616,14 +577,14 @@ def filter_new(
     start_time = time.time()
     if n_threads <= 0:
         train_fps = _get_training_fingerprints(
-            dbpath, train_idx, print_file, use_con_mat=True
+            dbpath, train_idx, print_file
         )
     else:
         train_fps = {"fingerprints": [None for _ in range(len(train_idx))]}
         run_threaded(
             _get_training_fingerprints,
             {"train_idx": train_idx},
-            {"dbpath": dbpath, "use_bits": True, "use_con_mat": True},
+            {"dbpath": dbpath, "use_bits": True},
             train_fps,
             exclusive_kwargs={"print_file": print_file},
             n_threads=n_threads,
@@ -689,7 +650,7 @@ def filter_new(
 
 
 def _get_training_fingerprints(
-    dbpath, train_idx, print_file=True, use_bits=False, use_con_mat=False
+    dbpath, train_idx, print_file=True, use_bits=False
 ):
     """
     Get the fingerprints (FP2 from Open Babel), canonical smiles representation,
@@ -706,9 +667,6 @@ def _get_training_fingerprints(
             (default: True)
         use_bits (bool, optional): set True to return the non-zero bits in the
             fingerprint instead of the pybel.Fingerprint object (default: False)
-        use_con_mat (bool, optional): set True to use pre-computed connectivity
-            matrices (need to be stored in the training database in compressed format
-            under the key 'con_mat', default: False)
 
     Returns:
         dict (str->list of tuple): dictionary with list of tuples under the key
@@ -717,8 +675,6 @@ def _get_training_fingerprints(
         the order)
     """
     train_fps = []
-    if use_con_mat:
-        compressor = ConnectivityCompressor()
     with connect(dbpath) as conn:
         if not print_file:
             print("0.00%", end="\r", flush=True)
@@ -729,10 +685,6 @@ def _get_training_fingerprints(
             except:
                 print(f"error getting idx={idx}")
             at = row.toatoms()
-            if use_con_mat:
-                con_mat = compressor.decompress(row.data["con_mat"])
-            else:
-                con_mat = None
             train_fps += [get_fingerprint(at, use_bits)]
             if (i % 100 == 0 or i + 1 == len(train_idx)) and not print_file:
                 print("\033[K", end="\r", flush=True)
@@ -749,9 +701,6 @@ def get_fingerprint(ase_mol, use_bits=False):
         ase_mol (ase.Atoms): molecule
         use_bits (bool, optional): set True to return the non-zero bits in the
             fingerprint instead of the pybel.Fingerprint object (default: False)
-        con_mat (numpy.ndarray, optional): connectivity matrix of the molecule
-            containing the pairwise bond orders between all atoms (n_atoms x n_atoms)
-            (can be inferred automatically if not provided, default: None)
 
     Returns:
         pybel.Fingerprint or set of int: the fingerprint of the molecule or a set
