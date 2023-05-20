@@ -73,6 +73,12 @@ def get_parser():
         "everything sequentially in the main thread,"
         " default: %(default)s)",
     )
+    main_parser.add_argument(
+        "--init",
+        type=str,
+        default="C",
+        help="An initial molecular fragment to start the generation process from.",
+    )
 
     return main_parser
 
@@ -941,7 +947,7 @@ if __name__ == "__main__":
 
     mol_path = args.mol_path
     if os.path.isdir(args.mol_path):
-        mol_path = os.path.join(args.mol_path, 'generated_molecules.db')
+        mol_path = os.path.join(args.mol_path, f'generated_molecules_init={args.init_molecule}.db')
     if not os.path.isfile(mol_path):
         print(
             f"\n\nThe specified data path ({mol_path}) is neither a file "
