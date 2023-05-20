@@ -18,6 +18,7 @@ import sys
 sys.path.append("..")
 
 import analyses.analysis as analysis
+import analyses.check_distances as check_distances
 
 
 ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
@@ -358,6 +359,36 @@ def plot_atom_type_hist(
     os.makedirs(outputdir, exist_ok=True)
     outputfile = os.path.join(
         outputdir, f"{model}_atom_types.png"
+    )
+    plt.savefig(outputfile, bbox_inches="tight")
+    plt.close()
+
+
+def plot_atom_distance_hist(
+        mol_path: str, outputdir: str, model: str
+):
+    """Creates a histogram of atom types for a given set of generated molecules."""
+    molecules = []
+    with connect(mol_path) as conn:
+        for row in conn.select():
+            molecules.append(row.toatoms())
+
+    distances = []
+
+    for mol in molecules:
+        for distance in check_distances.get_interatomic_distances(mol.get_positions()):
+            distances.append(distance)
+
+    plt.hist(distances, bins=20, range = (0, 10))
+    # TODO make `model` auto-detected from path
+    plt.title(
+        f"{get_title_for_model(model)}: Distribution of Interatomic Distances in Generated Molecules"
+    )
+
+    # Save figure.
+    os.makedirs(outputdir, exist_ok=True)
+    outputfile = os.path.join(
+        outputdir, f"{model}_atom_distances.png"
     )
     plt.savefig(outputfile, bbox_inches="tight")
     plt.close()

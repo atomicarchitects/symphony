@@ -8,7 +8,6 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from schnetpack import Properties
 
 from analyses.analysis import construct_pybel_mol
 

@@ -11,8 +11,6 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from schnetpack import Properties
-from analyses.analysis import update_dict
 
 
 # Bond lengths from:
@@ -94,65 +92,65 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_file = args.print_file
 
-    # read input file or fuse dictionaries if mol_path is a folder
-    if not os.path.isdir(args.mol_path):
-        if not os.path.isfile(args.mol_path):
-            print(
-                f"\n\nThe specified data path ({args.mol_path}) is neither a file "
-                f"nor a directory! Please specify a different data path."
-            )
-            raise FileNotFoundError
-        else:
-            with open(args.mol_path, "rb") as f:
-                res = pickle.load(f)  # read input file
-    else:
-        print(f"\n\nFusing .mol_dict files in folder {args.mol_path}...")
-        mol_files = [f for f in os.listdir(args.mol_path) if f.endswith(".mol_dict")]
-        if len(mol_files) == 0:
-            print(
-                f"Could not find any .mol_dict files at {args.mol_path}! Please "
-                f"specify a different data path!"
-            )
-            raise FileNotFoundError
-        res = {}
-        for file in mol_files:
-            with open(os.path.join(args.mol_path, file), "rb") as f:
-                cur_res = pickle.load(f)
-                update_dict(res, cur_res)
-        res = dict(sorted(res.items()))  # sort dictionary keys
-        print(f"...done!")
+    # # read input file or fuse dictionaries if mol_path is a folder
+    # if not os.path.isdir(args.mol_path):
+    #     if not os.path.isfile(args.mol_path):
+    #         print(
+    #             f"\n\nThe specified data path ({args.mol_path}) is neither a file "
+    #             f"nor a directory! Please specify a different data path."
+    #         )
+    #         raise FileNotFoundError
+    #     else:
+    #         with open(args.mol_path, "rb") as f:
+    #             res = pickle.load(f)  # read input file
+    # else:
+    #     print(f"\n\nFusing .mol_dict files in folder {args.mol_path}...")
+    #     mol_files = [f for f in os.listdir(args.mol_path) if f.endswith(".mol_dict")]
+    #     if len(mol_files) == 0:
+    #         print(
+    #             f"Could not find any .mol_dict files at {args.mol_path}! Please "
+    #             f"specify a different data path!"
+    #         )
+    #         raise FileNotFoundError
+    #     res = {}
+    #     for file in mol_files:
+    #         with open(os.path.join(args.mol_path, file), "rb") as f:
+    #             cur_res = pickle.load(f)
+    #             update_dict(res, cur_res)
+    #     res = dict(sorted(res.items()))  # sort dictionary keys
+    #     print(f"...done!")
 
-    # get distance bounds
-    min_dist = args.min_dist
-    # print the chosen settings
-    print(f"\nMinimum valid distance:\n{min_dist}\n")
+    # # get distance bounds
+    # min_dist = args.min_dist
+    # # print the chosen settings
+    # print(f"\nMinimum valid distance:\n{min_dist}\n")
 
-    n_atoms_list = np.array([], dtype=np.int32)
-    valid_dists = np.array([])
-    valid_atoms = np.array([])
+    # n_atoms_list = np.array([], dtype=np.int32)
+    # valid_dists = np.array([])
+    # valid_atoms = np.array([])
 
-    # Check distances
-    for n_atoms in res:
-        if not isinstance(n_atoms, int) or n_atoms == 0:
-            continue
+    # # Check distances
+    # for n_atoms in res:
+    #     if not isinstance(n_atoms, int) or n_atoms == 0:
+    #         continue
 
-        prog_str = lambda x: f"Checking {x} for molecules of length {n_atoms}"
-        work_str = "valence"
-        if not print_file:
-            print("\033[K", end="\r", flush=True)
-            print(prog_str(work_str) + " (0.00%)", end="\r", flush=True)
-        else:
-            print(prog_str(work_str), flush=True)
+    #     prog_str = lambda x: f"Checking {x} for molecules of length {n_atoms}"
+    #     work_str = "valence"
+    #     if not print_file:
+    #         print("\033[K", end="\r", flush=True)
+    #         print(prog_str(work_str) + " (0.00%)", end="\r", flush=True)
+    #     else:
+    #         print(prog_str(work_str), flush=True)
 
-        d = res[n_atoms]
-        all_pos = d[Properties.R]
-        all_numbers = d[Properties.Z]
-        n_mols = len(all_pos)
+    #     d = res[n_atoms]
+    #     all_pos = d[Properties.R]
+    #     all_numbers = d[Properties.Z]
+    #     n_mols = len(all_pos)
 
-        # check distances
-        valid_dists = np.concatenate([valid_dists, check_distances(all_pos, min_dist)])
-        n_atoms_list = np.concatenate([n_atoms_list, np.ones(n_mols) * n_atoms])
+    #     # check distances
+    #     valid_dists = np.concatenate([valid_dists, check_distances(all_pos, min_dist)])
+    #     n_atoms_list = np.concatenate([n_atoms_list, np.ones(n_mols) * n_atoms])
 
-    valid_stats = pd.DataFrame({"n_atoms": n_atoms_list, "valid_distances": valid_dists})
-    with open('distance-results.pkl', 'wb') as f:
-        pickle.dump(valid_stats, f)
+    # valid_stats = pd.DataFrame({"n_atoms": n_atoms_list, "valid_distances": valid_dists})
+    # with open('distance-results.pkl', 'wb') as f:
+    #     pickle.dump(valid_stats, f)
