@@ -947,7 +947,7 @@ if __name__ == "__main__":
 
     mol_path = args.mol_path
     if os.path.isdir(args.mol_path):
-        mol_path = os.path.join(args.mol_path, f'generated_molecules_init={args.init_molecule}.db')
+        mol_path = os.path.join(args.mol_path, f'generated_molecules_init={args.init}.db')
     if not os.path.isfile(mol_path):
         print(
             f"\n\nThe specified data path ({mol_path}) is neither a file "
@@ -1182,7 +1182,7 @@ if __name__ == "__main__":
     metric_df_dict["generated_stats"] = stats_df
 
     # store results in pickle file
-    stats_path = os.path.join(args.mol_path, "generated_molecules_statistics.pkl")
+    stats_path = os.path.join(args.mol_path, f"generated_molecules_init={args.init}_statistics.pkl")
     if os.path.isfile(stats_path):
         file_name, _ = os.path.splitext(stats_path)
         expand = 0
