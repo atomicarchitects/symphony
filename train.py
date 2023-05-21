@@ -252,9 +252,21 @@ def train_and_evaluate(
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
+    # We will record the best model seen during training.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
-    state = ckpt.restore_or_initialize(state)
+    restored = ckpt.restore_or_initialize({
+        "state": state,
+        "best_state": state,
+        "step_for_best_state": 1.,
+        "metrics_for_best_state": None,
+        "min_val_loss": 1.,
+    })
+    state = restored["state"]
+    best_state = restored["best_state"]
+    step_for_best_state = restored["step_for_best_state"]
+    metrics_for_best_state = restored["metrics_for_best_state"]
+    min_val_loss = restored["min_val_loss"]
     initial_step = int(state.step) + 1
 
     # Save the config for reproducibility.
@@ -271,11 +283,6 @@ def train_and_evaluate(
         every_secs=10800,
     )
     hooks = [report_progress, profile]
-
-    # We will record the best model seen during training.
-    best_state = None
-    step_for_best_state = initial_step
-    min_val_loss = jnp.inf
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -313,11 +320,15 @@ def train_and_evaluate(
             # Save the current state and best state seen so far.
             with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
                 pickle.dump(state.params, f)
+            with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
+                pickle.dump(best_state.params, f)
             ckpt.save(
                 {
                     "state": state,
                     "best_state": best_state,
                     "step_for_best_state": step_for_best_state,
+                    "metrics_for_best_state": None,
+                    "min_val_loss": min_val_loss,
                 }
             )
 
@@ -375,6 +386,7 @@ def train_and_evaluate(
                 "best_state": best_state,
                 "step_for_best_state": step_for_best_state,
                 "metrics_for_best_state": metrics_for_best_state,
+                "min_val_loss": min_val_loss,
             }
         )
 
