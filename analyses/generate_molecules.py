@@ -10,6 +10,7 @@ from absl import app
 from absl import logging
 import ase
 import ase.data
+from ase.db import connect
 import ase.io
 import ase.visualize
 import jax
@@ -205,41 +206,11 @@ def generate_molecules(
             )
             fig_all.write_html(outputfile, include_plotlyjs="cdn")
 
-    # Save the mol_dict over all seeds.
-    ase_to_mol_dict(
-        molecule_list,
-        file_name=os.path.join(molecules_outputdir, "generated_molecules.mol_dict"),
-    )
-
-
-def ase_to_mol_dict(molecules: List[ase.Atoms], save=True, file_name=None):
-    """from G-SchNet: https://github.com/atomistic-machine-learning/G-SchNet"""
-
-    generated = {}
-    for mol in molecules:
-        l = mol.get_atomic_numbers().shape[0]
-        if l not in generated:
-            generated[l] = {
-                "_positions": np.array([mol.get_positions()]),
-                "_atomic_numbers": np.array([mol.get_atomic_numbers()]),
-            }
-        else:
-            generated[l]["_positions"] = np.append(
-                generated[l]["_positions"],
-                np.array([mol.get_positions()]),
-                0,
-            )
-            generated[l]["_atomic_numbers"] = np.append(
-                generated[l]["_atomic_numbers"],
-                np.array([mol.get_atomic_numbers()]),
-                0,
-            )
-
-    if save:
-        with open(file_name, "wb") as f:
-            pickle.dump(generated, f)
-
-    return generated
+    # Save the generated molecules as an ASE database.
+    output_db = os.path.join(molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db")
+    with connect(output_db) as conn:
+        for mol in molecule_list:
+            conn.write(mol)
 
 
 def main(unused_argv: Sequence[str]) -> None:
@@ -286,3 +257,4 @@ if __name__ == "__main__":
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)
+

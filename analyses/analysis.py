@@ -24,6 +24,8 @@ from clu import checkpoint
 from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
+from openbabel import pybel
+from openbabel import openbabel as ob
 
 # import analyses.utility_classes as utility_classes
 
@@ -804,3 +806,29 @@ def get_mol_dict(mol_path):
 
         print(f"...done!")
         return res
+
+def construct_obmol(mol: ase.Atoms) -> ob.OBMol:
+    obmol = ob.OBMol()
+    obmol.BeginModify()
+
+    # set positions and atomic numbers of all atoms in the molecule
+    for p, n in zip(mol.positions, mol.numbers):
+        obatom = obmol.NewAtom()
+        obatom.SetAtomicNum(int(n))
+        obatom.SetVector(*p.tolist())
+
+    # infer bonds and bond order
+    obmol.ConnectTheDots()
+    obmol.PerceiveBondOrders()
+
+    obmol.EndModify()
+    return obmol
+
+
+def construct_pybel_mol(mol: ase.Atoms) -> pybel.Molecule:
+    """Constructs a Pybel molecule from an ASE molecule."""
+    obmol = construct_obmol(mol)
+
+    return pybel.Molecule(obmol)
+
+
