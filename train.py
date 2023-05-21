@@ -144,7 +144,7 @@ def evaluate_model(
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
-    mask_atom_types: bool,
+    mask_atom_types_in_fragments: bool,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -157,7 +157,7 @@ def evaluate_model(
         for graphs in datasets[split].as_numpy_iterator():
             graphs = datatypes.Fragments.from_graphstuple(graphs)
 
-            if mask_atom_types:
+            if mask_atom_types_in_fragments:
                 graphs = mask_atom_types(graphs)
 
             # Compute metrics for this batch.
