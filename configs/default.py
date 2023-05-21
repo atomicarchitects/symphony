@@ -15,9 +15,8 @@ def get_root_dir(dataset: str) -> Optional[str]:
             if username == "songk":
                 return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
             return "/radish/qm9_fragments/radius"
-            return "/home/ameyad/qm9_data_tf/data_tf2"
         elif username == "ameyad":
-            return "/Users/ameyad/Documents/qm9_data_tf/data_tf2"
+            return "/Users/ameyad/Documents/qm9_data_tf/radius"
         elif username == "songk":
             return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None
