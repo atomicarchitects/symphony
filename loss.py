@@ -22,6 +22,7 @@ def generation_loss(
     target_position_inverse_temperature: float,
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
+    mask_atom_types: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -256,6 +257,10 @@ def generation_loss(
     # If this is the last step in the generation process, we do not have to predict atom type and position.
     loss_atom_type = atom_type_loss()
     loss_position = position_loss() * (1 - graphs.globals.stop)
+
+    # Mask out the loss for atom types.
+    if mask_atom_types:
+        loss_atom_type = jnp.zeros_like(loss_atom_type)
 
     # Ignore position loss for graphs with less than, or equal to 3 atoms.
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
