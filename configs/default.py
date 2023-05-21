@@ -64,6 +64,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.target_position_inverse_temperature = 1.
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.position_loss_type = "kl_divergence"
+    config.mask_atom_types = False
 
     # Prediction heads.
     config.focus_predictor = ml_collections.ConfigDict()

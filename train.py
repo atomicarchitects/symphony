@@ -144,6 +144,7 @@ def evaluate_model(
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
+    mask_atom_types: bool,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -155,6 +156,9 @@ def evaluate_model(
         # Loop over graphs.
         for graphs in datasets[split].as_numpy_iterator():
             graphs = datatypes.Fragments.from_graphstuple(graphs)
+
+            if mask_atom_types:
+                graphs = mask_atom_types(graphs)
 
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
@@ -168,6 +172,21 @@ def evaluate_model(
         eval_metrics[split] = split_metrics
 
     return eval_metrics
+
+
+def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
+    """Mask atom types in graphs."""
+    num_nodes, num_atom_types = graphs.nodes.target_species_probs.shape
+    graphs = graphs._replace(
+        nodes=graphs.nodes._replace(
+            species=jnp.zeros_like(graphs.nodes.species),
+            target_species_probs=jnp.hstack((jnp.ones((num_nodes, 1)), jnp.zeros((num_nodes, num_atom_types - 1))))
+        ),
+        globals=graphs.globals._replace(
+            target_species=jnp.zeros_like(graphs.globals.target_species)
+        )
+    )
+    return graphs
 
 
 def train_and_evaluate(
@@ -206,6 +225,7 @@ def train_and_evaluate(
                 splits,
                 rng,
                 config.loss_kwargs,
+                config.mask_atom_types,
             )
 
         # Compute and write metrics.
@@ -246,8 +266,6 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    # We set run_in_evaluation_mode as False,
-    # because we want to evaluate how the model performs on unseen data.
     eval_net = models.create_model(config, run_in_evaluation_mode=False)
     eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
@@ -336,6 +354,10 @@ def train_and_evaluate(
         try:
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
+            
+            if config.mask_atom_types:
+                graphs = mask_atom_types(graphs)
+
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
             break
