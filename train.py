@@ -365,7 +365,8 @@ def train_and_evaluate(
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)
 
-            raise ValueError(graphs)
+            for graph in jraph.unbatch(jraph.unpad_with_graphs(graphs)):
+                print(graph)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
