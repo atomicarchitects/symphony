@@ -39,17 +39,22 @@ def generation_loss(
 
     def atom_type_loss() -> jnp.ndarray:
         """Computes the loss over atom types."""
-        focus_and_target_species_probs = preds.nodes.focus_and_target_species_probs
+        logits = preds.nodes.focus_and_target_species_logits
         targets = graphs.nodes.focus_and_target_species_probs
 
-        assert focus_and_target_species_probs.shape == (num_nodes, num_elements + 1)
+        # Subtract the maximum value for numerical stability.
+        logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
+
+        assert logits.shape == (num_nodes, num_elements + 1)
         assert targets.shape == (num_nodes, num_elements + 1)
         
-        logits = jnp.where(targets == 0, 0., jnp.log(focus_and_target_species_probs))
         loss_atom_type = -jnp.sum(targets * logits, axis=-1)
         assert loss_atom_type.shape == (num_nodes,)
 
-        loss_atom_type = jraph.segment_mean(loss_atom_type, segment_ids, num_graphs)
+        loss_atom_type = jraph.segment_sum(loss_atom_type, segment_ids, num_graphs)
+        assert loss_atom_type.shape == (num_graphs,)
+
+        loss_atom_type += jraph.segment_sum(jnp.sum(jnp.exp(logits), axis=-1), segment_ids, num_graphs)
         assert loss_atom_type.shape == (num_graphs,)
 
         return loss_atom_type

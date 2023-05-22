@@ -34,7 +34,7 @@ def segment_softmax_2D(logits: jnp.ndarray, segment_ids: jnp.ndarray, num_graphs
     """Returns the segment softmax over 2D arrays. The segment_ids correspond to the first dimension."""
     # Subtract the max to avoid numerical issues.
     logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
-    # Normalize by all nodes in each graph + all atom types.
+    # Normalize exp() by all nodes in each graph + all atom types.
     exp_logits = jnp.exp(logits)
     exp_logits_summed = jnp.sum(exp_logits, axis=1)
     normalizing_factors = jraph.segment_sum(exp_logits_summed, segment_ids, num_segments=num_graphs)
