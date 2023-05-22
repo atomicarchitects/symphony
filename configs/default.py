@@ -33,6 +33,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
+    config.shuffle_datasets = True
 
     # Optimizer.
     config.optimizer = "adam"
