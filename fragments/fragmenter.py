@@ -38,13 +38,12 @@ def main(
         "positions": tf.TensorSpec(shape=(None, 3), dtype=tf.float32),
         "species": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "target_species_probs": tf.TensorSpec(
-            shape=(None, len(atomic_numbers)), dtype=tf.float32
+            shape=(None, len(atomic_numbers) + 1), dtype=tf.float32
         ),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
-        "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
         "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
@@ -70,9 +69,6 @@ def main(
                         "Target position is too far away from the rest of the molecule."
                     )
                     skip = True
-            if len(frags) == 0 or not frags[-1].globals.stop:
-                print("The last fragment is not a stop fragment.")
-                skip = True
 
             if skip:
                 continue
@@ -86,7 +82,6 @@ def main(
                     ),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
-                    "stop": frag.globals.stop.astype(np.bool_),
                     "target_positions": frag.globals.target_positions.astype(
                         np.float32
                     ),
