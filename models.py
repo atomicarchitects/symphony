@@ -20,11 +20,9 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
-def get_atomic_numbers(species: jnp.ndarray, atomic_numbers=jnp.array([1, 6, 7, 8, 9])):
-    numbers = []
-    for i in species:
-        numbers.append(atomic_numbers[i])
-    return jnp.array(numbers)
+def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
+    """Returns the atomic numbers for the species."""
+    return jnp.asarray(ATOMIC_NUMBERS)[species]
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:

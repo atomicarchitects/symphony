@@ -45,7 +45,8 @@ def generation_loss(
         assert focus_and_target_species_probs.shape == (num_nodes, num_elements + 1)
         assert targets.shape == (num_nodes, num_elements + 1)
         
-        loss_atom_type = -jnp.sum(targets * jnp.log(focus_and_target_species_probs), axis=-1)
+        logits = jnp.where(targets == 0, 0., jnp.log(focus_and_target_species_probs))
+        loss_atom_type = -jnp.sum(targets * logits, axis=-1)
         assert loss_atom_type.shape == (num_nodes,)
 
         loss_atom_type = jraph.segment_mean(loss_atom_type, segment_ids, num_graphs)
