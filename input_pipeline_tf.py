@@ -260,7 +260,7 @@ def get_unbatched_qm9_datasets(
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
-        if config.shuffle_dataset:
+        if config.shuffle_datasets:
             dataset_split = dataset_split.shuffle(1000, seed=seed)
         datasets[split] = dataset_split
     return datasets
