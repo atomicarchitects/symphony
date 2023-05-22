@@ -280,7 +280,7 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
         nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
-            target_species_probs=get_tensor_spec(graph.nodes.target_species_probs),
+            focus_and_target_species_probs=get_tensor_spec(graph.nodes.focus_and_target_species_probs),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=get_tensor_spec(graph.globals.stop),
@@ -299,7 +299,8 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     """Converts a dictionary of tf.Tensors to a GraphsTuple."""
     positions = graph["positions"]
     species = graph["species"]
-    target_species_probs = graph["target_species_probs"]
+    focus_and_target_species_probs = graph["target_species_probs"]
+    focus_and_target_species_probs = tf.concat([focus_and_target_species_probs, 1 - tf.math.reduce_sum(focus_and_target_species_probs, axis=-1, keepdims=True)], axis=-1)
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
@@ -313,7 +314,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         nodes=datatypes.FragmentsNodes(
             positions=positions,
             species=species,
-            target_species_probs=target_species_probs,
+            focus_and_target_species_probs=focus_and_target_species_probs,
         ),
         edges=edges,
         receivers=receivers,

@@ -4,6 +4,7 @@ from typing import Tuple
 import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
+import jraph
 
 import datatypes
 import models
@@ -34,32 +35,22 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
     n_node = graphs.n_node
+    segment_ids = models.get_segment_ids(n_node, num_nodes, num_graphs)
 
     def atom_type_loss() -> jnp.ndarray:
         """Computes the loss over atom types."""
-        logits = preds.nodes.target_species_logits
-        target = graphs.nodes.target_species_probs
-        # stop = graphs.globals.stop (= 1 - sum(target))
+        focus_and_target_species_probs = preds.nodes.focus_and_target_species_probs
+        targets = graphs.nodes.focus_and_target_species_probs
 
-        assert logits.shape == target.shape == (num_nodes, num_elements)
+        assert focus_and_target_species_probs.shape == (num_nodes, num_elements + 1)
+        assert targets.shape == (num_nodes, num_elements + 1)
+        
+        loss_atom_type = -jnp.sum(targets * jnp.log(focus_and_target_species_probs), axis=-1)
+        assert loss_atom_type.shape == (num_nodes,)
 
-        max = e3nn.scatter_max(jnp.max(logits, axis=1), nel=n_node, initial=0.0)
-        max_ext = e3nn.scatter_max(
-            jnp.max(logits, axis=1, keepdims=True),
-            nel=n_node,
-            map_back=True,
-            initial=0.0,
-        )
-        assert max.shape == (num_graphs,)
-        assert max_ext.shape == (num_nodes, 1)
-
-        loss_atom_type = -(
-            -max + e3nn.scatter_sum(jnp.sum(target * logits, axis=-1), nel=n_node)
-        ) + jnp.log(
-            jnp.exp(-max)
-            + e3nn.scatter_sum(jnp.sum(jnp.exp(logits - max_ext), axis=1), nel=n_node)
-        )
+        loss_atom_type = jraph.segment_mean(loss_atom_type, segment_ids, num_graphs)
         assert loss_atom_type.shape == (num_graphs,)
+
         return loss_atom_type
 
     def target_position_to_radius_weights(
@@ -185,6 +176,7 @@ def generation_loss(
             true_radius_weights, log_true_angular_coeffs, log_predicted_dist
         )
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     def position_loss_with_l2() -> jnp.ndarray:
@@ -243,6 +235,7 @@ def generation_loss(
             true_radius_weights, log_true_angular_coeffs, log_predicted_dist_coeffs
         )
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     def position_loss() -> jnp.ndarray:
@@ -265,7 +258,7 @@ def generation_loss(
     # Ignore position loss for graphs with less than, or equal to 3 atoms.
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
     if ignore_position_loss_for_small_fragments:
-        loss_position = jnp.where(graphs.n_node <= 3, 0, loss_position)
+        loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
     total_loss = loss_atom_type + loss_position
     return total_loss, (loss_atom_type, loss_position)
