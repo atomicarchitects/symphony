@@ -735,7 +735,7 @@ class Predictor(hk.Module):
 
         # Compute stop probabilities.
         node_stop_probs = focus_and_target_species_probs[:, -1]
-        stop_probs = jraph.segment_sum(node_stop_probs, segment_ids)
+        stop_probs = jraph.segment_sum(node_stop_probs, segment_ids, num_graphs)
 
         # Get the PRNG key.
         rng = hk.next_rng_key()
@@ -783,8 +783,8 @@ class Predictor(hk.Module):
 
         # Get the angular probabilities.
         angular_probs = jax.vmap(
-            lambda p: p[radius_indices] / p[radius_indices].sum(), position_probs
-        )
+            lambda p, r_index: p[r_index] / p[r_index].integrate()
+        )(position_probs, radius_indices)  # [num_graphs, res_beta, res_alpha]
 
         # Sample angles.
         rng, angular_rng = jax.random.split(rng)
