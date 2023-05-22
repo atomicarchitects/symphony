@@ -176,11 +176,11 @@ def evaluate_model(
 
 def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
     """Mask atom types in graphs."""
-    num_nodes, num_atom_types = graphs.nodes.target_species_probs.shape
+    num_nodes, num_atom_types = graphs.nodes.focus_and_target_species_probs.shape
     graphs = graphs._replace(
         nodes=graphs.nodes._replace(
             species=jnp.zeros_like(graphs.nodes.species),
-            target_species_probs=jnp.hstack((jnp.ones((num_nodes, 1)), jnp.zeros((num_nodes, num_atom_types - 1))))
+            focus_and_target_species_probs=jnp.hstack((jnp.ones((num_nodes, 1)), jnp.zeros((num_nodes, num_atom_types - 1))))
         ),
         globals=graphs.globals._replace(
             target_species=jnp.zeros_like(graphs.globals.target_species)
