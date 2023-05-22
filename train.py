@@ -218,6 +218,7 @@ def train_and_evaluate(
         rng: chex.PRNGKey,
         is_final_eval: bool,
     ) -> Dict[str, metrics.Collection]:
+        return {"val_eval": {"total_loss": 1.}}
         # Final eval splits are usually larger.
         if is_final_eval:
             splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
@@ -366,7 +367,7 @@ def train_and_evaluate(
                 graphs = mask_atom_types(graphs)
 
             for graph in jraph.unbatch(jraph.unpad_with_graphs(graphs)):
-                print(graph)
+                print(graph.nodes.focus_and_target_species_probs)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
