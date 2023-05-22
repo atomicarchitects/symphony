@@ -251,7 +251,6 @@ def get_unbatched_qm9_datasets(
                 )
 
             dataset_split = dataset_split.skip(num_steps_to_skip).take(num_steps_to_take)
-
         # This is usually the case.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
