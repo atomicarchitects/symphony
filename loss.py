@@ -37,8 +37,8 @@ def generation_loss(
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes, num_graphs)
 
-    def atom_type_loss() -> jnp.ndarray:
-        """Computes the loss over atom types."""
+    def focus_and_atom_type_loss() -> jnp.ndarray:
+        """Computes the loss over focus and atom types."""
         logits = preds.nodes.focus_and_target_species_logits
         targets = graphs.nodes.focus_and_target_species_probs
 
@@ -49,18 +49,18 @@ def generation_loss(
         assert targets.shape == (num_nodes, num_elements + 1)
         
         # Compute the cross-entropy loss.
-        loss_atom_type = -jnp.sum(targets * logits, axis=-1)
-        loss_atom_type = jraph.segment_sum(loss_atom_type, segment_ids, num_graphs)
-        loss_atom_type += jraph.segment_sum(jnp.sum(jnp.exp(logits), axis=-1), segment_ids, num_graphs)
+        loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1)
+        loss_focus_and_atom_type = jraph.segment_sum(loss_focus_and_atom_type, segment_ids, num_graphs)
+        loss_focus_and_atom_type += jraph.segment_sum(jnp.sum(jnp.exp(logits), axis=-1), segment_ids, num_graphs)
 
         # We have computed the cross-entropy loss.
         # Subtract out self-entropy to get the KL divergence.
         lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1)
         lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
-        loss_atom_type -= lower_bound
-        assert loss_atom_type.shape == (num_graphs,)
+        loss_focus_and_atom_type -= lower_bound
+        assert loss_focus_and_atom_type.shape == (num_graphs,)
 
-        return loss_atom_type
+        return loss_focus_and_atom_type
 
     def target_position_to_radius_weights(
         target_position: jnp.ndarray,
@@ -257,17 +257,17 @@ def generation_loss(
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
     # If this is the last step in the generation process, we do not have to predict atom type and position.
-    loss_atom_type = atom_type_loss()
+    loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = position_loss() * (1 - graphs.globals.stop)
 
     # Mask out the loss for atom types.
     if mask_atom_types:
-        loss_atom_type = jnp.zeros_like(loss_atom_type)
+        loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
 
     # Ignore position loss for graphs with less than, or equal to 3 atoms.
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
     if ignore_position_loss_for_small_fragments:
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_atom_type + loss_position
-    return total_loss, (loss_atom_type, loss_position)
+    total_loss = loss_focus_and_atom_type + loss_position
+    return total_loss, (loss_focus_and_atom_type, loss_position)
