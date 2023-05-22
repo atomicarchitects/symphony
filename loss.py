@@ -48,13 +48,16 @@ def generation_loss(
         assert logits.shape == (num_nodes, num_elements + 1)
         assert targets.shape == (num_nodes, num_elements + 1)
         
+        # Compute the cross-entropy loss.
         loss_atom_type = -jnp.sum(targets * logits, axis=-1)
-        assert loss_atom_type.shape == (num_nodes,)
-
         loss_atom_type = jraph.segment_sum(loss_atom_type, segment_ids, num_graphs)
-        assert loss_atom_type.shape == (num_graphs,)
-
         loss_atom_type += jraph.segment_sum(jnp.sum(jnp.exp(logits), axis=-1), segment_ids, num_graphs)
+
+        # We have computed the cross-entropy loss.
+        # Subtract out self-entropy to get the KL divergence.
+        lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1)
+        lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
+        loss_atom_type -= lower_bound
         assert loss_atom_type.shape == (num_graphs,)
 
         return loss_atom_type
