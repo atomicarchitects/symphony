@@ -176,11 +176,18 @@ def evaluate_model(
 
 def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
     """Mask atom types in graphs."""
-    num_nodes, num_atom_types = graphs.nodes.focus_and_target_species_probs.shape
+    def aggregate_sum(arr: jnp.ndarray) -> jnp.ndarray:
+        """Aggregates the sum of all elements upto the last in arr into the first element."""
+        # Set the first element of arr as the sum of all elements upto the last element.
+        # Keep the last element as is.
+        # Set all of the other elements to 0.
+        return jnp.concatenate([arr[:-1].sum(axis=0, keepdims=True), jnp.zeros_like(arr[:-1]), arr[-1:]], axis=0)
+    focus_and_target_species_probs = graphs.nodes.focus_and_target_species_probs
+    focus_and_target_species_probs = jax.vmap(aggregate_sum)(focus_and_target_species_probs)
     graphs = graphs._replace(
         nodes=graphs.nodes._replace(
             species=jnp.zeros_like(graphs.nodes.species),
-            focus_and_target_species_probs=jnp.hstack((jnp.ones((num_nodes, 1)), jnp.zeros((num_nodes, num_atom_types - 1))))
+            focus_and_target_species_probs=focus_and_target_species_probs
         ),
         globals=graphs.globals._replace(
             target_species=jnp.zeros_like(graphs.globals.target_species)
@@ -357,6 +364,8 @@ def train_and_evaluate(
             
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)
+
+            raise ValueError(graphs)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
