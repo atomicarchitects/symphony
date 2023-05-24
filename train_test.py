@@ -122,7 +122,8 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
 
 class TrainTest(parameterized.TestCase):
     def setUp(self):
-        self.preds, self.graphs = create_dummy_data()
+        pass
+       #self.preds, self.graphs = create_dummy_data()
 
     def test_focus_loss(self):
         _, (focus_loss, _, _) = train.generation_loss(
