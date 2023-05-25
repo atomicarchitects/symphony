@@ -69,13 +69,13 @@ def get_config() -> ml_collections.ConfigDict:
     config.mask_atom_types = False
 
     # Prediction heads.
-    config.focus_predictor = ml_collections.ConfigDict()
-    config.focus_predictor.latent_size = 128
-    config.focus_predictor.num_layers = 3
+    config.stop_predictor = ml_collections.ConfigDict()
+    config.stop_predictor.latent_size = 128
+    config.stop_predictor.num_layers = 3
 
-    config.target_species_predictor = ml_collections.ConfigDict()
-    config.target_species_predictor.latent_size = 128
-    config.target_species_predictor.num_layers = 3
+    config.focus_and_target_species_predictor = ml_collections.ConfigDict()
+    config.focus_and_target_species_predictor.latent_size = 128
+    config.focus_and_target_species_predictor.num_layers = 3
 
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 180

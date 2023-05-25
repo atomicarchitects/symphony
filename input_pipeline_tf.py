@@ -252,9 +252,12 @@ def get_unbatched_qm9_datasets(
 
             dataset_split = dataset_split.skip(num_steps_to_skip).take(num_steps_to_take)
             # for graph in dataset_split:
-            #     print(graph["species"], graph["target_species_probs"], (tf.math.reduce_sum(graph["target_species_probs"], axis=0)[-1:] == 1))
+            #     print(graph["species"], graph["target_species_probs"])
+            #     print(_convert_to_graphstuple(graph).globals.stop)
+            #     print(_convert_to_graphstuple(graph).nodes.stop)
+            #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
             #     print()
-
+                
         # This is usually the case.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
@@ -282,6 +285,7 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
             focus_and_target_species_probs=get_tensor_spec(graph.nodes.focus_and_target_species_probs),
+            stop=get_tensor_spec(graph.nodes.stop),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=get_tensor_spec(graph.globals.stop),
@@ -300,8 +304,9 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     """Converts a dictionary of tf.Tensors to a GraphsTuple."""
     positions = graph["positions"]
     species = graph["species"]
-    focus_and_target_species_probs = graph["target_species_probs"]
-    stop = (tf.math.reduce_sum(focus_and_target_species_probs, axis=0)[-1:] == 1)
+    focus_and_target_species_probs = graph["target_species_probs"][:, :-1]
+    stop = (tf.math.reduce_sum(focus_and_target_species_probs, axis=-1) == 0)
+    graph_stop = tf.math.reduce_all(stop == tf.ones_like(stop), keepdims=True)
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
@@ -315,12 +320,13 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             positions=positions,
             species=species,
             focus_and_target_species_probs=focus_and_target_species_probs,
+            stop=stop,
         ),
         edges=edges,
         receivers=receivers,
         senders=senders,
         globals=datatypes.FragmentsGlobals(
-            stop=stop,
+            stop=graph_stop,
             target_positions=target_positions,
             target_species=target_species,
         ),

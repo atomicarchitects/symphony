@@ -193,7 +193,7 @@ class TrainTest(parameterized.TestCase):
 
     @parameterized.product(
         config_name=["nequip"],
-        train_on_split_smaller_than_chunk=[False],
+        train_on_split_smaller_than_chunk=[True],
         position_loss_type=["l2", "kl_divergence"]
     )
     def test_train_and_evaluate(

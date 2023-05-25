@@ -8,6 +8,7 @@ import jraph
 
 import datatypes
 import models
+import optax
 
 
 def safe_log(x: jnp.ndarray) -> jnp.ndarray:
@@ -37,16 +38,30 @@ def generation_loss(
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes, num_graphs)
 
+    def stop_loss() -> jnp.ndarray:
+        """Computes the loss over stopped nodes."""
+        loss_stop = optax.sigmoid_binary_cross_entropy(preds.nodes.stop_logits, graphs.nodes.stop.astype(jnp.float32))
+        assert loss_stop.shape == (num_nodes,)
+
+        loss_stop = jraph.segment_mean(loss_stop, segment_ids, num_graphs)
+        assert loss_stop.shape == (num_graphs,)
+
+        return loss_stop
+    
     def focus_and_atom_type_loss() -> jnp.ndarray:
-        """Computes the loss over focus and atom types."""
+        """Computes the loss over focus and atom types for nodes which are not stopped."""
         logits = preds.nodes.focus_and_target_species_logits
         targets = graphs.nodes.focus_and_target_species_probs
+
+        # Mask out the stop nodes.
+        logits = jnp.where(graphs.nodes.stop[:, None], 0.0, logits)
+        targets = jnp.where(graphs.nodes.stop[:, None], 0.0, targets)
 
         # Subtract the maximum value for numerical stability.
         logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
 
-        assert logits.shape == (num_nodes, num_elements + 1)
-        assert targets.shape == (num_nodes, num_elements + 1)
+        assert logits.shape == (num_nodes, num_elements)
+        assert targets.shape == (num_nodes, num_elements)
         
         # Compute the cross-entropy loss.
         loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1)
@@ -256,18 +271,19 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
-    # If this is the last step in the generation process, we do not have to predict atom type and position.
-    loss_focus_and_atom_type = focus_and_atom_type_loss()
+    # If this fragment is complete, we do not have to predict a new atom type and position.
+    loss_stop = stop_loss()
+    loss_focus_and_atom_type = focus_and_atom_type_loss() * (1 - graphs.globals.stop)
     loss_position = position_loss() * (1 - graphs.globals.stop)
 
-    # Mask out the loss for atom types.
+    # Mask out the loss for atom types?
     if mask_atom_types:
         loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
 
-    # Ignore position loss for graphs with less than, or equal to 3 atoms.
+    # Ignore position loss for graphs with less than, or equal to 3 atoms?
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
     if ignore_position_loss_for_small_fragments:
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_focus_and_atom_type + loss_position
-    return total_loss, (loss_focus_and_atom_type, loss_position)
+    total_loss = loss_stop + loss_focus_and_atom_type + loss_position
+    return total_loss, (loss_stop, loss_focus_and_atom_type, loss_position)
