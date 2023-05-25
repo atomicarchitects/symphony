@@ -121,7 +121,7 @@ def _make_middle_fragment(
 
     # use max_radius to compute the stop probability:
     s = jnp.array(
-        [1.0 if jnp.sum((senders == i) & mask) == 0 else 0.0 for i in range(n_nodes)]
+        [1.0 if jnp.sum((senders == i) & mask) == 0 else 0.0 for i in visited]
     )
 
     if mode == "nn":
@@ -129,12 +129,10 @@ def _make_middle_fragment(
         mask = mask & (dist < min_dist + nn_tolerance)
         del min_dist
 
-    n = jnp.zeros((n_nodes, n_species))
-    for focus_node in range(n_nodes):
-        targets = receivers[(senders == focus_node) & mask]
-        n = n.at[focus_node].set(
-            jnp.bincount(graph.nodes.species[targets], length=n_species)
-        )
+    n = jnp.zeros((len(visited), n_species))
+    for i in visited:
+        targets = receivers[(senders == i) & mask]
+        n = n.at[i].set(jnp.bincount(graph.nodes.species[targets], length=n_species))
 
     if jnp.sum(n) == 0:
         raise ValueError("No targets found.")
@@ -142,8 +140,8 @@ def _make_middle_fragment(
     # target_species_probability
     # last entry is the stop probability
     ts_pr = jnp.zeros((n_nodes, n_species + 1))
-    ts_pr = ts_pr.at[:, :n_species].set(n)
-    ts_pr = ts_pr.at[:, -1].set(s)
+    ts_pr = ts_pr.at[visited, :n_species].set(n)
+    ts_pr = ts_pr.at[visited, -1].set(s)
     ts_pr = ts_pr / jnp.sum(ts_pr)
 
     # pick a random focus node
