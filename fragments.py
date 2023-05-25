@@ -121,7 +121,7 @@ def _make_middle_fragment(
 
     # use max_radius to compute the stop probability:
     s = jnp.array(
-        [1.0 if len((senders == i) & mask) == 0 else 0.0 for i in range(n_nodes)]
+        [1.0 if jnp.sum((senders == i) & mask) == 0 else 0.0 for i in range(n_nodes)]
     )
 
     if mode == "nn":
