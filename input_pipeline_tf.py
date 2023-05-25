@@ -261,6 +261,7 @@ def get_unbatched_qm9_datasets(
         # This is usually the case.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
+            print(files_split)
             dataset_split = dataset_split.interleave(
                 lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
                 num_parallel_calls=tf.data.AUTOTUNE,
