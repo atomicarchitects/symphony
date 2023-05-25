@@ -251,6 +251,10 @@ def get_unbatched_qm9_datasets(
                 )
 
             dataset_split = dataset_split.skip(num_steps_to_skip).take(num_steps_to_take)
+            # for graph in dataset_split:
+            #     print(graph["species"], graph["target_species_probs"], (tf.math.reduce_sum(graph["target_species_probs"], axis=0)[-1:] == 1))
+            #     print()
+
         # This is usually the case.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
@@ -297,13 +301,12 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     positions = graph["positions"]
     species = graph["species"]
     focus_and_target_species_probs = graph["target_species_probs"]
-    focus_and_target_species_probs = tf.concat([focus_and_target_species_probs, 1 - tf.math.reduce_sum(focus_and_target_species_probs, axis=-1, keepdims=True)], axis=-1)
+    stop = (tf.math.reduce_sum(focus_and_target_species_probs, axis=0)[-1:] == 1)
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
     n_edge = graph["n_edge"]
     edges = tf.ones((tf.shape(senders)[0], 1))
-    stop = graph["stop"]
     target_positions = graph["target_positions"]
     target_species = graph["target_species"]
 
