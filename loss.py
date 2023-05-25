@@ -53,9 +53,10 @@ def generation_loss(
         logits = preds.nodes.focus_and_target_species_logits
         targets = graphs.nodes.focus_and_target_species_probs
 
-        # Mask out the stop nodes.
-        logits = jnp.where(graphs.nodes.stop[:, None], 0.0, logits)
-        targets = jnp.where(graphs.nodes.stop[:, None], 0.0, targets)
+        # Compute the number of unstopped nodes.
+        # We will normalize the loss by the number of unstopped nodes.
+        num_unstopped_nodes = jraph.segment_sum(1 - graphs.nodes.stop, segment_ids, num_graphs)
+        num_unstopped_nodes = jnp.where(num_unstopped_nodes == 0, 1, num_unstopped_nodes)
 
         # Subtract the maximum value for numerical stability.
         logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
@@ -64,15 +65,21 @@ def generation_loss(
         assert targets.shape == (num_nodes, num_elements)
         
         # Compute the cross-entropy loss.
-        loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1)
+        # We ignore the loss for stopped nodes.
+        loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1, keepdims=True) + jnp.sum(jnp.exp(logits), axis=-1, keepdims=True)
+        loss_focus_and_atom_type = jnp.where(graphs.nodes.stop[:, None], 0.0, loss_focus_and_atom_type)
         loss_focus_and_atom_type = jraph.segment_sum(loss_focus_and_atom_type, segment_ids, num_graphs)
-        loss_focus_and_atom_type += jraph.segment_sum(jnp.sum(jnp.exp(logits), axis=-1), segment_ids, num_graphs)
+        loss_focus_and_atom_type /= num_unstopped_nodes[:, None]
 
         # We have computed the cross-entropy loss.
-        # Subtract out self-entropy to get the KL divergence.
-        lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1)
+        # Subtract out self-entropy (lower bound) to get the KL divergence.
+        lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1, keepdims=True)
+        lower_bound = jnp.where(graphs.nodes.stop[:, None], 0.0, lower_bound)
         lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
+        lower_bound /= num_unstopped_nodes[:, None]
+
         loss_focus_and_atom_type -= lower_bound
+        loss_focus_and_atom_type = loss_focus_and_atom_type.squeeze(axis=-1)
         assert loss_focus_and_atom_type.shape == (num_graphs,)
 
         return loss_focus_and_atom_type
