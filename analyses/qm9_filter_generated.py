@@ -1102,7 +1102,7 @@ if __name__ == "__main__":
 
     n_valid_mol = 0
     for i in range(n_generated):
-        if stats[2, i] == 1 and duplicating[i] == 0:
+        if stats[2, i] == 1 and duplicating[i] == -1:
             n_valid_mol += 1
 
     print(f"Number of unique and valid molecules: {n_valid_mol}")
