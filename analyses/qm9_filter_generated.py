@@ -132,7 +132,7 @@ def filter_unique(mols, valid=None, use_bits=False):
                 if tanimoto_similarity(fp1, fp2, use_bits=use_bits) >= 1:
                     # compare canonical smiles representation
                     if (
-                        symbols1 == symbols1
+                        symbols1 == symbols2
                         or get_mirror_can(mol) == symbols1
                     ):
                         found = True
@@ -866,7 +866,7 @@ def _compare_fingerprints(
         print(f"0.00%", end="", flush=True)
     for i, idx in enumerate(idcs):
         mol = mols[idx]
-        mol_key = str(mol.symbols)
+        mol_key = _get_atoms_per_type_str(mol)
         # for now the molecule is considered to be new
         stats[idx, idx_known] = 0
         if np.sum(mol.numbers != 1) > max_heavy_atoms:
@@ -1024,11 +1024,12 @@ if __name__ == "__main__":
 
         # check valency
         if args.threads <= 0:
-            results = check_valence(
+            valid_mol, valid_atoms = check_valence(
                 mol,
                 valence,
             )
         else:
+            results = {'valid_mol': [], 'valid_atoms': []}
             results = run_threaded(
                 check_valence,
                 {"mol": mol},
@@ -1036,7 +1037,8 @@ if __name__ == "__main__":
                 results,
                 n_threads=args.threads,
             )
-        valid_mol, valid_atoms = results
+            valid_mol = results['valid_mol']
+            valid_atoms = results['valid_atoms']
 
         # collect statistics of generated data
         n_of_types = [np.sum(mol.numbers == i) for i in [6, 7, 8, 9, 1]]
@@ -1133,10 +1135,10 @@ if __name__ == "__main__":
         "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
         "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
         "n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
-        "known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
-        "known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
-        "known_val": stats_df["known"].apply(lambda x: x == 2).sum() / len(stats_df),
-        "known_test": stats_df["known"].apply(lambda x: x == 3).sum() / len(stats_df),
+        "known": stats_df["known"].apply(lambda x: x > 0).sum(),
+        "known_train": stats_df["known"].apply(lambda x: x == 1).sum(),
+        "known_val": stats_df["known"].apply(lambda x: x == 2).sum(),
+        "known_test": stats_df["known"].apply(lambda x: x == 3).sum(),
     }
     ring_bond_cols = [
         "C",
