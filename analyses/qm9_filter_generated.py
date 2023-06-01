@@ -5,6 +5,7 @@
 
 import argparse
 import collections
+import itertools
 import logging
 import os
 import pickle
@@ -900,6 +901,49 @@ def _compare_fingerprints(
     return {"stats": stats}
 
 
+def get_bond_stats(mol):
+        """
+        Retrieve the bond and ring count of the molecule. The bond count is
+        calculated for every pair of types (e.g. C1N are all single bonds between
+        carbon and nitrogen atoms in the molecule, C2N are all double bonds between
+        such atoms etc.). The ring count is provided for rings from size 3 to 8 (R3,
+        R4, ..., R8) and for rings greater than size eight (R>8).
+
+        Args:
+            mol (ase.Atoms): molecule
+
+        Returns:
+            dict (str->int): bond and ring counts
+        """
+        # 1st analyze bonds
+        bond_stats = {}
+        obmol = analysis.construct_obmol(mol)
+        for bond_idx in range(obmol.NumBonds()):
+            bond = obmol.GetBond(bond_idx)
+            atom1 = bond.GetBeginAtom().GetAtomicNum()
+            atom2 = bond.GetEndAtom().GetAtomicNum()
+            type1 = analysis.NUMBER_TO_SYMBOL[min(atom1, atom2)]
+            type2 = analysis.NUMBER_TO_SYMBOL[max(atom1, atom2)]
+            id = f'{type1}{bond.GetBondOrder()}{type2}'
+            bond_stats[id] = bond_stats.get(id, 0) + 1
+        # remove twice counted bonds
+        for bond_type in bond_stats.keys():
+            if bond_type[0] == bond_type[2]:
+                bond_stats[id] = int(bond_stats[id] / 2)
+
+        # 2nd analyze rings
+        rings = obmol.GetSSSR()
+        if len(rings) > 0:
+            for ring in rings:
+                ring_size = ring.Size()
+                if ring_size < 9:
+                    bond_stats[f"R{ring_size}"] = bond_stats.get(f"R{ring_size}", 0) + 1
+                else:
+                    bond_stats["R>8"] = bond_stats.get("R>8", 0) + 1
+
+        return bond_stats
+
+
 def collect_bond_and_ring_stats(mols, stats, stat_heads):
     """
     Compute the bond and ring counts of a list of molecules and write them to the
@@ -927,14 +971,14 @@ def collect_bond_and_ring_stats(mols, stats, stat_heads):
     """
     idx_val = stat_heads.index("valid_mol")
     for i, mol in enumerate(mols):
-        if stats[i, idx_val] != 1:
+        if stats[idx_val, i] != 1:
             continue
-        bond_stats = mol.get_bond_stats()
+        bond_stats = get_bond_stats(mol)
         for key, value in bond_stats.items():
             if key not in stat_heads:
                 continue
             idx = stat_heads.index(key)
-            stats[i, idx] = value
+            stats[idx, i] = value
     return {"stats": stats}
 
 
@@ -1085,17 +1129,18 @@ if __name__ == "__main__":
     h, m, s = int(h), int(m), int(s)
     print(f"Needed {h:d}h{m:02d}m{s:02d}s.")
 
-    # if args.threads <= 0:
-    #     results = collect_bond_and_ring_stats(all_mols, stats.T, stat_heads)
-    # else:
-    #     results = {"stats": stats.T}
-    #     run_threaded(
-    #         collect_bond_and_ring_stats,
-    #         {"mols": all_mols, "stats": stats.T},
-    #         {"stat_heads": stat_heads},
-    #         results=results,
-    #         n_threads=args.threads,
-    #     )
+    if args.threads <= 0:
+        results = collect_bond_and_ring_stats(molecules, stats, stat_heads)
+    else:
+        results = {"stats": stats.T}
+        run_threaded(
+            collect_bond_and_ring_stats,
+            {"mols": molecules, "stats": stats},
+            {"stat_heads": stat_heads},
+            results=results,
+            n_threads=args.threads,
+        )
+    stats = results["stats"]
 
     print(
         f"Number of generated molecules: {n_generated}\n"
@@ -1128,7 +1173,7 @@ if __name__ == "__main__":
     stats_df.insert(0, "formula", formulas)
     metric_df_dict = analysis.get_results_as_dataframe(
         [""],
-        ["total_loss", "focus_loss", "atom_type_loss", "position_loss"],
+        ["total_loss", "atom_type_loss", "position_loss"],
         args.model_path,
     )
     cum_stats = {
@@ -1198,4 +1243,3 @@ if __name__ == "__main__":
                 break
     with open(stats_path, "wb") as f:
         pickle.dump(metric_df_dict, f)
-

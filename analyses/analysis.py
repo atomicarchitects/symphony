@@ -50,6 +50,7 @@ except ImportError:
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
 ELEMENTS = ["H", "C", "N", "O", "F"]
 RADII = models.RADII
+NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
 # Colors and sizes for the atoms.
 ATOMIC_COLORS = {
