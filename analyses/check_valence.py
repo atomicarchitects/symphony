@@ -4,12 +4,9 @@
 ##########################################################
 
 import argparse
-import os
-import pickle
-import numpy as np
-import pandas as pd
+import ase
 
-from analyses.analysis import construct_pybel_mol
+from analysis import construct_pybel_mol
 
 
 def get_parser():
@@ -17,9 +14,7 @@ def get_parser():
     main_parser = argparse.ArgumentParser()
     main_parser.add_argument(
         "mol_path",
-        help="Path to generated molecules in .db format, "
-        'computed statistics ("generated_molecules_statistics.pkl") will be '
-        "stored in the same directory as the input file/s ",
+        help="Path to generated molecule in .xyz format",
     )
 
     return main_parser
@@ -62,24 +57,9 @@ if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
 
-    #     d = res[n_atoms]
-    #     all_pos = d[Properties.R]
-    #     all_numbers = d[Properties.Z]
-    #     n_mols = len(all_pos)
+    mol = ase.io.read(args.mol_path)
 
-    #     # check valency
-    #     results = check_valence(
-    #         all_pos,
-    #         all_numbers,
-    #         valence,
-    #         True,
-    #         print_file,
-    #         prog_str(work_str),
-    #     )
-    #     n_atoms_list = np.concatenate([n_atoms_list, np.ones(n_mols) * n_atoms])
-    #     valid_mols = np.concatenate([valid_mols, results["valid_mol"]])
-    #     valid_atoms = np.concatenate([valid_atoms, results["valid_atom"]])
-    # valid_stats = pd.DataFrame({"n_atoms": n_atoms_list, "valid_mol": valid_mols, "valid_atoms": valid_atoms})
-    # valid_stats["valid_atoms_frac"] = valid_stats["valid_atoms"] / valid_stats["n_atoms"]
-    # with open('valency-results.pkl', 'wb') as f:
-    #     pickle.dump(valid_stats, f)
+    # check valency
+    valid_mol, valid_atoms = check_valence(mol)
+    print(f'{mol.symbols} {"does" if valid_mol else "does not"} satisfy valence constraints')
+    print(f'{valid_atoms} of {len(mol.numbers)} atoms satisfy valence constraints')
