@@ -17,14 +17,9 @@ def get_parser():
     main_parser = argparse.ArgumentParser()
     main_parser.add_argument(
         "mol_path",
-        help="Path to generated molecules in .mol_dict format, "
-        'a database called "generated_molecules.db" with the '
-        "filtered molecules along with computed statistics "
-        '("generated_molecules_statistics.pkl") will be '
-        "stored in the same directory as the input file/s "
-        "(if the path points to a directory, all .mol_dict "
-        "files in the directory will be merged and filtered "
-        "in one pass)",
+        help="Path to generated molecules in .db format, "
+        'computed statistics ("generated_molecules_statistics.pkl") will be '
+        "stored in the same directory as the input file/s ",
     )
 
     return main_parser
