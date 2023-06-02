@@ -252,7 +252,9 @@ def get_unbatched_qm9_datasets(
                     "Could not find the correct number of molecules in the first chunk."
                 )
 
-            dataset_split = dataset_split.skip(num_steps_to_skip).take(num_steps_to_take)
+            dataset_split = dataset_split.skip(num_steps_to_skip).take(
+                num_steps_to_take
+            )
 
         # This is usually the case.
         else:
@@ -300,12 +302,12 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     positions = graph["positions"]
     species = graph["species"]
     target_species_probs = graph["target_species_probs"]
+    finished = graph["finished"]
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
     n_edge = graph["n_edge"]
     edges = tf.ones((tf.shape(senders)[0], 1))
-    stop = graph["stop"]
     target_positions = graph["target_positions"]
     target_species = graph["target_species"]
 
@@ -313,13 +315,13 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         nodes=datatypes.FragmentsNodes(
             positions=positions,
             species=species,
+            finished=finished,
             target_species_probs=target_species_probs,
         ),
         edges=edges,
         receivers=receivers,
         senders=senders,
         globals=datatypes.FragmentsGlobals(
-            stop=stop,
             target_positions=target_positions,
             target_species=target_species,
         ),

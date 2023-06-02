@@ -21,6 +21,12 @@ def main(
     root_dir: str,
     mode: str,
 ):
+    if os.path.exists(root_dir):
+        print("Root directory already exists.")
+    else:
+        os.makedirs(root_dir)
+        print(f"Created root directory {root_dir}")
+
     qm9_data = qm9.load_qm9("qm9_data")
     starts = list(range(0, len(qm9_data), chunk))
     del qm9_data

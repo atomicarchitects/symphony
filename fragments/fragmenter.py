@@ -40,6 +40,7 @@ def main(
         "target_species_probs": tf.TensorSpec(
             shape=(None, len(atomic_numbers) + 1), dtype=tf.float32
         ),
+        "finished": tf.TensorSpec(shape=(None,), dtype=tf.bool),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
@@ -80,6 +81,7 @@ def main(
                     "target_species_probs": frag.nodes.target_species_probs.astype(
                         np.float32
                     ),
+                    "finished": frag.nodes.finished.astype(np.bool),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
                     "target_positions": frag.globals.target_positions.astype(
