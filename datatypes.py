@@ -8,7 +8,6 @@ import jraph
 class NodesInfo(NamedTuple):
     positions: jnp.ndarray  # [n_node, 3] float array
     species: jnp.ndarray  # [n_node] int array
-    finished: jnp.ndarray  # [n_node] bool array
 
 
 class FragmentsGlobals(NamedTuple):
@@ -19,6 +18,7 @@ class FragmentsGlobals(NamedTuple):
 class FragmentsNodes(NamedTuple):
     positions: jnp.ndarray  # [n_node, 3] float array
     species: jnp.ndarray  # [n_node] int array
+    finished: jnp.ndarray  # [n_node] bool array
     target_species_probs: jnp.ndarray  # [n_node, n_species + 1] float array (only for training)
 
 

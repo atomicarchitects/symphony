@@ -64,8 +64,8 @@ def generate_fragments(
     except ValueError:
         pass
     else:
-        while len(finished) < n:
-            finished, frag = _make_last_fragments(finished, graph, n_species)
+        while jnp.sum(finished) < n:
+            rng, finished, frag = _make_last_fragments(rng, finished, graph, n_species)
             yield frag
 
 
@@ -180,7 +180,7 @@ def _make_middle_fragment(
     return rng, new_visited, finished, sample
 
 
-def _make_last_fragments(finished, graph, n_species):
+def _make_last_fragments(rng, finished, graph, n_species):
     num_nodes = len(graph.nodes.positions)
 
     ts_pr = jnp.zeros((num_nodes, n_species + 1))
@@ -201,7 +201,7 @@ def _make_last_fragments(finished, graph, n_species):
     )
 
     finished = finished.at[focus_node].set(True)
-    return finished, sample
+    return rng, finished, sample
 
 
 def _into_fragment(
