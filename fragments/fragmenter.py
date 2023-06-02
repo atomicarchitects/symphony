@@ -81,7 +81,7 @@ def main(
                     "target_species_probs": frag.nodes.target_species_probs.astype(
                         np.float32
                     ),
-                    "finished": frag.nodes.finished.astype(np.bool),
+                    "finished": frag.nodes.finished.astype(bool),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
                     "target_positions": frag.globals.target_positions.astype(
