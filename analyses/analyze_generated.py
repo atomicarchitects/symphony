@@ -4,20 +4,14 @@
 ##########################################################
 
 import argparse
-import collections
-import itertools
 import logging
 import os
 import pickle
 import time
 import sys
 
-from ase import Atoms
 from ase.db import connect
-from multiprocessing import Process, Queue
 import numpy as np
-from openbabel import openbabel as ob
-from openbabel import pybel
 import pandas as pd
 import tqdm
 import yaml
@@ -76,7 +70,7 @@ def get_parser():
     return main_parser
 
 
-def filter_unique(mols, valid=None, use_bits=False):
+def find_duplicates(mols, valid=None, use_bits=False):
     """
     Identify duplicate molecules among a large amount of generated structures.
     The first found structure of each kind is kept as valid original and all following
@@ -95,9 +89,6 @@ def filter_unique(mols, valid=None, use_bits=False):
             identical, default: False)
 
     Returns:
-        valid (numpy.ndarray): array of the same length as mols which flags molecules as
-            valid (identified duplicates are now marked as invalid in contrast to the
-            flag in input argument valid)
         duplicating (numpy.ndarray): array of length n_mols where entry i is -1 if molecule i is
             an original structure (not a duplicate) and otherwise it is the index j of
             the original structure that molecule i duplicates (j<i)
@@ -129,10 +120,10 @@ def filter_unique(mols, valid=None, use_bits=False):
                     break
         if not found:
             accepted_dict = _update_dict(accepted_dict, key=mol_key, val=(i, mol1))
-    return valid, duplicating, duplicate_count
+    return duplicating, duplicate_count
 
 
-def filter_new(
+def find_in_training_data(
     mols, stats, stat_heads, model_path, data_path, print_file=False
 ):
     """
@@ -142,9 +133,9 @@ def filter_new(
 
     Args:
         mols (list of ase.Atoms): generated molecules
-        stats (numpy.ndarray): statistics of all generated molecules where columns
-            correspond to molecules and rows correspond to available statistics
-            (n_statistics x n_molecules)
+        stats (numpy.ndarray): statistics of all generated molecules where rows
+            correspond to molecules and columns correspond to available statistics
+            (n_molecules x n_statistics)
         stat_heads (list of str): the names of the statistics stored in each row in
             stats (e.g. 'F' for the number of fluorine atoms or 'R5' for the number of
             rings of size 5)
@@ -197,32 +188,31 @@ def filter_new(
     print("\nComputing fingerprints of training data...")
     start_time = time.time()
 
-    train_fps = _get_training_fingerprints(
+    train_fps_dict = _get_training_fingerprints(
         dbpath, all_idx, print_file
     )
-    train_fps_dict = _get_training_fingerprints_dict(train_fps["fingerprints"])
 
     end_time = time.time() - start_time
     m, s = divmod(end_time, 60)
     h, m = divmod(m, 60)
     h, m, s = int(h), int(m), int(s)
     print(
-        f'...{len(train_fps["fingerprints"])} fingerprints computed '
+        f'...{len(all_idx)} fingerprints computed '
         f"in {h:d}h{m:02d}m{s:02d}s!"
     )
 
     print("\nComparing fingerprints...")
     start_time = time.time()
-    results = _compare_fingerprints(
+    stats = _compare_training_fingerprints(
         mols,
         train_fps_dict,
         all_idx,
         [len(val_idx), len(test_idx)],
-        stats.T,
+        stats,
         stat_heads,
         print_file,
     )
-    stats = results["stats"].T
+    stats = stats.T
     stats[idx_known] = stats[idx_known]
     end_time = time.time() - start_time
     m, s = divmod(end_time, 60)
@@ -242,7 +232,7 @@ def filter_new(
     )
     print(f"Number of molecules matching test data: " f"{sum(stats[idx_known] == 3)}")
 
-    return stats
+    return stats.T
 
 
 def _get_training_fingerprints(
@@ -265,10 +255,8 @@ def _get_training_fingerprints(
             fingerprint instead of the pybel.Fingerprint object (default: False)
 
     Returns:
-        dict (str->list of tuple): dictionary with list of tuples under the key
-        'fingerprints' containing the fingerprint, the canonical smiles representation,
-        and the atoms per type string of each molecule listed in train_idx (preserving
-        the order)
+        dict (str->list of tuple): dictionary with the atoms per type string of each molecule
+            as the keys, and 
     """
     train_fps = []
     with connect(dbpath) as conn:
@@ -285,35 +273,14 @@ def _get_training_fingerprints(
             if (i % 100 == 0 or i + 1 == len(train_idx)):
                 print("\033[K", end="\r", flush=True)
                 print(f"{100 * (i + 1) / len(train_idx):.2f}%", end="\r", flush=True)
-    return {"fingerprints": train_fps}
-
-
-def _get_training_fingerprints_dict(fps):
-    """
-    Convert a list of fingerprints into a dictionary where a string describing the
-    number of types in each molecules (e.g. H2C3O1, ordered by increasing nuclear
-    charge) is used as a key (allows for faster comparison of molecules as only those
-    made of the same atoms can be identical).
-
-    Args:
-        fps (list of tuple): list containing tuples as returned by the get_fingerprint
-            function (holding the fingerprint, canonical smiles representation, and the
-            atoms per type string)
-
-    Returns:
-        dict (str->list of tuple): dictionary containing lists of tuples holding the
-            molecular fingerprint, the canonical smiles representation, and the index
-            of the molecule in the input list using the atoms per type string of the
-            molecules as key (such that fingerprint tuples of all molecules with the
-            exact same atom composition, e.g. H2C3O1, are stored together in one list)
-    """
+    
     fp_dict = {}
-    for i, fp in enumerate(fps):
+    for i, fp in enumerate(train_fps):
         fp_dict = _update_dict(fp_dict, key=fp[-1], val=fp[:-1] + (i,))
     return fp_dict
 
 
-def _compare_fingerprints(
+def _compare_training_fingerprints(
     mols,
     train_fps,
     train_idx,
@@ -340,9 +307,9 @@ def _compare_fingerprints(
             and train_idx[n_train+n_validation:] corresponds to test data)
         thresh (tuple of int): tuple containing the number of validation and test
             data molecules (n_validation, n_test)
-        stats (numpy.ndarray): statistics of all generated molecules where columns
-            correspond to molecules and rows correspond to available statistics
-            (n_statistics x n_molecules)
+        stats (numpy.ndarray): statistics of all generated molecules where rows
+            correspond to molecules and columns correspond to available statistics
+            (n_molecules x n_statistics)
         stat_heads (list of str): the names of the statistics stored in each row in
             stats (e.g. 'F' for the number of fluorine atoms or 'R5' for the number of
             rings of size 5)
@@ -354,8 +321,7 @@ def _compare_fingerprints(
             training data set (i.e. 9 for qm9, default: 9)
 
     Returns:
-        dict (str->numpy.ndarray): dictionary containing the updated statistics under
-            the key 'stats'
+        stats (numpy.ndarray): updated statistics
     """
     idx_known = stat_heads.index("known")
     idx_equals = stat_heads.index("equals")
@@ -372,27 +338,28 @@ def _compare_fingerprints(
         stats[idx, idx_known] = 0
         if np.sum(mol.numbers != 1) > max_heavy_atoms:
             continue  # cannot be in dataset
-        if mol_key in train_fps:
-            for fp_train, symbols_train in train_fps[mol_key]:
-                # compare fingerprints
-                if fingerprints_similar(mol, fp_train, symbols_train, use_bits):
-                        # store index of match
-                        j = fp_train[-1]
-                        stats[idx, idx_equals] = train_idx[j]
-                        if j >= len(train_idx) - np.sum(thresh):
-                            if j > len(train_idx) - n_test_mols:
-                                stats[idx, idx_known] = 3  # equals test data
-                            else:
-                                stats[idx, idx_known] = 2  # equals validation data
-                        else:
-                            stats[idx, idx_known] = 1  # equals training data
-                        break
+        if mol_key not in train_fps:
+            continue
+        for fp_train, symbols_train in train_fps[mol_key]:
+            # compare fingerprints
+            if fingerprints_similar(mol, fp_train, symbols_train, use_bits):
+                # store index of match
+                j = fp_train[-1]
+                stats[idx, idx_equals] = train_idx[j]
+                if j >= len(train_idx) - np.sum(thresh):
+                    if j > len(train_idx) - n_test_mols:
+                        stats[idx, idx_known] = 3  # equals test data
+                    else:
+                        stats[idx, idx_known] = 2  # equals validation data
+                else:
+                    stats[idx, idx_known] = 1  # equals training data
+                break
         if not print_file:
             print("\033[K", end="\r", flush=True)
             print(f"{100 * (i + 1) / len(idcs):.2f}%", end="\r", flush=True)
     if not print_file:
         print("\033[K", end="", flush=True)
-    return {"stats": stats}
+    return stats
 
 
 def get_bond_stats(mol):
@@ -438,44 +405,6 @@ def get_bond_stats(mol):
         return bond_stats
 
 
-def collect_bond_and_ring_stats(mols, stats, stat_heads):
-    """
-    Compute the bond and ring counts of a list of molecules and write them to the
-    provided array of statistics if it contains the corresponding fields (e.g. 'R3'
-    for rings of size 3 or 'C1N' for single bonded carbon-nitrogen pairs). Note that
-    only statistics of molecules marked as 'valid' in the stats array are computed and
-    that only those statistics will be stored, which already have columns in the stats
-    array named accordingly in stat_heads (e.g. if 'R5' for rings of size 5 is not
-    included in stat_heads, the number of rings of size 5 will not be stored in the
-    stats array for the provided molecules).
-
-    Args:
-        mols (list of utiltiy_classes.Molecule): list of molecules for which bond and
-            ring statistics are computed
-        stats (numpy.ndarray): statistics of all molecules where columns
-            correspond to molecules and rows correspond to available statistics
-            (n_statistics x n_molecules)
-        stat_heads (list of str): the names of the statistics stored in each row in
-            stats (e.g. 'F' for the number of fluorine atoms or 'R5' for the number of
-            rings of size 5)
-
-    Returns:
-        dict (str->numpy.ndarray): dictionary containing the updated statistics array
-            under 'stats'
-    """
-    idx_val = stat_heads.index("valid_mol")
-    for i, mol in enumerate(mols):
-        if stats[idx_val, i] != 1:
-            continue
-        bond_stats = get_bond_stats(mol)
-        for key, value in bond_stats.items():
-            if key not in stat_heads:
-                continue
-            idx = stat_heads.index(key)
-            stats[idx, i] = value
-    return {"stats": stats}
-
-
 if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
@@ -512,12 +441,14 @@ if __name__ == "__main__":
 
     # initial setup of array for statistics and some counters
     n_generated = len(molecules)
-    ring_bond_cols = [
+    atom_cols = [
+        "H",
         "C",
         "N",
         "O",
         "F",
-        "H",
+    ]
+    ring_bond_cols = [
         "H1C",
         "H1N",
         "H1O",
@@ -553,6 +484,7 @@ if __name__ == "__main__":
         "n_duplicates",
         "known",
         "equals",
+        *atom_cols,
         *ring_bond_cols
     ]
     stats = np.empty((len(stat_heads), 0))
@@ -564,14 +496,11 @@ if __name__ == "__main__":
         n_atoms = len(mol.positions)
 
         # check valency
-        valid_mol, valid_atoms = check_valence(
-            mol,
-            valence,
-        )
+        valid_mol, valid_atoms = check_valence(mol, valence,)
 
         # collect statistics of generated data
         n_of_types = [np.sum(mol.numbers == i) for i in [6, 7, 8, 9, 1]]
-        formulas.append(str(mol.symbols))
+        bond_stats = get_bond_stats(mol)
         stats_new = np.stack(
             (
                 n_atoms,  # n_atoms
@@ -582,16 +511,17 @@ if __name__ == "__main__":
                 0,  # known
                 0,  # equals
                 *n_of_types,  # n_atoms per type
-                *np.zeros((19, )),  # n_bonds per type pairs
-                *np.zeros((7, )),  # ring counts for 3-8 & >8
+                *[bond_stats.get(k, 0) for k in ring_bond_cols],  # bond and ring counts
             ),
             axis=0,
         )
         stats_new = stats_new.reshape(stats_new.shape[0], 1)
         stats = np.hstack((stats, stats_new))
-        valid.append(valid_mol)
 
-    still_valid, duplicating, duplicate_count = filter_unique(
+        valid.append(valid_mol)
+        formulas.append(str(mol.symbols))
+
+    duplicating, duplicate_count = find_duplicates(
         molecules, valid=valid, use_bits=False
     )
 
@@ -605,9 +535,6 @@ if __name__ == "__main__":
     h, m = divmod(m, 60)
     h, m, s = int(h), int(m), int(s)
     print(f"Needed {h:d}h{m:02d}m{s:02d}s.")
-
-    results = collect_bond_and_ring_stats(molecules, stats, stat_heads)
-    stats = results["stats"]
 
     print(
         f"Number of generated molecules: {n_generated}\n"
@@ -623,9 +550,9 @@ if __name__ == "__main__":
 
     # filter molecules which were seen during training
     if args.model_path is not None:
-        stats = filter_new(
+        stats = find_in_training_data(
             molecules,
-            stats,
+            stats.T,
             stat_heads,
             args.model_path,
             args.data_path,
@@ -634,7 +561,7 @@ if __name__ == "__main__":
 
     # store gathered statistics in metrics dataframe
     stats_df = pd.DataFrame(
-        stats.T, columns=np.array(stat_heads)
+        stats, columns=np.array(stat_heads)
     )
     stats_df.insert(0, "formula", formulas)
     metric_df_dict = analysis.get_results_as_dataframe(
