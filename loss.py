@@ -4,6 +4,7 @@ from typing import Tuple
 import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 import jraph
 
 import datatypes
@@ -14,6 +15,12 @@ import optax
 def safe_log(x: jnp.ndarray) -> jnp.ndarray:
     """Computes the log of x, replacing 0 with 1 for numerical stability."""
     return jnp.log(jnp.where(x == 0, 1.0, x))
+
+
+def safe_norm(x: jnp.ndarray, axis) -> jnp.ndarray:
+    """Computes the norm of x, replacing 0 with 1 for numerical stability."""
+    x2 = jnp.sum(x**2, axis=axis)
+    return jnp.sqrt(jnp.where(x2 == 0, 1.0, x2))
 
 
 @functools.partial(jax.profiler.annotate_function, name="generation_loss")
@@ -104,9 +111,7 @@ def generation_loss(
         # Compute the true distribution over positions,
         # described by a smooth approximation of a delta function at the target positions.
         norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
-        target_position_unit_vector = target_position / jnp.where(
-            norm == 0, 1, norm
-        )
+        target_position_unit_vector = target_position / jnp.where(norm == 0, 1, norm)
         return target_position_inverse_temperature * e3nn.s2_dirac(
             target_position_unit_vector,
             lmax=preds.globals.position_coeffs.irreps.lmax,
@@ -222,15 +227,26 @@ def generation_loss(
             assert log_true_angular_coeffs.irreps == log_predicted_dist_coeffs.irreps
 
             log_true_radius_weights = jnp.log(true_radius_weights)
-            log_true_radius_weights = e3nn.IrrepsArray("0e", log_true_radius_weights[:, None])
+            log_true_radius_weights = e3nn.IrrepsArray(
+                "0e", log_true_radius_weights[:, None]
+            )
 
-            log_true_angular_coeffs_tiled = jnp.tile(log_true_angular_coeffs.array, (num_radii, 1))
-            log_true_angular_coeffs_tiled = e3nn.IrrepsArray(log_true_angular_coeffs.irreps, log_true_angular_coeffs_tiled)
+            log_true_angular_coeffs_tiled = jnp.tile(
+                log_true_angular_coeffs.array, (num_radii, 1)
+            )
+            log_true_angular_coeffs_tiled = e3nn.IrrepsArray(
+                log_true_angular_coeffs.irreps, log_true_angular_coeffs_tiled
+            )
 
-            log_true_dist_coeffs = e3nn.concatenate([log_true_radius_weights, log_true_angular_coeffs_tiled], axis=1)
+            log_true_dist_coeffs = e3nn.concatenate(
+                [log_true_radius_weights, log_true_angular_coeffs_tiled], axis=1
+            )
             log_true_dist_coeffs = e3nn.sum(log_true_dist_coeffs.regroup(), axis=-1)
 
-            assert log_true_dist_coeffs.shape == log_predicted_dist_coeffs.shape, (log_true_dist_coeffs.shape, log_predicted_dist_coeffs.shape)
+            assert log_true_dist_coeffs.shape == log_predicted_dist_coeffs.shape, (
+                log_true_dist_coeffs.shape,
+                log_predicted_dist_coeffs.shape,
+            )
 
             norms_of_differences = e3nn.norm(
                 log_true_dist_coeffs - log_predicted_dist_coeffs,
@@ -292,5 +308,55 @@ def generation_loss(
     if ignore_position_loss_for_small_fragments:
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_stop + loss_focus_and_atom_type + loss_position
-    return total_loss, (loss_stop, loss_focus_and_atom_type, loss_position)
+    total_loss = loss_focus_and_atom_type + loss_position
+    return total_loss, (loss_focus_and_atom_type, loss_position)
+
+
+def clash_loss(
+    graphs: datatypes.Fragments,
+    atomic_numbers: jnp.ndarray,  # typically [1, 6, 7, 8, 9]
+    atol: float = 0.0,
+    rtol: float = 0.1,
+) -> jnp.ndarray:
+    """Hinge loss that penalizes clashes between atoms depending on their atomic numbers."""
+    assert rtol >= 0.0
+    assert rtol < 1.0
+    assert atol >= 0.0
+
+    clash_dist = {
+        (8, 1): 0.96,
+        (1, 7): 1.00,
+        (1, 6): 1.06,
+        (7, 7): 1.10,
+        (8, 6): 1.13,
+        (6, 7): 1.15,
+        (8, 7): 1.17,
+        (6, 6): 1.20,
+        (9, 6): 1.30,
+        (1, 1): 1.51,
+        (9, 1): 2.06,
+        (8, 9): 2.14,
+        (8, 8): 2.15,
+        (9, 9): 2.15,
+        (9, 7): 2.18,
+    }
+    clash = np.zeros((len(atomic_numbers), len(atomic_numbers)))
+    for (zi, zj), dist in clash_dist.items():
+        if np.isin(zi, atomic_numbers) and np.isin(zj, atomic_numbers):
+            si = np.searchsorted(atomic_numbers, zi)
+            sj = np.searchsorted(atomic_numbers, zj)
+            clash[si, sj] = dist
+            clash[sj, si] = dist
+
+    i = graphs.senders
+    j = graphs.receivers
+    si = graphs.nodes.species[i]
+    sj = graphs.nodes.species[j]
+    ri = graphs.nodes.positions[i]
+    rj = graphs.nodes.positions[j]
+    rij = safe_norm(ri - rj, axis=-1)
+
+    def hinge_loss(x):
+        return jnp.maximum(0.0, x)
+
+    return hinge_loss(clash[si, sj] * (1.0 - rtol) - atol - rij)
