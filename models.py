@@ -20,16 +20,25 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
-def get_atomic_numbers(species: jnp.ndarray, atomic_numbers=jnp.array([1, 6, 7, 8, 9])):
-    numbers = []
-    for i in species:
-        numbers.append(atomic_numbers[i])
-    return jnp.array(numbers)
+def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
+    """Returns the atomic numbers for the species."""
+    return jnp.asarray(ATOMIC_NUMBERS)[species]
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     """Returns the indices of the focus nodes in each graph."""
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
+
+
+def segment_softmax_2D(logits: jnp.ndarray, segment_ids: jnp.ndarray, num_graphs: int) -> jnp.ndarray:
+    """Returns the segment softmax over 2D arrays. The segment_ids correspond to the first dimension."""
+    # Subtract the max to avoid numerical issues.
+    logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
+    # Normalize exp() by all nodes in each graph + all atom types.
+    exp_logits = jnp.exp(logits)
+    exp_logits_summed = jnp.sum(exp_logits, axis=1)
+    normalizing_factors = jraph.segment_sum(exp_logits_summed, segment_ids, num_segments=num_graphs)
+    return exp_logits / normalizing_factors[segment_ids, None]
 
 
 def get_segment_ids(
@@ -90,7 +99,7 @@ def segment_sample(
     segment_ids: jnp.ndarray,
     num_segments: int,
     rng: chex.PRNGKey,
-):
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Sample indices from a categorical distribution across each segment.
     Args:
         probabilities: A 1D array of probabilities.
@@ -100,26 +109,27 @@ def segment_sample(
     Returns:
         A 1D array of sampled indices, one for each segment.
     """
-    num_elements, num_logits = probabilities.shape
+    num_nodes, num_elements = probabilities.shape
 
-    def sample_for_segment(rng, i):
-        rng1, rng2 = jax.random.split(rng)
-        i = jax.random.choice(
-            rng1,
-            node_indices,
-            p=jnp.where(i == segment_ids, jnp.sum(probabilities, axis=1), 0.0),
+    def sample_for_segment(rng: chex.PRNGKey, segment_id: int) -> Tuple[float, float]:
+        """Samples a node and element index for a single segment."""
+        node_rng, logit_rng, rng = jax.random.split(rng, num=3)
+        node_index = jax.random.choice(
+            node_rng,
+            jnp.arange(num_nodes),
+            p=jnp.where(segment_id == segment_ids, jnp.sum(probabilities, axis=1), 0.0),
         )
-        j = jax.random.choice(rng2, jnp.arange(num_logits), p=probabilities[i])
-        return i, j
+        normalized_probs_for_index = probabilities[node_index] / jnp.sum(probabilities[node_index])
+        element_index = jax.random.choice(logit_rng, jnp.arange(num_elements), p=normalized_probs_for_index)
+        return node_index, element_index
 
-    node_indices = jnp.arange(len(segment_ids))
     rngs = jax.random.split(rng, num_segments)
-    node_indices, internal_indices = jax.vmap(sample_for_segment)(
+    node_indices, element_indices = jax.vmap(sample_for_segment)(
         rngs, jnp.arange(num_segments)
     )
     assert node_indices.shape == (num_segments,)
-    assert internal_indices.shape == (num_segments,)
-    return node_indices, internal_indices
+    assert element_indices.shape == (num_segments,)
+    return node_indices, element_indices
 
 
 def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
@@ -532,8 +542,36 @@ class MarioNette(hk.Module):
         return node_feats
 
 
-class TargetSpeciesPredictor(hk.Module):
-    """Predicts the target species conditioned on the focus node embeddings."""
+class StopPredictor(hk.Module):
+    """Predicts whether a node is to be stopped."""
+
+    def __init__(
+        self,
+        latent_size: int,
+        num_layers: int,
+        activation: Callable[[jnp.ndarray], jnp.ndarray],
+        name: Optional[str] = None,
+    ):
+        super().__init__(name)
+        self.latent_size = latent_size
+        self.num_layers = num_layers
+        self.activation = activation
+
+    def __call__(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+        num_nodes, _ = node_embeddings.shape
+        node_embeddings = node_embeddings.filter(keep="0e")
+        stop_logits = e3nn.haiku.MultiLayerPerceptron(
+            list_neurons=[self.latent_size] * (self.num_layers - 1)
+            + [1],
+            act=self.activation,
+            output_activation=False,
+        )(node_embeddings).array.squeeze(-1)
+        assert stop_logits.shape == (num_nodes,)
+        return stop_logits
+
+
+class FocusAndTargetSpeciesPredictor(hk.Module):
+    """Predicts the focus and target species distribution over all un-stopped nodes."""
 
     def __init__(
         self,
@@ -549,15 +587,20 @@ class TargetSpeciesPredictor(hk.Module):
         self.activation = activation
         self.num_species = num_species
 
-    def __call__(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
+    def __call__(self, node_embeddings: e3nn.IrrepsArray, stop: jnp.ndarray) -> jnp.ndarray:
         num_nodes, _ = node_embeddings.shape
         node_embeddings = node_embeddings.filter(keep="0e")
+        # TODO: See if we can do better than simple masking.
+        # Maybe message-passing over un-stopped nodes?
+        node_embeddings.array = jnp.where(stop[:, None], 0., node_embeddings.array)
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1)
             + [self.num_species],
             act=self.activation,
             output_activation=False,
         )(node_embeddings).array
+        # TODO: Again, see if we can do better than simple masking.
+        species_logits = jnp.where(stop[:, None], -jnp.inf, species_logits)
         assert species_logits.shape == (num_nodes, self.num_species)
         return species_logits
 
@@ -626,19 +669,21 @@ class Predictor(hk.Module):
     """A convenient wrapper for an entire prediction model."""
 
     node_embedder: hk.Module
-    target_species_predictor: TargetSpeciesPredictor
+    focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor
     target_position_predictor: TargetPositionPredictor
 
     def __init__(
         self,
         node_embedder: hk.Module,
-        target_species_predictor: hk.Module,
+        stop_predictor: hk.Module,
+        focus_and_target_species_predictor: hk.Module,
         target_position_predictor: hk.Module,
         name: str = None,
     ):
         super().__init__(name=name)
+        self.stop_predictor = stop_predictor
         self.node_embedder = node_embedder
-        self.target_species_predictor = target_species_predictor
+        self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
 
     def get_training_predictions(
@@ -648,17 +693,19 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
-        num_species = self.target_species_predictor.num_species
+        num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
 
+        # Get the stop logits.
+        stop_logits = self.stop_predictor(node_embeddings)
+        stop_probs = jax.nn.sigmoid(stop_logits)
+
         # Get the species logits.
-        target_species_logits = self.target_species_predictor(node_embeddings)
-        target_species_probs, stop_probs = segment_softmax_with_zero(
-            target_species_logits, segment_ids, num_graphs
-        )
+        focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings, graphs.nodes.stop)
+        focus_and_target_species_probs = segment_softmax_2D(focus_and_target_species_logits, segment_ids, num_graphs)
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
@@ -680,20 +727,22 @@ class Predictor(hk.Module):
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Check the shapes.
-        assert target_species_logits.shape == (num_nodes, num_species)
-        assert target_species_probs.shape == (num_nodes, num_species)
+        assert focus_and_target_species_logits.shape == (num_nodes, num_species)
+        assert focus_and_target_species_probs.shape == (num_nodes, num_species)
         assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
-                target_species_logits=target_species_logits,
-                target_species_probs=target_species_probs,
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=None,
+                focus_and_target_species_logits=focus_and_target_species_logits,
+                focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings=node_embeddings,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
-                stop_probs=stop_probs,
                 stop=None,
                 focus_indices=focus_node_indices,
                 target_species=None,
@@ -715,29 +764,32 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
-        num_species = self.target_species_predictor.num_species
+        num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
+
+        # Get the PRNG key for sampling.
+        rng = hk.next_rng_key()
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
 
-        # Compute corresponding focus probabilities.
-        target_species_logits = self.target_species_predictor(node_embeddings)
-        target_species_probs, stop_probs = segment_softmax_with_zero(
-            inverse_temperature * target_species_logits, segment_ids, num_graphs
-        )
+        # Get the stop logits.
+        stop_logits = self.stop_predictor(node_embeddings)
+        stop_probs = jax.nn.sigmoid(stop_logits)
 
-        # Get the PRNG key.
-        rng = hk.next_rng_key()
-
-        # Check if we have to stop.
+        # Sample stopped nodes.
         rng, stop_rng = jax.random.split(rng)
         stop = jax.random.bernoulli(stop_rng, stop_probs)
+        graph_stop = jnp.all(stop, axis=0, keepdims=True)
+
+        # Compute corresponding focus and target species probabilities.
+        focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings, stop)
+        focus_and_target_species_probs = segment_softmax_2D(focus_and_target_species_logits, segment_ids, num_graphs)
 
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
         focus_indices, target_species = segment_sample(
-            target_species_probs, segment_ids, num_graphs, focus_rng
+            focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
         )
 
         # Get the embeddings of the focus node.
@@ -774,9 +826,10 @@ class Predictor(hk.Module):
             radius_rngs, radii_probs
         )  # [num_graphs]
 
-        angular_probs = jax.tree_util.tree_map(
-            lambda x: x[jnp.arange(num_graphs), radius_indices], position_probs
-        )  # [num_graphs, res_beta, res_alpha]
+        # Get the angular probabilities.
+        angular_probs = jax.vmap(
+            lambda p, r_index: p[r_index] / p[r_index].integrate()
+        )(position_probs, radius_indices)  # [num_graphs, res_beta, res_alpha]
 
         # Sample angles.
         rng, angular_rng = jax.random.split(rng)
@@ -799,22 +852,24 @@ class Predictor(hk.Module):
 
         assert stop.shape == (num_graphs,)
         assert focus_indices.shape == (num_graphs,)
-        assert target_species_logits.shape == (num_nodes, num_species)
-        assert target_species_probs.shape == (num_nodes, num_species)
+        assert focus_and_target_species_logits.shape == (num_nodes, num_species)
+        assert focus_and_target_species_probs.shape == (num_nodes, num_species)
         assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
-                target_species_logits=target_species_logits,
-                target_species_probs=target_species_probs,
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=stop,
+                focus_and_target_species_logits=focus_and_target_species_logits,
+                focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings=node_embeddings,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
-                stop_probs=stop_probs,
-                stop=stop,
+                stop=graph_stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
                 position_coeffs=position_coeffs,
@@ -913,9 +968,14 @@ def create_model(
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
-        target_species_predictor = TargetSpeciesPredictor(
-            latent_size=config.target_species_predictor.latent_size,
-            num_layers=config.target_species_predictor.num_layers,
+        stop_predictor = StopPredictor(
+            latent_size=config.stop_predictor.latent_size,
+            num_layers=config.stop_predictor.num_layers,
+            activation=get_activation(config.activation),
+        )
+        focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
+            latent_size=config.focus_and_target_species_predictor.latent_size,
+            num_layers=config.focus_and_target_species_predictor.num_layers,
             activation=get_activation(config.activation),
             num_species=num_species,
         )
@@ -927,7 +987,8 @@ def create_model(
         )
         predictor = Predictor(
             node_embedder=node_embedder,
-            target_species_predictor=target_species_predictor,
+            stop_predictor=stop_predictor,
+            focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
         )
 

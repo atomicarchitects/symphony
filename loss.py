@@ -5,9 +5,11 @@ import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
 import numpy as np
+import jraph
 
 import datatypes
 import models
+import optax
 
 
 def safe_log(x: jnp.ndarray) -> jnp.ndarray:
@@ -29,6 +31,7 @@ def generation_loss(
     target_position_inverse_temperature: float,
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
+    mask_atom_types: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -40,33 +43,53 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
     n_node = graphs.n_node
+    segment_ids = models.get_segment_ids(n_node, num_nodes, num_graphs)
 
-    def atom_type_loss() -> jnp.ndarray:
-        """Computes the loss over atom types."""
-        logits = preds.nodes.target_species_logits
-        target = graphs.nodes.target_species_probs
-        # stop = graphs.globals.stop (= 1 - sum(target))
+    def stop_loss() -> jnp.ndarray:
+        """Computes the loss over stopped nodes."""
+        loss_stop = optax.sigmoid_binary_cross_entropy(preds.nodes.stop_logits, graphs.nodes.stop.astype(jnp.float32))
+        assert loss_stop.shape == (num_nodes,)
 
-        assert logits.shape == target.shape == (num_nodes, num_elements)
+        loss_stop = jraph.segment_mean(loss_stop, segment_ids, num_graphs)
+        assert loss_stop.shape == (num_graphs,)
 
-        max = e3nn.scatter_max(jnp.max(logits, axis=1), nel=n_node, initial=0.0)
-        max_ext = e3nn.scatter_max(
-            jnp.max(logits, axis=1, keepdims=True),
-            nel=n_node,
-            map_back=True,
-            initial=0.0,
-        )
-        assert max.shape == (num_graphs,)
-        assert max_ext.shape == (num_nodes, 1)
+        return loss_stop
+    
+    def focus_and_atom_type_loss() -> jnp.ndarray:
+        """Computes the loss over focus and atom types for nodes which are not stopped."""
+        logits = preds.nodes.focus_and_target_species_logits
+        targets = graphs.nodes.focus_and_target_species_probs
 
-        loss_atom_type = -(
-            -max + e3nn.scatter_sum(jnp.sum(target * logits, axis=-1), nel=n_node)
-        ) + jnp.log(
-            jnp.exp(-max)
-            + e3nn.scatter_sum(jnp.sum(jnp.exp(logits - max_ext), axis=1), nel=n_node)
-        )
-        assert loss_atom_type.shape == (num_graphs,)
-        return loss_atom_type
+        # Compute the number of unstopped nodes.
+        # We will normalize the loss by the number of unstopped nodes.
+        num_unstopped_nodes = jraph.segment_sum(1 - graphs.nodes.stop, segment_ids, num_graphs)
+        num_unstopped_nodes = jnp.where(num_unstopped_nodes == 0, 1, num_unstopped_nodes)
+
+        # Subtract the maximum value for numerical stability.
+        logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
+
+        assert logits.shape == (num_nodes, num_elements)
+        assert targets.shape == (num_nodes, num_elements)
+        
+        # Compute the cross-entropy loss.
+        # We ignore the loss for stopped nodes.
+        loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1, keepdims=True) + jnp.sum(jnp.exp(logits), axis=-1, keepdims=True)
+        loss_focus_and_atom_type = jnp.where(graphs.nodes.stop[:, None], 0.0, loss_focus_and_atom_type)
+        loss_focus_and_atom_type = jraph.segment_sum(loss_focus_and_atom_type, segment_ids, num_graphs)
+        loss_focus_and_atom_type /= num_unstopped_nodes[:, None]
+
+        # We have computed the cross-entropy loss.
+        # Subtract out self-entropy (lower bound) to get the KL divergence.
+        lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1, keepdims=True)
+        lower_bound = jnp.where(graphs.nodes.stop[:, None], 0.0, lower_bound)
+        lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
+        lower_bound /= num_unstopped_nodes[:, None]
+
+        loss_focus_and_atom_type -= lower_bound
+        loss_focus_and_atom_type = loss_focus_and_atom_type.squeeze(axis=-1)
+        assert loss_focus_and_atom_type.shape == (num_graphs,)
+
+        return loss_focus_and_atom_type
 
     def target_position_to_radius_weights(
         target_position: jnp.ndarray,
@@ -189,6 +212,7 @@ def generation_loss(
             true_radius_weights, log_true_angular_coeffs, log_predicted_dist
         )
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     def position_loss_with_l2() -> jnp.ndarray:
@@ -258,6 +282,7 @@ def generation_loss(
             true_radius_weights, log_true_angular_coeffs, log_predicted_dist_coeffs
         )
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     def position_loss() -> jnp.ndarray:
@@ -269,17 +294,22 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
-    # If this is the last step in the generation process, we do not have to predict atom type and position.
-    loss_atom_type = atom_type_loss()
+    # If this fragment is complete, we do not have to predict a new atom type and position.
+    loss_stop = stop_loss()
+    loss_focus_and_atom_type = focus_and_atom_type_loss() * (1 - graphs.globals.stop)
     loss_position = position_loss() * (1 - graphs.globals.stop)
 
-    # Ignore position loss for graphs with less than, or equal to 3 atoms.
+    # Mask out the loss for atom types?
+    if mask_atom_types:
+        loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
+
+    # Ignore position loss for graphs with less than, or equal to 3 atoms?
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
     if ignore_position_loss_for_small_fragments:
-        loss_position = jnp.where(graphs.n_node <= 3, 0, loss_position)
+        loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_atom_type + loss_position
-    return total_loss, (loss_atom_type, loss_position)
+    total_loss = loss_focus_and_atom_type + loss_position
+    return total_loss, (loss_focus_and_atom_type, loss_position)
 
 
 def clash_loss(

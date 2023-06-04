@@ -1,7 +1,6 @@
 """Loads the model from a workdir to perform analysis."""
 
 import glob
-import itertools
 import os
 import pickle
 import sys
@@ -25,8 +24,8 @@ from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
 
-from openbabel import pybel
-from openbabel import openbabel as ob
+# from openbabel import pybel
+# from openbabel import openbabel as ob
 
 sys.path.append("..")
 
@@ -191,11 +190,11 @@ def visualize_predictions(
     mol_trace = []
     focus = pred.globals.focus_indices.item()
     focus_position = input_molecule.positions[focus]
-    stop_prob = pred.globals.stop_probs.item()
-    if np.isnan(stop_prob):
-        stop_prob = 1
-    target_species_probs = (1 - stop_prob) * pred.nodes.target_species_probs
-    focus_probs = np.sum(target_species_probs, axis=1)
+    focus_and_target_species_probs = pred.nodes.focus_and_target_species_probs
+    focus_probs = focus_and_target_species_probs.sum(axis=-1)
+    target_species_probs = focus_and_target_species_probs[focus]
+    target_species_probs /= target_species_probs.sum()
+    target_species_probs = target_species_probs.tolist()
 
     mol_trace.append(
         go.Scatter3d(
@@ -322,24 +321,44 @@ def visualize_predictions(
 
     # Plot target species probabilities.
     predicted_target_species = pred.globals.target_species.item()
-    predicted_target_element = ELEMENTS[predicted_target_species]
-    species_probs = pred.nodes.target_species_probs[focus].tolist()
+    ELEMENTS_WITH_STOP = ELEMENTS + ["STOP"]
+    predicted_target_element = ELEMENTS_WITH_STOP[predicted_target_species]
 
     # We highlight the true target if provided.
-    if target is not None:
+    if target is None:
+        species_trace = [
+            go.Bar(
+                x=ELEMENTS_WITH_STOP,
+                y=target_species_probs,
+                name="Elements Probabilities",
+                hovertext=[
+                    chosen_element_string(elem, predicted_target_element)
+                    for elem in ELEMENTS_WITH_STOP
+                ],
+                marker=dict(
+                    color=[
+                        "gray" if elem != predicted_target_element else "blue"
+                        for elem in ELEMENTS_WITH_STOP
+                    ],
+                    opacity=0.8,
+                ),
+                showlegend=False,
+            ),
+        ]
+    else:
         target_element_index = ATOMIC_NUMBERS.index(
             molecule_with_target.numbers[target]
         )
         other_elements = (
-            ELEMENTS[:target_element_index] + ELEMENTS[target_element_index + 1 :]
+            ELEMENTS_WITH_STOP[:target_element_index] + ELEMENTS_WITH_STOP[target_element_index + 1 :]
         )
         species_trace = [
             go.Bar(
-                x=[ELEMENTS[target_element_index]],
-                y=[species_probs[target_element_index]],
+                x=[ELEMENTS_WITH_STOP[target_element_index]],
+                y=[target_species_probs[target_element_index]],
                 hovertext=[
                     chosen_element_string(
-                        ELEMENTS[target_element_index], predicted_target_element
+                        ELEMENTS_WITH_STOP[target_element_index], predicted_target_element
                     )
                 ],
                 name="True Target Element Probability",
@@ -348,8 +367,8 @@ def visualize_predictions(
             ),
             go.Bar(
                 x=other_elements,
-                y=species_probs[:target_element_index]
-                + species_probs[target_element_index + 1 :],
+                y=target_species_probs[:target_element_index]
+                + target_species_probs[target_element_index + 1 :],
                 hovertext=[
                     chosen_element_string(elem, predicted_target_element)
                     for elem in other_elements
@@ -359,27 +378,6 @@ def visualize_predictions(
                     color=[
                         "gray" if elem != predicted_target_element else "blue"
                         for elem in other_elements
-                    ],
-                    opacity=0.8,
-                ),
-                showlegend=False,
-            ),
-        ]
-
-    else:
-        species_trace = [
-            go.Bar(
-                x=ELEMENTS,
-                y=species_probs,
-                name="Elements Probabilities",
-                hovertext=[
-                    chosen_element_string(elem, predicted_target_element)
-                    for elem in ELEMENTS
-                ],
-                marker=dict(
-                    color=[
-                        "gray" if elem != predicted_target_element else "blue"
-                        for elem in ELEMENTS
                     ],
                     opacity=0.8,
                 ),
@@ -703,26 +701,26 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
     return molecule, molecule.get_chemical_formula()
 
 
-def construct_obmol(mol: ase.Atoms) -> ob.OBMol:
-    obmol = ob.OBMol()
-    obmol.BeginModify()
+# def construct_obmol(mol: ase.Atoms) -> ob.OBMol:
+#     obmol = ob.OBMol()
+#     obmol.BeginModify()
 
-    # set positions and atomic numbers of all atoms in the molecule
-    for p, n in zip(mol.positions, mol.numbers):
-        obatom = obmol.NewAtom()
-        obatom.SetAtomicNum(int(n))
-        obatom.SetVector(*p.tolist())
+#     # set positions and atomic numbers of all atoms in the molecule
+#     for p, n in zip(mol.positions, mol.numbers):
+#         obatom = obmol.NewAtom()
+#         obatom.SetAtomicNum(int(n))
+#         obatom.SetVector(*p.tolist())
 
-    # infer bonds and bond order
-    obmol.ConnectTheDots()
-    obmol.PerceiveBondOrders()
+#     # infer bonds and bond order
+#     obmol.ConnectTheDots()
+#     obmol.PerceiveBondOrders()
 
-    obmol.EndModify()
-    return obmol
+#     obmol.EndModify()
+#     return obmol
 
 
-def construct_pybel_mol(mol: ase.Atoms) -> pybel.Molecule:
-    """Constructs a Pybel molecule from an ASE molecule."""
-    obmol = construct_obmol(mol)
+# def construct_pybel_mol(mol: ase.Atoms) -> pybel.Molecule:
+#     """Constructs a Pybel molecule from an ASE molecule."""
+#     obmol = construct_obmol(mol)
 
-    return pybel.Molecule(obmol)
+#     return pybel.Molecule(obmol)
