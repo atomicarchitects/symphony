@@ -19,13 +19,12 @@ import datatypes
 def get_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
-    shuffle: bool = True,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads and preprocesses the QM9 dataset as tf.data.Datasets for each split."""
     del rng
 
     # Get the raw datasets.
-    datasets = get_unbatched_qm9_datasets(config, shuffle=shuffle)
+    datasets = get_unbatched_qm9_datasets(config)
 
     # Convert to jraph.GraphsTuple.
     for split, dataset_split in datasets.items():
@@ -184,7 +183,6 @@ def _deprecated_get_unbatched_qm9_datasets(
 def get_unbatched_qm9_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
-    shuffle: bool = True,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
     # Set the seed for reproducibility.
@@ -253,7 +251,13 @@ def get_unbatched_qm9_datasets(
                 )
 
             dataset_split = dataset_split.skip(num_steps_to_skip).take(num_steps_to_take)
-
+            # for graph in dataset_split:
+            #     print(graph["species"], graph["target_species_probs"])
+            #     print(_convert_to_graphstuple(graph).globals.stop)
+            #     print(_convert_to_graphstuple(graph).nodes.stop)
+            #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
+            #     print()
+                
         # This is usually the case.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
@@ -262,7 +266,7 @@ def get_unbatched_qm9_datasets(
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
-        if shuffle:
+        if config.shuffle_datasets:
             dataset_split = dataset_split.shuffle(1000, seed=seed)
         datasets[split] = dataset_split
     return datasets
@@ -280,7 +284,8 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
         nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
-            target_species_probs=get_tensor_spec(graph.nodes.target_species_probs),
+            focus_and_target_species_probs=get_tensor_spec(graph.nodes.focus_and_target_species_probs),
+            stop=get_tensor_spec(graph.nodes.stop),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=get_tensor_spec(graph.globals.stop),
@@ -299,13 +304,14 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     """Converts a dictionary of tf.Tensors to a GraphsTuple."""
     positions = graph["positions"]
     species = graph["species"]
-    target_species_probs = graph["target_species_probs"]
+    focus_and_target_species_probs = graph["target_species_probs"][:, :-1]
+    stop = (tf.math.reduce_sum(focus_and_target_species_probs, axis=-1) == 0)
+    graph_stop = tf.math.reduce_all(stop == tf.ones_like(stop), keepdims=True)
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
     n_edge = graph["n_edge"]
     edges = tf.ones((tf.shape(senders)[0], 1))
-    stop = graph["stop"]
     target_positions = graph["target_positions"]
     target_species = graph["target_species"]
 
@@ -313,13 +319,14 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         nodes=datatypes.FragmentsNodes(
             positions=positions,
             species=species,
-            target_species_probs=target_species_probs,
+            focus_and_target_species_probs=focus_and_target_species_probs,
+            stop=stop,
         ),
         edges=edges,
         receivers=receivers,
         senders=senders,
         globals=datatypes.FragmentsGlobals(
-            stop=stop,
+            stop=graph_stop,
             target_positions=target_positions,
             target_species=target_species,
         ),

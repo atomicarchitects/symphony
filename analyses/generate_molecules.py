@@ -26,7 +26,6 @@ from plotly.subplots import make_subplots
 sys.path.append("..")
 
 import analyses.analysis as analysis
-import analyses.visualize_atom_removals as visualize_atom_removals
 import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
 import models  # noqa: E402

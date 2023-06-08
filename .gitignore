@@ -160,8 +160,7 @@ cython_debug/
 #.idea/
 
 .DS_Store
-workdirs
-potato_workdirs
+*workdirs*
 graphmlp
 graphnet
 qm9_data

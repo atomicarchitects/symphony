@@ -10,13 +10,13 @@ def get_root_dir(dataset: str) -> Optional[str]:
     if dataset == "qm9":
         hostname, username = os.uname()[1], os.environ.get("USER")
         if hostname == "radish":
-            return "/data/NFS/radish/qm9_fragments/radius"
+            return "/data/NFS/radish/qm9_fragments/radius_with_nodestop"
         if hostname == "potato.mit.edu":
             if username == "songk":
                 return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
-            return "/radish/qm9_fragments/radius"
+            return "/radish/qm9_fragments/radius_with_nodestop"
         elif username == "ameyad":
-            return "/Users/ameyad/Documents/qm9_data_tf/radius"
+            return "/Users/ameyad/Documents/qm9_data_tf/radius_with_nodestop"
         elif username == "songk":
             return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None
@@ -33,6 +33,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
+    config.shuffle_datasets = True
 
     # Optimizer.
     config.optimizer = "adam"
@@ -64,15 +65,17 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.target_position_inverse_temperature = 1.
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.position_loss_type = "kl_divergence"
+    config.loss_kwargs.mask_atom_types = False
+    config.mask_atom_types = False
 
     # Prediction heads.
-    config.focus_predictor = ml_collections.ConfigDict()
-    config.focus_predictor.latent_size = 128
-    config.focus_predictor.num_layers = 3
+    config.stop_predictor = ml_collections.ConfigDict()
+    config.stop_predictor.latent_size = 128
+    config.stop_predictor.num_layers = 3
 
-    config.target_species_predictor = ml_collections.ConfigDict()
-    config.target_species_predictor.latent_size = 128
-    config.target_species_predictor.num_layers = 3
+    config.focus_and_target_species_predictor = ml_collections.ConfigDict()
+    config.focus_and_target_species_predictor.latent_size = 128
+    config.focus_and_target_species_predictor.num_layers = 3
 
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 180
