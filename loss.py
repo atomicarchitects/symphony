@@ -319,9 +319,8 @@ def clash_loss(
     rtol: float = 0.1,
 ) -> jnp.ndarray:
     """Hinge loss that penalizes clashes between atoms depending on their atomic numbers."""
-    assert rtol >= 0.0
-    assert rtol < 1.0
-    assert atol >= 0.0
+    assert 0.0 <= rtol < 1.0
+    assert 0.0 <= atol
 
     clash_dist = {
         (8, 1): 0.96,
