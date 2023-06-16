@@ -51,6 +51,7 @@ class NodePredictions(NamedTuple):
 
 class GlobalPredictions(NamedTuple):
     stop_logits: jnp.ndarray  # [n_graph] float array
+    stop_probs: jnp.ndarray  # [n_graph] float array
     stop: jnp.ndarray  # [n_graph] bool array
     focus_indices: jnp.ndarray  # [n_graph] int array
     target_species: jnp.ndarray  # [n_graph,] int array

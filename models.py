@@ -31,15 +31,25 @@ def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
 
 
-def segment_softmax_2D(logits: jnp.ndarray, segment_ids: jnp.ndarray, num_graphs: int) -> jnp.ndarray:
+def segment_softmax_2D_with_stop(species_logits: jnp.ndarray, stop_logits: jnp.ndarray, segment_ids: jnp.ndarray, num_graphs: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Returns the segment softmax over 2D arrays. The segment_ids correspond to the first dimension."""
     # Subtract the max to avoid numerical issues.
-    logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
-    # Normalize exp() by all nodes in each graph + all atom types.
-    exp_logits = jnp.exp(logits)
-    exp_logits_summed = jnp.sum(exp_logits, axis=1)
-    normalizing_factors = jraph.segment_sum(exp_logits_summed, segment_ids, num_segments=num_graphs)
-    return exp_logits / normalizing_factors[segment_ids, None]
+    logits_max = jraph.segment_max(species_logits, segment_ids, num_segments=num_graphs).max(axis=-1)
+    logits_max = jnp.maximum(logits_max, stop_logits)
+    logits_max = jax.lax.stop_gradient(logits_max)
+    species_logits -= logits_max[segment_ids, None]
+
+    # Normalize exp() by all nodes, all atom types, and the stop for each graph.
+    exp_species_logits = jnp.exp(species_logits)
+    exp_species_logits_summed = jnp.sum(exp_species_logits, axis=-1)
+    normalizing_factors = jraph.segment_sum(exp_species_logits_summed, segment_ids, num_segments=num_graphs)
+    exp_stop_logits = jnp.exp(stop_logits)
+
+    normalizing_factors += exp_stop_logits
+    species_probs = exp_species_logits / normalizing_factors[segment_ids, None]
+    stop_probs = exp_stop_logits / normalizing_factors
+
+    return species_probs, stop_probs
 
 
 def get_segment_ids(
@@ -816,7 +826,7 @@ class Predictor(hk.Module):
         # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings)
         stop_logits = jnp.zeros((num_graphs,))
-        focus_and_target_species_probs = segment_softmax_2D(focus_and_target_species_logits, segment_ids, num_graphs)
+        focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(focus_and_target_species_logits, stop_logits, segment_ids, num_graphs)
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
@@ -833,13 +843,14 @@ class Predictor(hk.Module):
         position_max = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
+        position_max = jax.lax.stop_gradient(position_max)
         position_probs = position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Check the shapes.
-        assert focus_and_target_species_logits.shape == (num_nodes, num_species)
-        assert focus_and_target_species_probs.shape == (num_nodes, num_species)
+        assert focus_and_target_species_logits.shape == (num_nodes, num_species), focus_and_target_species_logits.shape
+        assert focus_and_target_species_probs.shape == (num_nodes, num_species), focus_and_target_species_probs.shape
         assert position_coeffs.shape == (num_graphs, len(RADII), position_coeffs.shape[-1])
         assert position_logits.shape == (num_graphs, len(RADII), position_logits.shape[-2], position_logits.shape[-1])
 
@@ -853,6 +864,7 @@ class Predictor(hk.Module):
             edges=None,
             globals=datatypes.GlobalPredictions(
                 stop_logits=stop_logits,
+                stop_probs=stop_probs,
                 stop=None,
                 focus_indices=focus_node_indices,
                 target_species=None,
@@ -889,18 +901,16 @@ class Predictor(hk.Module):
             global_embeddings = self.global_embedder(graphs_with_node_embeddings)
             node_embeddings = jnp.concatenate([node_embeddings, global_embeddings[segment_ids, :]], axis=-1)
 
-        # Get the stop logits.
-        stop_logits = self.stop_predictor(node_embeddings)
-        stop_probs = jax.nn.sigmoid(stop_logits)
+        # Get the species and stop logits.
+        focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings)
+        stop_logits = jnp.zeros((num_graphs,))
+        focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(focus_and_target_species_logits, stop_logits, segment_ids, num_graphs)
 
-        # Sample stopped nodes.
-        rng, stop_rng = jax.random.split(rng)
-        stop = jax.random.bernoulli(stop_rng, stop_probs)
-        graph_stop = jnp.all(stop, axis=0, keepdims=True)
+        # We stop a graph if the stop probability is greater than 0.5.
+        stop = stop_probs > 0.5
 
-        # Compute corresponding focus and target species probabilities.
-        focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings, stop)
-        focus_and_target_species_probs = segment_softmax_2D(focus_and_target_species_logits, segment_ids, num_graphs)
+        # Renormalize the focus and target species probabilities, if we have not stopped.
+        focus_and_target_species_probs = (1 - stop_probs)[segment_ids, None] * focus_and_target_species_probs
 
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
@@ -925,6 +935,7 @@ class Predictor(hk.Module):
         max_logit = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
+        max_logit = jax.lax.stop_gradient(max_logit)
         position_probs = position_logits.apply(
             lambda logit: jnp.exp(logit - max_logit)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
@@ -976,8 +987,6 @@ class Predictor(hk.Module):
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
                 stop=stop,
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
@@ -985,7 +994,9 @@ class Predictor(hk.Module):
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
-                stop=graph_stop,
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
                 position_coeffs=position_coeffs,
