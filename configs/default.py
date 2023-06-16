@@ -10,13 +10,13 @@ def get_root_dir(dataset: str) -> Optional[str]:
     if dataset == "qm9":
         hostname, username = os.uname()[1], os.environ.get("USER")
         if hostname == "radish":
-            return "/data/NFS/radish/qm9_fragments/radius_with_nodestop"
+            return "/data/NFS/radish/qm9_fragments/nn_with_finished"
         if hostname == "potato.mit.edu":
             if username == "songk":
                 return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
-            return "/radish/qm9_fragments/radius_with_nodestop"
+            return "/radish/qm9_fragments/nn_with_finished"
         elif username == "ameyad":
-            return "/Users/ameyad/Documents/qm9_data_tf/radius_with_nodestop"
+            return "/Users/ameyad/Documents/qm9_data_tf/nn_with_finished"
         elif username == "songk":
             return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None

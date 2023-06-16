@@ -9,7 +9,6 @@ import jraph
 
 import datatypes
 import models
-import optax
 
 
 def safe_log(x: jnp.ndarray) -> jnp.ndarray:
@@ -45,45 +44,36 @@ def generation_loss(
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes, num_graphs)
 
-    def stop_loss() -> jnp.ndarray:
-        """Computes the loss over stopped nodes."""
-        loss_stop = optax.sigmoid_binary_cross_entropy(preds.nodes.stop_logits, graphs.nodes.stop.astype(jnp.float32))
-        assert loss_stop.shape == (num_nodes,)
-
-        loss_stop = jraph.segment_mean(loss_stop, segment_ids, num_graphs)
-        assert loss_stop.shape == (num_graphs,)
-
-        return loss_stop
     
     def focus_and_atom_type_loss() -> jnp.ndarray:
-        """Computes the loss over focus and atom types for nodes which are not stopped."""
+        """Computes the loss over focus and atom types for all nodes which are not finished."""
         logits = preds.nodes.focus_and_target_species_logits
         targets = graphs.nodes.focus_and_target_species_probs
 
-        # Compute the number of unstopped nodes.
-        # We will normalize the loss by the number of unstopped nodes.
-        num_unstopped_nodes = jraph.segment_sum(1 - graphs.nodes.stop, segment_ids, num_graphs)
-        num_unstopped_nodes = jnp.where(num_unstopped_nodes == 0, 1, num_unstopped_nodes)
+        # Compute the number of unfinished nodes.
+        # We will normalize the loss by the number of unfinished nodes.
+        num_unfinished_nodes = jraph.segment_sum(1 - graphs.nodes.finished, segment_ids, num_graphs)
+        num_unfinished_nodes = jnp.where(num_unfinished_nodes == 0, 1, num_unfinished_nodes)
 
         # Subtract the maximum value for numerical stability.
-        logits -= jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None]
+        logits -= jax.lax.stop_gradient(jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None])
 
-        assert logits.shape == (num_nodes, num_elements)
-        assert targets.shape == (num_nodes, num_elements)
+        assert logits.shape == (num_nodes, num_elements + 1), logits.shape
+        assert targets.shape == (num_nodes, num_elements + 1)
         
         # Compute the cross-entropy loss.
-        # We ignore the loss for stopped nodes.
+        # We ignore the loss for finished nodes.
         loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1, keepdims=True) + jnp.sum(jnp.exp(logits), axis=-1, keepdims=True)
-        loss_focus_and_atom_type = jnp.where(graphs.nodes.stop[:, None], 0.0, loss_focus_and_atom_type)
+        loss_focus_and_atom_type = jnp.where(graphs.nodes.finished[:, None], 0.0, loss_focus_and_atom_type)
         loss_focus_and_atom_type = jraph.segment_sum(loss_focus_and_atom_type, segment_ids, num_graphs)
-        loss_focus_and_atom_type /= num_unstopped_nodes[:, None]
+        loss_focus_and_atom_type /= num_unfinished_nodes[:, None]
 
         # We have computed the cross-entropy loss.
         # Subtract out self-entropy (lower bound) to get the KL divergence.
         lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1, keepdims=True)
-        lower_bound = jnp.where(graphs.nodes.stop[:, None], 0.0, lower_bound)
+        lower_bound = jnp.where(graphs.nodes.finished[:, None], 0.0, lower_bound)
         lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
-        lower_bound /= num_unstopped_nodes[:, None]
+        lower_bound /= num_unfinished_nodes[:, None]
 
         loss_focus_and_atom_type -= lower_bound
         loss_focus_and_atom_type = loss_focus_and_atom_type.squeeze(axis=-1)
@@ -149,6 +139,7 @@ def generation_loss(
             log_true_angular_dist_max = jnp.max(
                 log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
             )
+            log_true_angular_dist_max = jax.lax.stop_gradient(log_true_angular_dist_max)
             log_true_angular_dist = log_true_angular_dist.apply(
                 lambda x: x - log_true_angular_dist_max
             )
@@ -169,6 +160,7 @@ def generation_loss(
             # Now, compute the unnormalized predicted distribution over all spheres.
             # Subtract the maximum value for numerical stability.
             log_predicted_dist_max = jnp.max(log_predicted_dist.grid_values)
+            log_predicted_dist_max = jax.lax.stop_gradient(log_predicted_dist_max)
             log_predicted_dist = log_predicted_dist.apply(
                 lambda x: x - log_predicted_dist_max
             )
@@ -294,10 +286,9 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
-    # If this fragment is complete, we do not have to predict a new atom type and position.
-    loss_stop = stop_loss()
-    loss_focus_and_atom_type = focus_and_atom_type_loss() * (1 - graphs.globals.stop)
-    loss_position = position_loss() * (1 - graphs.globals.stop)
+    # If we predicted a STOP, we do not have to predict a position.
+    loss_focus_and_atom_type = focus_and_atom_type_loss()
+    loss_position = position_loss() * (graphs.globals.target_species == models.NUM_ELEMENTS)
 
     # Mask out the loss for atom types?
     if mask_atom_types:

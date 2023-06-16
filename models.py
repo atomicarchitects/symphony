@@ -278,7 +278,7 @@ class E3SchNet(hk.Module):
     def __call__(self, graphs: jraph.GraphsTuple) -> jnp.ndarray:
         # 'species' are actually atomic numbers mapped to [0, self.num_species).
         # But we keep the same name for consistency with SchNetPack.
-        atomic_numbers = graphs.nodes.species
+        species = graphs.nodes.species
         r_ij = (
             graphs.nodes.positions[graphs.receivers]
             - graphs.nodes.positions[graphs.senders]
@@ -294,7 +294,9 @@ class E3SchNet(hk.Module):
 
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
-        x = hk.Embed(self.num_species, self.n_atom_basis)(atomic_numbers)
+        x = hk.Embed(self.num_species, self.n_atom_basis)(species)
+        # Mask out finished atoms.
+        x = jnp.where(graphs.nodes.finished[:, None], 0.0, x)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps)(x)
 
@@ -374,6 +376,7 @@ class MACE(hk.Module):
         species = graphs.nodes.species
         num_nodes = species.shape[0]
 
+        # TODO: Add support for masking out finished atoms in MACE.
         node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
             output_irreps=self.output_irreps,
             r_max=self.r_max,
@@ -446,7 +449,10 @@ class NequIP(hk.Module):
 
         species = graphs.nodes.species
         node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
+        # Mask out features for finished nodes.
+        node_feats = jnp.where(graphs.nodes.finished[:, None], 0.0, node_feats)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
+
 
         for _ in range(self.num_interactions):
             node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
@@ -587,21 +593,17 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         self.activation = activation
         self.num_species = num_species
 
-    def __call__(self, node_embeddings: e3nn.IrrepsArray, stop: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
         num_nodes, _ = node_embeddings.shape
         node_embeddings = node_embeddings.filter(keep="0e")
-        # TODO: See if we can do better than simple masking.
-        # Maybe message-passing over un-stopped nodes?
-        node_embeddings.array = jnp.where(stop[:, None], 0., node_embeddings.array)
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1)
-            + [self.num_species],
+            + [self.num_species + 1],
             act=self.activation,
             output_activation=False,
         )(node_embeddings).array
-        # TODO: Again, see if we can do better than simple masking.
-        species_logits = jnp.where(stop[:, None], -jnp.inf, species_logits)
-        assert species_logits.shape == (num_nodes, self.num_species)
+        # An extra element 
+        assert species_logits.shape == (num_nodes, self.num_species + 1)
         return species_logits
 
 
@@ -675,13 +677,11 @@ class Predictor(hk.Module):
     def __init__(
         self,
         node_embedder: hk.Module,
-        stop_predictor: hk.Module,
         focus_and_target_species_predictor: hk.Module,
         target_position_predictor: hk.Module,
         name: str = None,
     ):
         super().__init__(name=name)
-        self.stop_predictor = stop_predictor
         self.node_embedder = node_embedder
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
@@ -699,12 +699,8 @@ class Predictor(hk.Module):
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
 
-        # Get the stop logits.
-        stop_logits = self.stop_predictor(node_embeddings)
-        stop_probs = jax.nn.sigmoid(stop_logits)
-
         # Get the species logits.
-        focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings, graphs.nodes.stop)
+        focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings)
         focus_and_target_species_probs = segment_softmax_2D(focus_and_target_species_logits, segment_ids, num_graphs)
 
         # Get the embeddings of the focus nodes.
@@ -727,15 +723,13 @@ class Predictor(hk.Module):
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Check the shapes.
-        assert focus_and_target_species_logits.shape == (num_nodes, num_species)
-        assert focus_and_target_species_probs.shape == (num_nodes, num_species)
+        assert focus_and_target_species_logits.shape == (num_nodes, num_species + 1)
+        assert focus_and_target_species_probs.shape == (num_nodes, num_species + 1)
         assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
         assert position_logits.shape[:2] == (num_graphs, len(RADII))
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
                 stop=None,
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
@@ -968,11 +962,6 @@ def create_model(
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
-        stop_predictor = StopPredictor(
-            latent_size=config.stop_predictor.latent_size,
-            num_layers=config.stop_predictor.num_layers,
-            activation=get_activation(config.activation),
-        )
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
             latent_size=config.focus_and_target_species_predictor.latent_size,
             num_layers=config.focus_and_target_species_predictor.num_layers,
@@ -987,7 +976,6 @@ def create_model(
         )
         predictor = Predictor(
             node_embedder=node_embedder,
-            stop_predictor=stop_predictor,
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
         )
