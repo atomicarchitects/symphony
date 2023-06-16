@@ -42,41 +42,42 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
     n_node = graphs.n_node
-    segment_ids = models.get_segment_ids(n_node, num_nodes, num_graphs)
-
+    segment_ids = models.get_segment_ids(n_node, num_nodes)
     
     def focus_and_atom_type_loss() -> jnp.ndarray:
-        """Computes the loss over focus and atom types for all nodes which are not finished."""
-        logits = preds.nodes.focus_and_target_species_logits
-        targets = graphs.nodes.focus_and_target_species_probs
+        """Computes the loss over focus and atom types for all nodes."""
+        species_logits = preds.nodes.focus_and_target_species_logits
+        species_targets = graphs.nodes.focus_and_target_species_probs
+        stop_logits = preds.globals.stop_logits
+        stop_targets = graphs.globals.stop.astype(jnp.float32)
 
-        # Compute the number of unfinished nodes.
-        # We will normalize the loss by the number of unfinished nodes.
-        num_unfinished_nodes = jraph.segment_sum(1 - graphs.nodes.finished, segment_ids, num_graphs)
-        num_unfinished_nodes = jnp.where(num_unfinished_nodes == 0, 1, num_unfinished_nodes)
+        assert species_logits.shape == (num_nodes, num_elements)
+        assert species_targets.shape == (num_nodes, num_elements)
+        assert stop_logits.shape == (num_graphs,)
+        assert stop_targets.shape == (num_graphs,)
 
         # Subtract the maximum value for numerical stability.
-        logits -= jax.lax.stop_gradient(jraph.segment_max(logits, segment_ids, num_segments=num_graphs).max(axis=-1)[segment_ids, None])
-
-        assert logits.shape == (num_nodes, num_elements + 1), logits.shape
-        assert targets.shape == (num_nodes, num_elements + 1)
+        # This doesn't affect the forward pass, nor the backward pass.
+        logits_max = jraph.segment_max(species_logits, segment_ids, num_segments=num_graphs).max(axis=-1)
+        logits_max = jnp.maximum(logits_max, stop_logits)
+        logits_max = jax.lax.stop_gradient(logits_max)
+        species_logits -= logits_max[segment_ids, None]
+        stop_logits -= logits_max
         
         # Compute the cross-entropy loss.
-        # We ignore the loss for finished nodes.
-        loss_focus_and_atom_type = -jnp.sum(targets * logits, axis=-1, keepdims=True) + jnp.sum(jnp.exp(logits), axis=-1, keepdims=True)
-        loss_focus_and_atom_type = jnp.where(graphs.nodes.finished[:, None], 0.0, loss_focus_and_atom_type)
+        loss_focus_and_atom_type = -jnp.sum(species_targets * species_logits, axis=-1, keepdims=True) + jnp.sum(jnp.exp(species_logits), axis=-1, keepdims=True)
         loss_focus_and_atom_type = jraph.segment_sum(loss_focus_and_atom_type, segment_ids, num_graphs)
-        loss_focus_and_atom_type /= num_unfinished_nodes[:, None]
-
-        # We have computed the cross-entropy loss.
-        # Subtract out self-entropy (lower bound) to get the KL divergence.
-        lower_bound = -jnp.sum(targets * safe_log(targets), axis=-1, keepdims=True)
-        lower_bound = jnp.where(graphs.nodes.finished[:, None], 0.0, lower_bound)
-        lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
-        lower_bound /= num_unfinished_nodes[:, None]
-
-        loss_focus_and_atom_type -= lower_bound
         loss_focus_and_atom_type = loss_focus_and_atom_type.squeeze(axis=-1)
+        loss_focus_and_atom_type += -stop_targets * stop_logits + jnp.exp(stop_logits)
+
+        # Compute the lower bound on cross-entropy loss as the entropy of the target distribution.
+        lower_bound = -jnp.sum(species_targets * safe_log(species_targets), axis=-1, keepdims=True)
+        lower_bound = jraph.segment_sum(lower_bound, segment_ids, num_graphs)
+        lower_bound = lower_bound.squeeze(axis=-1)
+        lower_bound += -stop_targets * safe_log(stop_targets)
+
+        # Subtract out self-entropy (lower bound) to get the KL divergence.
+        loss_focus_and_atom_type -= lower_bound
         assert loss_focus_and_atom_type.shape == (num_graphs,)
 
         return loss_focus_and_atom_type
@@ -286,9 +287,9 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
-    # If we predicted a STOP, we do not have to predict a position.
+    # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
-    loss_position = position_loss() * (graphs.globals.target_species == models.NUM_ELEMENTS)
+    loss_position = (1 - graphs.globals.stop) * position_loss()
 
     # Mask out the loss for atom types?
     if mask_atom_types:

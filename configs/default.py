@@ -5,18 +5,18 @@ import ml_collections
 import os
 
 
-def get_root_dir(dataset: str) -> Optional[str]:
+def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
     """Get the root directory for the QM9 dataset."""
     if dataset == "qm9":
         hostname, username = os.uname()[1], os.environ.get("USER")
-        if hostname == "radish":
-            return "/data/NFS/radish/qm9_fragments/nn_with_finished"
+        if hostname == "radish.mit.edu":
+            return f"/data/NFS/radish/qm9_fragments/{fragment_logic}"
         if hostname == "potato.mit.edu":
             if username == "songk":
                 return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
-            return "/radish/qm9_fragments/nn_with_finished"
+            return f"/radish/qm9_fragments/{fragment_logic}"
         elif username == "ameyad":
-            return "/Users/ameyad/Documents/qm9_data_tf/nn_with_finished"
+            return f"/Users/ameyad/Documents/qm9_data_tf/{fragment_logic}"
         elif username == "songk":
             return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None
@@ -28,8 +28,9 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
+    config.fragment_logic = "radius"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = get_root_dir(config.get_ref("dataset"))
+    config.root_dir = get_root_dir(config.get_ref("dataset"), config.fragment_logic)
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
@@ -69,9 +70,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.mask_atom_types = False
 
     # Prediction heads.
-    config.stop_predictor = ml_collections.ConfigDict()
-    config.stop_predictor.latent_size = 128
-    config.stop_predictor.num_layers = 3
+    config.compute_global_embedding = True
+    config.global_embedder = ml_collections.ConfigDict()
+    config.global_embedder.num_channels = 2
+    config.global_embedder.pooling = "attention"
+    config.global_embedder.num_attention_heads = 2
 
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.latent_size = 128

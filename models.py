@@ -7,13 +7,14 @@ import e3nn_jax as e3nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import numpy as np
 import jraph
 import mace_jax.modules
 import ml_collections
 import nequip_jax
 
 import datatypes
-from marionette import MarioNetteLayerHaiku
+import marionette
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -42,7 +43,7 @@ def segment_softmax_2D(logits: jnp.ndarray, segment_ids: jnp.ndarray, num_graphs
 
 
 def get_segment_ids(
-    n_node: jnp.ndarray, num_nodes: int, num_graphs: int
+    n_node: jnp.ndarray, num_nodes: int,
 ) -> jnp.ndarray:
     """Returns the segment ids for each node in the graphs."""
     num_graphs = n_node.shape[0]
@@ -295,8 +296,6 @@ class E3SchNet(hk.Module):
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
         x = hk.Embed(self.num_species, self.n_atom_basis)(species)
-        # Mask out finished atoms.
-        x = jnp.where(graphs.nodes.finished[:, None], 0.0, x)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps)(x)
 
@@ -376,7 +375,6 @@ class MACE(hk.Module):
         species = graphs.nodes.species
         num_nodes = species.shape[0]
 
-        # TODO: Add support for masking out finished atoms in MACE.
         node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
             output_irreps=self.output_irreps,
             r_max=self.r_max,
@@ -449,16 +447,12 @@ class NequIP(hk.Module):
 
         species = graphs.nodes.species
         node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
-        # Mask out features for finished nodes.
-        node_feats = jnp.where(graphs.nodes.finished[:, None], 0.0, node_feats)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
-
 
         for _ in range(self.num_interactions):
             node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
                 num_species=self.num_species,
-                # max_ell=self.max_ell,
                 output_irreps=self.output_irreps,
                 even_activation=self.even_activation,
                 odd_activation=self.odd_activation,
@@ -469,11 +463,13 @@ class NequIP(hk.Module):
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
 
         alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
-        node_feats = node_feats * alpha
+        node_feats = node_feats * alpha            
         return node_feats
 
 
 class MarioNette(hk.Module):
+    """Wrapper class for MarioNette."""
+
     def __init__(
         self,
         num_species: int,
@@ -528,7 +524,7 @@ class MarioNette(hk.Module):
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
         for _ in range(self.num_interactions):
-            node_feats = MarioNetteLayerHaiku(
+            node_feats = marionette.MarioNetteLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
                 num_species=self.num_species,
                 output_irreps=self.output_irreps,
@@ -548,36 +544,155 @@ class MarioNette(hk.Module):
         return node_feats
 
 
-class StopPredictor(hk.Module):
-    """Predicts whether a node is to be stopped."""
+class MultiHeadAttention(hk.Module):
+  """Multi-headed attention (MHA) module.
+
+  This module is intended for attending over sequences of IrrepsArrays.
+
+  Rough sketch:
+  - Compute keys (K), queries (Q), and values (V) as projections of inputs.
+  - Attention weights are computed as W = softmax(QK^T / sqrt(key_size)).
+  - Output is another projection of WV^T.
+
+  For more detail, see the original Transformer paper:
+    "Attention is all you need" https://arxiv.org/abs/1706.03762.
+
+  Glossary of shapes:
+  - T: Sequence length.
+  - D: Vector (embedding) size.
+  - H: Number of attention heads.
+  """
+
+  def __init__(
+      self,
+      num_heads: int,
+      num_channels: int,
+      name: Optional[str] = None,
+  ):
+    """Initialises the module.
+
+    Args:
+      num_heads: Number of independent attention heads (H).
+      num_channels: The number of channels in each head to determine the embedding size (D).
+      name: Optional name for this module.
+    """
+    super().__init__(name=name)
+    self.num_heads = num_heads
+    self.num_channels = num_channels
+
+  def __call__(
+      self,
+      query: e3nn.IrrepsArray,
+      key: e3nn.IrrepsArray,
+      value: e3nn.IrrepsArray,
+      mask: Optional[jnp.ndarray] = None,
+  ) -> e3nn.IrrepsArray:
+    """Computes (optionally masked) MHA with queries, keys & values.
+
+    This module broadcasts over zero or more 'batch-like' leading dimensions.
+
+    Args:
+      query: Embeddings sequence used to compute queries; shape [..., T', D_q].
+      key: Embeddings sequence used to compute keys; shape [..., T, D_k].
+      value: Embeddings sequence used to compute values; shape [..., T, D_v].
+      mask: Optional mask applied to attention weights; shape [..., H=1, T', T].
+
+    Returns:
+      A new sequence of embeddings, consisting of a projection of the
+        attention-weighted value projections; shape [..., T', D'].
+    """
+    # In shape hints below, we suppress the leading dims [...] for brevity.
+    # Hence e.g. [A, B] should be read in every case as [..., A, B].
+    irreps = query.irreps
+    *leading_dims, sequence_length, _ = query.shape
+    projection = self._linear_projection
+
+    # Compute key/query/values (overload K/Q/V to denote the respective sizes).
+    query_heads = projection(query, self.num_heads, self.num_channels, "query")  # [T', H, Q]
+    key_heads = projection(key, self.num_heads, self.num_channels, "key")  # [T, H, K]
+    value_heads = projection(value, self.num_heads, self.num_channels, "value")  # [T, H, V]
+
+    # Compute attention weights.
+    attn_logits = jnp.einsum("...thd,...Thd->...htT", query_heads.array, key_heads.array)
+    attn_logits = attn_logits / jnp.sqrt(query_heads.shape[-1])
+    if mask is not None:
+      if mask.ndim != attn_logits.ndim:
+        raise ValueError(
+            f"Mask dimensionality {mask.ndim} must match logits dimensionality "
+            f"{attn_logits.ndim}."
+        )
+      attn_logits = jnp.where(mask, attn_logits, -1e30)
+    attn_weights = jax.nn.softmax(attn_logits)  # [H, T', T]
+
+    # Weight the values by the attention and flatten the head vectors.
+    attn = jnp.einsum("...htT,...Thd->...thd", attn_weights, value_heads.array)
+    attn = jnp.reshape(attn, (*leading_dims, sequence_length, -1))  # [T', H*V]
+    attn = e3nn.IrrepsArray(self.num_heads * self.num_channels * irreps, attn)
+
+    # Apply another projection to get the final embeddings.
+    return e3nn.haiku.Linear(self.num_channels * irreps)(attn)  # [T', D']
+
+  @hk.transparent
+  def _linear_projection(
+      self,
+      x: e3nn.IrrepsArray,
+      num_heads: int,
+      num_channels: int,
+      name: Optional[str] = None,
+  ) -> jnp.ndarray:
+    y = e3nn.haiku.Linear(num_channels * num_heads * x.irreps, name=name)(x)
+    y = y.mul_to_axis(num_heads, axis=-2)
+    return y
+
+
+class GlobalEmbedder(hk.Module):
+    """Computes a global embedding for each node in the graph."""
 
     def __init__(
         self,
-        latent_size: int,
-        num_layers: int,
-        activation: Callable[[jnp.ndarray], jnp.ndarray],
+        num_channels: int,
+        pooling: str,
+        num_attention_heads: Optional[int] = None,
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.latent_size = latent_size
-        self.num_layers = num_layers
-        self.activation = activation
+        self.num_channels = num_channels
+        self.pooling = pooling
+        if self.pooling == "attention":
+            assert num_attention_heads is not None
+            self.num_attention_heads = num_attention_heads
+        else:
+            assert num_attention_heads is None
 
-    def __call__(self, node_embeddings: e3nn.IrrepsArray) -> jnp.ndarray:
-        num_nodes, _ = node_embeddings.shape
-        node_embeddings = node_embeddings.filter(keep="0e")
-        stop_logits = e3nn.haiku.MultiLayerPerceptron(
-            list_neurons=[self.latent_size] * (self.num_layers - 1)
-            + [1],
-            act=self.activation,
-            output_activation=False,
-        )(node_embeddings).array.squeeze(-1)
-        assert stop_logits.shape == (num_nodes,)
-        return stop_logits
+    def __call__(self, graphs: datatypes.Fragments) -> jnp.ndarray:
+        node_embeddings: e3nn.IrrepsArray = graphs.nodes
+        num_nodes = node_embeddings.shape[0]
+        num_graphs = graphs.n_node.shape[0]
+        irreps = node_embeddings.irreps
+        segment_ids = get_segment_ids(graphs.n_node, num_nodes)
+
+        if self.pooling == "mean":
+            global_embeddings = jraph.segment_mean(node_embeddings.array, segment_ids, num_segments=num_graphs)
+            global_embeddings = e3nn.IrrepsArray(irreps, global_embeddings)
+            global_embeddings = e3nn.haiku.Linear(self.num_channels * irreps)(global_embeddings)
+        
+        elif self.pooling == "sum":
+            global_embeddings = jraph.segment_sum(node_embeddings.array, segment_ids, num_segments=num_graphs)
+            global_embeddings = e3nn.IrrepsArray(irreps, global_embeddings)
+            global_embeddings = e3nn.haiku.Linear(self.num_channels * irreps)(global_embeddings)
+
+        elif self.pooling == "attention":
+            # Only attend to nodes within the same graph.
+            attention_mask = jnp.where(segment_ids[:, None] == segment_ids[None, :], 1.0, 0.0)
+            attention_mask = jnp.expand_dims(attention_mask, axis=0)
+            global_embeddings = MultiHeadAttention(self.num_attention_heads, self.num_channels)(node_embeddings, node_embeddings, node_embeddings, attention_mask)
+        
+        assert global_embeddings.shape == (num_nodes, self.num_channels * irreps.dim)
+        return global_embeddings
 
 
 class FocusAndTargetSpeciesPredictor(hk.Module):
-    """Predicts the focus and target species distribution over all un-stopped nodes."""
+    """Predicts the focus and target species distribution over all nodes."""
 
     def __init__(
         self,
@@ -598,21 +713,16 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         node_embeddings = node_embeddings.filter(keep="0e")
         species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1)
-            + [self.num_species + 1],
+            + [self.num_species],
             act=self.activation,
             output_activation=False,
         )(node_embeddings).array
-        # An extra element 
-        assert species_logits.shape == (num_nodes, self.num_species + 1)
+        assert species_logits.shape == (num_nodes, self.num_species)
         return species_logits
 
 
 class TargetPositionPredictor(hk.Module):
     """Predicts the position coefficients for the target species."""
-
-    position_coeffs_lmax: int
-    res_beta: int
-    res_alpha: int
 
     def __init__(
         self,
@@ -670,19 +780,17 @@ class TargetPositionPredictor(hk.Module):
 class Predictor(hk.Module):
     """A convenient wrapper for an entire prediction model."""
 
-    node_embedder: hk.Module
-    focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor
-    target_position_predictor: TargetPositionPredictor
-
     def __init__(
         self,
         node_embedder: hk.Module,
-        focus_and_target_species_predictor: hk.Module,
-        target_position_predictor: hk.Module,
+        focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
+        target_position_predictor: TargetPositionPredictor,
+        global_embedder: Optional[GlobalEmbedder] = None,
         name: str = None,
     ):
         super().__init__(name=name)
         self.node_embedder = node_embedder
+        self.global_embedder = global_embedder
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
 
@@ -694,13 +802,20 @@ class Predictor(hk.Module):
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
         num_species = self.focus_and_target_species_predictor.num_species
-        segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
+        segment_ids = get_segment_ids(graphs.n_node, num_nodes)
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
 
-        # Get the species logits.
+        # Concatenate global embeddings to node embeddings.
+        if self.global_embedder is not None:
+            graphs_with_node_embeddings = graphs._replace(nodes=node_embeddings)
+            global_embeddings = self.global_embedder(graphs_with_node_embeddings)
+            node_embeddings = e3nn.concatenate([node_embeddings, global_embeddings], axis=-1)
+
+        # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings)
+        stop_logits = jnp.zeros((num_graphs,))
         focus_and_target_species_probs = segment_softmax_2D(focus_and_target_species_logits, segment_ids, num_graphs)
 
         # Get the embeddings of the focus nodes.
@@ -723,10 +838,10 @@ class Predictor(hk.Module):
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Check the shapes.
-        assert focus_and_target_species_logits.shape == (num_nodes, num_species + 1)
-        assert focus_and_target_species_probs.shape == (num_nodes, num_species + 1)
-        assert position_coeffs.shape[:2] == (num_graphs, len(RADII))
-        assert position_logits.shape[:2] == (num_graphs, len(RADII))
+        assert focus_and_target_species_logits.shape == (num_nodes, num_species)
+        assert focus_and_target_species_probs.shape == (num_nodes, num_species)
+        assert position_coeffs.shape == (num_graphs, len(RADII), position_coeffs.shape[-1])
+        assert position_logits.shape == (num_graphs, len(RADII), position_logits.shape[-2], position_logits.shape[-1])
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -737,6 +852,7 @@ class Predictor(hk.Module):
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
+                stop_logits=stop_logits,
                 stop=None,
                 focus_indices=focus_node_indices,
                 target_species=None,
@@ -759,13 +875,19 @@ class Predictor(hk.Module):
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
         num_species = self.focus_and_target_species_predictor.num_species
-        segment_ids = get_segment_ids(graphs.n_node, num_nodes, num_graphs)
+        segment_ids = get_segment_ids(graphs.n_node, num_nodes)
 
         # Get the PRNG key for sampling.
         rng = hk.next_rng_key()
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
+
+        # Concatenate global embeddings to node embeddings.
+        if self.global_embedder is not None:
+            graphs_with_node_embeddings = graphs._replace(nodes=node_embeddings)
+            global_embeddings = self.global_embedder(graphs_with_node_embeddings)
+            node_embeddings = jnp.concatenate([node_embeddings, global_embeddings[segment_ids, :]], axis=-1)
 
         # Get the stop logits.
         stop_logits = self.stop_predictor(node_embeddings)
@@ -962,6 +1084,14 @@ def create_model(
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
+        if config.compute_global_embedding:
+            global_embedder = GlobalEmbedder(
+                num_channels=config.global_embedder.num_channels,
+                pooling=config.global_embedder.pooling,
+                num_attention_heads=config.global_embedder.num_attention_heads)
+        else:
+            global_embedder = None
+
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
             latent_size=config.focus_and_target_species_predictor.latent_size,
             num_layers=config.focus_and_target_species_predictor.num_layers,
@@ -976,6 +1106,7 @@ def create_model(
         )
         predictor = Predictor(
             node_embedder=node_embedder,
+            global_embedder=global_embedder,
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
         )

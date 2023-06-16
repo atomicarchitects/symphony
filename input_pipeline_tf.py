@@ -275,7 +275,8 @@ def get_unbatched_qm9_datasets(
 def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
     """Returns a tf.TensorSpec corresponding to this graph."""
 
-    def get_tensor_spec(array: np.ndarray):
+    def get_tensor_spec(array: np.ndarray) -> tf.TensorSpec:
+        """Returns a tf.TensorSpec corresponding to this array."""
         shape = list(array.shape)
         dtype = array.dtype
         return tf.TensorSpec(shape=shape, dtype=dtype)
@@ -285,11 +286,11 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
             focus_and_target_species_probs=get_tensor_spec(graph.nodes.focus_and_target_species_probs),
-            finished=get_tensor_spec(graph.nodes.finished),
         ),
         globals=datatypes.FragmentsGlobals(
             target_positions=get_tensor_spec(graph.globals.target_positions),
             target_species=get_tensor_spec(graph.globals.target_species),
+            stop=get_tensor_spec(graph.globals.stop),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -304,7 +305,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     positions = graph["positions"]
     species = graph["species"]
     focus_and_target_species_probs = graph["target_species_probs"]
-    finished = graph["finished"]
+    stop = graph["stop"]
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
@@ -318,7 +319,6 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             positions=positions,
             species=species,
             focus_and_target_species_probs=focus_and_target_species_probs,
-            finished=finished,
         ),
         edges=edges,
         receivers=receivers,
@@ -326,6 +326,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         globals=datatypes.FragmentsGlobals(
             target_positions=target_positions,
             target_species=target_species,
+            stop=stop,
         ),
         n_node=n_node,
         n_edge=n_edge,
