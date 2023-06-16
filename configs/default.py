@@ -72,7 +72,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.compute_global_embedding = True
     config.global_embedder = ml_collections.ConfigDict()
-    config.global_embedder.num_channels = 2
+    config.global_embedder.num_channels = 1
     config.global_embedder.pooling = "attention"
     config.global_embedder.num_attention_heads = 2
 
