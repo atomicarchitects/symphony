@@ -636,8 +636,8 @@ class MultiHeadAttention(hk.Module):
 
     # Weight the values by the attention and flatten the head vectors.
     attn = jnp.einsum("...htT,...Thd->...thd", attn_weights, value_heads.array)
-    attn = jnp.reshape(attn, (*leading_dims, sequence_length, -1))  # [T', H*V]
-    attn = e3nn.IrrepsArray(self.num_heads * self.num_channels * irreps, attn)
+    attn = e3nn.IrrepsArray(self.num_channels * irreps, attn)  # [T', H, V]
+    attn = attn.axis_to_mul(axis=-2) # [T', H * V]
 
     # Apply another projection to get the final embeddings.
     return e3nn.haiku.Linear(self.num_channels * irreps)(attn)  # [T', D']
@@ -899,7 +899,7 @@ class Predictor(hk.Module):
         if self.global_embedder is not None:
             graphs_with_node_embeddings = graphs._replace(nodes=node_embeddings)
             global_embeddings = self.global_embedder(graphs_with_node_embeddings)
-            node_embeddings = jnp.concatenate([node_embeddings, global_embeddings[segment_ids, :]], axis=-1)
+            node_embeddings = e3nn.concatenate([node_embeddings, global_embeddings], axis=-1)
 
         # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(node_embeddings)
