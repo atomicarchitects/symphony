@@ -176,22 +176,29 @@ def evaluate_model(
 
 def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
     """Mask atom types in graphs."""
+
     def aggregate_sum(arr: jnp.ndarray) -> jnp.ndarray:
         """Aggregates the sum of all elements upto the last in arr into the first element."""
         # Set the first element of arr as the sum of all elements upto the last element.
         # Keep the last element as is.
         # Set all of the other elements to 0.
-        return jnp.concatenate([arr[:-1].sum(axis=0, keepdims=True), jnp.zeros_like(arr[:-1]), arr[-1:]], axis=0)
+        return jnp.concatenate(
+            [arr[:-1].sum(axis=0, keepdims=True), jnp.zeros_like(arr[:-1]), arr[-1:]],
+            axis=0,
+        )
+
     focus_and_target_species_probs = graphs.nodes.focus_and_target_species_probs
-    focus_and_target_species_probs = jax.vmap(aggregate_sum)(focus_and_target_species_probs)
+    focus_and_target_species_probs = jax.vmap(aggregate_sum)(
+        focus_and_target_species_probs
+    )
     graphs = graphs._replace(
         nodes=graphs.nodes._replace(
             species=jnp.zeros_like(graphs.nodes.species),
-            focus_and_target_species_probs=focus_and_target_species_probs
+            focus_and_target_species_probs=focus_and_target_species_probs,
         ),
         globals=graphs.globals._replace(
             target_species=jnp.zeros_like(graphs.globals.target_species)
-        )
+        ),
     )
     return graphs
 
@@ -218,8 +225,7 @@ def train_and_evaluate(
         rng: chex.PRNGKey,
         is_final_eval: bool,
     ) -> Dict[str, metrics.Collection]:
-        return {"val_eval": {"total_loss": 1.}}
-        # Final eval splits are usually larger.
+        # Final eval splits are usually different.
         if is_final_eval:
             splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
         else:
@@ -281,13 +287,15 @@ def train_and_evaluate(
     # We will record the best model seen during training.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
-    restored = ckpt.restore_or_initialize({
-        "state": state,
-        "best_state": state,
-        "step_for_best_state": 1.,
-        "metrics_for_best_state": None,
-        "min_val_loss": 1.,
-    })
+    restored = ckpt.restore_or_initialize(
+        {
+            "state": state,
+            "best_state": state,
+            "step_for_best_state": 1.0,
+            "metrics_for_best_state": None,
+            "min_val_loss": 1.0,
+        }
+    )
     state = restored["state"]
     best_state = restored["best_state"]
     step_for_best_state = restored["step_for_best_state"]
@@ -362,7 +370,7 @@ def train_and_evaluate(
         try:
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
-            
+
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)
 
