@@ -331,9 +331,7 @@ def plot_sample_complexity_curves(
                 plot_metric(model, metric, split)
 
 
-def plot_atom_type_hist(
-        mol_path: str, outputdir: str, model: str
-):
+def plot_atom_type_hist(mol_path: str, outputdir: str, model: str):
     """Creates a histogram of atom types for a given set of generated molecules."""
     mol_dict = analysis.get_mol_dict(mol_path)
 
@@ -342,8 +340,8 @@ def plot_atom_type_hist(
         for atoms in mol_dict[n_atoms][Properties.Z]:
             atom_type_list = np.concatenate([atom_type_list, atoms])
 
-    atom_type_counts = {'H': 0, 'C': 0, 'N': 0, 'O': 0, 'F': 0}
-    element_numbers = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}
+    atom_type_counts = {"H": 0, "C": 0, "N": 0, "O": 0, "F": 0}
+    element_numbers = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
     for atom_type in atom_type_list:
         atom_type_counts[element_numbers[atom_type]] += 1
 
@@ -355,9 +353,7 @@ def plot_atom_type_hist(
 
     # Save figure.
     os.makedirs(outputdir, exist_ok=True)
-    outputfile = os.path.join(
-        outputdir, f"{model}_atom_types.png"
-    )
+    outputfile = os.path.join(outputdir, f"{model}_atom_types.png")
     plt.savefig(outputfile, bbox_inches="tight")
     plt.close()
 

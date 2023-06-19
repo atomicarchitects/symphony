@@ -19,21 +19,55 @@ from analyses.analysis import update_dict
 # http://www.wiredchemist.com/chemistry/data/bond_energies_lengths.html
 # And:
 # http://chemistry-reference.com/tables/Bond%20Lengths%20and%20Enthalpies.pdf
-bonds1 = {'H': {'H': 74, 'C': 109, 'N': 101, 'O': 96, 'F': 92,},
-          'C': {'H': 109, 'C': 154, 'N': 147, 'O': 143, 'F': 135,},
-          'N': {'H': 101, 'C': 147, 'N': 145, 'O': 140, 'F': 136,},
-          'O': {'H': 96, 'C': 143, 'N': 140, 'O': 148, 'F': 142,},
-          'F': {'H': 92, 'C': 135, 'N': 136, 'O': 142, 'F': 142,}
-          }
+bonds1 = {
+    "H": {
+        "H": 74,
+        "C": 109,
+        "N": 101,
+        "O": 96,
+        "F": 92,
+    },
+    "C": {
+        "H": 109,
+        "C": 154,
+        "N": 147,
+        "O": 143,
+        "F": 135,
+    },
+    "N": {
+        "H": 101,
+        "C": 147,
+        "N": 145,
+        "O": 140,
+        "F": 136,
+    },
+    "O": {
+        "H": 96,
+        "C": 143,
+        "N": 140,
+        "O": 148,
+        "F": 142,
+    },
+    "F": {
+        "H": 92,
+        "C": 135,
+        "N": 136,
+        "O": 142,
+        "F": 142,
+    },
+}
 
-bonds2 = {'C': {'C': 134, 'N': 129, 'O': 120},
-          'N': {'C': 129, 'N': 125, 'O': 121},
-          'O': {'C': 120, 'N': 121, 'O': 121},
-        }
+bonds2 = {
+    "C": {"C": 134, "N": 129, "O": 120},
+    "N": {"C": 129, "N": 125, "O": 121},
+    "O": {"C": 120, "N": 121, "O": 121},
+}
 
-bonds3 = {'C': {'C': 120, 'N': 116, 'O': 113},
-          'N': {'C': 116, 'N': 110},
-          'O': {'C': 113}}
+bonds3 = {
+    "C": {"C": 120, "N": 116, "O": 113},
+    "N": {"C": 116, "N": 110},
+    "O": {"C": 113},
+}
 
 
 def get_parser():
@@ -153,6 +187,8 @@ if __name__ == "__main__":
         valid_dists = np.concatenate([valid_dists, check_distances(all_pos, min_dist)])
         n_atoms_list = np.concatenate([n_atoms_list, np.ones(n_mols) * n_atoms])
 
-    valid_stats = pd.DataFrame({"n_atoms": n_atoms_list, "valid_distances": valid_dists})
-    with open('distance-results.pkl', 'wb') as f:
+    valid_stats = pd.DataFrame(
+        {"n_atoms": n_atoms_list, "valid_distances": valid_dists}
+    )
+    with open("distance-results.pkl", "wb") as f:
         pickle.dump(valid_stats, f)

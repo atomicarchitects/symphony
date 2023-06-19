@@ -125,10 +125,7 @@ def filter_unique(mols, valid=None, use_bits=False):
                 fp2, smiles2, symbols2 = get_fingerprint(mol2, use_bits=use_bits)
                 if tanimoto_similarity(fp1, fp2, use_bits=use_bits) >= 1:
                     # compare canonical smiles representation
-                    if (
-                        symbols1 == symbols1
-                        or get_mirror_can(mol) == symbols1
-                    ):
+                    if symbols1 == symbols1 or get_mirror_can(mol) == symbols1:
                         found = True
                         valid[i] = False
                         duplicating[i] = j
@@ -277,7 +274,7 @@ def filter_unique_threaded(
     return still_valid, duplicating, duplicate_count
 
 
-def _get_atoms_per_type_str(mol, type_infos = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}):
+def _get_atoms_per_type_str(mol, type_infos={1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}):
     """
     Get a string representing the atomic composition of a molecule (i.e. the number
     of atoms per type in the molecule, e.g. H2C3O1, where the order of types is
@@ -292,7 +289,7 @@ def _get_atoms_per_type_str(mol, type_infos = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9
     n_atoms_per_type = np.bincount(mol.numbers, minlength=10)
     s = ""
     for t, n in zip(type_infos.keys(), n_atoms_per_type):
-        s += f'{type_infos[t]}{int(n):d}'
+        s += f"{type_infos[t]}{int(n):d}"
     return s
 
 
@@ -555,7 +552,7 @@ def filter_new(
 
     if not os.path.exists(model_path):
         raise FileNotFoundError
-    
+
     # Load config.
     saved_config_path = os.path.join(model_path, "config.yml")
     if not os.path.exists(saved_config_path):
@@ -574,9 +571,7 @@ def filter_new(
     print("\nComputing fingerprints of training data...")
     start_time = time.time()
     if n_threads <= 0:
-        train_fps = _get_training_fingerprints(
-            dbpath, train_idx, print_file
-        )
+        train_fps = _get_training_fingerprints(dbpath, train_idx, print_file)
     else:
         train_fps = {"fingerprints": [None for _ in range(len(train_idx))]}
         run_threaded(
@@ -647,9 +642,7 @@ def filter_new(
     return stats
 
 
-def _get_training_fingerprints(
-    dbpath, train_idx, print_file=True, use_bits=False
-):
+def _get_training_fingerprints(dbpath, train_idx, print_file=True, use_bits=False):
     """
     Get the fingerprints (FP2 from Open Babel), canonical smiles representation,
     and atoms per type string of all molecules in the training database.
@@ -746,20 +739,20 @@ def _get_training_fingerprints_dict(fps):
 
 
 def get_mirror_can(mol):
-        """
-        Retrieve the canonical SMILES representation of the mirrored molecule (the
-        z-coordinates are flipped).
+    """
+    Retrieve the canonical SMILES representation of the mirrored molecule (the
+    z-coordinates are flipped).
 
-        Args:
-            mol (ase.Atoms): molecule
+    Args:
+        mol (ase.Atoms): molecule
 
-        Returns:
-             String: canonical SMILES string of the mirrored molecule
-        """
-        # calculate canonical SMILES of mirrored molecule
-        flipped = _flip_z(mol)  # flip z to mirror molecule using x-y plane
-        mirror_can = pybel.Molecule(flipped).write("can")
-        return mirror_can
+    Returns:
+         String: canonical SMILES string of the mirrored molecule
+    """
+    # calculate canonical SMILES of mirrored molecule
+    flipped = _flip_z(mol)  # flip z to mirror molecule using x-y plane
+    mirror_can = pybel.Molecule(flipped).write("can")
+    return mirror_can
 
 
 def _flip_z(mol):
@@ -782,27 +775,27 @@ def _flip_z(mol):
 
 
 def tanimoto_similarity(mol, other_mol, use_bits=True):
-        """
-        Get the Tanimoto (fingerprint) similarity to another molecule.
+    """
+    Get the Tanimoto (fingerprint) similarity to another molecule.
 
-        Args:
-         mol (pybel.Fingerprint/list of bits set):
-            representation of the second molecule
-         other_mol (pybel.Fingerprint/list of bits set):
-            representation of the second molecule
-         use_bits (bool, optional): set True to calculate Tanimoto similarity
-            from bits set in the fingerprint (default: True)
+    Args:
+     mol (pybel.Fingerprint/list of bits set):
+        representation of the second molecule
+     other_mol (pybel.Fingerprint/list of bits set):
+        representation of the second molecule
+     use_bits (bool, optional): set True to calculate Tanimoto similarity
+        from bits set in the fingerprint (default: True)
 
-        Returns:
-             float: Tanimoto similarity to the other molecule
-        """
-        if use_bits:
-            n_equal = len(mol.intersection(other_mol))
-            if len(mol) + len(other_mol) == 0:  # edge case with no set bits
-                return 1.0
-            return n_equal / (len(mol) + len(other_mol) - n_equal)
-        else:
-            return mol | other_mol
+    Returns:
+         float: Tanimoto similarity to the other molecule
+    """
+    if use_bits:
+        n_equal = len(mol.intersection(other_mol))
+        if len(mol) + len(other_mol) == 0:  # edge case with no set bits
+            return 1.0
+        return n_equal / (len(mol) + len(other_mol) - n_equal)
+    else:
+        return mol | other_mol
 
 
 def _compare_fingerprints(
@@ -868,12 +861,12 @@ def _compare_fingerprints(
             for fp_train in train_fps[mol_key]:
                 # compare fingerprints
                 fingerprint, smiles, symbols = get_fingerprint(mol, use_bits=use_bits)
-                if tanimoto_similarity(fingerprint, fp_train[0], use_bits=use_bits) >= 1:
+                if (
+                    tanimoto_similarity(fingerprint, fp_train[0], use_bits=use_bits)
+                    >= 1
+                ):
                     # compare canonical smiles representation
-                    if (
-                        symbols == fp_train[1]
-                        or get_mirror_can(mol) == fp_train[1]
-                    ):
+                    if symbols == fp_train[1] or get_mirror_can(mol) == fp_train[1]:
                         # store index of match
                         j = fp_train[-1]
                         stats[idx, idx_equals] = train_idx[j]
@@ -940,7 +933,7 @@ if __name__ == "__main__":
 
     mol_path = args.mol_path
     if os.path.isdir(args.mol_path):
-        mol_path = os.path.join(args.mol_path, 'generated_molecules.db')
+        mol_path = os.path.join(args.mol_path, "generated_molecules.db")
     if not os.path.isfile(mol_path):
         print(
             f"\n\nThe specified data path ({mol_path}) is neither a file "
@@ -1045,8 +1038,8 @@ if __name__ == "__main__":
                 0,  # known
                 0,  # equals
                 *n_of_types,  # n_atoms per type
-                *np.zeros((19, )),  # n_bonds per type pairs
-                *np.zeros((7, )),  # ring counts for 3-8 & >8
+                *np.zeros((19,)),  # n_bonds per type pairs
+                *np.zeros((7,)),  # ring counts for 3-8 & >8
             ),
             axis=0,
         )
@@ -1054,9 +1047,9 @@ if __name__ == "__main__":
         stats = np.hstack((stats, stats_new))
 
     if args.threads <= 0:
-            still_valid, duplicating, duplicate_count = filter_unique(
-                molecules, use_bits=False
-            )
+        still_valid, duplicating, duplicate_count = filter_unique(
+            molecules, use_bits=False
+        )
     else:
         still_valid, duplicating, duplicate_count = filter_unique_threaded(
             molecules,
@@ -1111,9 +1104,7 @@ if __name__ == "__main__":
         )
 
     # store gathered statistics in metrics dataframe
-    stats_df = pd.DataFrame(
-        np.array(stats), columns=np.array(stat_heads)
-    )
+    stats_df = pd.DataFrame(np.array(stats), columns=np.array(stat_heads))
     metric_df_dict = analysis.get_results_as_dataframe(
         [""],
         ["total_loss", "focus_loss", "atom_type_loss", "position_loss"],
@@ -1123,11 +1114,11 @@ if __name__ == "__main__":
     cum_stats = {
         "valid_mol": stats_df["valid_mol"].sum() / len(stats_df),
         "valid_atoms": stats_df["valid_atoms"].sum() / stats_df["n_atoms"].sum(),
-        #"n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
-        #"known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
-        #"known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
-        #"known_val": stats_df["known"].apply(lambda x: x == 2).sum() / len(stats_df),
-        #"known_test": stats_df["known"].apply(lambda x: x == 3).sum() / len(stats_df),
+        # "n_duplicates": stats_df["duplicating"].apply(lambda x: x != -1).sum(),
+        # "known": stats_df["known"].apply(lambda x: x > 0).sum() / len(stats_df),
+        # "known_train": stats_df["known"].apply(lambda x: x == 1).sum() / len(stats_df),
+        # "known_val": stats_df["known"].apply(lambda x: x == 2).sum() / len(stats_df),
+        # "known_test": stats_df["known"].apply(lambda x: x == 3).sum() / len(stats_df),
     }
     ring_bond_cols = [
         "C",
@@ -1165,9 +1156,7 @@ if __name__ == "__main__":
     for col_name in ring_bond_cols:
         cum_stats[col_name] = stats_df[col_name].sum()
 
-    cum_stats_df = pd.DataFrame(
-        cum_stats, columns=list(cum_stats.keys()), index=[0]
-    )
+    cum_stats_df = pd.DataFrame(cum_stats, columns=list(cum_stats.keys()), index=[0])
 
     metric_df_dict["generated_stats_overall"] = cum_stats_df
     metric_df_dict["generated_stats"] = stats_df

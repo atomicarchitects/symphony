@@ -43,7 +43,10 @@ ATOMIC_SIZES = {
     9: 30,  # F
 }
 
-def _remove_target_atoms(molecule: ase.Atoms, cutoff: float) -> Tuple[List[ase.Atoms], List[jraph.GraphsTuple]]:
+
+def _remove_target_atoms(
+    molecule: ase.Atoms, cutoff: float
+) -> Tuple[List[ase.Atoms], List[jraph.GraphsTuple]]:
     """Removes each atom in the molecule and returns the resulting fragments."""
     molecules_with_target_removed = []
     fragments = []
@@ -89,7 +92,9 @@ def visualize_atom_removals_against_steps(
             workdir, step, run_in_evaluation_mode=True
         )
         if molecules_with_target_removed is None:
-            molecules_with_target_removed, fragments = _remove_target_atoms(molecule, cutoff=config.nn_cutoff)
+            molecules_with_target_removed, fragments = _remove_target_atoms(
+                molecule, cutoff=config.nn_cutoff
+            )
 
         # We don't actually need a PRNG key, since we're not sampling.
         logging.info("Computing predictions...")
@@ -173,10 +178,14 @@ def visualize_atom_removals_against_l(
     figs = []
     for l_max in ls:
         model, params, config = analysis.load_model_at_step(
-            os.path.join(workdir, f'l={l_max}/channels={channels}'), step, run_in_evaluation_mode=True
+            os.path.join(workdir, f"l={l_max}/channels={channels}"),
+            step,
+            run_in_evaluation_mode=True,
         )
         if molecules_with_target_removed is None:
-            molecules_with_target_removed, fragments = _remove_target_atoms(molecule, cutoff=config.nn_cutoff)
+            molecules_with_target_removed, fragments = _remove_target_atoms(
+                molecule, cutoff=config.nn_cutoff
+            )
 
         # We don't actually need a PRNG key, since we're not sampling.
         logging.info("Computing predictions...")
@@ -193,8 +202,8 @@ def visualize_atom_removals_against_l(
             "visualizations",
             "atom_removal",
             name,
-            f'l={l_max}',
-            f'channels={channels}',
+            f"l={l_max}",
+            f"channels={channels}",
             f"beta={beta}",
             step_name,
         )
