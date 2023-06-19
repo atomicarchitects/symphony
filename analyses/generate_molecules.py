@@ -277,8 +277,9 @@ def generate_molecules(
         for step in range(MAX_NUM_ATOMS):
             step_rng, rng = jax.random.split(rng)
             fragment = input_pipeline.ase_atoms_to_jraph_graph(
-                molecule, models.ATOMIC_NUMBERS, config.nn_cutoff)
-            
+                molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
+            )
+
             # Run the model on the current molecule.
             pred = get_predictions(fragment, step_rng)
 
