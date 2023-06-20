@@ -5,6 +5,7 @@ from typing import Sequence, Dict
 from absl import app
 from absl import flags
 from absl import logging
+from ase.db import connect
 import os
 import pandas as pd
 import numpy as np
@@ -17,6 +18,7 @@ import sys
 sys.path.append("..")
 
 import analyses.analysis as analysis
+import analyses.check_distances as check_distances
 
 
 ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
@@ -333,17 +335,17 @@ def plot_sample_complexity_curves(
 
 def plot_atom_type_hist(mol_path: str, outputdir: str, model: str):
     """Creates a histogram of atom types for a given set of generated molecules."""
-    mol_dict = analysis.get_mol_dict(mol_path)
-
-    atom_type_list = np.array([])
-    for n_atoms in mol_dict:
-        for atoms in mol_dict[n_atoms][Properties.Z]:
-            atom_type_list = np.concatenate([atom_type_list, atoms])
+    molecules = []
+    with connect(mol_path) as conn:
+        for row in conn.select():
+            molecules.append(row.toatoms())
 
     atom_type_counts = {"H": 0, "C": 0, "N": 0, "O": 0, "F": 0}
     element_numbers = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
-    for atom_type in atom_type_list:
-        atom_type_counts[element_numbers[atom_type]] += 1
+
+    for mol in molecules:
+        for atom in mol.numbers:
+            atom_type_counts[element_numbers[atom]] += 1
 
     plt.bar(atom_type_counts.keys(), atom_type_counts.values())
     # TODO make `model` auto-detected from path
@@ -354,6 +356,32 @@ def plot_atom_type_hist(mol_path: str, outputdir: str, model: str):
     # Save figure.
     os.makedirs(outputdir, exist_ok=True)
     outputfile = os.path.join(outputdir, f"{model}_atom_types.png")
+    plt.savefig(outputfile, bbox_inches="tight")
+    plt.close()
+
+
+def plot_atom_distance_hist(mol_path: str, outputdir: str, model: str):
+    """Creates a histogram of atom types for a given set of generated molecules."""
+    molecules = []
+    with connect(mol_path) as conn:
+        for row in conn.select():
+            molecules.append(row.toatoms())
+
+    distances = []
+
+    for mol in molecules:
+        for distance in check_distances.get_interatomic_distances(mol.get_positions()):
+            distances.append(distance)
+
+    plt.hist(distances, bins=20, range=(0, 10))
+    # TODO make `model` auto-detected from path
+    plt.title(
+        f"{get_title_for_model(model)}: Distribution of Interatomic Distances in Generated Molecules"
+    )
+
+    # Save figure.
+    os.makedirs(outputdir, exist_ok=True)
+    outputfile = os.path.join(outputdir, f"{model}_atom_distances.png")
     plt.savefig(outputfile, bbox_inches="tight")
     plt.close()
 

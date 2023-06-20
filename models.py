@@ -903,7 +903,10 @@ class Predictor(hk.Module):
         )
 
     def get_evaluation_predictions(
-        self, graphs: datatypes.Fragments, focus_and_atom_type_inverse_temperature: float, position_inverse_temperature: float
+        self,
+        graphs: datatypes.Fragments,
+        focus_and_atom_type_inverse_temperature: float,
+        position_inverse_temperature: float,
     ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
@@ -1062,7 +1065,9 @@ def create_model(
         return getattr(jax.nn, activation)
 
     def model_fn(
-        graphs: datatypes.Fragments, focus_and_atom_type_inverse_temperature: float = 1., position_inverse_temperature: float = 1.
+        graphs: datatypes.Fragments,
+        focus_and_atom_type_inverse_temperature: float = 1.0,
+        position_inverse_temperature: float = 1.0,
     ) -> datatypes.Predictions:
         """Defines the entire network."""
 
@@ -1162,7 +1167,11 @@ def create_model(
         )
 
         if run_in_evaluation_mode:
-            return predictor.get_evaluation_predictions(graphs, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
+            return predictor.get_evaluation_predictions(
+                graphs,
+                focus_and_atom_type_inverse_temperature,
+                position_inverse_temperature,
+            )
         else:
             return predictor.get_training_predictions(graphs)
 
