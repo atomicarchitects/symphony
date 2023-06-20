@@ -69,7 +69,7 @@ def _update_dict(old_dict, **kwargs):
     return old_dict
 
 
-def _get_atoms_per_type_str(mol, type_infos = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F'}):
+def _get_atoms_per_type_str(mol, type_infos={1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}):
     """
     Get a string representing the atomic composition of a molecule (i.e. the number
     of atoms per type in the molecule, e.g. H2C3O1, where the order of types is
@@ -84,7 +84,7 @@ def _get_atoms_per_type_str(mol, type_infos = {1: 'H', 6: 'C', 7: 'N', 8: 'O', 9
     n_atoms_per_type = np.bincount(mol.numbers, minlength=10)
     s = ""
     for t, n in zip(type_infos.keys(), n_atoms_per_type):
-        s += f'{type_infos[t]}{int(n):d}'
+        s += f"{type_infos[t]}{int(n):d}"
     return s
 
 
@@ -126,48 +126,48 @@ def fingerprints_similar(mol1, fp2, symbols2, use_bits=False):
 
 
 def tanimoto_similarity(mol, other_mol, use_bits=True):
-        """
-        Get the Tanimoto (fingerprint) similarity to another molecule.
+    """
+    Get the Tanimoto (fingerprint) similarity to another molecule.
 
-        Args:
-         mol (pybel.Fingerprint/list of bits set):
-            representation of the second molecule
-         other_mol (pybel.Fingerprint/list of bits set):
-            representation of the second molecule
-         use_bits (bool, optional): set True to calculate Tanimoto similarity
-            from bits set in the fingerprint (default: True)
+    Args:
+     mol (pybel.Fingerprint/list of bits set):
+        representation of the second molecule
+     other_mol (pybel.Fingerprint/list of bits set):
+        representation of the second molecule
+     use_bits (bool, optional): set True to calculate Tanimoto similarity
+        from bits set in the fingerprint (default: True)
 
-        Returns:
-             float: Tanimoto similarity to the other molecule
-        """
-        if use_bits:
-            n_equal = len(mol.intersection(other_mol))
-            if len(mol) + len(other_mol) == 0:  # edge case with no set bits
-                return 1.0
-            return n_equal / (len(mol) + len(other_mol) - n_equal)
-        else:
-            return mol | other_mol
+    Returns:
+         float: Tanimoto similarity to the other molecule
+    """
+    if use_bits:
+        n_equal = len(mol.intersection(other_mol))
+        if len(mol) + len(other_mol) == 0:  # edge case with no set bits
+            return 1.0
+        return n_equal / (len(mol) + len(other_mol) - n_equal)
+    else:
+        return mol | other_mol
 
 
 def get_mirror_can(mol):
-        """
-        Retrieve the canonical SMILES representation of the mirrored molecule (the
-        z-coordinates are flipped).
+    """
+    Retrieve the canonical SMILES representation of the mirrored molecule (the
+    z-coordinates are flipped).
 
-        Args:
-            mol (ase.Atoms): molecule
+    Args:
+        mol (ase.Atoms): molecule
 
-        Returns:
-             String: canonical SMILES string of the mirrored molecule
-        """
-        # flip z to mirror molecule using x-y plane
-        flipped = analysis.construct_obmol(mol)
-        for atom in ob.OBMolAtomIter(flipped):
-            x, y, z = atom.x(), atom.y(), atom.z()
-            atom.SetVector(x, y, -z)
-        flipped.ConnectTheDots()
-        flipped.PerceiveBondOrders()
+    Returns:
+         String: canonical SMILES string of the mirrored molecule
+    """
+    # flip z to mirror molecule using x-y plane
+    flipped = analysis.construct_obmol(mol)
+    for atom in ob.OBMolAtomIter(flipped):
+        x, y, z = atom.x(), atom.y(), atom.z()
+        atom.SetVector(x, y, -z)
+    flipped.ConnectTheDots()
+    flipped.PerceiveBondOrders()
 
-        # calculate canonical SMILES of mirrored molecule
-        mirror_can = pybel.Molecule(flipped).write("can")
-        return mirror_can
+    # calculate canonical SMILES of mirrored molecule
+    mirror_can = pybel.Molecule(flipped).write("can")
+    return mirror_can

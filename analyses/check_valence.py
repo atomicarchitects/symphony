@@ -49,7 +49,7 @@ def check_valence(
     for atom in pybel_mol.atoms:
         if atom.OBAtom.GetExplicitValence() == valence[atom.atomicnum]:
             valid_atoms += 1
-    
+
     return valid_atoms == n_atoms, valid_atoms
 
 
@@ -61,5 +61,7 @@ if __name__ == "__main__":
 
     # check valency
     valid_mol, valid_atoms = check_valence(mol)
-    print(f'{mol.symbols} {"does" if valid_mol else "does not"} satisfy valence constraints')
-    print(f'{valid_atoms} of {len(mol.numbers)} atoms satisfy valence constraints')
+    print(
+        f'{mol.symbols} {"does" if valid_mol else "does not"} satisfy valence constraints'
+    )
+    print(f"{valid_atoms} of {len(mol.numbers)} atoms satisfy valence constraints")

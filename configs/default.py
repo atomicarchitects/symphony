@@ -5,18 +5,18 @@ import ml_collections
 import os
 
 
-def get_root_dir(dataset: str) -> Optional[str]:
+def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
     """Get the root directory for the QM9 dataset."""
     if dataset == "qm9":
         hostname, username = os.uname()[1], os.environ.get("USER")
-        if hostname == "radish":
-            return "/data/NFS/radish/qm9_fragments/radius_with_nodestop"
+        if hostname == "radish.mit.edu":
+            return f"/data/NFS/radish/qm9_fragments/{fragment_logic}"
         if hostname == "potato.mit.edu":
             if username == "songk":
                 return "/home/songk/spherical-harmonic-net/qm9_data_tf/data_tf2"
-            return "/radish/qm9_fragments/radius_with_nodestop"
+            return f"/radish/qm9_fragments/{fragment_logic}"
         elif username == "ameyad":
-            return "/Users/ameyad/Documents/qm9_data_tf/radius_with_nodestop"
+            return f"/Users/ameyad/Documents/qm9_data_tf/{fragment_logic}"
         elif username == "songk":
             return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     return None
@@ -28,8 +28,9 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
+    config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = get_root_dir(config.get_ref("dataset"))
+    config.root_dir = get_root_dir(config.get_ref("dataset"), config.fragment_logic)
     config.train_molecules = (0, 47616)
     config.val_molecules = (47616, 53568)
     config.test_molecules = (53568, 133920)
@@ -53,7 +54,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
-    config.eval_every_steps = 5000
+    config.eval_every_steps = 20000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
@@ -62,16 +63,18 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-3
-    config.loss_kwargs.target_position_inverse_temperature = 1.
+    config.loss_kwargs.target_position_inverse_temperature = 1.0
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.position_loss_type = "kl_divergence"
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
 
     # Prediction heads.
-    config.stop_predictor = ml_collections.ConfigDict()
-    config.stop_predictor.latent_size = 128
-    config.stop_predictor.num_layers = 3
+    config.compute_global_embedding = True
+    config.global_embedder = ml_collections.ConfigDict()
+    config.global_embedder.num_channels = 1
+    config.global_embedder.pooling = "attention"
+    config.global_embedder.num_attention_heads = 2
 
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.latent_size = 128
