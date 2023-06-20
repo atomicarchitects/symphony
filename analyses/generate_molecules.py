@@ -26,7 +26,6 @@ from plotly.subplots import make_subplots
 sys.path.append("..")
 
 import analyses.analysis as analysis
-import analyses.visualize_atom_removals as visualize_atom_removals
 import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
 import models  # noqa: E402
@@ -35,6 +34,142 @@ import models  # noqa: E402
 MAX_NUM_ATOMS = 30
 
 FLAGS = flags.FLAGS
+
+
+from typing import Tuple
+
+import jax
+import jax.numpy as jnp
+import jraph
+import matscipy.neighbours
+import numpy as np
+
+
+def get_edge_padding_mask(
+    n_node: jnp.ndarray, n_edge: jnp.ndarray, sum_n_edge: int
+) -> jnp.ndarray:
+    return jraph.get_edge_padding_mask(
+        jraph.GraphsTuple(
+            nodes=None,
+            edges=None,
+            globals=None,
+            receivers=None,
+            senders=jnp.zeros(sum_n_edge, dtype=jnp.int32),
+            n_node=n_node,
+            n_edge=n_edge,
+        )
+    )
+
+
+def create_radius_graph(
+    positions: jnp.ndarray, n_node: jnp.ndarray, cutoff: float, sum_n_edge: int
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Create a radius graph.
+
+    Args:
+        positions (jnp.ndarray): (n_node_sum, 3) array of positions, assumed to be padded, see `jraph.pad_with_graphs`
+        n_node (jnp.ndarray): (n_graph,) array of number of nodes per graph, see `jraph.batch_np` and `jraph.pad_with_graphs`
+        cutoff (float): cutoff radius
+        sum_n_edge (int): the total number of edges in output graph, the output graph will be padded with `jraph.pad_with_graphs`
+
+    Returns:
+        jnp.ndarray: senders: (sum_n_edge,) array of sender indices
+        jnp.ndarray: receivers: (sum_n_edge,) array of receiver indices
+        jnp.ndarray: n_edge: (n_graph,) array of number of edges per graph
+        bool: True if the radius graph was created successfully
+    """
+    return jax.pure_callback(
+        _create_radius_graph_helper,
+        (
+            jnp.empty(sum_n_edge, dtype=jnp.int32),  # senders
+            jnp.empty(sum_n_edge, dtype=jnp.int32),  # receivers
+            jnp.empty(n_node.shape, dtype=jnp.int32),  # n_edge
+            jnp.empty((), dtype=jnp.bool_),  # ok
+        ),
+        jax.lax.stop_gradient(positions),
+        n_node,
+        cutoff,
+        sum_n_edge,
+    )
+
+
+def _create_radius_graph_helper(
+    positions: np.ndarray, n_node: np.ndarray, cutoff: float, sum_n_edge: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Create a radius graph.
+
+    Args:
+        positions (jnp.ndarray): (n_node_sum, 3) array of positions, assumed to be padded, see `jraph.pad_with_graphs`
+        n_node (jnp.ndarray): (n_graph,) array of number of nodes per graph, see `jraph.batch_np` and `jraph.pad_with_graphs`
+        cutoff (float): cutoff radius
+        sum_n_edge (int): the total number of edges in output graph, the output graph will be padded with `jraph.pad_with_graphs`
+
+    Returns:
+        jnp.ndarray: senders: (sum_n_edge,) array of sender indices
+        jnp.ndarray: receivers: (sum_n_edge,) array of receiver indices
+        jnp.ndarray: n_edge: (n_graph,) array of number of edges per graph
+        bool: True if the radius graph was created successfully
+    """
+    sum_n_node = positions.shape[0]
+    n_graph = n_node.shape[0]
+
+    graph = jraph.GraphsTuple(
+        nodes=positions.copy(),
+        edges=None,
+        globals=None,
+        receivers=np.array([], dtype=np.int32),
+        senders=np.array([], dtype=np.int32),
+        n_node=n_node.copy(),
+        n_edge=np.array([0] * n_graph, dtype=np.int32),
+    )
+    graph = jraph.unpad_with_graphs(graph)
+    graphs = jraph.unbatch_np(graph)
+    new_graphs = []
+    for g in graphs:
+        pos = g.nodes.astype(np.float32)
+        senders, receivers = matscipy.neighbours.neighbour_list(
+            "ij", positions=pos, cutoff=float(cutoff), cell=np.eye(3)
+        )
+        g = jraph.GraphsTuple(
+            nodes=None,
+            edges=None,
+            globals=None,
+            receivers=receivers,
+            senders=senders,
+            n_node=g.n_node,
+            n_edge=np.array([len(senders)], dtype=np.int32),
+        )
+        new_graphs.append(g)
+
+    graph = jraph.batch_np(new_graphs)
+    ok = np.array(np.sum(graph.n_edge) <= sum_n_edge, dtype=np.bool_)
+
+    if not ok:
+        dummy_graph = jraph.GraphsTuple(
+            nodes=None,
+            edges=None,
+            globals=None,
+            receivers=np.zeros(sum_n_edge, dtype=np.int32),
+            senders=np.zeros(sum_n_edge, dtype=np.int32),
+            n_node=np.array([sum_n_node] + [0] * (n_graph - 1), dtype=np.int32),
+            n_edge=np.array([sum_n_edge] + [0] * (n_graph - 1), dtype=np.int32),
+        )
+        return (
+            dummy_graph.senders,
+            dummy_graph.receivers,
+            dummy_graph.n_edge,
+            ok,
+        )
+
+    graph = jraph.pad_with_graphs(
+        graph, n_node=sum_n_node, n_edge=sum_n_edge, n_graph=n_graph
+    )
+    return (
+        graph.senders,
+        graph.receivers,
+        graph.n_edge,
+        ok,
+    )
 
 
 def nan_analysis(pred: datatypes.Predictions):
@@ -65,7 +200,8 @@ def nan_analysis(pred: datatypes.Predictions):
 def generate_molecules(
     workdir: str,
     outputdir: str,
-    beta: float,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
     step: int,
     seeds: Sequence[int],
     init_molecule: str,
@@ -89,12 +225,22 @@ def generate_molecules(
     # Create output directories.
     step_name = "step=best" if step == -1 else f"step={step}"
     molecules_outputdir = os.path.join(
-        outputdir, "molecules", "generated", name, f"beta={beta}", step_name
+        outputdir,
+        "molecules",
+        "generated",
+        name,
+        f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
+        step_name,
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
     if visualize:
         visualizations_outputdir = os.path.join(
-            outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name
+            outputdir,
+            "visualizations",
+            "molecules",
+            name,
+            f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
+            step_name,
         )
         os.makedirs(visualizations_outputdir, exist_ok=True)
     molecule_list = []
@@ -103,7 +249,13 @@ def generate_molecules(
         fragment: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
         fragments = jraph.pad_with_graphs(fragment, n_node=80, n_edge=4096, n_graph=2)
-        preds = apply_fn(params, rng, fragments, beta)
+        preds = apply_fn(
+            params,
+            rng,
+            fragments,
+            focus_and_atom_type_inverse_temperature,
+            position_inverse_temperature,
+        )
 
         # Remove the batch dimension.
         pred = jraph.unpad_with_graphs(preds)
@@ -116,13 +268,13 @@ def generate_molecules(
         molecule: ase.Atoms, pred: datatypes.Predictions
     ) -> ase.Atoms:
         focus = pred.globals.focus_indices
-        pos_focus = molecule.positions[focus]
-        pos_rel = pred.globals.position_vectors
+        focus_position = molecule.positions[focus]
+        new_position_relative_to_focus = pred.globals.position_vectors
 
         new_species = jnp.array(
             models.ATOMIC_NUMBERS[pred.globals.target_species.item()]
         )
-        new_position = pos_focus + pos_rel
+        new_position = new_position_relative_to_focus + focus_position
 
         return ase.Atoms(
             positions=jnp.concatenate(
@@ -218,13 +370,25 @@ def main(unused_argv: Sequence[str]) -> None:
 
     workdir = os.path.abspath(FLAGS.workdir)
     outputdir = FLAGS.outputdir
-    beta = FLAGS.beta
+    focus_and_atom_type_inverse_temperature = (
+        FLAGS.focus_and_atom_type_inverse_temperature
+    )
+    position_inverse_temperature = FLAGS.position_inverse_temperature
     step = FLAGS.step
     seeds = [int(seed) for seed in FLAGS.seeds]
     init = FLAGS.init
     visualize = FLAGS.visualize
 
-    generate_molecules(workdir, outputdir, beta, step, seeds, init, visualize)
+    generate_molecules(
+        workdir,
+        outputdir,
+        focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature,
+        step,
+        seeds,
+        init,
+        visualize,
+    )
 
 
 if __name__ == "__main__":
@@ -234,7 +398,18 @@ if __name__ == "__main__":
         os.path.join(os.getcwd(), "analyses"),
         "Directory where molecules should be saved.",
     )
-    flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
+    flags.DEFINE_float(
+        "focus_and_atom_type_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the focus and atom type.",
+        short_name="fait",
+    )
+    flags.DEFINE_float(
+        "position_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the position.",
+        short_name="pit",
+    )
     flags.DEFINE_integer(
         "step",
         -1,

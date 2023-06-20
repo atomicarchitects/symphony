@@ -5,6 +5,7 @@ import e3nn_jax as e3nn
 import jax
 import jax.numpy as jnp
 import numpy as np
+import jraph
 
 import datatypes
 import models
@@ -21,6 +22,39 @@ def safe_norm(x: jnp.ndarray, axis) -> jnp.ndarray:
     return jnp.sqrt(jnp.where(x2 == 0, 1.0, x2))
 
 
+def target_position_to_radius_weights(
+    target_position: jnp.ndarray,
+    radius_rbf_variance: float,
+) -> jnp.ndarray:
+    """Returns the radial distribution for a target position."""
+    radius_weights = jax.vmap(
+        lambda radius: jnp.exp(
+            -((radius - jnp.linalg.norm(target_position)) ** 2)
+            / (2 * radius_rbf_variance)
+        )
+    )(models.RADII)
+    radius_weights += 1e-10
+    return radius_weights / jnp.sum(radius_weights)
+
+
+def target_position_to_log_angular_coeffs(
+    target_position: jnp.ndarray,
+    target_position_inverse_temperature: float,
+    lmax: int,
+) -> e3nn.IrrepsArray:
+    """Returns the temperature-scaled angular distribution for a target position."""
+    # Compute the true distribution over positions,
+    # described by a smooth approximation of a delta function at the target positions.
+    norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
+    target_position_unit_vector = target_position / jnp.where(norm == 0, 1, norm)
+    return target_position_inverse_temperature * e3nn.s2_dirac(
+        target_position_unit_vector,
+        lmax=lmax,
+        p_val=1,
+        p_arg=-1,
+    )
+
+
 @functools.partial(jax.profiler.annotate_function, name="generation_loss")
 def generation_loss(
     preds: datatypes.Predictions,
@@ -29,6 +63,7 @@ def generation_loss(
     target_position_inverse_temperature: float,
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
+    mask_atom_types: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -40,66 +75,60 @@ def generation_loss(
     num_nodes = graphs.nodes.positions.shape[0]
     num_elements = models.NUM_ELEMENTS
     n_node = graphs.n_node
+    segment_ids = models.get_segment_ids(n_node, num_nodes)
 
-    def atom_type_loss() -> jnp.ndarray:
-        """Computes the loss over atom types."""
-        logits = preds.nodes.target_species_logits
-        target = graphs.nodes.target_species_probs
-        # stop = graphs.globals.stop (= 1 - sum(target))
+    def focus_and_atom_type_loss() -> jnp.ndarray:
+        """Computes the loss over focus and atom types for all nodes."""
+        species_logits = preds.nodes.focus_and_target_species_logits
+        species_targets = graphs.nodes.focus_and_target_species_probs
+        stop_logits = preds.globals.stop_logits
+        stop_targets = graphs.globals.stop.astype(jnp.float32)
 
-        assert logits.shape == target.shape == (num_nodes, num_elements)
+        assert species_logits.shape == (num_nodes, num_elements)
+        assert species_targets.shape == (num_nodes, num_elements)
+        assert stop_logits.shape == (num_graphs,)
+        assert stop_targets.shape == (num_graphs,)
 
-        max = e3nn.scatter_max(jnp.max(logits, axis=1), nel=n_node, initial=0.0)
-        max_ext = e3nn.scatter_max(
-            jnp.max(logits, axis=1, keepdims=True),
-            nel=n_node,
-            map_back=True,
-            initial=0.0,
+        # Subtract the maximum value for numerical stability.
+        # This doesn't affect the forward pass, nor the backward pass.
+        logits_max = jraph.segment_max(
+            species_logits, segment_ids, num_segments=num_graphs
+        ).max(axis=-1)
+        logits_max = jnp.maximum(logits_max, stop_logits)
+        logits_max = jax.lax.stop_gradient(logits_max)
+        species_logits -= logits_max[segment_ids, None]
+        stop_logits -= logits_max
+
+        # Compute the cross-entropy loss.
+        loss_focus_and_atom_type = -(species_targets * species_logits).sum(axis=-1)
+        loss_focus_and_atom_type = jraph.segment_sum(
+            loss_focus_and_atom_type, segment_ids, num_graphs
         )
-        assert max.shape == (num_graphs,)
-        assert max_ext.shape == (num_nodes, 1)
-
-        loss_atom_type = -(
-            -max + e3nn.scatter_sum(jnp.sum(target * logits, axis=-1), nel=n_node)
-        ) + jnp.log(
-            jnp.exp(-max)
-            + e3nn.scatter_sum(jnp.sum(jnp.exp(logits - max_ext), axis=1), nel=n_node)
-        )
-        assert loss_atom_type.shape == (num_graphs,)
-        return loss_atom_type
-
-    def target_position_to_radius_weights(
-        target_position: jnp.ndarray,
-    ) -> jnp.ndarray:
-        """Returns the radial distribution for a target position."""
-        radius_weights = jax.vmap(
-            lambda radius: jnp.exp(
-                -((radius - jnp.linalg.norm(target_position)) ** 2)
-                / (2 * radius_rbf_variance)
+        loss_focus_and_atom_type += -stop_targets * stop_logits
+        loss_focus_and_atom_type += jnp.log(
+            jraph.segment_sum(
+                jnp.exp(species_logits).sum(axis=-1), segment_ids, num_graphs
             )
-        )(models.RADII)
-        radius_weights += 1e-10
-        return radius_weights / jnp.sum(radius_weights)
-
-    def target_position_to_log_angular_coeffs(
-        target_position: jnp.ndarray,
-    ) -> e3nn.IrrepsArray:
-        """Returns the temperature-scaled angular distribution for a target position."""
-        # Compute the true distribution over positions,
-        # described by a smooth approximation of a delta function at the target positions.
-        norm = jnp.linalg.norm(target_position, axis=-1, keepdims=True)
-        target_position_unit_vector = target_position / jnp.where(norm == 0, 1, norm)
-        return target_position_inverse_temperature * e3nn.s2_dirac(
-            target_position_unit_vector,
-            lmax=preds.globals.position_coeffs.irreps.lmax,
-            p_val=1,
-            p_arg=-1,
+            + jnp.exp(stop_logits)
         )
+
+        # Compute the lower bound on cross-entropy loss as the entropy of the target distribution.
+        lower_bounds = -(species_targets * safe_log(species_targets)).sum(axis=-1)
+        lower_bounds = jraph.segment_sum(lower_bounds, segment_ids, num_graphs)
+        lower_bounds += -stop_targets * safe_log(stop_targets)
+        lower_bounds = jax.lax.stop_gradient(lower_bounds)
+
+        # Subtract out self-entropy (lower bound) to get the KL divergence.
+        loss_focus_and_atom_type -= lower_bounds
+        assert loss_focus_and_atom_type.shape == (num_graphs,)
+
+        return loss_focus_and_atom_type
 
     def position_loss_with_kl_divergence() -> jnp.ndarray:
         """Computes the loss over position probabilities using the KL divergence."""
 
         position_logits = preds.globals.position_logits
+        lmax = preds.globals.position_coeffs.irreps.lmax
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
@@ -126,6 +155,7 @@ def generation_loss(
             log_true_angular_dist_max = jnp.max(
                 log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
             )
+            log_true_angular_dist_max = jax.lax.stop_gradient(log_true_angular_dist_max)
             log_true_angular_dist = log_true_angular_dist.apply(
                 lambda x: x - log_true_angular_dist_max
             )
@@ -146,6 +176,7 @@ def generation_loss(
             # Now, compute the unnormalized predicted distribution over all spheres.
             # Subtract the maximum value for numerical stability.
             log_predicted_dist_max = jnp.max(log_predicted_dist.grid_values)
+            log_predicted_dist_max = jax.lax.stop_gradient(log_predicted_dist_max)
             log_predicted_dist = log_predicted_dist.apply(
                 lambda x: x - log_predicted_dist_max
             )
@@ -165,12 +196,14 @@ def generation_loss(
             return cross_entropy + normalizing_factor - self_entropy
 
         target_positions = graphs.globals.target_positions
-        true_radius_weights = jax.vmap(target_position_to_radius_weights)(
-            target_positions
-        )
-        log_true_angular_coeffs = jax.vmap(target_position_to_log_angular_coeffs)(
-            target_positions
-        )
+        true_radius_weights = jax.vmap(
+            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance)
+        )(target_positions)
+        log_true_angular_coeffs = jax.vmap(
+            lambda pos: target_position_to_log_angular_coeffs(
+                pos, target_position_inverse_temperature, lmax
+            )
+        )(target_positions)
         log_predicted_dist = position_logits
 
         assert true_radius_weights.shape == (num_graphs, num_radii)
@@ -189,6 +222,7 @@ def generation_loss(
             true_radius_weights, log_true_angular_coeffs, log_predicted_dist
         )
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     def position_loss_with_l2() -> jnp.ndarray:
@@ -234,12 +268,14 @@ def generation_loss(
 
         position_coeffs = preds.globals.position_coeffs
         target_positions = graphs.globals.target_positions
-        true_radius_weights = jax.vmap(target_position_to_radius_weights)(
-            target_positions
-        )
-        log_true_angular_coeffs = jax.vmap(target_position_to_log_angular_coeffs)(
-            target_positions
-        )
+        true_radius_weights = jax.vmap(
+            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance)
+        )(target_positions)
+        log_true_angular_coeffs = jax.vmap(
+            lambda pos: target_position_to_log_angular_coeffs(
+                pos, target_position_inverse_temperature, lmax
+            )
+        )(target_positions)
         log_predicted_dist_coeffs = position_coeffs
 
         assert target_positions.shape == (num_graphs, 3)
@@ -258,6 +294,7 @@ def generation_loss(
             true_radius_weights, log_true_angular_coeffs, log_predicted_dist_coeffs
         )
         assert loss_position.shape == (num_graphs,)
+
         return loss_position
 
     def position_loss() -> jnp.ndarray:
@@ -269,17 +306,21 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
-    # If this is the last step in the generation process, we do not have to predict atom type and position.
-    loss_atom_type = atom_type_loss()
-    loss_position = position_loss() * (1 - graphs.globals.stop)
+    # If we should predict a STOP for this fragment, we do not have to predict a position.
+    loss_focus_and_atom_type = focus_and_atom_type_loss()
+    loss_position = (1 - graphs.globals.stop) * position_loss()
 
-    # Ignore position loss for graphs with less than, or equal to 3 atoms.
+    # Mask out the loss for atom types?
+    if mask_atom_types:
+        loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
+
+    # Ignore position loss for graphs with less than, or equal to 3 atoms?
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
     if ignore_position_loss_for_small_fragments:
-        loss_position = jnp.where(graphs.n_node <= 3, 0, loss_position)
+        loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_atom_type + loss_position
-    return total_loss, (loss_atom_type, loss_position)
+    total_loss = loss_focus_and_atom_type + loss_position
+    return total_loss, (loss_focus_and_atom_type, loss_position)
 
 
 def clash_loss(
@@ -289,9 +330,8 @@ def clash_loss(
     rtol: float = 0.1,
 ) -> jnp.ndarray:
     """Hinge loss that penalizes clashes between atoms depending on their atomic numbers."""
-    assert rtol >= 0.0
-    assert rtol < 1.0
-    assert atol >= 0.0
+    assert 0.0 <= rtol < 1.0
+    assert 0.0 <= atol
 
     clash_dist = {
         (8, 1): 0.96,

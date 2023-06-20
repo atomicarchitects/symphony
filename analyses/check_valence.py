@@ -49,7 +49,7 @@ def check_valence(
     for atom in pybel_mol.atoms:
         if atom.OBAtom.GetExplicitValence() == valence[atom.atomicnum]:
             valid_atoms += 1
-    
+
     return valid_atoms == n_atoms, valid_atoms
 
 
