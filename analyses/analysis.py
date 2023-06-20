@@ -87,6 +87,9 @@ def combine_visualizations(
     for fig in figs:
         all_traces.extend(fig.data)
 
+    # Save the original visibility of the traces.
+    original_visibility = {i: trace.visible for i, trace in enumerate(all_traces)}
+
     steps = []
     ct = 0
     start_indices = [0]
@@ -97,8 +100,10 @@ def combine_visualizations(
                 args=[
                     {
                         "visible": [
-                            True if ct <= i < ct + len(fig.data) else False
-                            for i in range(len(all_traces))
+                            original_visibility[i]
+                            if ct <= i < ct + len(fig.data)
+                            else False
+                            for i, trace in enumerate(all_traces)
                         ]
                     }
                 ],
@@ -145,7 +150,7 @@ def combine_visualizations(
         rows=1, cols=2, specs=[[{"type": "scene"}, {"type": "xy"}]]
     )
     for i, trace in enumerate(all_traces):
-        visible = True if i < start_indices[1] else False
+        visible = original_visibility[i] if i < start_indices[1] else False
         trace.update(visible=visible)
         if trace.type in ["scatter3d", "surface"]:
             col = 1
@@ -316,6 +321,7 @@ def visualize_predictions(
         ),
         name="Spherical Harmonics for Logits",
         showlegend=True,
+        visible="legendonly",
     )
     mol_trace.append(spherical_harmonics)
 

@@ -903,7 +903,7 @@ class Predictor(hk.Module):
         )
 
     def get_evaluation_predictions(
-        self, graphs: datatypes.Fragments, inverse_temperature: float
+        self, graphs: datatypes.Fragments, focus_and_atom_type_inverse_temperature: float, position_inverse_temperature: float
     ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
@@ -931,6 +931,12 @@ class Predictor(hk.Module):
             node_embeddings
         )
         stop_logits = jnp.zeros((num_graphs,))
+
+        # Scale the logits by the inverse temperature.
+        focus_and_target_species_logits *= focus_and_atom_type_inverse_temperature
+        stop_logits *= focus_and_atom_type_inverse_temperature
+
+        # Get the softmaxed probabilities.
         focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
         )
@@ -958,8 +964,8 @@ class Predictor(hk.Module):
         )
 
         # Scale by inverse temperature.
-        position_coeffs = inverse_temperature * position_coeffs
-        position_logits = inverse_temperature * position_logits
+        position_coeffs = position_inverse_temperature * position_coeffs
+        position_logits = position_inverse_temperature * position_logits
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
@@ -1056,7 +1062,7 @@ def create_model(
         return getattr(jax.nn, activation)
 
     def model_fn(
-        graphs: datatypes.Fragments, inverse_temperature: float = 1.0
+        graphs: datatypes.Fragments, focus_and_atom_type_inverse_temperature: float = 1., position_inverse_temperature: float = 1.
     ) -> datatypes.Predictions:
         """Defines the entire network."""
 
@@ -1156,7 +1162,7 @@ def create_model(
         )
 
         if run_in_evaluation_mode:
-            return predictor.get_evaluation_predictions(graphs, inverse_temperature)
+            return predictor.get_evaluation_predictions(graphs, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
         else:
             return predictor.get_training_predictions(graphs)
 

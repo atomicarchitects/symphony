@@ -70,192 +70,13 @@ def _remove_target_atoms(
     return molecules_with_target_removed, fragments
 
 
-def visualize_atom_removals_against_steps(
-    workdir: str,
-    outputdir: str,
-    beta: float,
-    steps: Sequence[int],
-    target: int,
-    molecule_str: str,
-    use_cache: bool,
-    seed: int,
-):
-    """Generates visualizations of the predictions when removing each atom from a molecule."""
-    # Remove the target atom
-    molecule, molecule_name = analysis.construct_molecule(molecule_str)
-    name = analysis.name_from_workdir(workdir)
-
-    molecules_with_target_removed = None
-    figs = []
-    for step in steps:
-        model, params, config = analysis.load_model_at_step(
-            workdir, step, run_in_evaluation_mode=True
-        )
-        if molecules_with_target_removed is None:
-            molecules_with_target_removed, fragments = _remove_target_atoms(
-                molecule, cutoff=config.nn_cutoff
-            )
-
-        # We don't actually need a PRNG key, since we're not sampling.
-        logging.info("Computing predictions...")
-        rng = jax.random.PRNGKey(seed)
-        preds = jax.jit(model.apply)(params, rng, jraph.batch(fragments), beta)
-        preds = jax.tree_map(np.asarray, preds)
-        preds = jraph.unbatch(preds)
-        logging.info("Predictions computed.")
-
-        # Create the output directory where HTML files will be saved.
-        step_name = "step=best" if step == -1 else f"step={step}"
-        outputdir = os.path.join(
-            outputdir,
-            "visualizations",
-            "atom_removal",
-            name,
-            f"beta={beta}",
-            step_name,
-        )
-        os.makedirs(outputdir, exist_ok=True)
-
-        # Loop over all possible targets.
-        logging.info("Visualizing predictions...")
-        # We have to remove the batch dimension.
-        # Also, correct the focus indices due to batching.
-        pred = preds[target]._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
-        )
-        corrected_focus_indices = pred.globals.focus_indices - sum(
-            p.n_node.item() for i, p in enumerate(preds) if i < target
-        )
-        pred = pred._replace(
-            globals=pred.globals._replace(focus_indices=corrected_focus_indices)
-        )
-
-        # Visualize predictions for this target.
-        fig = analysis.visualize_predictions(
-            pred, molecules_with_target_removed[target], molecule, target
-        )
-        figs.append(fig)
-
-    # Combine all figures into one.
-    fig_all = analysis.combine_visualizations(figs)
-
-    # Add title.
-    model_name = analysis.get_title_for_name(name)
-    fig_all.update_layout(
-        title=f"{model_name}: Predictions for {molecule_name}",
-        title_x=0.5,
-    )
-
-    # Save to file.
-    outputfile = os.path.join(
-        outputdir,
-        f"{molecule_name}_seed={seed}_against_steps.html",
-    )
-    fig_all.write_html(outputfile, include_plotlyjs="cdn")
-
-    return fig_all
-
-
-# symm4ml specific
-def visualize_atom_removals_against_l(
-    workdir: str,
-    outputdir: str,
-    beta: float,
-    step: int,
-    channels: int,
-    ls: Sequence[int],
-    target: int,
-    molecule_str: str,
-    use_cache: bool,
-    seed: int,
-):
-    """Generates visualizations of the predictions when removing each atom from a molecule."""
-    # Remove the target atom
-    molecule, molecule_name = analysis.construct_molecule(molecule_str)
-    name = analysis.name_from_workdir(workdir)
-
-    molecules_with_target_removed = None
-    figs = []
-    for l_max in ls:
-        model, params, config = analysis.load_model_at_step(
-            os.path.join(workdir, f"l={l_max}/channels={channels}"),
-            step,
-            run_in_evaluation_mode=True,
-        )
-        if molecules_with_target_removed is None:
-            molecules_with_target_removed, fragments = _remove_target_atoms(
-                molecule, cutoff=config.nn_cutoff
-            )
-
-        # We don't actually need a PRNG key, since we're not sampling.
-        logging.info("Computing predictions...")
-        rng = jax.random.PRNGKey(seed)
-        preds = jax.jit(model.apply)(params, rng, jraph.batch(fragments), beta)
-        preds = jax.tree_map(np.asarray, preds)
-        preds = jraph.unbatch(preds)
-        logging.info("Predictions computed.")
-
-        # Create the output directory where HTML files will be saved.
-        step_name = "step=best" if step == -1 else f"step={step}"
-        outputdir = os.path.join(
-            outputdir,
-            "visualizations",
-            "atom_removal",
-            name,
-            f"l={l_max}",
-            f"channels={channels}",
-            f"beta={beta}",
-            step_name,
-        )
-        os.makedirs(outputdir, exist_ok=True)
-
-        # Loop over all possible targets.
-        logging.info("Visualizing predictions...")
-        # We have to remove the batch dimension.
-        # Also, correct the focus indices due to batching.
-        pred = preds[target]._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
-        )
-        corrected_focus_indices = pred.globals.focus_indices - sum(
-            p.n_node.item() for i, p in enumerate(preds) if i < target
-        )
-        pred = pred._replace(
-            globals=pred.globals._replace(focus_indices=corrected_focus_indices)
-        )
-
-        # Visualize predictions for this target.
-        fig = analysis.visualize_predictions(
-            pred, molecules_with_target_removed[target], molecule, target
-        )
-        figs.append(fig)
-
-    # Combine all figures into one.
-    fig_all = analysis.combine_visualizations(figs)
-
-    # Add title.
-    model_name = analysis.get_title_for_name(name)
-    fig_all.update_layout(
-        title=f"{model_name}: Predictions for {molecule_name}",
-        title_x=0.5,
-    )
-
-    # Save to file.
-    outputfile = os.path.join(
-        outputdir,
-        f"{molecule_name}_seed={seed}_against_l.html",
-    )
-    fig_all.write_html(outputfile, include_plotlyjs="cdn")
-
-    return fig_all
-
-
 def visualize_atom_removals(
     workdir: str,
     outputdir: str,
-    beta: float,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
     step: int,
     molecule_str: str,
-    use_cache: bool,
     seed: int,
 ):
     """Generates visualizations of the predictions when removing each atom from a molecule."""
@@ -288,20 +109,17 @@ def visualize_atom_removals(
 
     # We don't actually need a PRNG key, since we're not sampling.
     logging.info("Computing predictions...")
-    preds_path = os.path.join(
-        f"cached/{workdir.replace('/', '_')}_{molecule_name}_preds.pkl"
+    rng = jax.random.PRNGKey(seed)
+    preds = jax.jit(model.apply)(
+        params,
+        rng,
+        jraph.batch(fragments),
+        focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature,
     )
-    if use_cache and os.path.exists(preds_path):
-        logging.info("Using cached predictions at %s", os.path.abspath(preds_path))
-        preds = pickle.load(open(preds_path, "rb"))
-    else:
-        rng = jax.random.PRNGKey(seed)
-        preds = jax.jit(model.apply)(params, rng, jraph.batch(fragments), beta)
-        preds = jax.tree_map(np.asarray, preds)
-        preds = jraph.unbatch(preds)
-        os.makedirs(os.path.dirname(preds_path), exist_ok=True)
-        pickle.dump(preds, open(preds_path, "wb"))
-        logging.info("Predictions computed.")
+    preds = jax.tree_map(np.asarray, preds)
+    preds = jraph.unbatch(preds)
+    logging.info("Predictions computed.")
 
     # Create the output directory where HTML files will be saved.
     step_name = "step=best" if step == -1 else f"step={step}"
@@ -310,7 +128,7 @@ def visualize_atom_removals(
         "visualizations",
         "atom_removal",
         name,
-        f"beta={beta}",
+        f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
         step_name,
     )
     os.makedirs(outputdir, exist_ok=True)
@@ -363,14 +181,22 @@ def main(unused_argv: Sequence[str]) -> None:
 
     workdir = os.path.abspath(FLAGS.workdir)
     outputdir = FLAGS.outputdir
-    beta = FLAGS.beta
+    focus_and_atom_type_inverse_temperature = (
+        FLAGS.focus_and_atom_type_inverse_temperature
+    )
+    position_inverse_temperature = FLAGS.position_inverse_temperature
     step = FLAGS.step
     molecule_str = FLAGS.molecule
-    use_cache = FLAGS.use_cache
     seed = FLAGS.seed
 
     visualize_atom_removals(
-        workdir, outputdir, beta, step, molecule_str, use_cache, seed
+        workdir,
+        outputdir,
+        focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature,
+        step,
+        molecule_str,
+        seed,
     )
 
 
@@ -381,7 +207,18 @@ if __name__ == "__main__":
         os.path.join(os.getcwd(), "analyses"),
         "Directory where visualizations should be saved.",
     )
-    flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
+    flags.DEFINE_float(
+        "focus_and_atom_type_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the focus and atom type.",
+        short_name="fait",
+    )
+    flags.DEFINE_float(
+        "position_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the position.",
+        short_name="pit",
+    )
     flags.DEFINE_integer(
         "step",
         -1,
@@ -391,11 +228,6 @@ if __name__ == "__main__":
         "molecule",
         None,
         "Molecule to use for experiment. Can be specified either as an index for the QM9 dataset, a name for ase.build.molecule(), or a file with atomic numbers and coordinates for ase.io.read().",
-    )
-    flags.DEFINE_bool(
-        "use_cache",
-        False,
-        "Whether to use cached predictions if they exist.",
     )
     flags.DEFINE_integer(
         "seed",
