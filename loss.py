@@ -1,5 +1,5 @@
 import functools
-from typing import Tuple
+from typing import Tuple, Optional
 
 import e3nn_jax as e3nn
 import jax
@@ -61,6 +61,7 @@ def generation_loss(
     graphs: datatypes.Fragments,
     radius_rbf_variance: float,
     target_position_inverse_temperature: float,
+    target_position_lmax: Optional[int],
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
     mask_atom_types: bool = False,
@@ -76,6 +77,10 @@ def generation_loss(
     num_elements = models.NUM_ELEMENTS
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes)
+    if target_position_lmax is None:
+        lmax = preds.globals.position_coeffs.irreps.lmax
+    else:
+        lmax = target_position_lmax
 
     def focus_and_atom_type_loss() -> jnp.ndarray:
         """Computes the loss over focus and atom types for all nodes."""
@@ -128,7 +133,6 @@ def generation_loss(
         """Computes the loss over position probabilities using the KL divergence."""
 
         position_logits = preds.globals.position_logits
-        lmax = preds.globals.position_coeffs.irreps.lmax
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
