@@ -200,7 +200,8 @@ def nan_analysis(pred: datatypes.Predictions):
 def generate_molecules(
     workdir: str,
     outputdir: str,
-    beta: float,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
     step: int,
     seeds: Sequence[int],
     init_molecule: str,
@@ -224,12 +225,22 @@ def generate_molecules(
     # Create output directories.
     step_name = "step=best" if step == -1 else f"step={step}"
     molecules_outputdir = os.path.join(
-        outputdir, "molecules", "generated", name, f"beta={beta}", step_name
+        outputdir,
+        "molecules",
+        "generated",
+        name,
+        f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
+        step_name,
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
     if visualize:
         visualizations_outputdir = os.path.join(
-            outputdir, "visualizations", "molecules", name, f"beta={beta}", step_name
+            outputdir,
+            "visualizations",
+            "molecules",
+            name,
+            f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
+            step_name,
         )
         os.makedirs(visualizations_outputdir, exist_ok=True)
     molecule_list = []
@@ -238,7 +249,13 @@ def generate_molecules(
         fragment: jraph.GraphsTuple, rng: chex.PRNGKey
     ) -> datatypes.Predictions:
         fragments = jraph.pad_with_graphs(fragment, n_node=80, n_edge=4096, n_graph=2)
-        preds = apply_fn(params, rng, fragments, beta)
+        preds = apply_fn(
+            params,
+            rng,
+            fragments,
+            focus_and_atom_type_inverse_temperature,
+            position_inverse_temperature,
+        )
 
         # Remove the batch dimension.
         pred = jraph.unpad_with_graphs(preds)
@@ -383,13 +400,25 @@ def main(unused_argv: Sequence[str]) -> None:
 
     workdir = os.path.abspath(FLAGS.workdir)
     outputdir = FLAGS.outputdir
-    beta = FLAGS.beta
+    focus_and_atom_type_inverse_temperature = (
+        FLAGS.focus_and_atom_type_inverse_temperature
+    )
+    position_inverse_temperature = FLAGS.position_inverse_temperature
     step = FLAGS.step
     seeds = [int(seed) for seed in FLAGS.seeds]
     init = FLAGS.init
     visualize = FLAGS.visualize
 
-    generate_molecules(workdir, outputdir, beta, step, seeds, init, visualize)
+    generate_molecules(
+        workdir,
+        outputdir,
+        focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature,
+        step,
+        seeds,
+        init,
+        visualize,
+    )
 
 
 if __name__ == "__main__":
@@ -399,7 +428,18 @@ if __name__ == "__main__":
         os.path.join(os.getcwd(), "analyses"),
         "Directory where molecules should be saved.",
     )
-    flags.DEFINE_float("beta", 1.0, "Inverse temperature value for sampling.")
+    flags.DEFINE_float(
+        "focus_and_atom_type_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the focus and atom type.",
+        short_name="fait",
+    )
+    flags.DEFINE_float(
+        "position_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the position.",
+        short_name="pit",
+    )
     flags.DEFINE_integer(
         "step",
         -1,

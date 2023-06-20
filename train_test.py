@@ -19,11 +19,6 @@ import train
 import loss_test
 from configs import mace, e3schnet, nequip, marionette
 
-try:
-    import profile_nn_jax
-except ImportError:
-    profile_nn_jax = None
-
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
 
@@ -33,9 +28,6 @@ _ALL_CONFIGS = {
     "nequip": nequip.get_config(),
     "marionette": marionette.get_config(),
 }
-
-from typing import *
-import numpy as np
 
 
 def update_dummy_config(
@@ -88,7 +80,7 @@ class TrainTest(parameterized.TestCase):
         train.train_and_evaluate(config, workdir)
 
         # Save device memory profile.
-        # jax.profiler.save_device_memory_profile(f"{config_name}.prof")
+        jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
 
     @parameterized.product(
         config_name=["nequip", "mace", "e3schnet", "marionette"],
