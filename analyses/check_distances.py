@@ -115,5 +115,7 @@ if __name__ == "__main__":
 
     mol = ase.io.read(args.mol_path)
 
-    valid, distances = check_distances(mol.positions, args.min_dist, return_distances=True)
-    print(f'All distances are greater than {args.min_dist}: {valid}')
+    valid, distances = check_distances(
+        mol.positions, args.min_dist, return_distances=True
+    )
+    print(f"All distances are greater than {args.min_dist}: {valid}")

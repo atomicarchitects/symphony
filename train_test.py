@@ -55,11 +55,13 @@ class TrainTest(parameterized.TestCase):
     @parameterized.product(
         config_name=["nequip"],
         train_on_split_smaller_than_chunk=[True],
-        position_loss_type=["kl_divergence"]
+        position_loss_type=["kl_divergence"],
     )
     def test_train_and_evaluate(
-        self, config_name: str, train_on_split_smaller_than_chunk: bool,
-        position_loss_type: str
+        self,
+        config_name: str,
+        train_on_split_smaller_than_chunk: bool,
+        position_loss_type: str,
     ):
         """Tests that training and evaluation runs without errors."""
         self.skipTest("This test is too slow.")
@@ -70,7 +72,9 @@ class TrainTest(parameterized.TestCase):
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
-        config = update_dummy_config(config, train_on_split_smaller_than_chunk, position_loss_type)
+        config = update_dummy_config(
+            config, train_on_split_smaller_than_chunk, position_loss_type
+        )
         config = ml_collections.FrozenConfigDict(config)
 
         # Create a temporary directory where metrics are written.
@@ -95,7 +99,9 @@ class TrainTest(parameterized.TestCase):
 
         def apply_fn(positions: e3nn.IrrepsArray) -> e3nn.IrrepsArray:
             """Wraps the model's apply function."""
-            graphs = self.graphs._replace(nodes=self.graphs.nodes._replace(positions=positions.array))
+            graphs = self.graphs._replace(
+                nodes=self.graphs.nodes._replace(positions=positions.array)
+            )
             return model.apply(params, rng, graphs).globals.position_coeffs
 
         input_positions = e3nn.IrrepsArray("1o", self.graphs.nodes.positions)

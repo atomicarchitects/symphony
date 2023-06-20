@@ -61,5 +61,7 @@ if __name__ == "__main__":
 
     # check valency
     valid_mol, valid_atoms = check_valence(mol)
-    print(f'{mol.symbols} {"does" if valid_mol else "does not"} satisfy valence constraints')
-    print(f'{valid_atoms} of {len(mol.numbers)} atoms satisfy valence constraints')
+    print(
+        f'{mol.symbols} {"does" if valid_mol else "does not"} satisfy valence constraints'
+    )
+    print(f"{valid_atoms} of {len(mol.numbers)} atoms satisfy valence constraints")

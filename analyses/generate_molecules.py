@@ -359,7 +359,9 @@ def generate_molecules(
             fig_all.write_html(outputfile, include_plotlyjs="cdn")
 
     # Save the generated molecules as an ASE database.
-    output_db = os.path.join(molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db")
+    output_db = os.path.join(
+        molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
+    )
     with connect(output_db) as conn:
         for mol in molecule_list:
             conn.write(mol)

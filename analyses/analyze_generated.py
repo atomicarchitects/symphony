@@ -20,7 +20,12 @@ sys.path.append("..")
 
 from analyses import analysis
 from analyses.check_valence import check_valence
-from analyses.utility_functions import _get_atoms_per_type_str, _update_dict, fingerprints_similar, get_fingerprint
+from analyses.utility_functions import (
+    _get_atoms_per_type_str,
+    _update_dict,
+    fingerprints_similar,
+    get_fingerprint,
+)
 
 
 def get_parser():
@@ -169,7 +174,7 @@ def find_in_training_data(
 
     if not os.path.exists(model_path):
         raise FileNotFoundError
-    
+
     # Load config.
     saved_config_path = os.path.join(model_path, "config.yml")
     if not os.path.exists(saved_config_path):
@@ -188,18 +193,13 @@ def find_in_training_data(
     print("\nComputing fingerprints of training data...")
     start_time = time.time()
 
-    train_fps_dict = _get_training_fingerprints(
-        dbpath, all_idx, print_file
-    )
+    train_fps_dict = _get_training_fingerprints(dbpath, all_idx, print_file)
 
     end_time = time.time() - start_time
     m, s = divmod(end_time, 60)
     h, m = divmod(m, 60)
     h, m, s = int(h), int(m), int(s)
-    print(
-        f'...{len(all_idx)} fingerprints computed '
-        f"in {h:d}h{m:02d}m{s:02d}s!"
-    )
+    print(f"...{len(all_idx)} fingerprints computed " f"in {h:d}h{m:02d}m{s:02d}s!")
 
     print("\nComparing fingerprints...")
     start_time = time.time()
@@ -235,9 +235,7 @@ def find_in_training_data(
     return stats.T
 
 
-def _get_training_fingerprints(
-    dbpath, train_idx, print_file=True, use_bits=False
-):
+def _get_training_fingerprints(dbpath, train_idx, print_file=True, use_bits=False):
     """
     Get the fingerprints (FP2 from Open Babel), canonical smiles representation,
     and atoms per type string of all molecules in the training database.
@@ -256,7 +254,7 @@ def _get_training_fingerprints(
 
     Returns:
         dict (str->list of tuple): dictionary with the atoms per type string of each molecule
-            as the keys, and 
+            as the keys, and
     """
     train_fps = []
     with connect(dbpath) as conn:
@@ -270,10 +268,10 @@ def _get_training_fingerprints(
                 print(f"error getting idx={idx}")
             at = row.toatoms()
             train_fps += [get_fingerprint(at, use_bits)]
-            if (i % 100 == 0 or i + 1 == len(train_idx)):
+            if i % 100 == 0 or i + 1 == len(train_idx):
                 print("\033[K", end="\r", flush=True)
                 print(f"{100 * (i + 1) / len(train_idx):.2f}%", end="\r", flush=True)
-    
+
     fp_dict = {}
     for i, fp in enumerate(train_fps):
         fp_dict = _update_dict(fp_dict, key=fp[-1], val=fp[:-1] + (i,))
@@ -363,46 +361,46 @@ def _compare_training_fingerprints(
 
 
 def get_bond_stats(mol):
-        """
-        Retrieve the bond and ring count of the molecule. The bond count is
-        calculated for every pair of types (e.g. C1N are all single bonds between
-        carbon and nitrogen atoms in the molecule, C2N are all double bonds between
-        such atoms etc.). The ring count is provided for rings from size 3 to 8 (R3,
-        R4, ..., R8) and for rings greater than size eight (R>8).
+    """
+    Retrieve the bond and ring count of the molecule. The bond count is
+    calculated for every pair of types (e.g. C1N are all single bonds between
+    carbon and nitrogen atoms in the molecule, C2N are all double bonds between
+    such atoms etc.). The ring count is provided for rings from size 3 to 8 (R3,
+    R4, ..., R8) and for rings greater than size eight (R>8).
 
-        Args:
-            mol (ase.Atoms): molecule
+    Args:
+        mol (ase.Atoms): molecule
 
-        Returns:
-            dict (str->int): bond and ring counts
-        """
-        # 1st analyze bonds
-        bond_stats = {}
-        obmol = analysis.construct_obmol(mol)
-        for bond_idx in range(obmol.NumBonds()):
-            bond = obmol.GetBond(bond_idx)
-            atom1 = bond.GetBeginAtom().GetAtomicNum()
-            atom2 = bond.GetEndAtom().GetAtomicNum()
-            type1 = analysis.NUMBER_TO_SYMBOL[min(atom1, atom2)]
-            type2 = analysis.NUMBER_TO_SYMBOL[max(atom1, atom2)]
-            id = f'{type1}{bond.GetBondOrder()}{type2}'
-            bond_stats[id] = bond_stats.get(id, 0) + 1
-        # remove twice counted bonds
-        for bond_type in bond_stats.keys():
-            if bond_type[0] == bond_type[2]:
-                bond_stats[id] = int(bond_stats[id] / 2)
+    Returns:
+        dict (str->int): bond and ring counts
+    """
+    # 1st analyze bonds
+    bond_stats = {}
+    obmol = analysis.construct_obmol(mol)
+    for bond_idx in range(obmol.NumBonds()):
+        bond = obmol.GetBond(bond_idx)
+        atom1 = bond.GetBeginAtom().GetAtomicNum()
+        atom2 = bond.GetEndAtom().GetAtomicNum()
+        type1 = analysis.NUMBER_TO_SYMBOL[min(atom1, atom2)]
+        type2 = analysis.NUMBER_TO_SYMBOL[max(atom1, atom2)]
+        id = f"{type1}{bond.GetBondOrder()}{type2}"
+        bond_stats[id] = bond_stats.get(id, 0) + 1
+    # remove twice counted bonds
+    for bond_type in bond_stats.keys():
+        if bond_type[0] == bond_type[2]:
+            bond_stats[id] = int(bond_stats[id] / 2)
 
-        # 2nd analyze rings
-        rings = obmol.GetSSSR()
-        if len(rings) > 0:
-            for ring in rings:
-                ring_size = ring.Size()
-                if ring_size < 9:
-                    bond_stats[f"R{ring_size}"] = bond_stats.get(f"R{ring_size}", 0) + 1
-                else:
-                    bond_stats["R>8"] = bond_stats.get("R>8", 0) + 1
+    # 2nd analyze rings
+    rings = obmol.GetSSSR()
+    if len(rings) > 0:
+        for ring in rings:
+            ring_size = ring.Size()
+            if ring_size < 9:
+                bond_stats[f"R{ring_size}"] = bond_stats.get(f"R{ring_size}", 0) + 1
+            else:
+                bond_stats["R>8"] = bond_stats.get("R>8", 0) + 1
 
-        return bond_stats
+    return bond_stats
 
 
 if __name__ == "__main__":
@@ -414,7 +412,9 @@ if __name__ == "__main__":
 
     mol_path = args.mol_path
     if os.path.isdir(args.mol_path):
-        mol_path = os.path.join(args.mol_path, f'generated_molecules_init={args.init}.db')
+        mol_path = os.path.join(
+            args.mol_path, f"generated_molecules_init={args.init}.db"
+        )
     if not os.path.isfile(mol_path):
         print(
             f"\n\nThe specified data path ({mol_path}) is neither a file "
@@ -485,7 +485,7 @@ if __name__ == "__main__":
         "known",
         "equals",
         *atom_cols,
-        *ring_bond_cols
+        *ring_bond_cols,
     ]
     stats = np.empty((len(stat_heads), 0))
     valid = []  # True if molecule is valid w.r.t valence, False otherwise
@@ -496,7 +496,10 @@ if __name__ == "__main__":
         n_atoms = len(mol.positions)
 
         # check valency
-        valid_mol, valid_atoms = check_valence(mol, valence,)
+        valid_mol, valid_atoms = check_valence(
+            mol,
+            valence,
+        )
 
         # collect statistics of generated data
         n_of_types = [np.sum(mol.numbers == i) for i in [6, 7, 8, 9, 1]]
@@ -560,9 +563,7 @@ if __name__ == "__main__":
         )
 
     # store gathered statistics in metrics dataframe
-    stats_df = pd.DataFrame(
-        stats, columns=np.array(stat_heads)
-    )
+    stats_df = pd.DataFrame(stats, columns=np.array(stat_heads))
     stats_df.insert(0, "formula", formulas)
     metric_df_dict = analysis.get_results_as_dataframe(
         [""],
@@ -578,19 +579,19 @@ if __name__ == "__main__":
         "known_val": stats_df["known"].apply(lambda x: x == 2).sum(),
         "known_test": stats_df["known"].apply(lambda x: x == 3).sum(),
     }
-    
+
     for col_name in ring_bond_cols:
         cum_stats[col_name] = stats_df[col_name].sum()
 
-    cum_stats_df = pd.DataFrame(
-        cum_stats, columns=list(cum_stats.keys()), index=[0]
-    )
+    cum_stats_df = pd.DataFrame(cum_stats, columns=list(cum_stats.keys()), index=[0])
 
     metric_df_dict["generated_stats_overall"] = cum_stats_df
     metric_df_dict["generated_stats"] = stats_df
 
     # store results in pickle file
-    stats_path = os.path.join(args.mol_path, f"generated_molecules_init={args.init}_statistics.pkl")
+    stats_path = os.path.join(
+        args.mol_path, f"generated_molecules_init={args.init}_statistics.pkl"
+    )
     if os.path.isfile(stats_path):
         file_name, _ = os.path.splitext(stats_path)
         expand = 0
