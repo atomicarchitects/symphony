@@ -74,7 +74,6 @@ def generation_loss(
     num_radii = models.RADII.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
-    num_elements = models.NUM_ELEMENTS
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes)
     if target_position_lmax is None:
@@ -89,8 +88,8 @@ def generation_loss(
         stop_logits = preds.globals.stop_logits
         stop_targets = graphs.globals.stop.astype(jnp.float32)
 
-        assert species_logits.shape == (num_nodes, num_elements)
-        assert species_targets.shape == (num_nodes, num_elements)
+        assert species_logits.shape == (num_nodes, species_logits.shape[-1])
+        assert species_targets.shape == (num_nodes, species_logits.shape[-1])
         assert stop_logits.shape == (num_graphs,)
         assert stop_targets.shape == (num_graphs,)
 

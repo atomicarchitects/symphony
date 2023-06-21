@@ -5,12 +5,12 @@ from typing import Dict, List, Sequence, Tuple
 import re
 import itertools
 import os
+import tempfile
 
 from absl import logging
 import tensorflow as tf
 import chex
 import jax
-import jax.numpy as jnp
 import numpy as np
 import jraph
 import ml_collections
@@ -26,21 +26,13 @@ def get_datasets(
     config: ml_collections.ConfigDict,
 ) -> Dict[str, tf.data.Dataset]:
     """Loads and preprocesses the dataset as tf.data.Datasets for each split."""
-    del rng
 
     # Get the raw datasets.
     if config.dataset == "qm9":
+        del rng
         datasets = get_unbatched_qm9_datasets(config)
     elif config.dataset == "tetris":
-        datasets = get_unbatched_tetris_datasets(config)
-
-    # Convert to jraph.GraphsTuple.
-    for split, dataset_split in datasets.items():
-        datasets[split] = dataset_split.map(
-            _convert_to_graphstuple,
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        )
+        datasets = get_unbatched_tetris_datasets(rng, config)
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:
@@ -69,7 +61,7 @@ def get_datasets(
     example_padded_graph = jraph.pad_with_graphs(
         example_graph, n_node=max_n_nodes, n_edge=max_n_edges, n_graph=max_n_graphs
     )
-    padded_graphs_spec = _specs_from_graphs_tuple(example_padded_graph)
+    padded_graphs_spec = _specs_from_graphs_tuple(example_padded_graph, unknown_first_dimension=False)
 
     # Batch and pad each split separately.
     for split in ["train", "val", "test"]:
@@ -156,14 +148,14 @@ def get_unbatched_tetris_datasets(
     # Taken from e3nn Tetris example.
     # https://docs.e3nn.org/en/stable/examples/tetris_gate.html
     pieces = [
-        [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 1, 0)],  # chiral_shape_1
+        [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 1, 0)],   # chiral_shape_1
         [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, -1, 0)],  # chiral_shape_2
-        [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)],  # square
-        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)],  # line
-        [(0, 0, 0), (0, 0, 1), (0, 1, 0), (1, 0, 0)],  # corner
-        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 0)],  # L
-        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 1)],  # T
-        [(0, 0, 0), (1, 0, 0), (1, 1, 0), (2, 1, 0)],  # zigzag
+        [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)],   # square
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)],   # line
+        [(0, 0, 0), (0, 0, 1), (0, 1, 0), (1, 0, 0)],   # corner
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 0)],   # L
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 1)],   # T
+        [(0, 0, 0), (1, 0, 0), (1, 1, 0), (2, 1, 0)],   # zigzag
     ]
 
     # Convert to molecules, and then jraph.GraphsTuples.
@@ -171,56 +163,42 @@ def get_unbatched_tetris_datasets(
         ase.Atoms(numbers=[1] * 4, positions=np.array(piece)) for piece in pieces
     ]
     pieces_as_graphs = [
-        input_pipeline.ase_atoms_to_jraph_graph(molecule, [1], nn_cutoff=1.0)
+        input_pipeline.ase_atoms_to_jraph_graph(molecule, [1], nn_cutoff=1.1)
         for molecule in pieces_as_molecules
     ]
 
+    # We will save our datasets to a temporary directory.
+    tempdir = tempfile.mkdtemp()
     datasets = {}
-    for split in ("train", "val", "test"):
-        split_rng, rng = jax.random.split(rng)
-        fragments_for_pieces = itertools.chain.from_iterable(
-            fragments.generate_fragments(
-                split_rng,
-                graph,
-                n_species=1,
-                nn_tolerance=0.01,
-                max_radius=1.01,
-                mode=config.fragment_logic,
-            )
-            for graph in pieces_as_graphs)
 
-        def fragment_yielder(split: str):
+    for split in ("train", "val", "test"):
+        split_rng, rng = jax.random.split(rng)                
+        fragments_for_pieces = itertools.chain.from_iterable(
+                fragments.generate_fragments(
+                    split_rng,
+                    graph,
+                    n_species=1,
+                    nn_tolerance=0.01,
+                    max_radius=1.01,
+                    mode=config.fragment_logic,
+                )
+                for graph in pieces_as_graphs)
+
+        def fragment_yielder():
             yield from fragments_for_pieces
 
+        example_graph = next(iter(fragments_for_pieces))
+        element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
         datasets[split] = tf.data.Dataset.from_generator(
-            lambda: fragment_yielder(split),
-            output_signature=jraph.GraphsTuple(
-                nodes=datatypes.FragmentsNodes(
-                    positions=tf.TensorSpec(
-                        shape=(None, 3), dtype=graph.nodes.positions.dtype
-                    ),
-                    species=tf.TensorSpec(shape=(None,), dtype=graph.nodes.species.dtype),
-                    focus_and_target_species_probs=tf.TensorSpec(
-                        shape=(None, 1),
-                        dtype=graph.nodes.focus_and_target_species_probs.dtype,
-                    ),
-                ),
-                globals=datatypes.FragmentsGlobals(
-                    target_positions=tf.TensorSpec(
-                        shape=(1, 3), dtype=graph.globals.target_positions.dtype
-                    ),
-                    target_species=tf.TensorSpec(
-                        shape=(1,), dtype=graph.globals.target_species.dtype
-                    ),
-                    stop=tf.TensorSpec(shape=(1,), dtype=graph.globals.stop.dtype),
-                ),
-                edges=tf.TensorSpec(shape=(None,), dtype=graph.edges.dtype),
-                receivers=tf.TensorSpec(shape=(None,), dtype=graph.receivers.dtype),
-                senders=tf.TensorSpec(shape=(None,), dtype=graph.senders.dtype),
-                n_node=tf.TensorSpec(shape=(None,), dtype=graph.n_node.dtype),
-                n_edge=tf.TensorSpec(shape=(None,), dtype=graph.n_edge.dtype),
-            ),
-        )
+            fragment_yielder,
+            output_signature=element_spec)
+        
+        # This is a hack to get around the fact that tf.data.Dataset.from_generator
+        # doesn't support looping.
+        dataset_path = f"{tempdir}/tetris_{split}.tfrecord"
+        datasets[split].save(dataset_path)
+        datasets[split] = tf.data.Dataset.load(dataset_path, element_spec=element_spec)
+
     return datasets
 
 
@@ -343,7 +321,7 @@ def get_unbatched_qm9_datasets(
             #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
             #     print()
 
-        # This is usually the case.
+        # This is usually the case, when the split is larger than a single chunk.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
             dataset_split = dataset_split.interleave(
@@ -351,18 +329,30 @@ def get_unbatched_qm9_datasets(
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
+
+        # Shuffle the dataset.
         if config.shuffle_datasets:
             dataset_split = dataset_split.shuffle(1000, seed=seed)
+
+        # Convert to jraph.GraphsTuple.
+        dataset_split = dataset_split.map(
+            _convert_to_graphstuple,
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
+
         datasets[split] = dataset_split
     return datasets
 
 
-def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
+def _specs_from_graphs_tuple(graph: jraph.GraphsTuple, unknown_first_dimension: bool = False):
     """Returns a tf.TensorSpec corresponding to this graph."""
 
-    def get_tensor_spec(array: np.ndarray) -> tf.TensorSpec:
+    def get_tensor_spec(array: np.ndarray, is_global: bool = False) -> tf.TensorSpec:
         """Returns a tf.TensorSpec corresponding to this array."""
         shape = list(array.shape)
+        if unknown_first_dimension and not is_global:
+            shape = [None] + shape[1:]
         dtype = array.dtype
         return tf.TensorSpec(shape=shape, dtype=dtype)
 
@@ -375,9 +365,9 @@ def _specs_from_graphs_tuple(graph: jraph.GraphsTuple):
             ),
         ),
         globals=datatypes.FragmentsGlobals(
-            target_positions=get_tensor_spec(graph.globals.target_positions),
-            target_species=get_tensor_spec(graph.globals.target_species),
-            stop=get_tensor_spec(graph.globals.stop),
+            target_positions=get_tensor_spec(graph.globals.target_positions, is_global=True),
+            target_species=get_tensor_spec(graph.globals.target_species, is_global=True),
+            stop=get_tensor_spec(graph.globals.stop, is_global=True),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
