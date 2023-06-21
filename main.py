@@ -54,7 +54,7 @@ def main(argv):
     # Freeze config.
     config = FLAGS.config
     config.root_dir = default.get_root_dir(config.dataset, config.fragment_logic)
-    config = ml_collections.FrozenConfigDict()
+    config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
     train.train_and_evaluate(config, FLAGS.workdir)
