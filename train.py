@@ -350,6 +350,7 @@ def train_and_evaluate(
                 min_val_loss = eval_metrics["val_eval"]["total_loss"]
                 best_state = state
                 step_for_best_state = step
+                logging.info("New best state found at step %d.", step)
 
             # Save the current state and best state seen so far.
             with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
