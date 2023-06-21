@@ -226,9 +226,9 @@ def generate_molecules(
     step_name = "step=best" if step == -1 else f"step={step}"
     molecules_outputdir = os.path.join(
         outputdir,
+        name,
         "molecules",
         "generated",
-        name,
         f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
         step_name,
     )
@@ -236,9 +236,9 @@ def generate_molecules(
     if visualize:
         visualizations_outputdir = os.path.join(
             outputdir,
+            name,
             "visualizations",
             "molecules",
-            name,
             f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
             step_name,
         )
@@ -397,7 +397,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("workdir", None, "Workdir for model.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses"),
+        os.path.join(os.getcwd(), "analyses", "analysed_workdirs"),
         "Directory where molecules should be saved.",
     )
     flags.DEFINE_float(
