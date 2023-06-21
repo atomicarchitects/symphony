@@ -30,14 +30,14 @@ import plotly.subplots
 sys.path.append("..")
 
 import qm9
-import datatypes  # noqa: E402
+import datatypes
 import input_pipeline
-import models  # noqa: E402
-import train  # noqa: E402
-from configs import default  # noqa: E402
+import models
+import train
+from configs import root_dirs
 
 try:
-    import input_pipeline_tf  # noqa: E402
+    import input_pipeline_tf
 
     tf.config.experimental.set_visible_devices([], "GPU")
 except ImportError:
@@ -511,7 +511,7 @@ def load_model_at_step(
         config = yaml.unsafe_load(config_file)
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir("qm9", config.get("fragment_logic", "nn"))
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.get("fragment_logic", "nn"))
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_map(jnp.asarray, params)
@@ -592,7 +592,7 @@ def load_metrics_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir("qm9", config.get("fragment_logic", "nn"))
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.get("fragment_logic", "nn"))
 
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
@@ -628,7 +628,7 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = default.get_root_dir("qm9", config.get("fragment_logic", "nn"))
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.get("fragment_logic", "nn"))
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)

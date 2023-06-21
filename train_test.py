@@ -17,7 +17,8 @@ import models
 import datatypes
 import train
 import loss_test
-from configs import mace, e3schnet, nequip, marionette, default
+from configs.qm9 import mace, e3schnet, nequip, marionette
+from configs import root_dirs
 
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
@@ -34,7 +35,7 @@ def update_dummy_config(
     config: ml_collections.ConfigDict,
     train_on_split_smaller_than_chunk: bool,
     position_loss_type: str,
-    dataset: str
+    dataset: str,
 ) -> ml_collections.FrozenConfigDict:
     """Updates the dummy config."""
     config.num_train_steps = 100
@@ -46,7 +47,7 @@ def update_dummy_config(
     if train_on_split_smaller_than_chunk:
         config.train_molecules = (0, 10)
     config.dataset = dataset
-    config.root_dir = default.get_root_dir(config.dataset, config.fragment_logic)
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
     return ml_collections.FrozenConfigDict(config)
 
 
@@ -68,7 +69,7 @@ class TrainTest(parameterized.TestCase):
         dataset: str,
     ):
         """Tests that training and evaluation runs without errors."""
-        #self.skipTest("This test is too slow.")
+        # self.skipTest("This test is too slow.")
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)

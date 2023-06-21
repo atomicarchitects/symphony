@@ -15,7 +15,7 @@ import tensorflow as tf
 
 
 import train
-import configs.default as default
+from configs import root_dirs
 
 
 FLAGS = flags.FLAGS
@@ -53,7 +53,7 @@ def main(argv):
 
     # Freeze config.
     config = FLAGS.config
-    config.root_dir = default.get_root_dir(config.dataset, config.fragment_logic)
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!

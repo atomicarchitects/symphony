@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs import default
+from configs.qm9 import default
 
 
 def get_config() -> ml_collections.ConfigDict:
