@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import List, Sequence
+from typing import Sequence
 
 import os
 import sys
@@ -73,9 +73,9 @@ def create_radius_graph(
         sum_n_edge (int): the total number of edges in output graph, the output graph will be padded with `jraph.pad_with_graphs`
 
     Returns:
-        jnp.ndarray: senders: (sum_n_edge,) array of sender indices
-        jnp.ndarray: receivers: (sum_n_edge,) array of receiver indices
-        jnp.ndarray: n_edge: (n_graph,) array of number of edges per graph
+        senders: jnp.ndarray of dimension (sum_n_edge,) array of sender indices
+        receivers: jnp.ndarray of dimension (sum_n_edge,) array of receiver indices
+        n_edge: jnp.ndarray of dimension (n_graph,) array of number of edges per graph
         bool: True if the radius graph was created successfully
     """
     return jax.pure_callback(

@@ -1,30 +1,38 @@
-"""Input pipeline for the QM9 dataset with the tf.data API."""
+"""Input pipeline for the datasets with the tf.data API."""
 
 import functools
 from typing import Dict, List, Sequence, Tuple
 import re
+import itertools
 import os
 
 from absl import logging
 import tensorflow as tf
 import chex
 import jax
+import jax.numpy as jnp
 import numpy as np
 import jraph
 import ml_collections
+import ase
 
+import input_pipeline
 import datatypes
+import fragments
 
 
 def get_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
 ) -> Dict[str, tf.data.Dataset]:
-    """Loads and preprocesses the QM9 dataset as tf.data.Datasets for each split."""
+    """Loads and preprocesses the dataset as tf.data.Datasets for each split."""
     del rng
 
     # Get the raw datasets.
-    datasets = get_unbatched_qm9_datasets(config)
+    if config.dataset == "qm9":
+        datasets = get_unbatched_qm9_datasets(config)
+    elif config.dataset == "tetris":
+        datasets = get_unbatched_tetris_datasets(config)
 
     # Convert to jraph.GraphsTuple.
     for split, dataset_split in datasets.items():
@@ -139,6 +147,84 @@ def estimate_padding_budget_for_num_graphs(
     n_edge = next_multiple_of_64(num_edges_per_graph_estimate * num_graphs)
     n_graph = num_graphs
     return n_node, n_edge, n_graph
+
+
+def get_unbatched_tetris_datasets(
+    rng: chex.PRNGKey, config: ml_collections.ConfigDict
+) -> Dict[str, tf.data.Dataset]:
+    """Loads the raw Tetris dataset as tf.data.Datasets for each split."""
+    # Taken from e3nn Tetris example.
+    # https://docs.e3nn.org/en/stable/examples/tetris_gate.html
+    pieces = [
+        [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 1, 0)],  # chiral_shape_1
+        [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, -1, 0)],  # chiral_shape_2
+        [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)],  # square
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)],  # line
+        [(0, 0, 0), (0, 0, 1), (0, 1, 0), (1, 0, 0)],  # corner
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 0)],  # L
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 1)],  # T
+        [(0, 0, 0), (1, 0, 0), (1, 1, 0), (2, 1, 0)],  # zigzag
+    ]
+
+    # Convert to molecules, and then jraph.GraphsTuples.
+    pieces_as_molecules = [
+        ase.Atoms(numbers=[1] * 4, positions=np.array(piece)) for piece in pieces
+    ]
+    pieces_as_graphs = [
+        input_pipeline.ase_atoms_to_jraph_graph(molecule, [1], nn_cutoff=1.0)
+        for molecule in pieces_as_molecules
+    ]
+    fragments_for_pieces = itertools.chain(
+        fragments.generate_fragments(
+            rng,
+            graph,
+            n_species=1,
+            nn_tolerance=0.01,
+            max_radius=1.01,
+            mode=config.fragment_logic,
+        )
+        for graph in pieces_as_graphs
+    )
+
+    def fragment_yielder():
+        yield from fragments_for_pieces
+
+    graph = next(iter(fragments_for_pieces))
+    dataset = tf.data.Dataset.from_generator(
+        fragment_yielder,
+        output_signature=jraph.GraphsTuple(
+            nodes=datatypes.FragmentsNodes(
+                positions=tf.TensorSpec(
+                    shape=(None, 3), dtype=graph.nodes.positions.dtype
+                ),
+                species=tf.TensorSpec(shape=(None,), dtype=graph.nodes.species.dtype),
+                focus_and_target_species_probs=tf.TensorSpec(
+                    shape=(None, 1),
+                    dtype=graph.nodes.focus_and_target_species_probs.dtype,
+                ),
+            ),
+            globals=datatypes.FragmentsGlobals(
+                target_positions=tf.TensorSpec(
+                    shape=(1, 3), dtype=graph.globals.target_positions.dtype
+                ),
+                target_species=tf.TensorSpec(
+                    shape=(1,), dtype=graph.globals.target_species.dtype
+                ),
+                stop=tf.TensorSpec(shape=(1,), dtype=graph.globals.stop.dtype),
+            ),
+            edges=tf.TensorSpec(shape=(None,), dtype=graph.edges.dtype),
+            receivers=tf.TensorSpec(shape=(None,), dtype=graph.receivers.dtype),
+            senders=tf.TensorSpec(shape=(None,), dtype=graph.senders.dtype),
+            n_node=tf.TensorSpec(shape=(None,), dtype=graph.n_node.dtype),
+            n_edge=tf.TensorSpec(shape=(None,), dtype=graph.n_edge.dtype),
+        ),
+    )
+    # TODO: Figure out the split logic.
+    return {
+        "train": dataset,
+        "val": dataset,
+        "test": dataset,
+    }
 
 
 def _deprecated_get_unbatched_qm9_datasets(

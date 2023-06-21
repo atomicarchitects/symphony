@@ -21,7 +21,7 @@ def generate_fragments(
     Args:
         rng: The random number generator.
         graph: The molecular graph.
-        atomic_numbers: The atomic numbers of the target species.
+        n_species: The number of atomic species.
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
 
@@ -185,7 +185,7 @@ def _into_fragment(
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,
-        target_species_probs=target_species_probability,
+        focus_and_target_species_probs=target_species_probability,
     )
     globals = datatypes.FragmentsGlobals(
         stop=jnp.array([stop], dtype=bool),  # [1]

@@ -1071,8 +1071,11 @@ def create_model(
     ) -> datatypes.Predictions:
         """Defines the entire network."""
 
-        if config.get("dataset", "qm9") == "qm9":
+        dataset = config.get("dataset", "qm9")
+        if dataset == "qm9":
             num_species = NUM_ELEMENTS
+        if dataset == "tetris":
+            num_species = 1
 
         if config.model == "MACE":
             output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
