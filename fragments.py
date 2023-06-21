@@ -15,15 +15,19 @@ def generate_fragments(
     nn_tolerance: float = 0.01,
     max_radius: float = 2.03,
     mode: str = "nn",
+    heavy_first: bool = False,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
     Args:
         rng: The random number generator.
         graph: The molecular graph.
-        atomic_numbers: The atomic numbers of the target species.
+        n_species: The number of different species considered.
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
+        mode:
+        heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
+        beta_com: Inverse temperature value for the center of mass.
 
     Returns:
         A sequence of fragments.
@@ -42,9 +46,24 @@ def generate_fragments(
         axis=1,
     )  # [n_edge]
 
+    # find all nodes that are hydrogens
+    if heavy_first:
+        hydrogens = jnp.where(graph.nodes.species == 0)[0]
+    else:
+        hydrogens = None
+
+    # make fragments
     try:
         rng, visited_nodes, frag = _make_first_fragment(
-            rng, graph, dist, n_species, nn_tolerance, max_radius, mode
+            rng,
+            graph,
+            dist,
+            n_species,
+            nn_tolerance,
+            max_radius,
+            mode,
+            heavy_first,
+            hydrogens,
         )
         yield frag
 
@@ -58,6 +77,8 @@ def generate_fragments(
                 nn_tolerance,
                 max_radius,
                 mode,
+                heavy_first,
+                hydrogens,
             )
             yield frag
     except ValueError:
@@ -68,15 +89,32 @@ def generate_fragments(
         yield _make_last_fragment(graph, n_species)
 
 
-def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, mode):
+def _make_first_fragment(
+    rng,
+    graph,
+    dist,
+    n_species,
+    nn_tolerance,
+    max_radius,
+    mode,
+    heavy_first=False,
+    hydrogens=None,
+):
     # pick a random initial node
     rng, k = jax.random.split(rng)
-    first_node = jax.random.randint(
-        k, shape=(), minval=0, maxval=len(graph.nodes.positions)
-    )
+    if heavy_first and hydrogens.shape[0] > 0:
+        first_node = jax.random.choice(
+            k, jnp.arange(len(graph.nodes.positions))[~hydrogens]
+        )
+    else:
+        first_node = jax.random.randint(
+            k, shape=(), minval=0, maxval=len(graph.nodes.positions)
+        )
 
     if mode == "nn":
-        min_dist = dist[graph.senders == first_node].min()
+        min_dist = dist[
+            (graph.senders == first_node) & ~jnp.isin(graph.receivers, hydrogens)
+        ].min()
         targets = graph.receivers[
             (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
         ]
@@ -86,6 +124,11 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, 
 
     if len(targets) == 0:
         raise ValueError("No targets found.")
+
+    if heavy_first:
+        targets_heavy = targets[~jnp.isin(targets, hydrogens)]
+        if len(targets_heavy) != 0:
+            targets = targets_heavy
 
     species_probability = (
         jnp.zeros((graph.nodes.positions.shape[0], n_species))
@@ -111,12 +154,28 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, 
 
 
 def _make_middle_fragment(
-    rng, visited, graph, dist, n_species, nn_tolerance, max_radius, mode
+    rng,
+    visited,
+    graph,
+    dist,
+    n_species,
+    nn_tolerance,
+    max_radius,
+    mode,
+    heavy_first=False,
+    hydrogens=None,
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
 
     mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
+
+    if heavy_first:
+        species = jax.vmap(lambda x: x != 0)(graph.nodes.species)
+        if species.sum() > species[visited].sum():
+            mask = (
+                mask & ~jnp.isin(senders, hydrogens) & ~jnp.isin(receivers, hydrogens)
+            )
 
     if mode == "nn":
         min_dist = dist[mask].min()
@@ -185,7 +244,7 @@ def _into_fragment(
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,
-        target_species_probs=target_species_probability,
+        focus_and_target_species_probs=target_species_probability,
     )
     globals = datatypes.FragmentsGlobals(
         stop=jnp.array([stop], dtype=bool),  # [1]
