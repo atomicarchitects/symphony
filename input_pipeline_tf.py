@@ -5,7 +5,6 @@ from typing import Dict, List, Sequence, Tuple
 import re
 import itertools
 import os
-import tempfile
 
 from absl import logging
 import tensorflow as tf
@@ -168,7 +167,6 @@ def get_unbatched_tetris_datasets(
     ]
 
     # We will save our datasets to a temporary directory.
-    tempdir = tempfile.mkdtemp()
     datasets = {}
 
     for split in ("train", "val", "test"):
@@ -194,8 +192,10 @@ def get_unbatched_tetris_datasets(
             output_signature=element_spec)
         
         # This is a hack to get around the fact that tf.data.Dataset.from_generator
-        # doesn't support looping.
-        dataset_path = f"{tempdir}/tetris_{split}.tfrecord"
+        # doesn't support looping. We just save and load the dataset to and from the disk.
+        if not os.path.exists(f"{config.root_dir}/{os.getpid()}"):
+            os.makedirs(f"{config.root_dir}/{os.getpid()}")
+        dataset_path = f"{config.root_dir}/{os.getpid()}/{split}.tfrecord"
         datasets[split].save(dataset_path)
         datasets[split] = tf.data.Dataset.load(dataset_path, element_spec=element_spec)
 
