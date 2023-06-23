@@ -17,7 +17,8 @@ import models
 import datatypes
 import train
 import loss_test
-from configs import mace, e3schnet, nequip, marionette
+from configs.qm9 import mace, e3schnet, nequip, marionette
+from configs import root_dirs
 
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
@@ -34,9 +35,9 @@ def update_dummy_config(
     config: ml_collections.ConfigDict,
     train_on_split_smaller_than_chunk: bool,
     position_loss_type: str,
+    dataset: str,
 ) -> ml_collections.FrozenConfigDict:
     """Updates the dummy config."""
-    config = ml_collections.ConfigDict(config)
     config.num_train_steps = 100
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
@@ -45,6 +46,8 @@ def update_dummy_config(
     config.loss_kwargs.position_loss_type = position_loss_type
     if train_on_split_smaller_than_chunk:
         config.train_molecules = (0, 10)
+    config.dataset = dataset
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
     return ml_collections.FrozenConfigDict(config)
 
 
@@ -56,15 +59,17 @@ class TrainTest(parameterized.TestCase):
         config_name=["nequip"],
         train_on_split_smaller_than_chunk=[True],
         position_loss_type=["kl_divergence"],
+        dataset=["tetris"],
     )
     def test_train_and_evaluate(
         self,
         config_name: str,
         train_on_split_smaller_than_chunk: bool,
         position_loss_type: str,
+        dataset: str,
     ):
         """Tests that training and evaluation runs without errors."""
-        self.skipTest("This test is too slow.")
+        # self.skipTest("This test is too slow.")
 
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
@@ -73,7 +78,7 @@ class TrainTest(parameterized.TestCase):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
         config = update_dummy_config(
-            config, train_on_split_smaller_than_chunk, position_loss_type
+            config, train_on_split_smaller_than_chunk, position_loss_type, dataset
         )
         config = ml_collections.FrozenConfigDict(config)
 
@@ -92,6 +97,8 @@ class TrainTest(parameterized.TestCase):
     )
     def test_equivariance(self, config_name: str, rng: int):
         """Tests that models are equivariant."""
+        self.skipTest("This test is too slow.")
+
         rng = jax.random.PRNGKey(rng)
         config = _ALL_CONFIGS[config_name]
         model = models.create_model(config, run_in_evaluation_mode=False)

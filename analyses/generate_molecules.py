@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import List, Sequence
+from typing import Sequence, Tuple
 
 import os
 import sys
@@ -15,11 +15,11 @@ import ase.io
 import ase.visualize
 import jax
 import jax.numpy as jnp
-import numpy as np
 import jraph
+import numpy as np
 import tqdm
 import chex
-import pickle
+import matscipy.neighbours
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -30,20 +30,9 @@ import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
 import models  # noqa: E402
 
-
 MAX_NUM_ATOMS = 30
 
 FLAGS = flags.FLAGS
-
-
-from typing import Tuple
-
-import jax
-import jax.numpy as jnp
-import jraph
-import matscipy.neighbours
-import numpy as np
-
 
 def get_edge_padding_mask(
     n_node: jnp.ndarray, n_edge: jnp.ndarray, sum_n_edge: int
@@ -73,9 +62,9 @@ def create_radius_graph(
         sum_n_edge (int): the total number of edges in output graph, the output graph will be padded with `jraph.pad_with_graphs`
 
     Returns:
-        jnp.ndarray: senders: (sum_n_edge,) array of sender indices
-        jnp.ndarray: receivers: (sum_n_edge,) array of receiver indices
-        jnp.ndarray: n_edge: (n_graph,) array of number of edges per graph
+        senders: jnp.ndarray of dimension (sum_n_edge,) array of sender indices
+        receivers: jnp.ndarray of dimension (sum_n_edge,) array of receiver indices
+        n_edge: jnp.ndarray of dimension (n_graph,) array of number of edges per graph
         bool: True if the radius graph was created successfully
     """
     return jax.pure_callback(
@@ -226,19 +215,19 @@ def generate_molecules(
     step_name = "step=best" if step == -1 else f"step={step}"
     molecules_outputdir = os.path.join(
         outputdir,
-        "molecules",
-        "generated",
         name,
-        f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
+        f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
+        "molecules",
         step_name,
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
     if visualize:
         visualizations_outputdir = os.path.join(
             outputdir,
+            name,
+            f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
             "visualizations",
             "molecules",
-            name,
             f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
             step_name,
         )
@@ -397,7 +386,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("workdir", None, "Workdir for model.")
     flags.DEFINE_string(
         "outputdir",
-        os.path.join(os.getcwd(), "analyses"),
+        os.path.join(os.getcwd(), "analyses", "analysed_workdirs"),
         "Directory where molecules should be saved.",
     )
     flags.DEFINE_float(
