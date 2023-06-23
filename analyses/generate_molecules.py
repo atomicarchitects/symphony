@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence
+from typing import Sequence, Tuple
 
 import os
 import sys
@@ -15,11 +15,11 @@ import ase.io
 import ase.visualize
 import jax
 import jax.numpy as jnp
-import numpy as np
 import jraph
+import numpy as np
 import tqdm
 import chex
-import pickle
+import matscipy.neighbours
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -30,20 +30,9 @@ import datatypes  # noqa: E402
 import input_pipeline  # noqa: E402
 import models  # noqa: E402
 
-
 MAX_NUM_ATOMS = 30
 
 FLAGS = flags.FLAGS
-
-
-from typing import Tuple
-
-import jax
-import jax.numpy as jnp
-import jraph
-import matscipy.neighbours
-import numpy as np
-
 
 def get_edge_padding_mask(
     n_node: jnp.ndarray, n_edge: jnp.ndarray, sum_n_edge: int
@@ -227,9 +216,8 @@ def generate_molecules(
     molecules_outputdir = os.path.join(
         outputdir,
         name,
+        f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
         "molecules",
-        "generated",
-        f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
         step_name,
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
@@ -237,6 +225,7 @@ def generate_molecules(
         visualizations_outputdir = os.path.join(
             outputdir,
             name,
+            f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
             "visualizations",
             "molecules",
             f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",

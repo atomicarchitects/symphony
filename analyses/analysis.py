@@ -148,8 +148,12 @@ def combine_visualizations(
     )
 
     fig_all = plotly.subplots.make_subplots(
-        rows=1, cols=2, specs=[[{"type": "scene"}, {"type": "xy"}]]
+        rows=1,
+        cols=4,
+        specs=[[{"type": "scene"}, {"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
+        subplot_titles=("Input Fragment", "Predictions", "Focus and Atom Type Probabilities", "Stop Probability"),
     )
+
     for i, trace in enumerate(all_traces):
         visible = original_visibility[i] if i < start_indices[1] else False
         trace.update(visible=visible)
@@ -162,14 +166,77 @@ def combine_visualizations(
     return fig_all
 
 
-def visualize_predictions(
-    pred: datatypes.Predictions,
-    input_molecule: ase.Atoms,
-    molecule_with_target: Optional[ase.Atoms] = None,
-    target: Optional[int] = None,
-) -> go.Figure:
-    """Visualizes the predictions for a molecule at a particular step."""
+def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go.Scatter3d]:
+    """Returns the plotly traces for the fragment."""
+    atomic_numbers = list(
+        int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
+    )
+    molecule_traces = []
+    molecule_traces.append(
+        go.Scatter3d(
+            x=fragment.nodes.positions[:, 0],
+            y=fragment.nodes.positions[:, 1],
+            z=fragment.nodes.positions[:, 2],
+            mode="markers",
+            marker=dict(
+                size=[ATOMIC_SIZES[num] for num in atomic_numbers],
+                color=[ATOMIC_COLORS[num] for num in atomic_numbers],
+            ),
+            hovertext=[
+                f"Element: {ase.data.chemical_symbols[num]}"
+                for num in atomic_numbers
+            ],
+            opacity=1.0,
+            name="Molecule Atoms",
+            legendrank=1,
+        )
+    )
+    # Add bonds.
+    for i, j in zip(fragment.senders, fragment.receivers):
+        molecule_traces.append(
+            go.Scatter3d(
+                x=fragment.nodes.positions[[i, j], 0],
+                y=fragment.nodes.positions[[i, j], 1],
+                z=fragment.nodes.positions[[i, j], 2],
+                line=dict(color="black"),
+                mode="lines",
+                showlegend=False,
+            )
+        )
 
+    # Highlight the target atom.
+    if fragment.globals.target_positions is not None:
+        molecule_traces.append(
+            go.Scatter3d(
+                x=[fragment.globals.target_positions[0]],
+                y=[fragment.globals.target_positions[1]],
+                z=[fragment.globals.target_positions[2]],
+                mode="markers",
+                marker=dict(
+                    size=[1.05 * ATOMIC_SIZES[models.ATOMIC_NUMBERS[fragment.globals.target_species.item()]]],
+                    color=["green"],
+                ),
+                opacity=0.5,
+                name="Target Atom",
+            )
+        )
+
+    return molecule_traces
+
+
+def get_plotly_traces_for_predictions(pred: datatypes.Predictions, fragment: datatypes.Fragments) -> Sequence[go.Scatter3d]:
+    """Returns a list of plotly traces for the prediction."""
+
+    atomic_numbers = list(
+        int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
+    )
+    focus = pred.globals.focus_indices.item()
+    focus_position = fragment.nodes.positions[focus]
+    focus_and_target_species_probs = pred.nodes.focus_and_target_species_probs
+    focus_probs = focus_and_target_species_probs.sum(axis=-1)
+    num_nodes, num_elements = focus_and_target_species_probs.shape
+
+    # Highlight the focus probabilities, obtained by marginalization over all elements.
     def get_scaling_factor(focus_prob: float, num_nodes: int) -> float:
         """Returns a scaling factor for the size of the atom."""
         if focus_prob < 1 / num_nodes - 1e-3:
@@ -179,46 +246,23 @@ def visualize_predictions(
     def chosen_focus_string(index: int, focus: int) -> str:
         """Returns a string indicating whether the atom was chosen as the focus."""
         if index == focus:
-            return "(Chosen as Focus)"
-        return "(Not Chosen as Focus)"
+            return f"Atom {index} (Chosen as Focus)"
+        return f"Atom {index} (Not Chosen as Focus)"
 
-    def chosen_element_string(element: str, predicted_target_element: str) -> str:
-        """Returns a string indicating whether an element was chosen as the target element."""
-        if element == predicted_target_element:
-            return "Chosen as Target Element"
-        return "Not Chosen as Target Element"
-
-    # Make subplots.
-    fig = plotly.subplots.make_subplots(
-        rows=1,
-        cols=2,
-        specs=[[{"type": "scene"}, {"type": "xy"}]],
-        subplot_titles=("Molecule", "Target Element Probabilities"),
-    )
-
-    # Highlight the focus probabilities.
-    mol_trace = []
-    focus = pred.globals.focus_indices.item()
-    focus_position = input_molecule.positions[focus]
-    focus_and_target_species_probs = pred.nodes.focus_and_target_species_probs
-    focus_probs = focus_and_target_species_probs.sum(axis=-1)
-    target_species_probs = focus_and_target_species_probs[focus]
-    target_species_probs /= target_species_probs.sum()
-    target_species_probs = target_species_probs.tolist()
-
-    mol_trace.append(
+    molecule_traces = []
+    molecule_traces.append(
         go.Scatter3d(
-            x=input_molecule.positions[:, 0],
-            y=input_molecule.positions[:, 1],
-            z=input_molecule.positions[:, 2],
+            x=fragment.nodes.positions[:, 0],
+            y=fragment.nodes.positions[:, 1],
+            z=fragment.nodes.positions[:, 2],
             mode="markers",
             marker=dict(
                 size=[
-                    get_scaling_factor(float(focus_prob), len(input_molecule))
+                    get_scaling_factor(float(focus_prob), num_nodes)
                     * ATOMIC_SIZES[num]
-                    for focus_prob, num in zip(focus_probs, input_molecule.numbers)
+                    for focus_prob, num in zip(focus_probs, atomic_numbers)
                 ],
-                color=["rgba(150, 75, 0, 0.5)" for _ in input_molecule],
+                color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
             ),
             hovertext=[
                 f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
@@ -227,41 +271,22 @@ def visualize_predictions(
             name="Focus Probabilities",
         )
     )
-    # Plot the actual molecule.
-    mol_trace.append(
-        go.Scatter3d(
-            x=input_molecule.positions[:, 0],
-            y=input_molecule.positions[:, 1],
-            z=input_molecule.positions[:, 2],
-            mode="markers",
-            marker=dict(
-                size=[ATOMIC_SIZES[num] for num in input_molecule.numbers],
-                color=[ATOMIC_COLORS[num] for num in input_molecule.numbers],
-            ),
-            hovertext=[
-                f"Element: {ase.data.chemical_symbols[num]}"
-                for num in input_molecule.numbers
-            ],
-            opacity=1.0,
-            name="Molecule Atoms",
-            legendrank=1,
-        )
-    )
 
-    # Highlight the target atom.
-    if target is not None:
-        mol_trace.append(
+    # Highlight predicted position, if not stopped.
+    if not pred.globals.stop:
+        predicted_target_position = focus_position + pred.globals.position_vectors
+        molecule_traces.append(
             go.Scatter3d(
-                x=[molecule_with_target.positions[target, 0]],
-                y=[molecule_with_target.positions[target, 1]],
-                z=[molecule_with_target.positions[target, 2]],
+                x=[predicted_target_position[0]],
+                y=[predicted_target_position[1]],
+                z=[predicted_target_position[2]],
                 mode="markers",
                 marker=dict(
-                    size=[1.05 * ATOMIC_SIZES[molecule_with_target.numbers[target]]],
-                    color=["green"],
+                    size=[1.05 * ATOMIC_SIZES[models.ATOMIC_NUMBERS[pred.globals.target_species.item()]]],
+                    color=["purple"],
                 ),
                 opacity=0.5,
-                name="Target Atom",
+                name="Predicted Atom",
             )
         )
 
@@ -301,8 +326,9 @@ def visualize_predictions(
             name="Position Probabilities",
             legendgroup="Position Probabilities",
             showlegend=(count == 1),
+            visible="legendonly",
         )
-        mol_trace.append(surface_r)
+        molecule_traces.append(surface_r)
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
@@ -324,82 +350,74 @@ def visualize_predictions(
         showlegend=True,
         visible="legendonly",
     )
-    mol_trace.append(spherical_harmonics)
-
-    # All of the above is on the left subplot.
-    for trace in mol_trace:
-        fig.add_trace(trace, row=1, col=1)
+    molecule_traces.append(spherical_harmonics)
 
     # Plot target species probabilities.
+    stop_probability = pred.globals.stop_probs.item()
     predicted_target_species = pred.globals.target_species.item()
-    ELEMENTS_WITH_STOP = ELEMENTS + ["STOP"]
-    predicted_target_element = ELEMENTS_WITH_STOP[predicted_target_species]
+    true_focus = 0 # This is a convention used in our training pipeline.
+    true_target_species = fragment.globals.target_species.item()
 
     # We highlight the true target if provided.
-    if target is None:
-        species_trace = [
-            go.Bar(
-                x=ELEMENTS_WITH_STOP,
-                y=target_species_probs,
-                name="Elements Probabilities",
-                hovertext=[
-                    chosen_element_string(elem, predicted_target_element)
-                    for elem in ELEMENTS_WITH_STOP
-                ],
-                marker=dict(
-                    color=[
-                        "gray" if elem != predicted_target_element else "blue"
-                        for elem in ELEMENTS_WITH_STOP
-                    ],
-                    opacity=0.8,
-                ),
-                showlegend=False,
-            ),
-        ]
-    else:
-        target_element_index = ATOMIC_NUMBERS.index(
-            molecule_with_target.numbers[target]
-        )
-        other_elements = (
-            ELEMENTS_WITH_STOP[:target_element_index]
-            + ELEMENTS_WITH_STOP[target_element_index + 1 :]
-        )
-        species_trace = [
-            go.Bar(
-                x=[ELEMENTS_WITH_STOP[target_element_index]],
-                y=[target_species_probs[target_element_index]],
-                hovertext=[
-                    chosen_element_string(
-                        ELEMENTS_WITH_STOP[target_element_index],
-                        predicted_target_element,
-                    )
-                ],
-                name="True Target Element Probability",
-                marker=dict(color="green", opacity=0.8),
-                showlegend=False,
-            ),
-            go.Bar(
-                x=other_elements,
-                y=target_species_probs[:target_element_index]
-                + target_species_probs[target_element_index + 1 :],
-                hovertext=[
-                    chosen_element_string(elem, predicted_target_element)
-                    for elem in other_elements
-                ],
-                name="Other Elements Probabilities",
-                marker=dict(
-                    color=[
-                        "gray" if elem != predicted_target_element else "blue"
-                        for elem in other_elements
-                    ],
-                    opacity=0.8,
-                ),
-                showlegend=False,
-            ),
-        ]
+    def get_focus_string(atom_index: int) -> str:
+        """Get the string for the focus."""
+        base_string = f"Atom {atom_index}"
+        if atom_index == focus:
+            base_string = f"{base_string}<br>Predicted Focus"
+        if atom_index == true_focus:
+            base_string = f"{base_string}<br>True Focus"
+        return base_string
 
-    for trace in species_trace:
-        fig.add_trace(trace, row=1, col=2)
+    def get_atom_type_string(element_index: int, element: str) -> str:
+        """Get the string for the atom type."""
+        base_string = f"{element}"
+        if element_index == predicted_target_species:
+            base_string = f"{base_string}<br>Predicted Species"
+        if element_index == true_target_species:
+            base_string = f"{base_string}<br>True Species"
+        return base_string
+
+    focus_and_atom_type_traces = [
+        go.Heatmap(
+            x=[get_atom_type_string(index, elem) for index, elem in enumerate(ELEMENTS[:num_elements])],
+            y=[get_focus_string(i) for i in range(num_nodes)],
+            z=np.round(pred.nodes.focus_and_target_species_probs, 3),
+            texttemplate= "%{z}",
+            showlegend=False,
+            showscale=False,
+            colorscale="Blues",
+            zmin=0.0,
+            zmax=1.0,
+            xgap=1,
+            ygap=1,
+        ),
+    ]
+    stop_traces = [
+        go.Bar(
+            x=["STOP"],
+            y=[stop_probability],
+            showlegend=False,
+        )
+    ]
+    return molecule_traces, focus_and_atom_type_traces, stop_traces
+
+
+def visualize_fragment(
+    fragment: datatypes.Fragments,
+) -> go.Figure:
+    """Visualizes the predictions for a molecule at a particular step."""
+    # Make subplots.
+    fig = plotly.subplots.make_subplots(
+        rows=1,
+        cols=1,
+        specs=[[{"type": "scene"}]],
+        subplot_titles=("Input Fragment",),
+    )
+
+    # Traces corresponding to the input fragment.
+    fragment_traces = get_plotly_traces_for_fragment(fragment)
+    for trace in fragment_traces:
+        fig.add_trace(trace, row=1, col=1)
 
     # Update the layout.
     axis = dict(
@@ -411,16 +429,14 @@ def visualize_predictions(
         nticks=3,
     )
     fig.update_layout(
-        width=1500,
-        height=800,
         scene=dict(
             xaxis=dict(**axis),
-            yaxis=dict(**axis),
-            zaxis=dict(**axis),
+            yaxis=dict(**axis, scaleanchor="x", scaleratio=1),
+            zaxis=dict(**axis, scaleanchor="x", scaleratio=1),
             aspectmode="data",
         ),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(255,255,255,1)",
+        plot_bgcolor="rgba(255,255,255,1)",
         legend=dict(
             yanchor="top",
             y=0.99,
@@ -428,7 +444,105 @@ def visualize_predictions(
             x=0.1,
         ),
     )
-    return fig
+
+    try:
+        return go.FigureWidget(fig)
+    except NotImplementedError:
+        return fig
+
+
+def visualize_predictions(
+    pred: datatypes.Predictions,
+    fragment: datatypes.Fragments,
+) -> go.Figure:
+    """Visualizes the predictions for a molecule at a particular step."""
+
+    # Make subplots.
+    fig = plotly.subplots.make_subplots(
+        rows=1,
+        cols=4,
+        specs=[[{"type": "scene"}, {"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
+        column_widths=[0.4, 0.4, 0.1, 0.1],
+        subplot_titles=("Input Fragment", "Predictions", "", ""),
+    )
+
+    # Traces corresponding to the input fragment.
+    fragment_traces = get_plotly_traces_for_fragment(fragment)
+
+    # Traces corresponding to the prediction.
+    predicted_fragment_traces, focus_and_atom_type_traces, stop_traces = get_plotly_traces_for_predictions(pred, fragment)
+    
+    for trace in fragment_traces:
+        fig.add_trace(trace, row=1, col=1)
+        trace.showlegend = False
+        fig.add_trace(trace, row=1, col=2)
+
+    for trace in predicted_fragment_traces:
+        fig.add_trace(trace, row=1, col=2)
+
+    for trace in focus_and_atom_type_traces:
+        fig.add_trace(trace, row=1, col=3)
+
+    for trace in stop_traces:
+        fig.add_trace(trace, row=1, col=4)
+
+    # Update the layout.
+    centre_of_mass = jnp.mean(fragment.nodes.positions, axis=0)
+    furthest_dist = jnp.max(jnp.linalg.norm(fragment.nodes.positions + pred.globals.position_vectors - centre_of_mass, axis=-1))
+    furthest_dist = jnp.max(jnp.linalg.norm(fragment.nodes.positions - pred.globals.position_vectors - centre_of_mass, axis=-1))
+    min_range = centre_of_mass - furthest_dist
+    max_range = centre_of_mass + furthest_dist
+    axis = dict(
+        showbackground=False,
+        showticklabels=False,
+        showgrid=False,
+        zeroline=False,
+        title="",
+        nticks=3,
+    )
+    fig.update_layout(
+        scene1=dict(
+            xaxis=dict(**axis, range=[min_range[0], max_range[0]]),
+            yaxis=dict(**axis, range=[min_range[1], max_range[1]]),
+            zaxis=dict(**axis, range=[min_range[2], max_range[2]]),
+            aspectmode="manual",
+            aspectratio=dict(x=1, y=1, z=1),
+        ),
+        scene2=dict(
+            xaxis=dict(**axis, range=[min_range[0], max_range[0]]),
+            yaxis=dict(**axis, range=[min_range[1], max_range[1]]),
+            zaxis=dict(**axis, range=[min_range[2], max_range[2]]),
+            aspectmode="manual",
+            aspectratio=dict(x=1, y=1, z=1),
+        ),
+        yaxis2=dict(
+            range=[0, 1],
+        ),
+        paper_bgcolor="rgba(255,255,255,1)",
+        plot_bgcolor="rgba(255,255,255,1)",
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.1,
+        ),
+    )
+
+    # Sync cameras.
+    try:
+        fig_widget = go.FigureWidget(fig)
+        def cam_change_1(layout, camera):
+            fig_widget.layout.scene2.camera = camera
+        def cam_change_2(layout, camera):
+            if fig_widget.layout.scene1.camera != camera:
+                fig_widget.layout.scene1.camera = camera
+
+        fig_widget.layout.scene1.on_change(cam_change_1, 'camera')
+        fig_widget.layout.scene2.on_change(cam_change_2, 'camera')
+
+        return fig_widget
+    except NotImplementedError:
+        return fig
 
 
 def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
