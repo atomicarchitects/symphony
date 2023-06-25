@@ -1074,7 +1074,7 @@ def create_model(
         dataset = config.get("dataset", "qm9")
         if dataset == "qm9":
             num_species = NUM_ELEMENTS
-        if dataset == "tetris":
+        if dataset in ["tetris", "platonic_solids"]:
             num_species = 1
 
         if config.model == "MACE":
