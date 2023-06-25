@@ -196,7 +196,7 @@ def pieces_to_unbatched_datasets(
     """Converts a sequence of pieces to a tf.data.Dataset for each split."""
     # Convert to molecules, and then jraph.GraphsTuples.
     pieces_as_molecules = [
-        ase.Atoms(numbers=[1] * 4, positions=np.array(piece)) for piece in pieces
+        ase.Atoms(numbers=np.ones_like(piece, dtype=np.int32), positions=np.array(piece)) for piece in pieces
     ]
     pieces_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
