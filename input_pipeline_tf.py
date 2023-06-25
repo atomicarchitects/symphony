@@ -208,7 +208,7 @@ def pieces_to_unbatched_datasets(
     # We will save our datasets to a temporary directory.
     datasets = {}
 
-    for split in ("train", "val", "test"):
+    for split in ["train", "val", "test"]:
         split_rng, rng = jax.random.split(rng)
         fragments_for_pieces = itertools.chain.from_iterable(
             fragments.generate_fragments(
@@ -226,6 +226,7 @@ def pieces_to_unbatched_datasets(
             yield from fragments_for_pieces
 
         example_graph = next(iter(fragments_for_pieces))
+        raise ValueError(pieces_as_graphs[0], example_graph)
         element_spec = _specs_from_graphs_tuple(
             example_graph, unknown_first_dimension=True
         )

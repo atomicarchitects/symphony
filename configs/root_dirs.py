@@ -24,5 +24,9 @@ def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
             return f"/radish/tetris/{fragment_logic}"
         if username == "ameyad":
             return f"/Users/ameyad/Documents/spherical-harmonic-net/tetris/{fragment_logic}"
-
+    if dataset == "platonic_solids":
+        if hostname == "potato.mit.edu":
+            return f"/radish/platonic_solids/{fragment_logic}"
+        if username == "ameyad":
+            return f"/Users/ameyad/Documents/spherical-harmonic-net/platonic_solids/{fragment_logic}"
     return None
