@@ -761,7 +761,6 @@ class TargetPositionPredictor(hk.Module):
             focus_node_embeddings.irreps.dim,
         )
 
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         target_species_embeddings = hk.Embed(
             self.num_species, focus_node_embeddings.irreps.num_irreps
         )(target_species)
@@ -771,7 +770,8 @@ class TargetPositionPredictor(hk.Module):
             focus_node_embeddings.irreps.num_irreps,
         )
 
-        # TODO (ameyad, mariogeiger, songk): See if we can make this more expressive.
+        # TODO: See if we can make this more expressive.
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(
             target_species_embeddings * focus_node_embeddings
         )

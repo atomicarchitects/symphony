@@ -52,10 +52,15 @@ def visualize_predictions_and_fragments(workdir: str, outputdir: str, focus_and_
         workdir, step, run_in_evaluation_mode=True
     )
 
+    # Load the dataset.
+    # We disable shuffling to visualize step-by-step.
+    config.shuffle_datasets = False
+    config.nn_cutoff = 3.
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
     datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
 
+    # Load the fragments and compute predictions.
     fragments = next(datasets["train"].take(1).as_numpy_iterator())
     preds = jax.jit(model.apply)(
         params,

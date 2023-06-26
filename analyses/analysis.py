@@ -205,7 +205,7 @@ def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go
         )
 
     # Highlight the target atom.
-    if fragment.globals.target_positions is not None:
+    if fragment.globals.target_positions is not None and not fragment.globals.stop:
         molecule_traces.append(
             go.Scatter3d(
                 x=[fragment.globals.target_positions[0]],
