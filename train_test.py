@@ -48,12 +48,13 @@ def update_dummy_config(
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 50
-    config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
     config.loss_kwargs.position_loss_type = position_loss_type
-    if train_on_split_smaller_than_chunk:
-        config.train_molecules = (0, 10)
     config.dataset = dataset
     config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
+    if dataset == "qm9":
+        config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
+        if train_on_split_smaller_than_chunk:
+            config.train_molecules = (0, 10)
     return ml_collections.FrozenConfigDict(config)
 
 
