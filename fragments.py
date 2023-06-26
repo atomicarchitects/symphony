@@ -16,6 +16,8 @@ def generate_fragments(
     max_radius: float = 2.03,
     mode: str = "nn",
     heavy_first: bool = False,
+    beta_com: float = 0.0,
+    species_mass: jnp.ndarray = jnp.asarray([1.008, 12.011, 14.007, 15.999, 18.998]),
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -64,6 +66,8 @@ def generate_fragments(
             mode,
             heavy_first,
             hydrogens,
+            beta_com,
+            species_mass,
         )
         yield frag
 
@@ -99,16 +103,24 @@ def _make_first_fragment(
     mode,
     heavy_first=False,
     hydrogens=None,
+    beta_com=0.0,
+    species_mass=jnp.asarray([1.008, 12.011, 14.007, 15.999, 18.998]),
 ):
-    # pick a random initial node
+    # get distances from center of mass
+    com = jnp.average(
+        graph.nodes.positions,
+        axis=0,
+        weights=jax.vmap(lambda x: species_mass[x])(graph.nodes.species),
+    )
+    distances_com = jnp.linalg.norm(graph.nodes.positions - com, axis=1)
+    probs_com = jax.nn.softmax(-beta_com * distances_com)
     rng, k = jax.random.split(rng)
     if heavy_first and jnp.argwhere(graph.nodes.species != 0).squeeze(-1).shape[0] > 0:
-        first_node = jax.random.choice(
-            k, jnp.argwhere(graph.nodes.species != 0).squeeze(-1)
-        )
+        heavy_indices = jnp.argwhere(graph.nodes.species != 0).squeeze(-1)
+        first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices,])
     else:
-        first_node = jax.random.randint(
-            k, shape=(), minval=0, maxval=len(graph.nodes.positions)
+        first_node = jax.random.choice(
+            k, jnp.arange(0, len(graph.nodes.positions)), p=probs_com
         )
 
     if mode == "nn":
