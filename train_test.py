@@ -18,16 +18,22 @@ import datatypes
 import train
 import loss_test
 from configs.qm9 import mace, e3schnet, nequip, marionette
+from configs.tetris import nequip as tetris_nequip
+from configs.platonic_solids import nequip as platonic_solids_nequip
 from configs import root_dirs
 
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
 
 _ALL_CONFIGS = {
-    "e3schnet": e3schnet.get_config(),
-    "mace": mace.get_config(),
-    "nequip": nequip.get_config(),
-    "marionette": marionette.get_config(),
+    "qm9": {
+        "e3schnet": e3schnet.get_config(),
+        "mace": mace.get_config(),
+        "nequip": nequip.get_config(),
+        "marionette": marionette.get_config(),
+    },
+    "tetris": {"nequip": tetris_nequip.get_config()},
+    "platonic_solids": {"nequip": platonic_solids_nequip.get_config()},
 }
 
 
@@ -42,12 +48,13 @@ def update_dummy_config(
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 50
-    config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
     config.loss_kwargs.position_loss_type = position_loss_type
-    if train_on_split_smaller_than_chunk:
-        config.train_molecules = (0, 10)
     config.dataset = dataset
     config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
+    if dataset == "qm9":
+        config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
+        if train_on_split_smaller_than_chunk:
+            config.train_molecules = (0, 10)
     return ml_collections.FrozenConfigDict(config)
 
 
@@ -59,7 +66,7 @@ class TrainTest(parameterized.TestCase):
         config_name=["nequip"],
         train_on_split_smaller_than_chunk=[True],
         position_loss_type=["kl_divergence"],
-        dataset=["tetris"],
+        dataset=["platonic_solids"],
     )
     def test_train_and_evaluate(
         self,
@@ -76,7 +83,7 @@ class TrainTest(parameterized.TestCase):
         jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
-        config = _ALL_CONFIGS[config_name]
+        config = _ALL_CONFIGS[dataset][config_name]
         config = update_dummy_config(
             config, train_on_split_smaller_than_chunk, position_loss_type, dataset
         )
@@ -100,7 +107,7 @@ class TrainTest(parameterized.TestCase):
         self.skipTest("This test is too slow.")
 
         rng = jax.random.PRNGKey(rng)
-        config = _ALL_CONFIGS[config_name]
+        config = _ALL_CONFIGS["qm9"][config_name]
         model = models.create_model(config, run_in_evaluation_mode=False)
         params = model.init(rng, self.graphs)
 

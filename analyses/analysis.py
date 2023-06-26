@@ -151,7 +151,12 @@ def combine_visualizations(
         rows=1,
         cols=4,
         specs=[[{"type": "scene"}, {"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
-        subplot_titles=("Input Fragment", "Predictions", "Focus and Atom Type Probabilities", "Stop Probability"),
+        subplot_titles=(
+            "Input Fragment",
+            "Predictions",
+            "Focus and Atom Type Probabilities",
+            "Stop Probability",
+        ),
     )
 
     for i, trace in enumerate(all_traces):
@@ -166,7 +171,9 @@ def combine_visualizations(
     return fig_all
 
 
-def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go.Scatter3d]:
+def get_plotly_traces_for_fragment(
+    fragment: datatypes.Fragments,
+) -> Sequence[go.Scatter3d]:
     """Returns the plotly traces for the fragment."""
     atomic_numbers = list(
         int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
@@ -183,8 +190,7 @@ def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go
                 color=[ATOMIC_COLORS[num] for num in atomic_numbers],
             ),
             hovertext=[
-                f"Element: {ase.data.chemical_symbols[num]}"
-                for num in atomic_numbers
+                f"Element: {ase.data.chemical_symbols[num]}" for num in atomic_numbers
             ],
             opacity=1.0,
             name="Molecule Atoms",
@@ -205,7 +211,7 @@ def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go
         )
 
     # Highlight the target atom.
-    if fragment.globals.target_positions is not None:
+    if fragment.globals.target_positions is not None and not fragment.globals.stop:
         molecule_traces.append(
             go.Scatter3d(
                 x=[fragment.globals.target_positions[0]],
@@ -213,7 +219,14 @@ def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go
                 z=[fragment.globals.target_positions[2]],
                 mode="markers",
                 marker=dict(
-                    size=[1.05 * ATOMIC_SIZES[models.ATOMIC_NUMBERS[fragment.globals.target_species.item()]]],
+                    size=[
+                        1.05
+                        * ATOMIC_SIZES[
+                            models.ATOMIC_NUMBERS[
+                                fragment.globals.target_species.item()
+                            ]
+                        ]
+                    ],
                     color=["green"],
                 ),
                 opacity=0.5,
@@ -224,7 +237,9 @@ def get_plotly_traces_for_fragment(fragment: datatypes.Fragments) -> Sequence[go
     return molecule_traces
 
 
-def get_plotly_traces_for_predictions(pred: datatypes.Predictions, fragment: datatypes.Fragments) -> Sequence[go.Scatter3d]:
+def get_plotly_traces_for_predictions(
+    pred: datatypes.Predictions, fragment: datatypes.Fragments
+) -> Sequence[go.Scatter3d]:
     """Returns a list of plotly traces for the prediction."""
 
     atomic_numbers = list(
@@ -258,8 +273,7 @@ def get_plotly_traces_for_predictions(pred: datatypes.Predictions, fragment: dat
             mode="markers",
             marker=dict(
                 size=[
-                    get_scaling_factor(float(focus_prob), num_nodes)
-                    * ATOMIC_SIZES[num]
+                    get_scaling_factor(float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
                     for focus_prob, num in zip(focus_probs, atomic_numbers)
                 ],
                 color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
@@ -282,7 +296,12 @@ def get_plotly_traces_for_predictions(pred: datatypes.Predictions, fragment: dat
                 z=[predicted_target_position[2]],
                 mode="markers",
                 marker=dict(
-                    size=[1.05 * ATOMIC_SIZES[models.ATOMIC_NUMBERS[pred.globals.target_species.item()]]],
+                    size=[
+                        1.05
+                        * ATOMIC_SIZES[
+                            models.ATOMIC_NUMBERS[pred.globals.target_species.item()]
+                        ]
+                    ],
                     color=["purple"],
                 ),
                 opacity=0.5,
@@ -355,7 +374,7 @@ def get_plotly_traces_for_predictions(pred: datatypes.Predictions, fragment: dat
     # Plot target species probabilities.
     stop_probability = pred.globals.stop_probs.item()
     predicted_target_species = pred.globals.target_species.item()
-    true_focus = 0 # This is a convention used in our training pipeline.
+    true_focus = 0  # This is a convention used in our training pipeline.
     true_target_species = fragment.globals.target_species.item()
 
     # We highlight the true target if provided.
@@ -379,10 +398,13 @@ def get_plotly_traces_for_predictions(pred: datatypes.Predictions, fragment: dat
 
     focus_and_atom_type_traces = [
         go.Heatmap(
-            x=[get_atom_type_string(index, elem) for index, elem in enumerate(ELEMENTS[:num_elements])],
+            x=[
+                get_atom_type_string(index, elem)
+                for index, elem in enumerate(ELEMENTS[:num_elements])
+            ],
             y=[get_focus_string(i) for i in range(num_nodes)],
             z=np.round(pred.nodes.focus_and_target_species_probs, 3),
-            texttemplate= "%{z}",
+            texttemplate="%{z}",
             showlegend=False,
             showscale=False,
             colorscale="Blues",
@@ -470,8 +492,12 @@ def visualize_predictions(
     fragment_traces = get_plotly_traces_for_fragment(fragment)
 
     # Traces corresponding to the prediction.
-    predicted_fragment_traces, focus_and_atom_type_traces, stop_traces = get_plotly_traces_for_predictions(pred, fragment)
-    
+    (
+        predicted_fragment_traces,
+        focus_and_atom_type_traces,
+        stop_traces,
+    ) = get_plotly_traces_for_predictions(pred, fragment)
+
     for trace in fragment_traces:
         fig.add_trace(trace, row=1, col=1)
         trace.showlegend = False
@@ -488,8 +514,18 @@ def visualize_predictions(
 
     # Update the layout.
     centre_of_mass = jnp.mean(fragment.nodes.positions, axis=0)
-    furthest_dist = jnp.max(jnp.linalg.norm(fragment.nodes.positions + pred.globals.position_vectors - centre_of_mass, axis=-1))
-    furthest_dist = jnp.max(jnp.linalg.norm(fragment.nodes.positions - pred.globals.position_vectors - centre_of_mass, axis=-1))
+    furthest_dist = jnp.max(
+        jnp.linalg.norm(
+            fragment.nodes.positions + pred.globals.position_vectors - centre_of_mass,
+            axis=-1,
+        )
+    )
+    furthest_dist = jnp.max(
+        jnp.linalg.norm(
+            fragment.nodes.positions - pred.globals.position_vectors - centre_of_mass,
+            axis=-1,
+        )
+    )
     min_range = centre_of_mass - furthest_dist
     max_range = centre_of_mass + furthest_dist
     axis = dict(
@@ -531,14 +567,16 @@ def visualize_predictions(
     # Sync cameras.
     try:
         fig_widget = go.FigureWidget(fig)
+
         def cam_change_1(layout, camera):
             fig_widget.layout.scene2.camera = camera
+
         def cam_change_2(layout, camera):
             if fig_widget.layout.scene1.camera != camera:
                 fig_widget.layout.scene1.camera = camera
 
-        fig_widget.layout.scene1.on_change(cam_change_1, 'camera')
-        fig_widget.layout.scene2.on_change(cam_change_2, 'camera')
+        fig_widget.layout.scene1.on_change(cam_change_1, "camera")
+        fig_widget.layout.scene2.on_change(cam_change_2, "camera")
 
         return fig_widget
     except NotImplementedError:
@@ -625,7 +663,9 @@ def load_model_at_step(
         config = yaml.unsafe_load(config_file)
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.get("fragment_logic", "nn"))
+    config.root_dir = root_dirs.get_root_dir(
+        config.dataset, config.get("fragment_logic", "nn")
+    )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_map(jnp.asarray, params)
@@ -706,7 +746,9 @@ def load_metrics_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.get("fragment_logic", "nn"))
+    config.root_dir = root_dirs.get_root_dir(
+        config.dataset, config.get("fragment_logic", "nn")
+    )
 
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
@@ -742,7 +784,9 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.get("fragment_logic", "nn"))
+    config.root_dir = root_dirs.get_root_dir(
+        config.dataset, config.get("fragment_logic", "nn")
+    )
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
