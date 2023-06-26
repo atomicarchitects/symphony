@@ -87,10 +87,14 @@ def get_datasets(
         )
 
         datasets[split] = dataset_split.prefetch(tf.data.AUTOTUNE)
-        datasets[split + "_eval"] = dataset_split.take(config.num_eval_steps).cache().prefetch(tf.data.AUTOTUNE)
-        datasets[split + "_eval_final"] = dataset_split.take(
-            config.num_eval_steps_at_end_of_training
-        ).cache().prefetch(tf.data.AUTOTUNE)
+        datasets[split + "_eval"] = (
+            dataset_split.take(config.num_eval_steps).cache().prefetch(tf.data.AUTOTUNE)
+        )
+        datasets[split + "_eval_final"] = (
+            dataset_split.take(config.num_eval_steps_at_end_of_training)
+            .cache()
+            .prefetch(tf.data.AUTOTUNE)
+        )
 
     return datasets
 
@@ -149,14 +153,14 @@ def get_pieces_for_tetris() -> List[List[Tuple[int, int, int]]]:
     # Taken from e3nn Tetris example.
     # https://docs.e3nn.org/en/stable/examples/tetris_gate.html
     return [
-        [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 1, 0)],   # chiral_shape_1
+        [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 1, 0)],  # chiral_shape_1
         [(0, 0, 0), (0, 0, 1), (1, 0, 0), (1, -1, 0)],  # chiral_shape_2
-        [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)],   # square
-        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)],   # line
-        [(0, 0, 0), (0, 0, 1), (0, 1, 0), (1, 0, 0)],   # corner
-        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 0)],   # L
-        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 1)],   # T
-        [(0, 0, 0), (1, 0, 0), (1, 1, 0), (2, 1, 0)],   # zigzag
+        [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)],  # square
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)],  # line
+        [(0, 0, 0), (0, 0, 1), (0, 1, 0), (1, 0, 0)],  # corner
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 0)],  # L
+        [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 1)],  # T
+        [(0, 0, 0), (1, 0, 0), (1, 1, 0), (2, 1, 0)],  # zigzag
     ]
 
 
@@ -166,11 +170,61 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     # https://en.wikipedia.org/wiki/Platonic_solid
     phi = (1 + np.sqrt(5)) / 2
     return [
-        [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],   # tetrahedron
-        [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)],  # octahedron
-        [(1, 1, 1), (-1, 1, 1), (1, -1, 1), (1, 1, -1), (-1, -1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, -1)],   # cube
-        [(0, 1, phi), (0, -1, phi), (0, 1, -phi), (0, -1, -phi), (1, phi, 0), (-1, phi, 0), (1, -phi, 0), (-1, -phi, 0), (phi, 0, 1), (phi, 0, -1), (-phi, 0, 1), (-phi, 0, -1)],   # icosahedron
-        [(1, 1, 1), (-1, 1, 1), (1, -1, 1), (1, 1, -1), (-1, -1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, -1), (0, 1/phi, phi), (0, -1/phi, phi), (0, 1/phi, -phi), (0, -1/phi, -phi), (1/phi, phi, 0), (-1/phi, phi, 0), (1/phi, -phi, 0), (-1/phi, -phi, 0), (phi, 0, 1/phi), (phi, 0, -1/phi), (-phi, 0, 1/phi), (-phi, 0, -1/phi)],   # dodacahedron
+        [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
+        [
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 1, 0),
+            (0, -1, 0),
+            (0, 0, 1),
+            (0, 0, -1),
+        ],  # octahedron
+        [
+            (1, 1, 1),
+            (-1, 1, 1),
+            (1, -1, 1),
+            (1, 1, -1),
+            (-1, -1, 1),
+            (1, -1, -1),
+            (-1, 1, -1),
+            (-1, -1, -1),
+        ],  # cube
+        [
+            (0, 1, phi),
+            (0, -1, phi),
+            (0, 1, -phi),
+            (0, -1, -phi),
+            (1, phi, 0),
+            (-1, phi, 0),
+            (1, -phi, 0),
+            (-1, -phi, 0),
+            (phi, 0, 1),
+            (phi, 0, -1),
+            (-phi, 0, 1),
+            (-phi, 0, -1),
+        ],  # icosahedron
+        [
+            (1, 1, 1),
+            (-1, 1, 1),
+            (1, -1, 1),
+            (1, 1, -1),
+            (-1, -1, 1),
+            (1, -1, -1),
+            (-1, 1, -1),
+            (-1, -1, -1),
+            (0, 1 / phi, phi),
+            (0, -1 / phi, phi),
+            (0, 1 / phi, -phi),
+            (0, -1 / phi, -phi),
+            (1 / phi, phi, 0),
+            (-1 / phi, phi, 0),
+            (1 / phi, -phi, 0),
+            (-1 / phi, -phi, 0),
+            (phi, 0, 1 / phi),
+            (phi, 0, -1 / phi),
+            (-phi, 0, 1 / phi),
+            (-phi, 0, -1 / phi),
+        ],  # dodacahedron
     ]
 
 
@@ -191,11 +245,15 @@ def get_unbatched_platonic_solids_datasets(
 
 
 def pieces_to_unbatched_datasets(
-    pieces: Sequence[Sequence[Tuple[int, int, int]]], rng: chex.PRNGKey, config: ml_collections.ConfigDict
+    pieces: Sequence[Sequence[Tuple[int, int, int]]],
+    rng: chex.PRNGKey,
+    config: ml_collections.ConfigDict,
 ) -> Dict[str, tf.data.Dataset]:
     """Converts a sequence of pieces to a tf.data.Dataset for each split."""
-    
-    def generate_fragments_helper(rng: chex.PRNGKey, graph: jraph.GraphsTuple) -> Iterator[datatypes.Fragments]:
+
+    def generate_fragments_helper(
+        rng: chex.PRNGKey, graph: jraph.GraphsTuple
+    ) -> Iterator[datatypes.Fragments]:
         """Helper function to generate fragments from a graph."""
         return fragments.generate_fragments(
             rng,
@@ -208,7 +266,8 @@ def pieces_to_unbatched_datasets(
 
     # Convert to molecules, and then jraph.GraphsTuples.
     pieces_as_molecules = [
-        ase.Atoms(numbers=np.asarray([1] * len(piece)), positions=np.array(piece)) for piece in pieces
+        ase.Atoms(numbers=np.asarray([1] * len(piece)), positions=np.array(piece))
+        for piece in pieces
     ]
     pieces_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
@@ -220,10 +279,10 @@ def pieces_to_unbatched_datasets(
     # Create an example graph to get the specs.
     # This is a bit ugly but I don't want to consume the generator.
     example_rng, rng = jax.random.split(rng)
-    example_graph = next(iter(generate_fragments_helper(example_rng, pieces_as_graphs[0])))
-    element_spec = _specs_from_graphs_tuple(
-        example_graph, unknown_first_dimension=True
+    example_graph = next(
+        iter(generate_fragments_helper(example_rng, pieces_as_graphs[0]))
     )
+    element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
 
     # We will save our datasets to a temporary directory.
     datasets = {}
@@ -231,10 +290,9 @@ def pieces_to_unbatched_datasets(
     for split in ["train", "val", "test"]:
         split_rng, rng = jax.random.split(rng)
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, graph)
-            for graph in pieces_as_graphs
+            generate_fragments_helper(split_rng, graph) for graph in pieces_as_graphs
         )
-        
+
         def fragment_yielder():
             yield from fragments_for_pieces
 
@@ -253,7 +311,7 @@ def pieces_to_unbatched_datasets(
         # Shuffle the dataset.
         if config.shuffle_datasets:
             datasets[split] = datasets[split].shuffle(1000, seed=0)
-    
+
     return datasets
 
 

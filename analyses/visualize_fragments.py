@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 import plotly.subplots
 
 import sys
+
 sys.path.append("..")
 
 import input_pipeline_tf
@@ -45,7 +46,14 @@ def main(unused_argv: Sequence[str]) -> None:
         step,
     )
 
-def visualize_predictions_and_fragments(workdir: str, outputdir: str, focus_and_atom_type_inverse_temperature: float, position_inverse_temperature: float, step: int):
+
+def visualize_predictions_and_fragments(
+    workdir: str,
+    outputdir: str,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
+    step: int,
+):
     """Visualize the predictions and fragments."""
     name = analysis.name_from_workdir(workdir)
     model, params, config = analysis.load_model_at_step(
@@ -55,7 +63,7 @@ def visualize_predictions_and_fragments(workdir: str, outputdir: str, focus_and_
     # Load the dataset.
     # We disable shuffling to visualize step-by-step.
     config.shuffle_datasets = False
-    config.nn_cutoff = 3.
+    config.nn_cutoff = 3.0
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
     datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
@@ -77,7 +85,9 @@ def visualize_predictions_and_fragments(workdir: str, outputdir: str, focus_and_
 
     # We create one figure per fragment.
     figs = []
-    for index, (fragment, pred) in enumerate(zip(jraph.unbatch(fragments), jraph.unbatch(preds))):
+    for index, (fragment, pred) in enumerate(
+        zip(jraph.unbatch(fragments), jraph.unbatch(preds))
+    ):
         # Remove batch dimension.
         # Also, correct the focus indices.
         fragment = fragment._replace(
@@ -86,18 +96,21 @@ def visualize_predictions_and_fragments(workdir: str, outputdir: str, focus_and_
         pred = pred._replace(
             globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
         )
-        corrected_focus_indices = pred.globals.focus_indices - preds.n_node[:index].sum()
+        corrected_focus_indices = (
+            pred.globals.focus_indices - preds.n_node[:index].sum()
+        )
         pred = pred._replace(
             globals=pred.globals._replace(focus_indices=corrected_focus_indices)
         )
         figs.append(analysis.visualize_predictions(pred, fragment))
 
-   # Save to files.
+    # Save to files.
     visualizations_dir = os.path.join(
         outputdir,
         name,
         f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
-        "visualizations")
+        "visualizations",
+    )
     os.makedirs(
         visualizations_dir,
         exist_ok=True,
