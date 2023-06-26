@@ -233,7 +233,7 @@ def ase_atoms_to_jraph_graph(
 
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(jnp.asarray(atoms.positions), jnp.asarray(species)),
-        edges=None,
+        edges=jnp.ones(len(senders)),
         globals=None,
         senders=jnp.asarray(senders),
         receivers=jnp.asarray(receivers),

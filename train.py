@@ -1,4 +1,4 @@
-"""Library file for executing training and evaluation of generative model."""
+"""Library file for executing the training and evaluation of generative models."""
 
 import functools
 import os
@@ -293,7 +293,7 @@ def train_and_evaluate(
             "best_state": state,
             "step_for_best_state": 1.0,
             "metrics_for_best_state": None,
-            "min_val_loss": 1.0,
+            "min_val_loss": 1e9,
         }
     )
     state = restored["state"]
@@ -350,6 +350,7 @@ def train_and_evaluate(
                 min_val_loss = eval_metrics["val_eval"]["total_loss"]
                 best_state = state
                 step_for_best_state = step
+                logging.info("New best state found at step %d.", step)
 
             # Save the current state and best state seen so far.
             with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:

@@ -125,9 +125,9 @@ def visualize_atom_removals(
     step_name = "step=best" if step == -1 else f"step={step}"
     outputdir = os.path.join(
         outputdir,
+        name,
         "visualizations",
         "atom_removal",
-        name,
         f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
         step_name,
     )
