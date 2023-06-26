@@ -33,7 +33,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.log_every_steps = 1000
     config.eval_every_steps = 2000
     config.nn_tolerance = 0.1
-    config.nn_cutoff = 1.1
+    config.nn_cutoff = 2.1
     config.compute_padding_dynamically = False
     config.max_n_graphs = 32
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
