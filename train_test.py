@@ -18,16 +18,22 @@ import datatypes
 import train
 import loss_test
 from configs.qm9 import mace, e3schnet, nequip, marionette
+from configs.tetris import nequip as tetris_nequip
+from configs.platonic_solids import nequip as platonic_solids_nequip
 from configs import root_dirs
 
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
 
 _ALL_CONFIGS = {
-    "e3schnet": e3schnet.get_config(),
-    "mace": mace.get_config(),
-    "nequip": nequip.get_config(),
-    "marionette": marionette.get_config(),
+    "qm9": {
+        "e3schnet": e3schnet.get_config(),
+        "mace": mace.get_config(),
+        "nequip": nequip.get_config(),
+        "marionette": marionette.get_config(),
+    },
+    "tetris": {"nequip": tetris_nequip.get_config()},
+    "platonic_solids": {"nequip": platonic_solids_nequip.get_config()},
 }
 
 
@@ -76,7 +82,7 @@ class TrainTest(parameterized.TestCase):
         jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
-        config = _ALL_CONFIGS[config_name]
+        config = _ALL_CONFIGS[dataset][config_name]
         config = update_dummy_config(
             config, train_on_split_smaller_than_chunk, position_loss_type, dataset
         )
@@ -100,7 +106,7 @@ class TrainTest(parameterized.TestCase):
         self.skipTest("This test is too slow.")
 
         rng = jax.random.PRNGKey(rng)
-        config = _ALL_CONFIGS[config_name]
+        config = _ALL_CONFIGS["qm9"][config_name]
         model = models.create_model(config, run_in_evaluation_mode=False)
         params = model.init(rng, self.graphs)
 
