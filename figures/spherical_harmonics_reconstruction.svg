@@ -27,12 +27,12 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="true"
      inkscape:zoom="0.91997701"
-     inkscape:cx="409.24936"
-     inkscape:cy="65.762513"
+     inkscape:cx="426.64109"
+     inkscape:cy="73.371398"
      inkscape:window-width="1512"
-     inkscape:window-height="917"
+     inkscape:window-height="945"
      inkscape:window-x="0"
-     inkscape:window-y="65"
+     inkscape:window-y="37"
      inkscape:window-maximized="0"
      inkscape:current-layer="svg1500"><inkscape:grid
        type="xygrid"
@@ -634,4 +634,7 @@
      width="866.32599"
      height="228.26657"
      x="1.45"
-     y="1.45" /></svg>
+     y="1.45"
+     inkscape:export-filename="spherical_harmonics_reconstruction_labelled.pdf"
+     inkscape:export-xdpi="96"
+     inkscape:export-ydpi="96" /></svg>

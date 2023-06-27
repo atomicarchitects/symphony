@@ -34,6 +34,7 @@ MAX_NUM_ATOMS = 30
 
 FLAGS = flags.FLAGS
 
+
 def get_edge_padding_mask(
     n_node: jnp.ndarray, n_edge: jnp.ndarray, sum_n_edge: int
 ) -> jnp.ndarray:

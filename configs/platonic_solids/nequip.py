@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.tetris import default
+from configs.platonic_solids import default
 
 
 def get_config() -> ml_collections.ConfigDict:
