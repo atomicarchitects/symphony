@@ -113,7 +113,7 @@ def _make_first_fragment(
         weights=jax.vmap(lambda x: species_mass[x])(graph.nodes.species),
     )
     distances_com = jnp.linalg.norm(graph.nodes.positions - com, axis=1)
-    probs_com = jax.nn.softmax(-beta_com * distances_com)
+    probs_com = jax.nn.softmax(-beta_com * distances_com**2)
     rng, k = jax.random.split(rng)
     if heavy_first and jnp.argwhere(graph.nodes.species != 0).squeeze(-1).shape[0] > 0:
         heavy_indices = jnp.argwhere(graph.nodes.species != 0).squeeze(-1)
