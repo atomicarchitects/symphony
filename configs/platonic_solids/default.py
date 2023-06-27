@@ -61,5 +61,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
+    config.target_position_predictor.num_channels = 1
 
     return config

@@ -742,6 +742,7 @@ class TargetPositionPredictor(hk.Module):
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
+        num_channels: int,
         num_species: int,
         name: Optional[str] = None,
     ):
@@ -749,7 +750,25 @@ class TargetPositionPredictor(hk.Module):
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
+        self.num_channels = num_channels
         self.num_species = num_species
+
+    def log_coeffs_to_probability_distribution(self, log_coeffs: e3nn.IrrepsArray) -> e3nn.SphericalSignal:
+        """Converts coefficients of the logits to a probability distribution."""
+        log_dist = e3nn.to_s2grid(log_coeffs, self.res_beta, self.res_alpha, quadrature="gausslegendre", normalization="integral", p_val=1, p_arg=-1)
+
+        # Subtract the maximum value to avoid numerical issues.
+        log_dist_max = jnp.max(log_dist.grid_values, axis=(-2, -1), keepdims=True)
+        log_dist_max = jax.lax.stop_gradient(log_dist_max)
+        log_dist = log_dist.apply(
+            lambda x: x - log_dist_max
+        )
+
+        # Take the exponential and normalize.
+        dist = log_dist.apply(jnp.exp)
+        dist = dist / dist.integrate()
+        return dist
+
 
     def __call__(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
@@ -772,21 +791,23 @@ class TargetPositionPredictor(hk.Module):
 
         # TODO: See if we can make this more expressive.
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(
+        num_radii = len(RADII)
+        position_coeffs = e3nn.haiku.Linear(num_radii * self.num_channels * irreps)(
             target_species_embeddings * focus_node_embeddings
         )
-        position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
-
+        position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
+        position_coeffs = position_coeffs.mul_to_axis(factor=num_radii)
+        assert position_coeffs.shape == (num_graphs, self.num_channels, num_radii, irreps.dim), position_coeffs.shape
+    
         # Compute the position signal projected to a spherical grid for each radius.
-        position_logits = e3nn.to_s2grid(
-            position_coeffs,
-            self.res_beta,
-            self.res_alpha,
-            quadrature="gausslegendre",
-            normalization="integral",
-            p_val=1,
-            p_arg=-1,
-        )
+        # We take a average over the channels; this corresponds to a uniform mixture of distributions.
+        position_distribution = self.log_coeffs_to_probability_distribution(position_coeffs)
+        position_distribution.grid_values = position_distribution.grid_values.mean(axis=-4)
+        
+        # Compute the position logits for each radius.
+        position_logits = position_distribution.apply(jnp.log)
+        assert position_logits.shape == (num_graphs, num_radii, self.res_beta, self.res_alpha)
+
         return position_coeffs, position_logits
 
 
@@ -819,6 +840,7 @@ class Predictor(hk.Module):
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
+        jax.debug.print("node_embeddings,{x},{y},{z}", x=node_embeddings.array[:5].max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
 
         # Concatenate global embeddings to node embeddings.
         if self.global_embedder is not None:
@@ -828,10 +850,13 @@ class Predictor(hk.Module):
                 [node_embeddings, global_embeddings], axis=-1
             )
 
+        jax.debug.print("node_embeddings_after,{x},{y},{z}", x=node_embeddings.array.max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
+
         # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(
             node_embeddings
         )
+        jax.debug.print("focus_and_target_species_logits,{x},{y},{z}", x=focus_and_target_species_logits.max(), y=focus_and_target_species_logits.min(), z=focus_and_target_species_logits.shape)
         stop_logits = jnp.zeros((num_graphs,))
         focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
@@ -856,6 +881,7 @@ class Predictor(hk.Module):
         position_probs = position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
+        #position_probs = position_probs / position_probs.integrate()
 
         # Check the shapes.
         assert focus_and_target_species_logits.shape == (
@@ -868,14 +894,15 @@ class Predictor(hk.Module):
         ), focus_and_target_species_probs.shape
         assert position_coeffs.shape == (
             num_graphs,
+            self.target_position_predictor.num_channels,
             len(RADII),
             position_coeffs.shape[-1],
-        )
+        ), position_coeffs.shape
         assert position_logits.shape == (
             num_graphs,
             len(RADII),
-            position_logits.shape[-2],
-            position_logits.shape[-1],
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
         )
 
         return datatypes.Predictions(
@@ -1160,6 +1187,7 @@ def create_model(
             position_coeffs_lmax=config.max_ell,
             res_beta=config.target_position_predictor.res_beta,
             res_alpha=config.target_position_predictor.res_alpha,
+            num_channels=config.target_position_predictor.num_channels,
             num_species=num_species,
         )
         predictor = Predictor(
