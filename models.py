@@ -1071,7 +1071,7 @@ class Predictor(hk.Module):
         assert focus_indices.shape == (num_graphs,)
         assert focus_and_target_species_logits.shape == (num_nodes, num_species)
         assert focus_and_target_species_probs.shape == (num_nodes, num_species)
-        assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
+        assert position_coeffs.shape == (num_graphs, self.target_position_predictor.num_channels, len(RADII), irreps.dim)
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
