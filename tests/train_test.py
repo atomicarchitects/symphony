@@ -13,10 +13,9 @@ import scipy
 import ml_collections
 import logging
 
-import models
-import datatypes
-import train
-import loss_test
+from symphony import models, datatypes, train
+from . import loss_test
+
 from configs.qm9 import mace, e3schnet, nequip, marionette
 from configs.tetris import nequip as tetris_nequip
 from configs.platonic_solids import nequip as platonic_solids_nequip

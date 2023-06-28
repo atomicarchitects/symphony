@@ -11,10 +11,9 @@ import ml_collections
 import numpy as np
 import roundmantissa
 
-import datatypes
-import dynamic_batcher
-import qm9
-from fragments import generate_fragments
+from symphony import datatypes
+from symphony.data import dynamic_batcher, qm9
+from symphony.data import fragments as fragments_lib
 
 
 def get_raw_datasets(
@@ -169,7 +168,7 @@ def fragments_pool_iterator(
             rng, index_rng, fragment_rng = jax.random.split(rng, num=3)
             indices = jax.random.randint(index_rng, (), 0, len(graph_molecules))
             fragments += list(
-                generate_fragments(
+                fragments_lib.generate_fragments(
                     fragment_rng, graph_molecules[indices], n_species, nn_tolerance
                 )
             )

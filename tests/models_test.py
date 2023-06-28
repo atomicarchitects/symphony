@@ -5,11 +5,10 @@ from absl.testing import parameterized
 import jax
 import jax.numpy as jnp
 import numpy as np
-import haiku as hk
-import e3nn_jax as e3nn
 import jraph
 
-import models
+
+from symphony import models
 
 
 class ModelsTest(parameterized.TestCase):

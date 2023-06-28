@@ -2,4 +2,4 @@
 ignore = E741, E203, W503, E731
 max-complexity = 64
 select = B,C,E,F,W,T4,B9
-exclude = .eggs,*.egg,build,dist,docs/_build,notebook
+exclude = .eggs,*.egg,build,dist,docs/_build,notebook,.venv

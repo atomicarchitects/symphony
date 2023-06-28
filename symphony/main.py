@@ -14,7 +14,7 @@ from ml_collections import config_flags
 import tensorflow as tf
 
 
-import train
+from symphony import train
 from configs import root_dirs
 
 

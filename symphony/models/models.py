@@ -1,4 +1,5 @@
 """Definition of the generative models."""
+# TODO: Separate the models into separate files.
 
 from typing import Callable, Optional, Tuple
 
@@ -13,8 +14,8 @@ import mace_jax.modules
 import ml_collections
 import nequip_jax
 
-import datatypes
-import marionette
+from symphony import datatypes
+from symphony.models import marionette
 
 RADII = jnp.arange(0.75, 2.03, 0.02)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]

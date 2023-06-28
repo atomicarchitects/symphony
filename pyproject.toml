@@ -1,3 +1,48 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "symphony"
+authors = [
+    {name = "Ameya Daigavane", email = "ameya.d.98@gmail.com"},
+    {name = "Song Kim", email = "songk@mit.edu"},
+    {name = "Mario Geiger", email = "geiger.mario@gmail.com"},
+]
+description = "Symphony"
+readme = "README.md"
+requires-python = ">=3.7"
+keywords = ["generative", "equivariant", "molecules"]
+license = {text = "BSD-3-Clause"}
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "tensorflow",
+    "e3nn_jax",
+    "numpy",
+    "jax",
+    "flax",
+    "dm-haiku",
+    "jraph",
+    "clu",
+    "absl-py",
+    "chex",
+    "optax",
+    "scipy",
+    "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
+    "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+plotting = ["pandas", "matplotlib", "plotly"]
+
+[tool.setuptools.packages]
+find = {}
+
 [tool.black]
 target-version = ['py39']
 include = '\.pyi?$'
