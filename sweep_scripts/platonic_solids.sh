@@ -7,7 +7,7 @@ expname="$dataset"
 # Loop over hyperparameters
 for model in "nequip"
 do
-  for l in 1
+  for l in 3
   do
     for pc in 1 2 5
     do
