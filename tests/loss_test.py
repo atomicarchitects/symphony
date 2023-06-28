@@ -12,9 +12,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-import datatypes
-import loss
-import models
+from symphony import datatypes, loss, models
 
 
 def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
@@ -112,6 +110,7 @@ class LossTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=1000,
+            target_position_lmax=1,
             ignore_position_loss_for_small_fragments=False,
             position_loss_type="kl_divergence",
         )
@@ -235,6 +234,7 @@ class LossTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=target_position_inverse_temperature,
+            target_position_lmax=1,
             ignore_position_loss_for_small_fragments=False,
             position_loss_type="kl_divergence",
         )

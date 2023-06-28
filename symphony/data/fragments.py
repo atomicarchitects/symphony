@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import jraph
 
-import datatypes
+from symphony import datatypes
 
 
 def generate_fragments(

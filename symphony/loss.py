@@ -7,8 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import jraph
 
-import datatypes
-import models
+from symphony import datatypes, models
 
 
 def safe_log(x: jnp.ndarray) -> jnp.ndarray:

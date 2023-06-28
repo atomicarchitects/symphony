@@ -23,10 +23,8 @@ from clu import (
 )
 from flax.training import train_state
 
-import datatypes
-import input_pipeline_tf
-import models
-import loss
+from symphony import datatypes, models, loss
+from symphony.data import input_pipeline_tf
 
 
 @flax.struct.dataclass
