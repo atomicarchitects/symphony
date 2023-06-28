@@ -17,7 +17,6 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
-    species_mass: jnp.ndarray = jnp.asarray([1.008, 12.011, 14.007, 15.999, 18.998]),
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -48,12 +47,6 @@ def generate_fragments(
         axis=1,
     )  # [n_edge]
 
-    # find all nodes that are hydrogens
-    if heavy_first:
-        hydrogens = jnp.where(graph.nodes.species == 0)[0]
-    else:
-        hydrogens = None
-
     # make fragments
     try:
         rng, visited_nodes, frag = _make_first_fragment(
@@ -65,9 +58,7 @@ def generate_fragments(
             max_radius,
             mode,
             heavy_first,
-            hydrogens,
             beta_com,
-            species_mass,
         )
         yield frag
 
@@ -82,7 +73,6 @@ def generate_fragments(
                 max_radius,
                 mode,
                 heavy_first,
-                hydrogens,
             )
             yield frag
     except ValueError:
@@ -102,20 +92,18 @@ def _make_first_fragment(
     max_radius,
     mode,
     heavy_first=False,
-    hydrogens=None,
     beta_com=0.0,
-    species_mass=jnp.asarray([1.008, 12.011, 14.007, 15.999, 18.998]),
 ):
-    # get distances from center of mass
+    # get distances from (approximate) center of mass - assume all atoms have the same mass
     com = jnp.average(
         graph.nodes.positions,
         axis=0,
-        weights=jax.vmap(lambda x: species_mass[x])(graph.nodes.species),
+        weights=(graph.nodes.species > 0) if heavy_first else None,
     )
     distances_com = jnp.linalg.norm(graph.nodes.positions - com, axis=1)
     probs_com = jax.nn.softmax(-beta_com * distances_com**2)
     rng, k = jax.random.split(rng)
-    if heavy_first and jnp.argwhere(graph.nodes.species != 0).squeeze(-1).shape[0] > 0:
+    if heavy_first and (graph.nodes.species != 0).sum() > 0:
         heavy_indices = jnp.argwhere(graph.nodes.species != 0).squeeze(-1)
         first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices,])
     else:
@@ -129,16 +117,21 @@ def _make_first_fragment(
         # at least one other heavy atom, so this check is sufficient
         if (
             heavy_first
-            and (first_node_mask & ~jnp.isin(graph.receivers, hydrogens)).sum() > 0
+            and (first_node_mask & graph.nodes.species[graph.receivers] > 0).sum() > 0
         ):
             min_dist = dist[
-                first_node_mask & ~jnp.isin(graph.receivers, hydrogens)
+                first_node_mask & graph.nodes.species[graph.receivers] > 0
             ].min()
+            targets = graph.receivers[
+                (graph.senders == first_node)
+                & (graph.nodes.species[graph.receivers] > 0)
+                & (dist < min_dist + nn_tolerance)
+            ]
         else:
             min_dist = dist[(graph.senders == first_node)].min()
-        targets = graph.receivers[
-            (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
-        ]
+            targets = graph.receivers[
+                (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
+            ]
         del min_dist
     if mode == "radius":
         targets = graph.receivers[(graph.senders == first_node) & (dist < max_radius)]
@@ -147,7 +140,7 @@ def _make_first_fragment(
         raise ValueError("No targets found.")
 
     if heavy_first:
-        targets_heavy = targets[~jnp.isin(targets, hydrogens)]
+        targets_heavy = targets[graph.nodes.species[targets] > 0]
         if len(targets_heavy) != 0:
             targets = targets_heavy
 
@@ -184,7 +177,6 @@ def _make_middle_fragment(
     max_radius,
     mode,
     heavy_first=False,
-    hydrogens=None,
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
@@ -195,7 +187,9 @@ def _make_middle_fragment(
         species = jax.vmap(lambda x: x != 0)(graph.nodes.species)
         if species.sum() > species[visited].sum():
             mask = (
-                mask & ~jnp.isin(senders, hydrogens) & ~jnp.isin(receivers, hydrogens)
+                mask
+                & (graph.nodes.species[senders] > 0)
+                & (graph.nodes.species[receivers] > 0)
             )
 
     if mode == "nn":
