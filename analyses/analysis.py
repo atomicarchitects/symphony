@@ -311,19 +311,9 @@ def get_plotly_traces_for_predictions(
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.position_coeffs
-    position_logits = e3nn.to_s2grid(
-        position_coeffs,
-        50,
-        99,
-        quadrature="gausslegendre",
-        normalization="integral",
-        p_val=1,
-        p_arg=-1,
+    position_probs = models.log_coeffs_to_probability_distribution(
+        position_coeffs, 50, 99
     )
-    position_logits = position_logits.apply(
-        lambda x: x - position_logits.grid_values.max()
-    )
-    position_probs = position_logits.apply(jnp.exp)
 
     count = 0
     cmin = 0.0
@@ -354,22 +344,30 @@ def get_plotly_traces_for_predictions(
     radius = jnp.linalg.norm(pred.globals.position_vectors, axis=-1)
     most_likely_radius_index = jnp.abs(RADII - radius).argmin()
     most_likely_radius = RADII[most_likely_radius_index]
-    most_likely_radius_coeffs = position_coeffs[most_likely_radius_index]
-    most_likely_radius_sig = e3nn.to_s2grid(
-        most_likely_radius_coeffs, 50, 69, quadrature="soft", p_val=1, p_arg=-1
+    all_sigs = e3nn.to_s2grid(
+        position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
     )
-    spherical_harmonics = go.Surface(
-        most_likely_radius_sig.plotly_surface(
-            scale_radius_by_amplitude=True,
-            radius=most_likely_radius,
-            translation=focus_position,
-            normalize_radius_by_max_amplitude=True,
-        ),
-        name="Spherical Harmonics for Logits",
-        showlegend=True,
-        visible="legendonly",
-    )
-    molecule_traces.append(spherical_harmonics)
+    cmin = all_sigs.grid_values.min().item()
+    cmax = all_sigs.grid_values.max().item()
+    for channel in range(position_coeffs.shape[0]):
+        most_likely_radius_coeffs = position_coeffs[channel, most_likely_radius_index]
+        most_likely_radius_sig = e3nn.to_s2grid(
+            most_likely_radius_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+        )
+        spherical_harmonics = go.Surface(
+            most_likely_radius_sig.plotly_surface(
+                scale_radius_by_amplitude=True,
+                radius=most_likely_radius,
+                translation=focus_position,
+                normalize_radius_by_max_amplitude=True,
+            ),
+            cmin=cmin,
+            cmax=cmax,
+            name=f"Spherical Harmonics for Logits: Channel {channel}",
+            showlegend=True,
+            visible="legendonly",
+        )
+        molecule_traces.append(spherical_harmonics)
 
     # Plot target species probabilities.
     stop_probability = pred.globals.stop_probs.item()

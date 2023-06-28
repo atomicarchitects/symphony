@@ -176,6 +176,8 @@ def generation_loss(
 
             # Mix in the radius weights to get a distribution over all spheres.
             true_dist = true_radius_weights * true_angular_dist[None, :, :]
+            assert true_dist.shape == (num_radii, res_beta, res_alpha)
+
             # Now, compute the unnormalized predicted distribution over all spheres.
             # Subtract the maximum value for numerical stability.
             log_predicted_dist_max = jnp.max(log_predicted_dist.grid_values)
