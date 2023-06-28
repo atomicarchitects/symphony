@@ -21,6 +21,11 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
+def debug_print(fmt, *args, **kwargs):
+    return
+    jax.debug.print(fmt, *args, **kwargs)
+
+
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
     return jnp.asarray(ATOMIC_NUMBERS)[species]
@@ -755,10 +760,15 @@ class TargetPositionPredictor(hk.Module):
 
     def log_coeffs_to_probability_distribution(self, log_coeffs: e3nn.IrrepsArray) -> e3nn.SphericalSignal:
         """Converts coefficients of the logits to a probability distribution."""
-        log_dist = e3nn.to_s2grid(log_coeffs, self.res_beta, self.res_alpha, quadrature="gausslegendre", normalization="integral", p_val=1, p_arg=-1)
+        num_radii = len(RADII)
+        assert log_coeffs.shape == (self.num_channels, num_radii, log_coeffs.irreps.dim), log_coeffs.shape
+        
+        log_dist = e3nn.to_s2grid(log_coeffs, self.res_beta, self.res_alpha, quadrature="soft", p_val=1, p_arg=-1)
+        assert log_dist.shape == (self.num_channels, num_radii, self.res_beta, self.res_alpha)
 
         # Subtract the maximum value to avoid numerical issues.
-        log_dist_max = jnp.max(log_dist.grid_values, axis=(-2, -1), keepdims=True)
+        # We perform the softmax over all channels and radii.
+        log_dist_max = jnp.max(log_dist.grid_values, axis=(-4, -3, -2, -1), keepdims=True)
         log_dist_max = jax.lax.stop_gradient(log_dist_max)
         log_dist = log_dist.apply(
             lambda x: x - log_dist_max
@@ -766,7 +776,10 @@ class TargetPositionPredictor(hk.Module):
 
         # Take the exponential and normalize.
         dist = log_dist.apply(jnp.exp)
-        dist = dist / dist.integrate()
+        dist = dist / dist.integrate().array.sum()
+        dist.grid_values = dist.grid_values.sum(axis=-4)
+        assert dist.shape == (num_radii, self.res_beta, self.res_alpha)
+
         return dist
 
 
@@ -800,12 +813,18 @@ class TargetPositionPredictor(hk.Module):
         assert position_coeffs.shape == (num_graphs, self.num_channels, num_radii, irreps.dim), position_coeffs.shape
     
         # Compute the position signal projected to a spherical grid for each radius.
-        # We take a average over the channels; this corresponds to a uniform mixture of distributions.
-        position_distribution = self.log_coeffs_to_probability_distribution(position_coeffs)
-        position_distribution.grid_values = position_distribution.grid_values.mean(axis=-4)
-        
+        position_dist = jax.vmap(self.log_coeffs_to_probability_distribution)(position_coeffs)
+        assert position_dist.shape == (num_graphs, num_radii, self.res_beta, self.res_alpha), position_dist.shape
+
+        debug_print("integrals={x}", x=position_dist.integrate().array.sum(axis=1))
         # Compute the position logits for each radius.
-        position_logits = position_distribution.apply(jnp.log)
+        debug_print("position_dist: min={x},max={y}", x=jnp.min(position_dist.grid_values), y=jnp.max(position_dist.grid_values))
+        position_logits = position_dist.apply(lambda x: jnp.log(1e-9 + x))
+        position_logits.grid_values -= position_logits.grid_values.max(axis=(-3, -2, -1), keepdims=True)
+
+        # position_logits = position_dist.apply(lambda x: jnp.where(x == 0, -1e9, x))
+        debug_print("position_logits: min={x},max={y}", x=jnp.min(position_logits.grid_values), y=jnp.max(position_logits.grid_values))
+
         assert position_logits.shape == (num_graphs, num_radii, self.res_beta, self.res_alpha)
 
         return position_coeffs, position_logits
@@ -840,7 +859,7 @@ class Predictor(hk.Module):
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
-        jax.debug.print("node_embeddings,{x},{y},{z}", x=node_embeddings.array[:5].max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
+        #debug_print("node_embeddings,{x},{y},{z}", x=node_embeddings.array[:5].max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
 
         # Concatenate global embeddings to node embeddings.
         if self.global_embedder is not None:
@@ -850,17 +869,19 @@ class Predictor(hk.Module):
                 [node_embeddings, global_embeddings], axis=-1
             )
 
-        jax.debug.print("node_embeddings_after,{x},{y},{z}", x=node_embeddings.array.max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
+        debug_print("node_embeddings_after,{x},{y},{z}", x=node_embeddings.array.max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
 
         # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(
             node_embeddings
         )
-        jax.debug.print("focus_and_target_species_logits,{x},{y},{z}", x=focus_and_target_species_logits.max(), y=focus_and_target_species_logits.min(), z=focus_and_target_species_logits.shape)
+        debug_print("focus_and_target_species_logits,{a},{x},{y},{z}", a=focus_and_target_species_logits, x=focus_and_target_species_logits.max(), y=focus_and_target_species_logits.min(), z=focus_and_target_species_logits.shape)
         stop_logits = jnp.zeros((num_graphs,))
-        focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
-            focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
-        )
+        focus_and_target_species_probs = jnp.zeros_like(focus_and_target_species_logits)
+        stop_probs = jnp.zeros_like(stop_logits)
+        # focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
+        #     focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
+        # )
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
