@@ -14,6 +14,10 @@ import ml_collections
 import optax
 import yaml
 from absl import logging
+
+# Change logging format to not print the time.
+logging.get_absl_handler().setFormatter(logging.PythonFormatter("%(message)s"))
+
 from clu import (
     checkpoint,
     metric_writers,
@@ -390,6 +394,8 @@ def train_and_evaluate(
             )
             # Log predictions.
             preds = get_predictions(state, graphs, rng)
+            print(hash(graphs))
+            print(graphs)
             print(preds)
             print(batch_metrics.compute())
             return
