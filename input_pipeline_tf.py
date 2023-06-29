@@ -289,8 +289,13 @@ def pieces_to_unbatched_datasets(
 
     for split in ["train", "val", "test"]:
         split_rng, rng = jax.random.split(rng)
+
+        split_pieces = config.get(f"{split}_pieces")
+        if split_pieces is not None:
+            split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
+
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, graph) for graph in pieces_as_graphs
+            generate_fragments_helper(split_rng, graph) for graph in split_pieces_as_graphs
         )
 
         def fragment_yielder():
