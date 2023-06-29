@@ -394,7 +394,6 @@ def train_and_evaluate(
             )
             # Log predictions.
             preds = get_predictions(state, graphs, rng)
-            print(hash(graphs))
             print(graphs)
             print(preds)
             print(batch_metrics.compute())
