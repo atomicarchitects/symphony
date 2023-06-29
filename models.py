@@ -787,6 +787,9 @@ class TargetPositionPredictor(hk.Module):
             p_val=1,
             p_arg=-1,
         )
+        position_logits.grid_values -= position_logits.grid_values.max(
+            axis=(-3, -2, -1), keepdims=True
+        )
         return position_coeffs, position_logits
 
 
