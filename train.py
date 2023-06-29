@@ -387,15 +387,15 @@ def train_and_evaluate(
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+            preds = get_predictions(state, graphs, rng)
+            print(graphs)
+            print(preds)
             state, batch_metrics = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
             )
             # Log predictions.
-            preds = get_predictions(state, graphs, rng)
-            print(graphs)
-            print(preds)
             print(batch_metrics.compute())
             return
 
