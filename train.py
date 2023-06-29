@@ -95,9 +95,13 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rng=None)
+        import e3nn_jax as e3nn
+        jax.debug.print("position_coeffs_sum={x}", x=e3nn.sum(preds.globals.position_coeffs))
+        jax.debug.print("position_logits_sum={x}", x=preds.globals.position_logits.grid_vectors.sum())
         total_loss, (focus_and_atom_type_loss, position_loss) = loss.generation_loss(
             preds=preds, graphs=graphs, **loss_kwargs
         )
+        jax.debug.print("total_loss={x},position_loss={y}", x=total_loss, y=position_loss)
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (total_loss, focus_and_atom_type_loss, position_loss, mask)
@@ -387,12 +391,8 @@ def train_and_evaluate(
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-            preds = get_predictions(state, graphs, rng)
-            print(graphs)
-            import e3nn_jax as e3nn
-            print(e3nn.sum(preds.globals.position_coeffs))
-            print(preds.globals.position_logits.grid_vectors.sum())
-
+            # Log predictions.
+            print("After initialization")
             state, batch_metrics = train_step(
                 state,
                 graphs,
