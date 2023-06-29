@@ -149,28 +149,28 @@ def log_coeffs_to_probability_distribution(
     assert log_dist.shape == (num_channels, num_radii, res_beta, res_alpha)
 
     # Softmax over all channels.
-    # # Subtract the maximum value to avoid numerical issues.
-    # log_dist_max = jnp.max(log_dist.grid_values, axis=(-4, -3, -2, -1), keepdims=True)
-    # log_dist_max = jax.lax.stop_gradient(log_dist_max)
-    # log_dist = log_dist.apply(lambda x: x - log_dist_max)
-
-    # # Take the exponential and normalize.
-    # dist = log_dist.apply(jnp.exp)
-    # dist = dist / dist.integrate().array.sum()
-    # dist.grid_values = dist.grid_values.sum(axis=-4)
-    # assert dist.shape == (num_radii, res_beta, res_alpha)
-
-    # Softmax over each channel, then average distributions.
     # Subtract the maximum value to avoid numerical issues.
-    log_dist_max = jnp.max(log_dist.grid_values, axis=(-3, -2, -1), keepdims=True)
+    log_dist_max = jnp.max(log_dist.grid_values)
     log_dist_max = jax.lax.stop_gradient(log_dist_max)
     log_dist = log_dist.apply(lambda x: x - log_dist_max)
 
     # Take the exponential and normalize.
     dist = log_dist.apply(jnp.exp)
-    dist = jax.vmap(lambda channel_dist: channel_dist / channel_dist.integrate().array.sum())(dist)
-    dist.grid_values = dist.grid_values.mean(axis=-4)
+    dist = dist / dist.integrate().array.sum()
+    dist.grid_values = dist.grid_values.sum(axis=-4)
     assert dist.shape == (num_radii, res_beta, res_alpha)
+
+    # # Softmax over each channel, then average distributions.
+    # # Subtract the maximum value to avoid numerical issues.
+    # log_dist_max = jnp.max(log_dist.grid_values, axis=(-3, -2, -1), keepdims=True)
+    # log_dist_max = jax.lax.stop_gradient(log_dist_max)
+    # log_dist = log_dist.apply(lambda x: x - log_dist_max)
+
+    # # Take the exponential and normalize.
+    # dist = log_dist.apply(jnp.exp)
+    # dist = jax.vmap(lambda channel_dist: channel_dist / channel_dist.integrate().array.sum())(dist)
+    # dist.grid_values = dist.grid_values.mean(axis=-4)
+    # assert dist.shape == (num_radii, res_beta, res_alpha)
 
     return dist
 
@@ -813,7 +813,7 @@ class TargetPositionPredictor(hk.Module):
         )
 
         target_species_embeddings = hk.Embed(
-            self.num_species, focus_node_embeddings.irreps.num_irreps
+            self.num_species, embed_dim=focus_node_embeddings.irreps.num_irreps
         )(target_species)
 
         assert target_species_embeddings.shape == (
@@ -836,6 +836,9 @@ class TargetPositionPredictor(hk.Module):
             irreps.dim,
         ), position_coeffs.shape
 
+        # Old logic:
+        # position_logits = e3nn.to_s2grid(position_coeffs)
+
         # Compute the position signal projected to a spherical grid for each radius.
         position_dist = jax.vmap(
             lambda coeffs: log_coeffs_to_probability_distribution(
@@ -857,9 +860,9 @@ class TargetPositionPredictor(hk.Module):
             y=jnp.max(position_dist.grid_values),
         )
         position_logits = position_dist.apply(lambda x: jnp.log(1e-9 + x))
-        position_logits.grid_values -= position_logits.grid_values.max(
-            axis=(-3, -2, -1), keepdims=True
-        )
+        # position_logits.grid_values -= position_logits.grid_values.max(
+        #     axis=(-3, -2, -1), keepdims=True
+        # )
 
         # position_logits = position_dist.apply(lambda x: jnp.where(x == 0, -1e9, x))
         debug_print(

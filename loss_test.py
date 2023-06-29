@@ -112,6 +112,7 @@ class LossTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=1000,
+            target_position_lmax=1,
             ignore_position_loss_for_small_fragments=False,
             position_loss_type="kl_divergence",
         )
@@ -235,6 +236,7 @@ class LossTest(parameterized.TestCase):
             graphs=self.graphs,
             radius_rbf_variance=1e-3,
             target_position_inverse_temperature=target_position_inverse_temperature,
+            target_position_lmax=1,
             ignore_position_loss_for_small_fragments=False,
             position_loss_type="kl_divergence",
         )
@@ -257,6 +259,42 @@ class LossTest(parameterized.TestCase):
 
         self.assertTrue(jnp.all(position_loss >= 0))
         np.testing.assert_allclose(position_loss, expected_position_loss, atol=1e-4)
+
+    def test_logits_shift(self):
+        preds = self.preds._replace(
+            globals=self.preds.globals._replace(
+                position_logits=self.preds.globals.position_logits.apply(lambda x: x + 1),
+            )
+        )
+
+        _, (_, position_loss) = loss.generation_loss(
+            preds=preds,
+            graphs=self.graphs,
+            radius_rbf_variance=1e-3,
+            target_position_inverse_temperature=1.0,
+            target_position_lmax=1,
+            ignore_position_loss_for_small_fragments=False,
+            position_loss_type="kl_divergence",
+        )
+
+        preds_2 = self.preds._replace(
+            globals=self.preds.globals._replace(
+                position_logits=self.preds.globals.position_logits.apply(lambda x: x + 2),
+            )
+        )
+
+        _, (_, position_loss_2) = loss.generation_loss(
+            preds=preds_2,
+            graphs=self.graphs,
+            radius_rbf_variance=1e-3,
+            target_position_inverse_temperature=1.0,
+            target_position_lmax=1,
+            ignore_position_loss_for_small_fragments=False,
+            position_loss_type="kl_divergence",
+        )
+
+        np.testing.assert_allclose(position_loss, position_loss_2, atol=1e-4)
+
 
 
 if __name__ == "__main__":
