@@ -233,6 +233,9 @@ def get_unbatched_tetris_datasets(
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
     pieces = get_pieces_for_tetris()
+    num_pieces = config.get("num_pieces")
+    if num_pieces is not None:
+        pieces = pieces[:num_pieces]
     return pieces_to_unbatched_datasets(pieces, rng, config)
 
 
@@ -241,6 +244,9 @@ def get_unbatched_platonic_solids_datasets(
 ) -> Dict[str, tf.data.Dataset]:
     """Loads the raw Platonic solids dataset as a tf.data.Dataset for each split."""
     pieces = get_pieces_for_platonic_solids()
+    num_pieces = config.get("num_pieces")
+    if num_pieces is not None:
+        pieces = pieces[:num_pieces]
     return pieces_to_unbatched_datasets(pieces, rng, config)
 
 
