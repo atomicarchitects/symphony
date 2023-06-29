@@ -333,6 +333,7 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
+            continue
             eval_state = eval_state.replace(params=state.params)
 
             # Evaluate on validation and test splits.
@@ -379,6 +380,7 @@ def train_and_evaluate(
             logging.info("No more training data. Continuing with final evaluation.")
             break
 
+
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             state, batch_metrics = train_step(
@@ -386,6 +388,11 @@ def train_and_evaluate(
                 graphs,
                 loss_kwargs=config.loss_kwargs,
             )
+            # Log predictions.
+            preds = get_predictions(state, graphs, rng)
+            print(preds)
+            print(batch_metrics.compute())
+            return
 
         # Update metrics.
         if train_metrics is None:
