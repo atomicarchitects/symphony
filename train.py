@@ -391,7 +391,10 @@ def train_and_evaluate(
             # Log predictions.
             preds = get_predictions(state, graphs, rng)
             print(graphs)
-            print(preds)
+            import e3nn_jax as e3nn
+            print(e3nn.sum(preds.globals.position_coeffs))
+            print(preds.globals.position_logits.grid_vectors.sum())
+
             state, batch_metrics = train_step(
                 state,
                 graphs,
