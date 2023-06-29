@@ -132,7 +132,7 @@ def segment_sample_2D(
 
 
 def log_coeffs_to_probability_distribution(
-    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int
+    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int,
 ) -> e3nn.SphericalSignal:
     """Converts coefficients of the logits to a probability distribution."""
     num_radii = len(RADII)
