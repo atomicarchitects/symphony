@@ -144,7 +144,7 @@ def log_coeffs_to_probability_distribution(
     ), log_coeffs.shape
 
     log_dist = e3nn.to_s2grid(
-        log_coeffs, res_beta, res_alpha, quadrature="soft", p_val=1, p_arg=-1
+        log_coeffs, res_beta, res_alpha, quadrature="gausslegendre", p_val=1, p_arg=-1
     )
     assert log_dist.shape == (num_channels, num_radii, res_beta, res_alpha)
 
@@ -860,9 +860,9 @@ class TargetPositionPredictor(hk.Module):
             y=jnp.max(position_dist.grid_values),
         )
         position_logits = position_dist.apply(lambda x: jnp.log(1e-9 + x))
-        # position_logits.grid_values -= position_logits.grid_values.max(
-        #     axis=(-3, -2, -1), keepdims=True
-        # )
+        position_logits.grid_values -= position_logits.grid_values.max(
+            axis=(-3, -2, -1), keepdims=True
+        )
 
         # position_logits = position_dist.apply(lambda x: jnp.where(x == 0, -1e9, x))
         debug_print(
@@ -939,11 +939,10 @@ class Predictor(hk.Module):
             z=focus_and_target_species_logits.shape,
         )
         stop_logits = jnp.zeros((num_graphs,))
-        focus_and_target_species_probs = jnp.zeros_like(focus_and_target_species_logits)
-        stop_probs = jnp.zeros_like(stop_logits)
-        # focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
-        #     focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
-        # )
+
+        focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
+            focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
+        )
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
