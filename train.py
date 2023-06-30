@@ -410,13 +410,13 @@ def train_and_evaluate(
             print("Shapes", jax.tree_map(get_shape, pred, is_leaf=lambda x: isinstance(x, jnp.ndarray) or isinstance(x, e3nn.SphericalSignal)))
             print("Sums", jax.tree_map(get_sum, pred, is_leaf=lambda x: isinstance(x, jnp.ndarray) or isinstance(x, e3nn.SphericalSignal)))
 
-            # print("After initialization")
-            # state, batch_metrics = train_step(
-            #     state,
-            #     graphs,
-            #     loss_kwargs=config.loss_kwargs,
-            # )
-            # print(batch_metrics.compute())
+            print("After initialization")
+            state, batch_metrics = train_step(
+                state,
+                graphs,
+                loss_kwargs=config.loss_kwargs,
+            )
+            print(batch_metrics.compute())
             return
 
         # Update metrics.
