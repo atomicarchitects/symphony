@@ -131,10 +131,10 @@ def segment_sample_2D(
     return node_indices, species_indices
 
 
-def log_coeffs_to_probability_distribution(
+def log_coeffs_to_logits(
     log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int,
 ) -> e3nn.SphericalSignal:
-    """Converts coefficients of the logits to a probability distribution."""
+    """Converts coefficients of the logits to a SphericalSignal representing the logits."""
     num_radii = len(RADII)
     num_channels = log_coeffs.shape[0]
     assert log_coeffs.shape == (
@@ -149,16 +149,8 @@ def log_coeffs_to_probability_distribution(
     assert log_dist.shape == (num_channels, num_radii, res_beta, res_alpha)
 
     # Softmax over all channels.
-    # Subtract the maximum value to avoid numerical issues.
-    log_dist_max = jnp.max(log_dist.grid_values)
-    log_dist_max = jax.lax.stop_gradient(log_dist_max)
-    log_dist = log_dist.apply(lambda x: x - log_dist_max)
-
-    # Take the exponential and normalize.
-    dist = log_dist.apply(jnp.exp)
-    dist = dist / dist.integrate().array.sum()
-    dist.grid_values = dist.grid_values.sum(axis=-4)
-    assert dist.shape == (num_radii, res_beta, res_alpha)
+    log_dist.grid_values = jax.scipy.special.logsumexp(log_dist.grid_values, axis=0)
+    return log_dist
 
     # # Softmax over each channel, then average distributions.
     # # Subtract the maximum value to avoid numerical issues.
@@ -171,8 +163,6 @@ def log_coeffs_to_probability_distribution(
     # dist = jax.vmap(lambda channel_dist: channel_dist / channel_dist.integrate().array.sum())(dist)
     # dist.grid_values = dist.grid_values.mean(axis=-4)
     # assert dist.shape == (num_radii, res_beta, res_alpha)
-
-    return dist
 
 
 def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
@@ -840,42 +830,20 @@ class TargetPositionPredictor(hk.Module):
         # position_logits = e3nn.to_s2grid(position_coeffs)
 
         # Compute the position signal projected to a spherical grid for each radius.
-        position_dist = jax.vmap(
-            lambda coeffs: log_coeffs_to_probability_distribution(
+        position_logits = jax.vmap(
+            lambda coeffs: log_coeffs_to_logits(
                 coeffs, self.res_beta, self.res_alpha
             )
         )(position_coeffs)
-        assert position_dist.shape == (
-            num_graphs,
-            num_radii,
-            self.res_beta,
-            self.res_alpha,
-        ), position_dist.shape
-
-        debug_print("integrals={x}", x=position_dist.integrate().array.sum(axis=1))
-        # Compute the position logits for each radius.
-        debug_print(
-            "position_dist: min={x},max={y}",
-            x=jnp.min(position_dist.grid_values),
-            y=jnp.max(position_dist.grid_values),
-        )
-        position_logits = position_dist.apply(lambda x: jnp.log(1e-9 + x))
-        position_logits.grid_values -= position_logits.grid_values.max(
-            axis=(-3, -2, -1), keepdims=True
-        )
-
-        # position_logits = position_dist.apply(lambda x: jnp.where(x == 0, -1e9, x))
-        debug_print(
-            "position_logits: min={x},max={y}",
-            x=jnp.min(position_logits.grid_values),
-            y=jnp.max(position_logits.grid_values),
-        )
-
         assert position_logits.shape == (
             num_graphs,
             num_radii,
             self.res_beta,
             self.res_alpha,
+        ), position_logits.shape
+
+        position_logits.grid_values -= position_logits.grid_values.max(
+            axis=(-3, -2, -1), keepdims=True
         )
 
         jax.debug.print("position_logits.min={min}, position_logits.min={max}", min=position_logits.grid_values.min(), max=position_logits.grid_values.max())
