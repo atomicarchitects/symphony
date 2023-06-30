@@ -105,44 +105,31 @@ def _make_first_fragment(
     rng, k = jax.random.split(rng)
     if heavy_first and (graph.nodes.species != 0).sum() > 0:
         heavy_indices = jnp.argwhere(graph.nodes.species != 0).squeeze(-1)
-        first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices,])
+        first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices])
     else:
         first_node = jax.random.choice(
             k, jnp.arange(0, len(graph.nodes.positions)), p=probs_com
         )
 
     if mode == "nn":
-        first_node_mask = jnp.isin(graph.senders, first_node)
+        mask = graph.senders == first_node
         # if there is more than one heavy atom, all heavy atoms are connected to
         # at least one other heavy atom, so this check is sufficient
         if (
             heavy_first
-            and (first_node_mask & graph.nodes.species[graph.receivers] > 0).sum() > 0
+            and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0
         ):
-            min_dist = dist[
-                first_node_mask & graph.nodes.species[graph.receivers] > 0
-            ].min()
-            targets = graph.receivers[
-                (graph.senders == first_node)
-                & (graph.nodes.species[graph.receivers] > 0)
-                & (dist < min_dist + nn_tolerance)
-            ]
-        else:
-            min_dist = dist[(graph.senders == first_node)].min()
-            targets = graph.receivers[
-                (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
-            ]
+            mask = mask & (graph.nodes.species[graph.receivers] > 0)
+        min_dist = dist[mask].min()
+        targets = graph.receivers[
+            mask & (dist < min_dist + nn_tolerance)
+        ]
         del min_dist
     if mode == "radius":
-        targets = graph.receivers[(graph.senders == first_node) & (dist < max_radius)]
+        targets = graph.receivers[mask & (dist < max_radius)]
 
     if len(targets) == 0:
         raise ValueError("No targets found.")
-
-    if heavy_first:
-        targets_heavy = targets[graph.nodes.species[targets] > 0]
-        if len(targets_heavy) != 0:
-            targets = targets_heavy
 
     species_probability = (
         jnp.zeros((graph.nodes.positions.shape[0], n_species))
