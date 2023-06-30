@@ -22,7 +22,6 @@ NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
 def debug_print(fmt, *args, **kwargs):
-    return
     jax.debug.print(fmt, *args, **kwargs)
 
 
