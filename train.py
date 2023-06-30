@@ -394,10 +394,7 @@ def train_and_evaluate(
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):            
             import e3nn_jax as e3nn
             def get_shape(x):
-                try:
-                    return x.shape
-                except AttributeError:
-                    return x.grid_values.shape
+                return x.shape
             
             def get_sum(x):
                 try:
@@ -410,17 +407,16 @@ def train_and_evaluate(
 
             # Log predictions.
             pred = get_predictions(state, graphs, None)
-            print("Shapes", jax.tree_map(get_shape, pred))
-            print("Sums", jax.tree_map(get_sum, pred))
+            print("Shapes", jax.tree_map(get_shape, pred, is_leaf=lambda x: isinstance(x, jnp.ndarray) or isinstance(x, e3nn.SphericalSignal)))
+            print("Sums", jax.tree_map(get_sum, pred, is_leaf=lambda x: isinstance(x, jnp.ndarray) or isinstance(x, e3nn.SphericalSignal)))
 
-            print("After initialization")
-            state, batch_metrics = train_step(
-                state,
-                graphs,
-                loss_kwargs=config.loss_kwargs,
-            )
-            # Log predictions.
-            print(batch_metrics.compute())
+            # print("After initialization")
+            # state, batch_metrics = train_step(
+            #     state,
+            #     graphs,
+            #     loss_kwargs=config.loss_kwargs,
+            # )
+            # print(batch_metrics.compute())
             return
 
         # Update metrics.

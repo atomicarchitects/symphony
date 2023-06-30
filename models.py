@@ -21,6 +21,11 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
+def debug_print(fmt, *args, **kwargs):
+    return
+    jax.debug.print(fmt, *args, **kwargs)
+
+
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
     return jnp.asarray(ATOMIC_NUMBERS)[species]
