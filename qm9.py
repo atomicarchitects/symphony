@@ -1,7 +1,6 @@
 import logging
 import os
 import zipfile
-from functools import cache
 from typing import List
 from urllib.request import urlopen
 from urllib.error import URLError
@@ -116,7 +115,6 @@ def read_sdf(f):
                 break
 
 
-@cache
 def load_qm9(root_dir: str) -> List[Atoms]:
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
