@@ -878,6 +878,7 @@ class TargetPositionPredictor(hk.Module):
             self.res_alpha,
         )
 
+        jax.debug.print("position_logits.min={min}, position_logits.min={max}", min=position_logits.grid_values.min(), max=position_logits.grid_values.max())
         return position_coeffs, position_logits
 
 
