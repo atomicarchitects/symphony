@@ -115,15 +115,10 @@ def _make_first_fragment(
         mask = graph.senders == first_node
         # if there is more than one heavy atom, all heavy atoms are connected to
         # at least one other heavy atom, so this check is sufficient
-        if (
-            heavy_first
-            and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0
-        ):
+        if heavy_first and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0:
             mask = mask & (graph.nodes.species[graph.receivers] > 0)
         min_dist = dist[mask].min()
-        targets = graph.receivers[
-            mask & (dist < min_dist + nn_tolerance)
-        ]
+        targets = graph.receivers[mask & (dist < min_dist + nn_tolerance)]
         del min_dist
     if mode == "radius":
         targets = graph.receivers[mask & (dist < max_radius)]
@@ -171,8 +166,8 @@ def _make_middle_fragment(
     mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
 
     if heavy_first:
-        species = jax.vmap(lambda x: x != 0)(graph.nodes.species)
-        if species.sum() > species[visited].sum():
+        heavy = graph.nodes.species > 0
+        if heavy.sum() > heavy[visited].sum():
             mask = (
                 mask
                 & (graph.nodes.species[senders] > 0)
