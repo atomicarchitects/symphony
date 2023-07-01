@@ -334,7 +334,6 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
-            continue
             eval_state = eval_state.replace(params=state.params)
 
             # Evaluate on validation and test splits.
