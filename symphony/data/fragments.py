@@ -111,12 +111,10 @@ def _make_first_fragment(
             k, jnp.arange(0, len(graph.nodes.positions)), p=probs_com
         )
 
+    mask = graph.senders == first_node
+    if heavy_first and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0:
+        mask = mask & (graph.nodes.species[graph.receivers] > 0)
     if mode == "nn":
-        mask = graph.senders == first_node
-        # if there is more than one heavy atom, all heavy atoms are connected to
-        # at least one other heavy atom, so this check is sufficient
-        if heavy_first and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0:
-            mask = mask & (graph.nodes.species[graph.receivers] > 0)
         min_dist = dist[mask].min()
         targets = graph.receivers[mask & (dist < min_dist + nn_tolerance)]
         del min_dist
