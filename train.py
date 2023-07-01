@@ -170,6 +170,7 @@ def evaluate_model(
                 split_metrics = batch_metrics
             else:
                 split_metrics = split_metrics.merge(batch_metrics)
+
         eval_metrics[split] = split_metrics
 
     return eval_metrics

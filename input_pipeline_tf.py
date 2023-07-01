@@ -70,9 +70,9 @@ def get_datasets(
     for split in ["train", "val", "test"]:
         dataset_split = datasets[split]
 
-        # We repeat the training split indefinitely.
-        if split == "train":
-            dataset_split = dataset_split.repeat()
+        # We repeat all splits indefinitely.
+        # This is required because of some weird behavior of tf.data.Dataset.from_generator.
+        dataset_split = dataset_split.repeat()
 
         # Now we batch and pad the graphs.
         batching_fn = functools.partial(
@@ -91,9 +91,7 @@ def get_datasets(
             dataset_split.take(config.num_eval_steps).cache().prefetch(tf.data.AUTOTUNE)
         )
         datasets[split + "_eval_final"] = (
-            dataset_split.take(config.num_eval_steps_at_end_of_training)
-            .cache()
-            .prefetch(tf.data.AUTOTUNE)
+            dataset_split.take(config.num_eval_steps_at_end_of_training).cache().prefetch(tf.data.AUTOTUNE)
         )
 
     return datasets
