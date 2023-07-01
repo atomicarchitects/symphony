@@ -15,10 +15,6 @@ import optax
 import yaml
 from absl import logging
 
-# Change logging format to not print the time.
-logging.get_absl_handler().setFormatter(logging.PythonFormatter("%(message)s"))
-logging.info = print
-
 from clu import (
     checkpoint,
     metric_writers,
@@ -100,10 +96,6 @@ def train_step(
             preds=preds, graphs=graphs, **loss_kwargs
         )
         mask = jraph.get_graph_padding_mask(graphs)
-        import e3nn_jax as e3nn
-        jax.debug.print("position_coeffs_sum={x}", x=e3nn.sum(preds.globals.position_coeffs))
-        jax.debug.print("position_logits_sum={x}", x=preds.globals.position_logits.grid_vectors.sum())
-        jax.debug.print("total_loss={x},position_loss={y},mask={z}", x=total_loss, y=position_loss, z=mask)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (total_loss, focus_and_atom_type_loss, position_loss, mask)
 
