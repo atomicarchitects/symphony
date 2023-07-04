@@ -15,15 +15,20 @@ def generate_fragments(
     nn_tolerance: float = 0.01,
     max_radius: float = 2.03,
     mode: str = "nn",
+    heavy_first: bool = False,
+    beta_com: float = 0.0,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
     Args:
         rng: The random number generator.
         graph: The molecular graph.
-        n_species: The number of atomic species.
+        n_species: The number of different species considered.
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
+        mode:
+        heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
+        beta_com: Inverse temperature value for the center of mass.
 
     Returns:
         A sequence of fragments.
@@ -42,9 +47,18 @@ def generate_fragments(
         axis=1,
     )  # [n_edge]
 
+    # make fragments
     try:
         rng, visited_nodes, frag = _make_first_fragment(
-            rng, graph, dist, n_species, nn_tolerance, max_radius, mode
+            rng,
+            graph,
+            dist,
+            n_species,
+            nn_tolerance,
+            max_radius,
+            mode,
+            heavy_first,
+            beta_com,
         )
         yield frag
 
@@ -58,6 +72,7 @@ def generate_fragments(
                 nn_tolerance,
                 max_radius,
                 mode,
+                heavy_first,
             )
             yield frag
     except ValueError:
@@ -68,21 +83,43 @@ def generate_fragments(
         yield _make_last_fragment(graph, n_species)
 
 
-def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, mode):
-    # pick a random initial node
-    rng, k = jax.random.split(rng)
-    first_node = jax.random.randint(
-        k, shape=(), minval=0, maxval=len(graph.nodes.positions)
+def _make_first_fragment(
+    rng,
+    graph,
+    dist,
+    n_species,
+    nn_tolerance,
+    max_radius,
+    mode,
+    heavy_first=False,
+    beta_com=0.0,
+):
+    # get distances from (approximate) center of mass - assume all atoms have the same mass
+    com = jnp.average(
+        graph.nodes.positions,
+        axis=0,
+        weights=(graph.nodes.species > 0) if heavy_first else None,
     )
+    distances_com = jnp.linalg.norm(graph.nodes.positions - com, axis=1)
+    probs_com = jax.nn.softmax(-beta_com * distances_com**2)
+    rng, k = jax.random.split(rng)
+    if heavy_first and (graph.nodes.species != 0).sum() > 0:
+        heavy_indices = jnp.argwhere(graph.nodes.species != 0).squeeze(-1)
+        first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices])
+    else:
+        first_node = jax.random.choice(
+            k, jnp.arange(0, len(graph.nodes.positions)), p=probs_com
+        )
 
+    mask = graph.senders == first_node
+    if heavy_first and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0:
+        mask = mask & (graph.nodes.species[graph.receivers] > 0)
     if mode == "nn":
-        min_dist = dist[graph.senders == first_node].min()
-        targets = graph.receivers[
-            (graph.senders == first_node) & (dist < min_dist + nn_tolerance)
-        ]
+        min_dist = dist[mask].min()
+        targets = graph.receivers[mask & (dist < min_dist + nn_tolerance)]
         del min_dist
     if mode == "radius":
-        targets = graph.receivers[(graph.senders == first_node) & (dist < max_radius)]
+        targets = graph.receivers[mask & (dist < max_radius)]
 
     if len(targets) == 0:
         raise ValueError("No targets found.")
@@ -111,12 +148,29 @@ def _make_first_fragment(rng, graph, dist, n_species, nn_tolerance, max_radius, 
 
 
 def _make_middle_fragment(
-    rng, visited, graph, dist, n_species, nn_tolerance, max_radius, mode
+    rng,
+    visited,
+    graph,
+    dist,
+    n_species,
+    nn_tolerance,
+    max_radius,
+    mode,
+    heavy_first=False,
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
 
     mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
+
+    if heavy_first:
+        heavy = graph.nodes.species > 0
+        if heavy.sum() > heavy[visited].sum():
+            mask = (
+                mask
+                & (graph.nodes.species[senders] > 0)
+                & (graph.nodes.species[receivers] > 0)
+            )
 
     if mode == "nn":
         min_dist = dist[mask].min()
