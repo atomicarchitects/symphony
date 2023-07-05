@@ -10,7 +10,6 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from schnetpack import Properties
 import seaborn as sns
 
 import sys
@@ -21,7 +20,7 @@ import analyses.analysis as analysis
 import analyses.check_distances as check_distances
 
 
-ALL_METRICS = ["total_loss", "position_loss", "focus_loss", "atom_type_loss"]
+ALL_METRICS = ["total_loss", "position_loss", "focus_and_atom_type_loss"]
 ALL_MODELS = ["mace", "e3schnet", "nequip"]
 
 FLAGS = flags.FLAGS

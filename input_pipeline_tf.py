@@ -162,6 +162,14 @@ def get_pieces_for_tetris() -> List[List[Tuple[int, int, int]]]:
     ]
 
 
+def get_unbatched_tetris_datasets(
+    rng: chex.PRNGKey, config: ml_collections.ConfigDict
+) -> Dict[str, tf.data.Dataset]:
+    """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
+    pieces = get_pieces_for_tetris()
+    return pieces_to_unbatched_datasets(pieces, rng, config)
+
+
 def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     """Returns the pieces for the Platonic solids."""
     # Taken from Wikipedia.
@@ -224,14 +232,6 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
             (-phi, 0, -1 / phi),
         ],  # dodacahedron
     ]
-
-
-def get_unbatched_tetris_datasets(
-    rng: chex.PRNGKey, config: ml_collections.ConfigDict
-) -> Dict[str, tf.data.Dataset]:
-    """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
-    pieces = get_pieces_for_tetris()
-    return pieces_to_unbatched_datasets(pieces, rng, config)
 
 
 def get_unbatched_platonic_solids_datasets(

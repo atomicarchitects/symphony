@@ -311,9 +311,11 @@ def get_plotly_traces_for_predictions(
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.position_coeffs
-    position_probs = models.log_coeffs_to_probability_distribution(
+    position_logits = models.log_coeffs_to_logits(
         position_coeffs, 50, 99
     )
+    position_logits.grid_values -= jnp.max(position_logits.grid_values)
+    position_probs = position_logits.apply(jnp.exp)
 
     count = 0
     cmin = 0.0
@@ -627,7 +629,7 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
                 yield prefix + k, v
 
     config_dict = dict(iterate_with_prefix(config.to_dict(), "config."))
-    return pd.DataFrame().from_dict(config_dict)
+    return pd.DataFrame().from_dict([config_dict])
 
 
 def load_model_at_step(
@@ -671,50 +673,48 @@ def load_model_at_step(
 
 
 def get_results_as_dataframe(
-    models: Sequence[str], metrics: Sequence[str], basedir: str
-) -> Dict[str, pd.DataFrame]:
+    basedir: str
+) -> pd.DataFrame:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
-    splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
-    results = {split: pd.DataFrame() for split in splits}
-    for model in models:
-        for config_file_path in glob.glob(
-            os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
-        ):
-            workdir = os.path.dirname(config_file_path)
-            try:
-                config, best_state, _, metrics_for_best_state = load_from_workdir(
-                    workdir
-                )
-            except FileNotFoundError:
-                logging.warning(f"Skipping {workdir} because it is incomplete.")
-                continue
+    results = pd.DataFrame()
+    for config_file_path in glob.glob(
+        os.path.join(basedir, "**", "*.yml"), recursive=True
+    ):
+        workdir = os.path.dirname(config_file_path)
+        try:
+            config, best_state, _, metrics_for_best_state = load_from_workdir(
+                workdir
+            )
+        except FileNotFoundError:
+            logging.warning(f"Skipping {workdir} because it is incomplete.")
+            continue
 
-            num_params = sum(
-                jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
-            )
-            config_df = config_to_dataframe(config)
-            other_df = pd.DataFrame.from_dict(
-                {
-                    "model": [config.model.lower()],
-                    "max_l": [config.max_ell],
-                    "num_interactions": [config.num_interactions],
-                    "num_channels": [config.num_channels],
-                    "num_params": [num_params],
-                    "num_train_molecules": [
-                        config.train_molecules[1] - config.train_molecules[0]
-                    ],
-                }
-            )
-            for split in results:
-                metrics_for_split = {
-                    metric: [metrics_for_best_state[split][metric].item()]
-                    for metric in metrics
-                }
-                metrics_df = pd.DataFrame.from_dict(metrics_for_split)
-                df = pd.merge(config_df, metrics_df, left_index=True, right_index=True)
-                df = pd.merge(df, other_df, left_index=True, right_index=True)
-                results[split] = pd.concat([results[split], df], ignore_index=True)
+        num_params = sum(
+            jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
+        )
+        config_df = config_to_dataframe(config)
+        other_df = pd.DataFrame.from_dict(
+            {
+                "model": [config.model.lower()],
+                "max_l": [config.max_ell],
+                "num_interactions": [config.num_interactions],
+                "num_channels": [config.num_channels],
+                "num_params": [num_params],
+                # "num_train_molecules": [
+                #     config.train_molecules[1] - config.train_molecules[0]
+                # ],
+            }
+        )
+        df = pd.merge(config_df, other_df, left_index=True, right_index=True)
+        for split in metrics_for_best_state:
+            metrics_for_split = {
+                f"{split}.{metric}": [metrics_for_best_state[split][metric].item()]
+                for metric in metrics_for_best_state[split]
+            }
+            metrics_df = pd.DataFrame.from_dict(metrics_for_split)
+            df = pd.merge(df, metrics_df, left_index=True, right_index=True)
+        results = pd.concat([results, df], ignore_index=True)
 
     return results
 

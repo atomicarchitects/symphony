@@ -217,20 +217,21 @@ def generate_molecules(
     molecules_outputdir = os.path.join(
         outputdir,
         name,
-        f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
-        "molecules",
+        f"fait={focus_and_atom_type_inverse_temperature}",
+        f"pit={position_inverse_temperature}",
         step_name,
+        "molecules",
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
     if visualize:
         visualizations_outputdir = os.path.join(
             outputdir,
             name,
-            f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
+            f"fait={focus_and_atom_type_inverse_temperature}",
+            f"pit={position_inverse_temperature}",
+            step_name,
             "visualizations",
             "molecules",
-            f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
-            step_name,
         )
         os.makedirs(visualizations_outputdir, exist_ok=True)
     molecule_list = []

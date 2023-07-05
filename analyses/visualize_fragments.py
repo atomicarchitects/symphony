@@ -105,10 +105,13 @@ def visualize_predictions_and_fragments(
         figs.append(analysis.visualize_predictions(pred, fragment))
 
     # Save to files.
+    step_name = "step=best" if step == -1 else f"step={step}"
     visualizations_dir = os.path.join(
         outputdir,
         name,
-        f"fait={focus_and_atom_type_inverse_temperature}_pit={position_inverse_temperature}",
+        f"fait={focus_and_atom_type_inverse_temperature}",
+        f"pit={position_inverse_temperature}",
+        step_name,
         "visualizations",
     )
     os.makedirs(
