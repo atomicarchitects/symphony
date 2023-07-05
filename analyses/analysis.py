@@ -211,28 +211,31 @@ def get_plotly_traces_for_fragment(
         )
 
     # Highlight the target atom.
-    if fragment.globals.target_positions is not None and not fragment.globals.stop:
-        molecule_traces.append(
-            go.Scatter3d(
-                x=[fragment.globals.target_positions[0]],
-                y=[fragment.globals.target_positions[1]],
-                z=[fragment.globals.target_positions[2]],
-                mode="markers",
-                marker=dict(
-                    size=[
-                        1.05
-                        * ATOMIC_SIZES[
-                            models.ATOMIC_NUMBERS[
-                                fragment.globals.target_species.item()
+    if fragment.globals is not None:
+        if fragment.globals.target_positions is not None and not fragment.globals.stop:
+            # The target position is relative to the fragment's focus node.
+            target_positions = fragment.globals.target_positions + fragment.nodes.positions[0]
+            molecule_traces.append(
+                go.Scatter3d(
+                    x=[target_positions[0]],
+                    y=[target_positions[1]],
+                    z=[target_positions[2]],
+                    mode="markers",
+                    marker=dict(
+                        size=[
+                            1.05
+                            * ATOMIC_SIZES[
+                                models.ATOMIC_NUMBERS[
+                                    fragment.globals.target_species.item()
+                                ]
                             ]
-                        ]
-                    ],
-                    color=["green"],
-                ),
-                opacity=0.5,
-                name="Target Atom",
+                        ],
+                        color=["green"],
+                    ),
+                    opacity=0.5,
+                    name="Target Atom",
+                )
             )
-        )
 
     return molecule_traces
 
@@ -374,8 +377,12 @@ def get_plotly_traces_for_predictions(
     # Plot target species probabilities.
     stop_probability = pred.globals.stop_probs.item()
     predicted_target_species = pred.globals.target_species.item()
-    true_focus = 0  # This is a convention used in our training pipeline.
-    true_target_species = fragment.globals.target_species.item()
+    if fragment.globals is not None and not fragment.globals.stop:
+        true_focus = 0  # This is a convention used in our training pipeline.
+        true_target_species = fragment.globals.target_species.item()
+    else:
+        true_focus = None
+        true_target_species = None
 
     # We highlight the true target if provided.
     def get_focus_string(atom_index: int) -> str:

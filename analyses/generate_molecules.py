@@ -224,7 +224,7 @@ def generate_molecules(
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
     if visualize:
-        visualizations_outputdir = os.path.join(
+        visualizations_dir = os.path.join(
             outputdir,
             name,
             f"fait={focus_and_atom_type_inverse_temperature}",
@@ -233,7 +233,7 @@ def generate_molecules(
             "visualizations",
             "molecules",
         )
-        os.makedirs(visualizations_outputdir, exist_ok=True)
+        os.makedirs(visualizations_dir, exist_ok=True)
     molecule_list = []
 
     def get_predictions(
@@ -306,7 +306,7 @@ def generate_molecules(
 
             # Save visualization of generation process.
             if visualize:
-                fig = analysis.visualize_predictions(pred, molecule)
+                fig = analysis.visualize_predictions(pred, fragment)
                 figs.append(fig)
 
             # Check if we should stop.
@@ -332,22 +332,22 @@ def generate_molecules(
             )
 
         if visualize:
-            # Combine visualizations.
-            fig_all = analysis.combine_visualizations(figs)
+            for index, fig in enumerate(figs):
+                # Update the title.
+                model_name = analysis.get_title_for_name(name)
+                fig.update_layout(
+                    title=f"{model_name}: Predictions for Seed {seed}",
+                    title_x=0.5,
+                )
 
-            # Add title.
-            model_name = analysis.get_title_for_name(name)
-            fig_all.update_layout(
-                title=f"{model_name}: Predictions for Seed {seed}",
-                title_x=0.5,
-            )
+                # Save to file.
+                outputfile = os.path.join(
+                    visualizations_dir,
+                    f"fragments_{index}.html",
+                )
+                fig.write_html(outputfile, include_plotlyjs="cdn")
 
-            # Save to file.
-            outputfile = os.path.join(
-                visualizations_outputdir,
-                f"{init_molecule_name}_seed={seed}.html",
-            )
-            fig_all.write_html(outputfile, include_plotlyjs="cdn")
+
 
     # Save the generated molecules as an ASE database.
     output_db = os.path.join(

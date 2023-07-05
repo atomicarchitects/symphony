@@ -63,7 +63,6 @@ def visualize_predictions_and_fragments(
     # Load the dataset.
     # We disable shuffling to visualize step-by-step.
     config.shuffle_datasets = False
-    config.nn_cutoff = 3.0
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
     datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
