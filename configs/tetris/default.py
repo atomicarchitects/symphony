@@ -13,6 +13,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.root_dir = None
     config.shuffle_datasets = True
     config.train_pieces = None
+    config.val_pieces = None
+    config.test_pieces = None
 
     # Optimizer.
     config.optimizer = "adam"
