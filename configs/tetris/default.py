@@ -12,9 +12,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.root_dir = None
     config.shuffle_datasets = True
-    config.train_pieces = None
-    config.val_pieces = None
-    config.test_pieces = None
+    config.train_pieces = (None, None)
+    config.val_pieces = (None, None)
+    config.test_pieces = (None, None)
 
     # Optimizer.
     config.optimizer = "adam"

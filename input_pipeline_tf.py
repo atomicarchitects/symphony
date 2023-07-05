@@ -289,7 +289,7 @@ def pieces_to_unbatched_datasets(
         split_rng, rng = jax.random.split(rng)
 
         split_pieces = config.get(f"{split}_pieces")
-        if split_pieces is not None:
+        if None in [split_pieces, split_pieces[0], split_pieces[1]]:
             split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
         else:
             split_pieces_as_graphs = pieces_as_graphs
