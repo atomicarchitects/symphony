@@ -175,7 +175,7 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     # Taken from Wikipedia.
     # https://en.wikipedia.org/wiki/Platonic_solid
     phi = (1 + np.sqrt(5)) / 2
-    return [
+    pieces = [
         [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
         [
             (1, 0, 0),
@@ -232,6 +232,10 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
             (-phi, 0, -1 / phi),
         ],  # dodacahedron
     ]
+    # Scale the pieces to be unit size.
+    piece_factors = [1/np.linalg.norm(np.asarray(piece[0]) - np.asarray(piece[1])) for piece in pieces]
+    pieces = [[tuple(np.asarray(v) * factor) for v in piece] for factor, piece in zip(piece_factors, pieces)]
+    return pieces
 
 
 def get_unbatched_platonic_solids_datasets(
