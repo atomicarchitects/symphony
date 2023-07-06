@@ -152,18 +152,6 @@ def log_coeffs_to_logits(
     log_dist.grid_values = jax.scipy.special.logsumexp(log_dist.grid_values, axis=0)
     return log_dist
 
-    # # Softmax over each channel, then average distributions.
-    # # Subtract the maximum value to avoid numerical issues.
-    # log_dist_max = jnp.max(log_dist.grid_values, axis=(-3, -2, -1), keepdims=True)
-    # log_dist_max = jax.lax.stop_gradient(log_dist_max)
-    # log_dist = log_dist.apply(lambda x: x - log_dist_max)
-
-    # # Take the exponential and normalize.
-    # dist = log_dist.apply(jnp.exp)
-    # dist = jax.vmap(lambda channel_dist: channel_dist / channel_dist.integrate().array.sum())(dist)
-    # dist.grid_values = dist.grid_values.mean(axis=-4)
-    # assert dist.shape == (num_radii, res_beta, res_alpha)
-
 
 def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
     """A softplus function shifted so that shifted_softplus(0) = 0."""
@@ -846,7 +834,6 @@ class TargetPositionPredictor(hk.Module):
             axis=(-3, -2, -1), keepdims=True
         )
 
-        debug_print("position_logits.min={min}, position_logits.min={max}", min=position_logits.grid_values.min(), max=position_logits.grid_values.max())
         return position_coeffs, position_logits
 
 
@@ -879,7 +866,6 @@ class Predictor(hk.Module):
 
         # Get the node embeddings.
         node_embeddings = self.node_embedder(graphs)
-        # debug_print("node_embeddings,{x},{y},{z}", x=node_embeddings.array[:5].max(), y=node_embeddings.array.min(), z=node_embeddings.shape)
 
         # Concatenate global embeddings to node embeddings.
         if self.global_embedder is not None:
@@ -889,23 +875,10 @@ class Predictor(hk.Module):
                 [node_embeddings, global_embeddings], axis=-1
             )
 
-        debug_print(
-            "node_embeddings_after,{x},{y},{z}",
-            x=node_embeddings.array.max(),
-            y=node_embeddings.array.min(),
-            z=node_embeddings.shape,
-        )
 
         # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(
             node_embeddings
-        )
-        debug_print(
-            "focus_and_target_species_logits,{a},{x},{y},{z}",
-            a=focus_and_target_species_logits,
-            x=focus_and_target_species_logits.max(),
-            y=focus_and_target_species_logits.min(),
-            z=focus_and_target_species_logits.shape,
         )
         stop_logits = jnp.zeros((num_graphs,))
 

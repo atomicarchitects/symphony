@@ -231,7 +231,7 @@ def generate_molecules(
             f"pit={position_inverse_temperature}",
             step_name,
             "visualizations",
-            "molecules",
+            "generated_molecules",
         )
         os.makedirs(visualizations_dir, exist_ok=True)
     molecule_list = []

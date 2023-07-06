@@ -112,6 +112,7 @@ def visualize_predictions_and_fragments(
         f"pit={position_inverse_temperature}",
         step_name,
         "visualizations",
+        "train_fragments",
     )
     os.makedirs(
         visualizations_dir,
