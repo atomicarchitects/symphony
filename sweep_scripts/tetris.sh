@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Set experiment name
-expname=tetris
+branch=$(git symbolic-ref --short HEAD)
+expname=tetris_"$branch"
 
 # Loop over hyperparameters
 for model in "nequip"
