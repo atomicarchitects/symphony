@@ -16,7 +16,7 @@ import nequip_jax
 import datatypes
 import marionette
 
-RADII = jnp.arange(0.75, 2.03, 0.02)
+RADII = jnp.arange(0.75, 5.03, 0.1)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 

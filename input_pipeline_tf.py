@@ -293,6 +293,7 @@ def pieces_to_unbatched_datasets(
             split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
         else:
             split_pieces_as_graphs = pieces_as_graphs
+
         fragments_for_pieces = itertools.chain.from_iterable(
             generate_fragments_helper(split_rng, graph) for graph in split_pieces_as_graphs
         )
