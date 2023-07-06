@@ -258,7 +258,7 @@ def pieces_to_unbatched_datasets(
             graph,
             n_species=1,
             nn_tolerance=config.nn_tolerance,
-            max_radius=2.0,
+            max_radius=config.nn_cutoff,
             mode=config.fragment_logic,
         )
 
