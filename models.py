@@ -843,6 +843,7 @@ class Predictor(hk.Module):
     def __init__(
         self,
         node_embedder: hk.Module,
+        auxiliary_node_embedder: hk.Module,
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
         target_position_predictor: TargetPositionPredictor,
         global_embedder: Optional[GlobalEmbedder] = None,
@@ -850,6 +851,7 @@ class Predictor(hk.Module):
     ):
         super().__init__(name=name)
         self.node_embedder = node_embedder
+        self.auxiliary_node_embedder = auxiliary_node_embedder
         self.global_embedder = global_embedder
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
@@ -875,7 +877,6 @@ class Predictor(hk.Module):
                 [node_embeddings, global_embeddings], axis=-1
             )
 
-
         # Get the species and stop logits.
         focus_and_target_species_logits = self.focus_and_target_species_predictor(
             node_embeddings
@@ -888,8 +889,9 @@ class Predictor(hk.Module):
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
+        auxiliary_node_embeddings = self.auxiliary_node_embedder(graphs)
         focus_node_indices = get_first_node_indices(graphs)
-        true_focus_node_embeddings = node_embeddings[focus_node_indices]
+        true_focus_node_embeddings = auxiliary_node_embeddings[focus_node_indices]
 
         # Get the position coefficients.
         position_coeffs, position_logits = self.target_position_predictor(
@@ -934,6 +936,7 @@ class Predictor(hk.Module):
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings=node_embeddings,
+                auxiliary_node_embeddings=auxiliary_node_embeddings,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -1010,7 +1013,8 @@ class Predictor(hk.Module):
         )
 
         # Get the embeddings of the focus node.
-        focus_node_embeddings = node_embeddings[focus_indices]
+        auxiliary_node_embeddings = self.auxiliary_node_embedder(graphs)
+        focus_node_embeddings = auxiliary_node_embeddings[focus_indices]
 
         # Get the position coefficients.
         position_coeffs, position_logits = self.target_position_predictor(
@@ -1088,6 +1092,7 @@ class Predictor(hk.Module):
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings=node_embeddings,
+                auxiliary_node_embeddings=auxiliary_node_embeddings,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -1164,6 +1169,22 @@ def create_model(
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
             )
+            auxiliary_node_embedder = NequIP(
+                num_species=num_species,
+                r_max=config.r_max,
+                avg_num_neighbors=config.avg_num_neighbors,
+                max_ell=config.max_ell,
+                init_embedding_dims=config.num_channels,
+                output_irreps=output_irreps,
+                num_interactions=config.num_interactions,
+                even_activation=get_activation(config.even_activation),
+                odd_activation=get_activation(config.odd_activation),
+                mlp_activation=get_activation(config.mlp_activation),
+                mlp_n_hidden=config.num_channels,
+                mlp_n_layers=config.mlp_n_layers,
+                n_radial_basis=config.num_basis_fns,
+            )
+
         elif config.model == "MarioNette":
             node_embedder = MarioNette(
                 num_species=num_species,
@@ -1221,6 +1242,7 @@ def create_model(
         )
         predictor = Predictor(
             node_embedder=node_embedder,
+            auxiliary_node_embedder=auxiliary_node_embedder,
             global_embedder=global_embedder,
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,

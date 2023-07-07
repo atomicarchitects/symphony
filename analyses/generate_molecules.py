@@ -343,7 +343,7 @@ def generate_molecules(
                 # Save to file.
                 outputfile = os.path.join(
                     visualizations_dir,
-                    f"fragments_{index}.html",
+                    f"seed_{seed}_fragments_{index}.html",
                 )
                 fig.write_html(outputfile, include_plotlyjs="cdn")
 

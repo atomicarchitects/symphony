@@ -52,6 +52,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             ),
             focus_and_target_species_probs=None,
             embeddings=None,
+            auxiliary_node_embeddings=None,
         ),
         globals=datatypes.GlobalPredictions(
             stop_logits=jnp.asarray([0.0, 0.0]),
