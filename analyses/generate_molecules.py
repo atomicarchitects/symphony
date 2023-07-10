@@ -20,17 +20,13 @@ import numpy as np
 import tqdm
 import chex
 import matscipy.neighbours
-from plotly import graph_objects as go
-from plotly.subplots import make_subplots
 
 sys.path.append("..")
 
 import analyses.analysis as analysis
-import datatypes  # noqa: E402
-import input_pipeline  # noqa: E402
-import models  # noqa: E402
-
-MAX_NUM_ATOMS = 30
+from symphony import datatypes
+from symphony.data import input_pipeline
+from symphony.models import models
 
 FLAGS = flags.FLAGS
 
@@ -192,10 +188,11 @@ def generate_molecules(
     outputdir: str,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
-    step: int,
+    step: str,
     seeds: Sequence[int],
     init_molecule: str,
-    visualize: bool,
+    max_num_atoms: int,
+    visualize: bool
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Create initial molecule, if provided.
@@ -213,13 +210,12 @@ def generate_molecules(
     logging.info(config.to_dict())
 
     # Create output directories.
-    step_name = "step=best" if step == -1 else f"step={step}"
     molecules_outputdir = os.path.join(
         outputdir,
         name,
         f"fait={focus_and_atom_type_inverse_temperature}",
         f"pit={position_inverse_temperature}",
-        step_name,
+        f"step={step}",
         "molecules",
     )
     os.makedirs(molecules_outputdir, exist_ok=True)
@@ -229,7 +225,7 @@ def generate_molecules(
             name,
             f"fait={focus_and_atom_type_inverse_temperature}",
             f"pit={position_inverse_temperature}",
-            step_name,
+            f"step={step}",
             "visualizations",
             "generated_molecules",
         )
@@ -282,7 +278,7 @@ def generate_molecules(
 
         # Add atoms step-by-step.
         figs = []
-        for step in range(MAX_NUM_ATOMS):
+        for step in range(max_num_atoms):
             step_rng, rng = jax.random.split(rng)
             fragment = input_pipeline.ase_atoms_to_jraph_graph(
                 molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
@@ -370,6 +366,7 @@ def main(unused_argv: Sequence[str]) -> None:
     step = FLAGS.step
     seeds = [int(seed) for seed in FLAGS.seeds]
     init = FLAGS.init
+    max_num_atoms = FLAGS.max_num_atoms
     visualize = FLAGS.visualize
 
     generate_molecules(
@@ -380,6 +377,7 @@ def main(unused_argv: Sequence[str]) -> None:
         step,
         seeds,
         init,
+        max_num_atoms,
         visualize,
     )
 
@@ -403,10 +401,10 @@ if __name__ == "__main__":
         "Inverse temperature value for sampling the position.",
         short_name="pit",
     )
-    flags.DEFINE_integer(
+    flags.DEFINE_string(
         "step",
-        -1,
-        "Step number to load model from. The default of -1 corresponds to the best model.",
+        "best",
+        "Step number to load model from. The default corresponds to the best model.",
     )
     flags.DEFINE_list(
         "seeds",
@@ -417,6 +415,11 @@ if __name__ == "__main__":
         "init",
         "C",
         "An initial molecular fragment to start the generation process from.",
+    )
+    flags.DEFINE_integer(
+        "max_num_atoms",
+        1000,
+        "Maximum number of atoms to generate per molecule",
     )
     flags.DEFINE_bool(
         "visualize",

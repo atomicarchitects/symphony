@@ -641,31 +641,15 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
 
 
 def load_model_at_step(
-    workdir: str, step: int, run_in_evaluation_mode: bool
+    workdir: str, step: str, run_in_evaluation_mode: bool
 ) -> Tuple[ml_collections.ConfigDict, hk.Transformed, Dict[str, jnp.ndarray]]:
     """Loads the model at a given step.
 
     This is a lightweight version of load_from_workdir, that only constructs the model and not the training state.
     """
-
-    if step == -1:
-        params_file = os.path.join(workdir, "checkpoints/params_best.pkl")
-    else:
-        params_file = os.path.join(workdir, f"checkpoints/params_{step}.pkl")
-
-    try:
-        with open(params_file, "rb") as f:
-            params = pickle.load(f)
-    except FileNotFoundError:
-        if step == -1:
-            try:
-                params_file = os.path.join(workdir, "checkpoints/params.pkl")
-                with open(params_file, "rb") as f:
-                    params = pickle.load(f)
-            except:
-                raise FileNotFoundError(f"Could not find params file {params_file}")
-        else:
-            raise FileNotFoundError(f"Could not find params file {params_file}")
+    params_file = os.path.join(workdir, f"checkpoints/params_{step}.pkl")
+    with open(params_file, "rb") as f:
+        params = pickle.load(f)
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
