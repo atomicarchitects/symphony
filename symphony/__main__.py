@@ -1,7 +1,7 @@
 """Main file for running the training pipeline.
 
-This file is intentionally kept short. The majority for logic is in libraries
-that can be easily tested and imported in Colab.
+This file is intentionally kept short.
+The majority for logic is in libraries that can be easily tested.
 """
 
 from absl import app

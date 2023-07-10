@@ -50,7 +50,7 @@ Start training with a configuration defined
 under `configs/`:
 
 ```shell
-python -m main --workdir=./workdirs --config=configs/graphnet.py
+python -m symphony --workdir=./workdirs --config=configs/graphnet.py
 ```
 
 #### Changing Hyperparameters
