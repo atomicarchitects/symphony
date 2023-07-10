@@ -20,7 +20,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "tensorflow",
     "e3nn_jax",
     "numpy",
     "jax",

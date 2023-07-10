@@ -1,17 +1,11 @@
 import argparse
 import os
-
-# import subprocess
-import sys
 import time
 
 import numpy as np
 
-import fragmenter
-
-sys.path.append("..")
-
-import qm9  # noqa: E402
+from symphony.data import qm9
+from symphony.data.scripts import fragmenter
 
 
 def main(
@@ -20,6 +14,8 @@ def main(
     end_seed: int,
     root_dir: str,
     mode: str,
+    heavy_first: bool,
+    beta_com: float,
 ):
     qm9_data = qm9.load_qm9("qm9_data")
     starts = list(range(0, len(qm9_data), chunk))
@@ -40,42 +36,14 @@ def main(
             print(f"Dispatching {path}")
             t0 = time.time()
 
-            # run non-blocking
-            # p = subprocess.Popen(
-            #     [
-            #         # "srun",
-            #         # "--mem=4G",
-            #         # "--ntasks=1",
-            #         # "--cpus-per-task=8",
-            #         # "--gres=gpu:1",
-            #         "python",
-            #         "fragmenter.py",
-            #         "--seed",
-            #         str(seed),
-            #         "--start",
-            #         str(start),
-            #         "--end",
-            #         str(end),
-            #         "--output",
-            #         path,
-            #         "--mode",
-            #         mode,
-            #     ]
-            # )
-            # processes.append(p)
-
-            # wait a bit to avoid overloading the scheduler
-            # time.sleep(10.0)
-
-            # actually wait for the process to finish
-            # p.wait()
-
             fragmenter.main(
                 seed=seed,
                 start=start,
                 end=end,
                 output=path,
                 mode=mode,
+                heavy_first=heavy_first,
+                beta_com=beta_com,
             )
 
             t1 = time.time()
@@ -99,5 +67,7 @@ if __name__ == "__main__":
     parser.add_argument("--end_seed", type=int, default=8)
     parser.add_argument("--root_dir", type=str, default="data")
     parser.add_argument("--mode", type=str, default="nn")
+    parser.add_argument("--heavy_first", action="store_true")
+    parser.add_argument("--beta_com", type=float, default=0.0)
     args = parser.parse_args()
     main(**vars(args))
