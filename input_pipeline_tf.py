@@ -232,8 +232,11 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
             (-phi, 0, -1 / phi),
         ],  # dodacahedron
     ]
-    # Scale the pieces to be unit size.
-    piece_factors = [1/np.linalg.norm(np.asarray(piece[0]) - np.asarray(piece[1])) for piece in pieces]
+    # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
+    pieces_as_arrays = [np.asarray(piece) for piece in pieces]
+    def compute_first_node_distance(piece):
+        return np.min(np.linalg.norm(piece[0] - piece[1:], axis=-1))
+    piece_factors = [1/np.min(compute_first_node_distance(piece)) for piece in pieces_as_arrays]
     pieces = [[tuple(np.asarray(v) * factor) for v in piece] for factor, piece in zip(piece_factors, pieces)]
     return pieces
 

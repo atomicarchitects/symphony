@@ -215,6 +215,7 @@ def get_plotly_traces_for_fragment(
         if fragment.globals.target_positions is not None and not fragment.globals.stop:
             # The target position is relative to the fragment's focus node.
             target_positions = fragment.globals.target_positions + fragment.nodes.positions[0]
+            target_positions = target_positions.reshape(3)
             molecule_traces.append(
                 go.Scatter3d(
                     x=[target_positions[0]],

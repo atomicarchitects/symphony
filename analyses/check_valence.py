@@ -6,7 +6,7 @@
 import argparse
 import ase
 
-from analysis import construct_pybel_mol
+from analyses import analysis
 
 
 def get_parser():
@@ -44,7 +44,7 @@ def check_valence(
     """
     n_atoms = len(mol.numbers)
     valid_atoms = 0
-    pybel_mol = construct_pybel_mol(mol)
+    pybel_mol = analysis.construct_pybel_mol(mol)
 
     for atom in pybel_mol.atoms:
         if atom.OBAtom.GetExplicitValence() == valence[atom.atomicnum]:
