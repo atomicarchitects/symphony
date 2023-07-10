@@ -645,6 +645,57 @@ class MultiHeadAttention(hk.Module):
         y = e3nn.haiku.Linear(num_channels * num_heads * x.irreps, name=name)(x)
         y = y.mul_to_axis(num_heads, axis=-2)
         return y
+    
+
+class SCNNBlock(hk.Module):
+    r"""E(3)-equivariant spherical CNN."""
+
+    def __init__(
+        self,
+        res_beta: int,
+        res_alpha: int,
+        max_ell: int,
+        activation: Callable[[jnp.ndarray], jnp.ndarray],
+    ):
+        """
+        Args:
+            res_beta (int): number of points on the sphere in the :math:`\theta` direction
+            res_alpha (int): number of points on the sphere in the :math:`\phi` direction
+            activation: if None, no activation function is used.
+        """
+        super(SCNNBlock, self).__init__()
+        self.res_beta = res_beta
+        self.res_alpha = res_alpha
+        self.max_ell = max_ell
+        self.activation = activation
+
+    def __call__(
+        self,
+        x: e3nn.IrrepsArray,
+        h: e3nn.IrrepsArray,
+    ) -> e3nn.IrrepsArray:
+        """Compute the output of a spherical CNN block. Assumes that all inputs are in fourier space.
+        Args:
+            x: input IrrepsArray indicating node features
+            h: spherical filter
+        Returns:
+            atom features after interaction
+        """
+        input_irreps = x.irreps
+
+        # Apply activation layer.
+        x_act = e3nn.scalar_activation(
+            e3nn.to_s2grid(x, self.res_beta, self.res_alpha, quadrature="gausslegendre")
+            acts=[self.activation if ir.l == 0 else None for _, ir in input_irreps],
+        )
+        x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
+
+        l_arr = 2 * jnp.arange(self.max_ell) + 1  # number of coefficients per l
+        coeffs_first_ndx = jnp.concatenate([jnp.array([0]), jnp.cumsum(l_arr)])
+        h_first = jnp.repeat(h[coeffs_first_ndx,], repeats=l_arr)
+        y_prime = 2 * jnp.pi * jnp.sqrt(4 * jnp.pi / (2 * l_arr + 1)) * x_prime * h_first
+
+        return e3nn.to_s2grid(y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre")
 
 
 class GlobalEmbedder(hk.Module):
