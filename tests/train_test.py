@@ -95,7 +95,7 @@ class TrainTest(parameterized.TestCase):
         train.train_and_evaluate(config, workdir)
 
         # Save device memory profile.
-        jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
+        # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
 
     @parameterized.product(
         config_name=["nequip", "mace", "e3schnet", "marionette"],

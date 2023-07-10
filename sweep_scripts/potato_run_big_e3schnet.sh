@@ -10,7 +10,7 @@ do
   do
     for i in 4
     do
-        CUDA_VISIBLE_DEVICES=4 python -m main --config=configs/qm9/e3schnet.py     --config.max_ell="$l" --config.num_channels="$c"  --config.num_interactions="$i" --workdir=workdirs/"$expname"/e3schnet/interactions="$i"/l="$l"/channels="$c"/  || break 10
+        CUDA_VISIBLE_DEVICES=4 python -m symphony --config=configs/qm9/e3schnet.py     --config.max_ell="$l" --config.num_channels="$c"  --config.num_interactions="$i" --workdir=workdirs/"$expname"/e3schnet/interactions="$i"/l="$l"/channels="$c"/  || break 10
     done
   done
 done

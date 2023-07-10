@@ -14,6 +14,7 @@ import ml_collections
 import optax
 import yaml
 from absl import logging
+
 from clu import (
     checkpoint,
     metric_writers,
@@ -167,6 +168,7 @@ def evaluate_model(
                 split_metrics = batch_metrics
             else:
                 split_metrics = split_metrics.merge(batch_metrics)
+
         eval_metrics[split] = split_metrics
 
     return eval_metrics
@@ -377,8 +379,9 @@ def train_and_evaluate(
             logging.info("No more training data. Continuing with final evaluation.")
             break
 
+
         # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):            
             state, batch_metrics = train_step(
                 state,
                 graphs,

@@ -12,6 +12,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.root_dir = None
     config.shuffle_datasets = True
+    config.train_pieces = (None, None)
+    config.val_pieces = (None, None)
+    config.test_pieces = (None, None)
 
     # Optimizer.
     config.optimizer = "adam"
@@ -36,8 +39,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 32
-    config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
-    config.max_n_edges = 90 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 15 * config.get_ref("max_n_graphs")
+    config.max_n_edges = 45 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-3
     config.loss_kwargs.target_position_inverse_temperature = 20.0
@@ -61,5 +64,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
+    config.target_position_predictor.num_channels = 1
 
     return config

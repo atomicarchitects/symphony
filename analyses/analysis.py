@@ -211,28 +211,32 @@ def get_plotly_traces_for_fragment(
         )
 
     # Highlight the target atom.
-    if fragment.globals.target_positions is not None and not fragment.globals.stop:
-        molecule_traces.append(
-            go.Scatter3d(
-                x=[fragment.globals.target_positions[0]],
-                y=[fragment.globals.target_positions[1]],
-                z=[fragment.globals.target_positions[2]],
-                mode="markers",
-                marker=dict(
-                    size=[
-                        1.05
-                        * ATOMIC_SIZES[
-                            models.ATOMIC_NUMBERS[
-                                fragment.globals.target_species.item()
+    if fragment.globals is not None:
+        if fragment.globals.target_positions is not None and not fragment.globals.stop:
+            # The target position is relative to the fragment's focus node.
+            target_positions = fragment.globals.target_positions + fragment.nodes.positions[0]
+            target_positions = target_positions.reshape(3)
+            molecule_traces.append(
+                go.Scatter3d(
+                    x=[target_positions[0]],
+                    y=[target_positions[1]],
+                    z=[target_positions[2]],
+                    mode="markers",
+                    marker=dict(
+                        size=[
+                            1.05
+                            * ATOMIC_SIZES[
+                                models.ATOMIC_NUMBERS[
+                                    fragment.globals.target_species.item()
+                                ]
                             ]
-                        ]
-                    ],
-                    color=["green"],
-                ),
-                opacity=0.5,
-                name="Target Atom",
+                        ],
+                        color=["green"],
+                    ),
+                    opacity=0.5,
+                    name="Target Atom",
+                )
             )
-        )
 
     return molecule_traces
 
@@ -311,18 +315,10 @@ def get_plotly_traces_for_predictions(
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.position_coeffs
-    position_logits = e3nn.to_s2grid(
-        position_coeffs,
-        50,
-        99,
-        quadrature="gausslegendre",
-        normalization="integral",
-        p_val=1,
-        p_arg=-1,
+    position_logits = models.log_coeffs_to_logits(
+        position_coeffs, 50, 99
     )
-    position_logits = position_logits.apply(
-        lambda x: x - position_logits.grid_values.max()
-    )
+    position_logits.grid_values -= jnp.max(position_logits.grid_values)
     position_probs = position_logits.apply(jnp.exp)
 
     count = 0
@@ -354,28 +350,40 @@ def get_plotly_traces_for_predictions(
     radius = jnp.linalg.norm(pred.globals.position_vectors, axis=-1)
     most_likely_radius_index = jnp.abs(RADII - radius).argmin()
     most_likely_radius = RADII[most_likely_radius_index]
-    most_likely_radius_coeffs = position_coeffs[most_likely_radius_index]
-    most_likely_radius_sig = e3nn.to_s2grid(
-        most_likely_radius_coeffs, 50, 69, quadrature="soft", p_val=1, p_arg=-1
+    all_sigs = e3nn.to_s2grid(
+        position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
     )
-    spherical_harmonics = go.Surface(
-        most_likely_radius_sig.plotly_surface(
-            scale_radius_by_amplitude=True,
-            radius=most_likely_radius,
-            translation=focus_position,
-            normalize_radius_by_max_amplitude=True,
-        ),
-        name="Spherical Harmonics for Logits",
-        showlegend=True,
-        visible="legendonly",
-    )
-    molecule_traces.append(spherical_harmonics)
+    cmin = all_sigs.grid_values.min().item()
+    cmax = all_sigs.grid_values.max().item()
+    for channel in range(position_coeffs.shape[0]):
+        most_likely_radius_coeffs = position_coeffs[channel, most_likely_radius_index]
+        most_likely_radius_sig = e3nn.to_s2grid(
+            most_likely_radius_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+        )
+        spherical_harmonics = go.Surface(
+            most_likely_radius_sig.plotly_surface(
+                scale_radius_by_amplitude=True,
+                radius=most_likely_radius,
+                translation=focus_position,
+                normalize_radius_by_max_amplitude=True,
+            ),
+            cmin=cmin,
+            cmax=cmax,
+            name=f"Spherical Harmonics for Logits: Channel {channel}",
+            showlegend=True,
+            visible="legendonly",
+        )
+        molecule_traces.append(spherical_harmonics)
 
     # Plot target species probabilities.
     stop_probability = pred.globals.stop_probs.item()
     predicted_target_species = pred.globals.target_species.item()
-    true_focus = 0  # This is a convention used in our training pipeline.
-    true_target_species = fragment.globals.target_species.item()
+    if fragment.globals is not None and not fragment.globals.stop:
+        true_focus = 0  # This is a convention used in our training pipeline.
+        true_target_species = fragment.globals.target_species.item()
+    else:
+        true_focus = None
+        true_target_species = None
 
     # We highlight the true target if provided.
     def get_focus_string(atom_index: int) -> str:
@@ -629,7 +637,7 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
                 yield prefix + k, v
 
     config_dict = dict(iterate_with_prefix(config.to_dict(), "config."))
-    return pd.DataFrame().from_dict(config_dict)
+    return pd.DataFrame().from_dict([config_dict])
 
 
 def load_model_at_step(
@@ -673,50 +681,48 @@ def load_model_at_step(
 
 
 def get_results_as_dataframe(
-    models: Sequence[str], metrics: Sequence[str], basedir: str
-) -> Dict[str, pd.DataFrame]:
+    basedir: str
+) -> pd.DataFrame:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
-    splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
-    results = {split: pd.DataFrame() for split in splits}
-    for model in models:
-        for config_file_path in glob.glob(
-            os.path.join(basedir, "**", model, "**", "*.yml"), recursive=True
-        ):
-            workdir = os.path.dirname(config_file_path)
-            try:
-                config, best_state, _, metrics_for_best_state = load_from_workdir(
-                    workdir
-                )
-            except FileNotFoundError:
-                logging.warning(f"Skipping {workdir} because it is incomplete.")
-                continue
+    results = pd.DataFrame()
+    for config_file_path in glob.glob(
+        os.path.join(basedir, "**", "*.yml"), recursive=True
+    ):
+        workdir = os.path.dirname(config_file_path)
+        try:
+            config, best_state, _, metrics_for_best_state = load_from_workdir(
+                workdir
+            )
+        except FileNotFoundError:
+            logging.warning(f"Skipping {workdir} because it is incomplete.")
+            continue
 
-            num_params = sum(
-                jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
-            )
-            config_df = config_to_dataframe(config)
-            other_df = pd.DataFrame.from_dict(
-                {
-                    "model": [config.model.lower()],
-                    "max_l": [config.max_ell],
-                    "num_interactions": [config.num_interactions],
-                    "num_channels": [config.num_channels],
-                    "num_params": [num_params],
-                    "num_train_molecules": [
-                        config.train_molecules[1] - config.train_molecules[0]
-                    ],
-                }
-            )
-            for split in results:
-                metrics_for_split = {
-                    metric: [metrics_for_best_state[split][metric].item()]
-                    for metric in metrics
-                }
-                metrics_df = pd.DataFrame.from_dict(metrics_for_split)
-                df = pd.merge(config_df, metrics_df, left_index=True, right_index=True)
-                df = pd.merge(df, other_df, left_index=True, right_index=True)
-                results[split] = pd.concat([results[split], df], ignore_index=True)
+        num_params = sum(
+            jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
+        )
+        config_df = config_to_dataframe(config)
+        other_df = pd.DataFrame.from_dict(
+            {
+                "model": [config.model.lower()],
+                "max_l": [config.max_ell],
+                "num_interactions": [config.num_interactions],
+                "num_channels": [config.num_channels],
+                "num_params": [num_params],
+                # "num_train_molecules": [
+                #     config.train_molecules[1] - config.train_molecules[0]
+                # ],
+            }
+        )
+        df = pd.merge(config_df, other_df, left_index=True, right_index=True)
+        for split in metrics_for_best_state:
+            metrics_for_split = {
+                f"{split}.{metric}": [metrics_for_best_state[split][metric].item()]
+                for metric in metrics_for_best_state[split]
+            }
+            metrics_df = pd.DataFrame.from_dict(metrics_for_split)
+            df = pd.merge(df, metrics_df, left_index=True, right_index=True)
+        results = pd.concat([results, df], ignore_index=True)
 
     return results
 

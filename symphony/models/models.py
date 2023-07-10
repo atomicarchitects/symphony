@@ -17,9 +17,14 @@ import nequip_jax
 from symphony import datatypes
 from symphony.models import marionette
 
-RADII = jnp.arange(0.75, 2.03, 0.02)
+RADII = jnp.arange(0.5, 1.5, 0.05)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
+
+
+def debug_print(fmt, *args, **kwargs):
+    return
+    jax.debug.print(fmt, *args, **kwargs)
 
 
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
@@ -125,6 +130,28 @@ def segment_sample_2D(
     assert node_indices.shape == (num_segments,)
     assert species_indices.shape == (num_segments,)
     return node_indices, species_indices
+
+
+def log_coeffs_to_logits(
+    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int,
+) -> e3nn.SphericalSignal:
+    """Converts coefficients of the logits to a SphericalSignal representing the logits."""
+    num_radii = len(RADII)
+    num_channels = log_coeffs.shape[0]
+    assert log_coeffs.shape == (
+        num_channels,
+        num_radii,
+        log_coeffs.irreps.dim,
+    ), log_coeffs.shape
+
+    log_dist = e3nn.to_s2grid(
+        log_coeffs, res_beta, res_alpha, quadrature="gausslegendre", p_val=1, p_arg=-1
+    )
+    assert log_dist.shape == (num_channels, num_radii, res_beta, res_alpha)
+
+    # Softmax over all channels.
+    log_dist.grid_values = jax.scipy.special.logsumexp(log_dist.grid_values, axis=0)
+    return log_dist
 
 
 def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
@@ -453,6 +480,7 @@ class NequIP(hk.Module):
                 mlp_activation=self.mlp_activation,
                 mlp_n_hidden=self.mlp_n_hidden,
                 mlp_n_layers=self.mlp_n_layers,
+                radial_basis=nequip_jax.radial.simple_smooth_radial_basis,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
 
@@ -794,6 +822,7 @@ class TargetPositionPredictor(hk.Module):
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
+        num_channels: int,
         num_species: int,
         name: Optional[str] = None,
     ):
@@ -801,6 +830,7 @@ class TargetPositionPredictor(hk.Module):
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
+        self.num_channels = num_channels
         self.num_species = num_species
 
     def __call__(
@@ -814,7 +844,7 @@ class TargetPositionPredictor(hk.Module):
         )
 
         target_species_embeddings = hk.Embed(
-            self.num_species, focus_node_embeddings.irreps.num_irreps
+            self.num_species, embed_dim=focus_node_embeddings.irreps.num_irreps
         )(target_species)
 
         assert target_species_embeddings.shape == (
@@ -824,21 +854,39 @@ class TargetPositionPredictor(hk.Module):
 
         # TODO: See if we can make this more expressive.
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        position_coeffs = e3nn.haiku.Linear(len(RADII) * irreps)(
+        num_radii = len(RADII)
+        position_coeffs = e3nn.haiku.Linear(num_radii * self.num_channels * irreps)(
             target_species_embeddings * focus_node_embeddings
         )
-        position_coeffs = position_coeffs.mul_to_axis(factor=len(RADII))
+        position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
+        position_coeffs = position_coeffs.mul_to_axis(factor=num_radii)
+        assert position_coeffs.shape == (
+            num_graphs,
+            self.num_channels,
+            num_radii,
+            irreps.dim,
+        ), position_coeffs.shape
+
+        # Old logic:
+        # position_logits = e3nn.to_s2grid(position_coeffs)
 
         # Compute the position signal projected to a spherical grid for each radius.
-        position_logits = e3nn.to_s2grid(
-            position_coeffs,
+        position_logits = jax.vmap(
+            lambda coeffs: log_coeffs_to_logits(
+                coeffs, self.res_beta, self.res_alpha
+            )
+        )(position_coeffs)
+        assert position_logits.shape == (
+            num_graphs,
+            num_radii,
             self.res_beta,
             self.res_alpha,
-            quadrature="gausslegendre",
-            normalization="integral",
-            p_val=1,
-            p_arg=-1,
+        ), position_logits.shape
+
+        position_logits.grid_values -= position_logits.grid_values.max(
+            axis=(-3, -2, -1), keepdims=True
         )
+
         return position_coeffs, position_logits
 
 
@@ -848,6 +896,7 @@ class Predictor(hk.Module):
     def __init__(
         self,
         node_embedder: hk.Module,
+        auxiliary_node_embedder: hk.Module,
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
         target_position_predictor: TargetPositionPredictor,
         global_embedder: Optional[GlobalEmbedder] = None,
@@ -855,6 +904,7 @@ class Predictor(hk.Module):
     ):
         super().__init__(name=name)
         self.node_embedder = node_embedder
+        self.auxiliary_node_embedder = auxiliary_node_embedder
         self.global_embedder = global_embedder
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
@@ -885,14 +935,16 @@ class Predictor(hk.Module):
             node_embeddings
         )
         stop_logits = jnp.zeros((num_graphs,))
+
         focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
         )
 
         # Get the embeddings of the focus nodes.
         # These are the first nodes in each graph during training.
+        auxiliary_node_embeddings = self.auxiliary_node_embedder(graphs)
         focus_node_indices = get_first_node_indices(graphs)
-        true_focus_node_embeddings = node_embeddings[focus_node_indices]
+        true_focus_node_embeddings = auxiliary_node_embeddings[focus_node_indices]
 
         # Get the position coefficients.
         position_coeffs, position_logits = self.target_position_predictor(
@@ -908,6 +960,7 @@ class Predictor(hk.Module):
         position_probs = position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
+        # position_probs = position_probs / position_probs.integrate()
 
         # Check the shapes.
         assert focus_and_target_species_logits.shape == (
@@ -920,14 +973,15 @@ class Predictor(hk.Module):
         ), focus_and_target_species_probs.shape
         assert position_coeffs.shape == (
             num_graphs,
+            self.target_position_predictor.num_channels,
             len(RADII),
             position_coeffs.shape[-1],
-        )
+        ), position_coeffs.shape
         assert position_logits.shape == (
             num_graphs,
             len(RADII),
-            position_logits.shape[-2],
-            position_logits.shape[-1],
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
         )
 
         return datatypes.Predictions(
@@ -935,6 +989,7 @@ class Predictor(hk.Module):
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings=node_embeddings,
+                auxiliary_node_embeddings=auxiliary_node_embeddings,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -1011,7 +1066,8 @@ class Predictor(hk.Module):
         )
 
         # Get the embeddings of the focus node.
-        focus_node_embeddings = node_embeddings[focus_indices]
+        auxiliary_node_embeddings = self.auxiliary_node_embedder(graphs)
+        focus_node_embeddings = auxiliary_node_embeddings[focus_indices]
 
         # Get the position coefficients.
         position_coeffs, position_logits = self.target_position_predictor(
@@ -1075,7 +1131,12 @@ class Predictor(hk.Module):
         assert focus_indices.shape == (num_graphs,)
         assert focus_and_target_species_logits.shape == (num_nodes, num_species)
         assert focus_and_target_species_probs.shape == (num_nodes, num_species)
-        assert position_coeffs.shape == (num_graphs, len(RADII), irreps.dim)
+        assert position_coeffs.shape == (
+            num_graphs,
+            self.target_position_predictor.num_channels,
+            len(RADII),
+            irreps.dim,
+        )
         assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
@@ -1084,6 +1145,7 @@ class Predictor(hk.Module):
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings=node_embeddings,
+                auxiliary_node_embeddings=auxiliary_node_embeddings,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -1160,6 +1222,22 @@ def create_model(
                 mlp_n_layers=config.mlp_n_layers,
                 n_radial_basis=config.num_basis_fns,
             )
+            auxiliary_node_embedder = NequIP(
+                num_species=num_species,
+                r_max=config.r_max,
+                avg_num_neighbors=config.avg_num_neighbors,
+                max_ell=config.max_ell,
+                init_embedding_dims=config.num_channels,
+                output_irreps=output_irreps,
+                num_interactions=config.num_interactions,
+                even_activation=get_activation(config.even_activation),
+                odd_activation=get_activation(config.odd_activation),
+                mlp_activation=get_activation(config.mlp_activation),
+                mlp_n_hidden=config.num_channels,
+                mlp_n_layers=config.mlp_n_layers,
+                n_radial_basis=config.num_basis_fns,
+            )
+
         elif config.model == "MarioNette":
             node_embedder = MarioNette(
                 num_species=num_species,
@@ -1212,10 +1290,12 @@ def create_model(
             position_coeffs_lmax=config.max_ell,
             res_beta=config.target_position_predictor.res_beta,
             res_alpha=config.target_position_predictor.res_alpha,
+            num_channels=config.target_position_predictor.num_channels,
             num_species=num_species,
         )
         predictor = Predictor(
             node_embedder=node_embedder,
+            auxiliary_node_embedder=auxiliary_node_embedder,
             global_embedder=global_embedder,
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,

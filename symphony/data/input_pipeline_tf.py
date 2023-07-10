@@ -69,9 +69,9 @@ def get_datasets(
     for split in ["train", "val", "test"]:
         dataset_split = datasets[split]
 
-        # We repeat the training split indefinitely.
-        if split == "train":
-            dataset_split = dataset_split.repeat()
+        # We repeat all splits indefinitely.
+        # This is required because of some weird behavior of tf.data.Dataset.from_generator.
+        dataset_split = dataset_split.repeat()
 
         # Now we batch and pad the graphs.
         batching_fn = functools.partial(
@@ -90,9 +90,7 @@ def get_datasets(
             dataset_split.take(config.num_eval_steps).cache().prefetch(tf.data.AUTOTUNE)
         )
         datasets[split + "_eval_final"] = (
-            dataset_split.take(config.num_eval_steps_at_end_of_training)
-            .cache()
-            .prefetch(tf.data.AUTOTUNE)
+            dataset_split.take(config.num_eval_steps_at_end_of_training).cache().prefetch(tf.data.AUTOTUNE)
         )
 
     return datasets
@@ -163,12 +161,20 @@ def get_pieces_for_tetris() -> List[List[Tuple[int, int, int]]]:
     ]
 
 
+def get_unbatched_tetris_datasets(
+    rng: chex.PRNGKey, config: ml_collections.ConfigDict
+) -> Dict[str, tf.data.Dataset]:
+    """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
+    pieces = get_pieces_for_tetris()
+    return pieces_to_unbatched_datasets(pieces, rng, config)
+
+
 def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     """Returns the pieces for the Platonic solids."""
     # Taken from Wikipedia.
     # https://en.wikipedia.org/wiki/Platonic_solid
     phi = (1 + np.sqrt(5)) / 2
-    return [
+    pieces = [
         [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
         [
             (1, 0, 0),
@@ -225,14 +231,13 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
             (-phi, 0, -1 / phi),
         ],  # dodacahedron
     ]
-
-
-def get_unbatched_tetris_datasets(
-    rng: chex.PRNGKey, config: ml_collections.ConfigDict
-) -> Dict[str, tf.data.Dataset]:
-    """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
-    pieces = get_pieces_for_tetris()
-    return pieces_to_unbatched_datasets(pieces, rng, config)
+    # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
+    pieces_as_arrays = [np.asarray(piece) for piece in pieces]
+    def compute_first_node_distance(piece):
+        return np.min(np.linalg.norm(piece[0] - piece[1:], axis=-1))
+    piece_factors = [1/np.min(compute_first_node_distance(piece)) for piece in pieces_as_arrays]
+    pieces = [[tuple(np.asarray(v) * factor) for v in piece] for factor, piece in zip(piece_factors, pieces)]
+    return pieces
 
 
 def get_unbatched_platonic_solids_datasets(
@@ -259,7 +264,7 @@ def pieces_to_unbatched_datasets(
             graph,
             n_species=1,
             nn_tolerance=config.nn_tolerance,
-            max_radius=2.0,
+            max_radius=config.nn_cutoff,
             mode=config.fragment_logic,
         )
 
@@ -288,8 +293,15 @@ def pieces_to_unbatched_datasets(
 
     for split in ["train", "val", "test"]:
         split_rng, rng = jax.random.split(rng)
+
+        split_pieces = config.get(f"{split}_pieces")
+        if None not in [split_pieces, split_pieces[0], split_pieces[1]]:
+            split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
+        else:
+            split_pieces_as_graphs = pieces_as_graphs
+
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, graph) for graph in pieces_as_graphs
+            generate_fragments_helper(split_rng, graph) for graph in split_pieces_as_graphs
         )
 
         def fragment_yielder():

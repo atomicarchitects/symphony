@@ -56,5 +56,6 @@ exclude = '''
   | buck-out
   | build
   | dist
+  | .nox
 )/
 '''

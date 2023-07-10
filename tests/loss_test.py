@@ -50,6 +50,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             ),
             focus_and_target_species_probs=None,
             embeddings=None,
+            auxiliary_node_embeddings=None,
         ),
         globals=datatypes.GlobalPredictions(
             stop_logits=jnp.asarray([0.0, 0.0]),
@@ -257,6 +258,42 @@ class LossTest(parameterized.TestCase):
 
         self.assertTrue(jnp.all(position_loss >= 0))
         np.testing.assert_allclose(position_loss, expected_position_loss, atol=1e-4)
+
+    def test_logits_shift(self):
+        preds = self.preds._replace(
+            globals=self.preds.globals._replace(
+                position_logits=self.preds.globals.position_logits.apply(lambda x: x + 1),
+            )
+        )
+
+        _, (_, position_loss) = loss.generation_loss(
+            preds=preds,
+            graphs=self.graphs,
+            radius_rbf_variance=1e-3,
+            target_position_inverse_temperature=1.0,
+            target_position_lmax=1,
+            ignore_position_loss_for_small_fragments=False,
+            position_loss_type="kl_divergence",
+        )
+
+        preds_2 = self.preds._replace(
+            globals=self.preds.globals._replace(
+                position_logits=self.preds.globals.position_logits.apply(lambda x: x + 2),
+            )
+        )
+
+        _, (_, position_loss_2) = loss.generation_loss(
+            preds=preds_2,
+            graphs=self.graphs,
+            radius_rbf_variance=1e-3,
+            target_position_inverse_temperature=1.0,
+            target_position_lmax=1,
+            ignore_position_loss_for_small_fragments=False,
+            position_loss_type="kl_divergence",
+        )
+
+        np.testing.assert_allclose(position_loss, position_loss_2, atol=1e-4)
+
 
 
 if __name__ == "__main__":

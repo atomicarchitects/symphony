@@ -12,8 +12,9 @@ import numpy as np
 import roundmantissa
 
 from symphony import datatypes
-from symphony.data import dynamic_batcher, qm9
+from symphony.data import dynamic_batcher
 from symphony.data import fragments as fragments_lib
+from symphony.data import qm9
 
 
 def get_raw_datasets(
@@ -231,11 +232,11 @@ def ase_atoms_to_jraph_graph(
     species = np.searchsorted(atomic_numbers, atoms.numbers)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(jnp.asarray(atoms.positions), jnp.asarray(species)),
-        edges=jnp.ones(len(senders)),
+        nodes=datatypes.NodesInfo(np.asarray(atoms.positions), np.asarray(species)),
+        edges=np.ones(len(senders)),
         globals=None,
-        senders=jnp.asarray(senders),
-        receivers=jnp.asarray(receivers),
-        n_node=jnp.array([len(atoms)]),
-        n_edge=jnp.array([len(senders)]),
+        senders=np.asarray(senders),
+        receivers=np.asarray(receivers),
+        n_node=np.array([len(atoms)]),
+        n_edge=np.array([len(senders)]),
     )

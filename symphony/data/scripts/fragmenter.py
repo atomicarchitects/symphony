@@ -7,12 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
 import tqdm
-import sys
 
-sys.path.append("..")
-
-import input_pipeline  # noqa: E402
-import qm9  # noqa: E402
+from symphony.data import fragments, qm9, input_pipeline
 
 
 def main(
@@ -21,7 +17,12 @@ def main(
     end: int,
     output: str = "fragments.pkl",
     mode: str = "nn",
+    heavy_first: bool = False,
+    beta_com: float = 0.0,
 ):
+    print(f"Generating fragments {start}:{end} using seed {seed}...")
+    print(f"Saving to {output}...")
+    print(f"Mode: {mode}, heavy_first: {heavy_first}, beta_com: {beta_com}")
     seed = jax.random.PRNGKey(seed)
     molecules = qm9.load_qm9("qm9_data")
 
@@ -37,7 +38,7 @@ def main(
         # nodes
         "positions": tf.TensorSpec(shape=(None, 3), dtype=tf.float32),
         "species": tf.TensorSpec(shape=(None,), dtype=tf.int32),
-        "target_species_probs": tf.TensorSpec(
+        "focus_and_target_species_probs": tf.TensorSpec(
             shape=(None, len(atomic_numbers)), dtype=tf.float32
         ),
         # edges
@@ -57,8 +58,15 @@ def main(
             graph = input_pipeline.ase_atoms_to_jraph_graph(
                 molecule, atomic_numbers, cutoff
             )
-            frags = input_pipeline.generate_fragments(
-                seed, graph, len(atomic_numbers), nn_tolerance, max_radius, mode
+            frags = fragments.generate_fragments(
+                seed,
+                graph,
+                len(atomic_numbers),
+                nn_tolerance,
+                max_radius,
+                mode,
+                heavy_first,
+                beta_com,
             )
             frags = list(frags)
 
@@ -81,7 +89,7 @@ def main(
                 yield {
                     "positions": frag.nodes.positions.astype(np.float32),
                     "species": frag.nodes.species.astype(np.int32),
-                    "target_species_probs": frag.nodes.target_species_probs.astype(
+                    "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
                         np.float32
                     ),
                     "senders": frag.senders.astype(np.int32),
@@ -110,5 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--end", type=int)
     parser.add_argument("--output", type=str, default="fragments")
     parser.add_argument("--mode", type=str, default="nn")
+    parser.add_argument("--heavy_first", action="store_true")
+    parser.add_argument("--beta_com", type=float, default=0.0)
     args = parser.parse_args()
     main(**vars(args))
