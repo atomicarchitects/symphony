@@ -7,7 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 import jraph
 
-import models
+
+from symphony import models
 
 
 class ModelsTest(parameterized.TestCase):

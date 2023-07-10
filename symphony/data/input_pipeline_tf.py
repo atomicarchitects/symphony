@@ -15,9 +15,8 @@ import jraph
 import ml_collections
 import ase
 
-import input_pipeline
-import datatypes
-import fragments
+from symphony.data import input_pipeline, fragments
+from symphony import datatypes
 
 
 def get_datasets(

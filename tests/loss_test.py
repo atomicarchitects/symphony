@@ -12,9 +12,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-import datatypes
-import loss
-import models
+from symphony import datatypes, loss, models
 
 
 def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
