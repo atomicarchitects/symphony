@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Callable
 
 import os
 import sys
@@ -19,7 +19,7 @@ import jraph
 import numpy as np
 import tqdm
 import chex
-import matscipy.neighbours
+import optax
 
 sys.path.append("..")
 
@@ -49,6 +49,7 @@ def append_predictions(
     target_species = pred.globals.target_species[0]
     new_species = species.at[num_valid_nodes].set(target_species)
 
+    # Compute the distance matrix to select the edges.
     distance_matrix = jnp.linalg.norm(
         new_positions[None, :, :] - new_positions[:, None, :], axis=-1
     )
@@ -58,8 +59,8 @@ def append_predictions(
     valid_edges = (distance_matrix > 0) & (distance_matrix < nn_cutoff)
     valid_edges = (
         valid_edges
-        & (node_indices[None, :] < num_valid_nodes)
-        & (node_indices[:, None] < num_valid_nodes)
+        & (node_indices[None, :] <= num_valid_nodes)
+        & (node_indices[:, None] <= num_valid_nodes)
     )
     senders, receivers = jnp.nonzero(
         valid_edges, size=num_nodes * num_nodes, fill_value=-1
@@ -77,6 +78,44 @@ def append_predictions(
         senders=senders,
         receivers=receivers,
     )
+
+
+# Generate with different seeds.
+def generate_one_step(
+    apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    padded_fragment: datatypes.Fragments,
+    stop: bool,
+    nn_cutoff: float,
+    rng: chex.PRNGKey,
+) -> Tuple[
+    Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
+]:
+    """Generates the next fragment for a given seed."""
+    pred = apply_fn(padded_fragment, rng)
+    next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
+    stop = pred.globals.stop[0] | stop
+    return jax.lax.cond(
+        stop,
+        lambda: ((padded_fragment, True), (padded_fragment, pred)),
+        lambda: ((next_padded_fragment, False), (next_padded_fragment, pred)),
+    )
+
+
+def generate_for_one_seed(
+    apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    init_fragment,
+    max_num_atoms,
+    cutoff: float,
+    rng: chex.PRNGKey,
+) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
+    """Generates a single molecule for a given seed."""
+    step_rngs = jax.random.split(rng, num=max_num_atoms)
+    _, (padded_fragments, preds) = jax.lax.scan(
+        lambda args, rng: generate_one_step(apply_fn, *args, cutoff, rng),
+        (init_fragment, False),
+        step_rngs,
+    )
+    return padded_fragments, preds
 
 
 def generate_molecules(
@@ -139,37 +178,25 @@ def generate_molecules(
     )
     init_fragment = jax.tree_map(jnp.asarray, init_fragment)
 
-    # Generate with different seeds.
-    def generate_one_step(
-        padded_fragment: datatypes.Fragments, rng: chex.PRNGKey
-    ) -> Tuple[datatypes.Fragments, Tuple[datatypes.Fragments, datatypes.Predictions]]:
-        pred = model.apply(
+    # Generate molecules, for all seeds
+    def apply_with_params(params: optax.Params, rngs: chex.PRNGKey):
+        apply_fn = lambda padded_fragment, rng: model.apply(
             params,
             rng,
             padded_fragment,
             focus_and_atom_type_inverse_temperature,
             position_inverse_temperature,
         )
-        next_padded_fragment = append_predictions(
-            pred, padded_fragment, config.nn_cutoff
+        generate_for_one_seed_fn = lambda rng: generate_for_one_seed(
+            apply_fn, init_fragment, max_num_atoms, config.nn_cutoff, rng
         )
-        return jax.lax.cond(
-            pred.globals.stop[0],
-            lambda: (padded_fragment, (padded_fragment, pred)),
-            lambda: (next_padded_fragment, (next_padded_fragment, pred)),
-        )
-
-    def generate_for_one_seed(seed: int) -> None:
-        rngs = jax.random.split(jax.random.PRNGKey(seed), num=max_num_atoms)
-        _, (padded_fragments, preds) = jax.lax.scan(
-            generate_one_step, init_fragment, rngs
-        )
+        vmapped_generate_fn = jax.vmap(generate_for_one_seed_fn)
+        padded_fragments, preds = vmapped_generate_fn(rngs)
         return padded_fragments, preds
 
-    # Generate molecules, for all seeds
-    vmapped_generate_fn = jax.jit(jax.vmap(generate_for_one_seed))
-    padded_fragments, preds = vmapped_generate_fn(jnp.asarray(seeds))
-    print(padded_fragments.nodes.positions.shape)
+    # Generate molecules for all seeds.
+    rngs = jax.vmap(jax.random.PRNGKey)(jnp.asarray(seeds))
+    padded_fragments, preds = jax.jit(apply_with_params)(params, rngs)
 
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
         # Get the padded fragment and predictions for this seed.
