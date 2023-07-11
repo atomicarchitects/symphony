@@ -3,7 +3,6 @@
 # - MACE polynomial structure
 # - ESCN performance
 
-
 from typing import Callable, Optional, Union
 
 import e3nn_jax as e3nn
@@ -12,6 +11,8 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 from e3nn_jax.experimental.linear_shtp import LinearSHTP
+
+from symphony import datatypes
 
 
 class MarioNetteLayerFlax(flax.linen.Module):
@@ -208,3 +209,80 @@ def unflatten(array, template):
         lst.append(array[start : start + x.size].reshape(x.shape))
         start += x.size
     return jax.tree_util.tree_unflatten(jax.tree_util.tree_structure(template), lst)
+
+
+class MarioNette(hk.Module):
+    """Wrapper class for MarioNette."""
+
+    def __init__(
+        self,
+        num_species: int,
+        r_max: float,
+        avg_num_neighbors: float,
+        init_embedding_dims: int,
+        output_irreps: str,
+        soft_normalization: float,
+        num_interactions: int,
+        even_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        mlp_n_hidden: int,
+        mlp_n_layers: int,
+        n_radial_basis: int,
+        use_bessel: bool,
+        alpha: float,
+        alphal: float,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.num_species = num_species
+        self.r_max = r_max
+        self.avg_num_neighbors = avg_num_neighbors
+        self.init_embedding_dims = init_embedding_dims
+        self.output_irreps = output_irreps
+        self.soft_normalization = soft_normalization
+        self.num_interactions = num_interactions
+        self.even_activation = even_activation
+        self.odd_activation = odd_activation
+        self.mlp_activation = mlp_activation
+        self.mlp_n_hidden = mlp_n_hidden
+        self.mlp_n_layers = mlp_n_layers
+        self.n_radial_basis = n_radial_basis
+        self.use_bessel = use_bessel
+        self.alpha = alpha
+        self.alphal = alphal
+
+    def __call__(
+        self,
+        graphs: datatypes.Fragments,
+    ):
+        relative_positions = (
+            graphs.nodes.positions[graphs.receivers]
+            - graphs.nodes.positions[graphs.senders]
+        )
+        relative_positions = relative_positions / self.r_max
+        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
+
+        species = graphs.nodes.species
+        node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
+        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
+
+        for _ in range(self.num_interactions):
+            node_feats = MarioNetteLayerHaiku(
+                avg_num_neighbors=self.avg_num_neighbors,
+                num_species=self.num_species,
+                output_irreps=self.output_irreps,
+                interaction_irreps=self.output_irreps,
+                soft_normalization=self.soft_normalization,
+                even_activation=self.even_activation,
+                odd_activation=self.odd_activation,
+                mlp_activation=self.mlp_activation,
+                mlp_n_hidden=self.mlp_n_hidden,
+                mlp_n_layers=self.mlp_n_layers,
+                n_radial_basis=self.n_radial_basis,
+                use_bessel=self.use_bessel,
+            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+
+        alpha = self.alpha * (self.alphal ** jnp.array(node_feats.irreps.ls))
+        node_feats = node_feats * alpha
+        return node_feats

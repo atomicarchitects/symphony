@@ -1,5 +1,4 @@
 """Definition of the generative models."""
-# TODO: Separate the models into separate files.
 
 from typing import Callable, Optional, Tuple
 
@@ -8,14 +7,11 @@ import e3nn_jax as e3nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
-import numpy as np
 import jraph
-import mace_jax.modules
 import ml_collections
-import nequip_jax
 
 from symphony import datatypes
-from symphony.models import marionette
+from symphony.models import nequip, marionette, e3schnet, mace, attention
 
 RADII = jnp.arange(0.5, 1.5, 0.05)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -154,527 +150,6 @@ def log_coeffs_to_logits(
     return log_dist
 
 
-def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
-    """A softplus function shifted so that shifted_softplus(0) = 0."""
-    return jax.nn.softplus(x) - jnp.log(2.0)
-
-
-def cosine_cutoff(input: jnp.ndarray, cutoff: jnp.ndarray):
-    """Behler-style cosine cutoff, adapted from SchNetPack."""
-    # Compute values of cutoff function
-    input_cut = 0.5 * (jnp.cos(input * jnp.pi / cutoff) + 1.0)
-    # Remove contributions beyond the cutoff radius
-    input_cut *= (input < cutoff).astype(jnp.float32)
-    return input_cut
-
-
-class E3SchNetInteractionBlock(hk.Module):
-    r"""E(3)-equivariant SchNet interaction block for modeling interactions of atomistic systems."""
-
-    def __init__(
-        self,
-        n_atom_basis: int,
-        n_filters: int,
-        max_ell: int,
-        activation: Callable[[jnp.ndarray], jnp.ndarray],
-    ):
-        """
-        Args:
-            n_atom_basis: number of features to describe atomic environments.
-            n_rbf (int): number of radial basis functions.
-            n_filters: number of filters used in continuous-filter convolution.
-            activation: if None, no activation function is used.
-        """
-        super(E3SchNetInteractionBlock, self).__init__()
-        self.n_atom_basis = n_atom_basis
-        self.n_filters = n_filters
-        self.max_ell = max_ell
-        self.activation = activation
-
-    def __call__(
-        self,
-        x: e3nn.IrrepsArray,
-        idx_i: jnp.ndarray,
-        idx_j: jnp.ndarray,
-        f_ij: jnp.ndarray,
-        rcut_ij: jnp.ndarray,
-        Yr_ij: jnp.ndarray,
-    ) -> e3nn.IrrepsArray:
-        """Compute interaction output. Notation matches SchNetPack implementation in PyTorch.
-        Args:
-            x: input IrrepsArray indicating node features
-            idx_i: index of center atom i
-            idx_j: index of neighbors j
-            f_ij: d_ij passed through the embedding function
-            rcut_ij: d_ij passed through the cutoff function
-            r_ij: relative position of neighbor j to atom i
-            Yr_ij: spherical harmonics of r_ij
-        Returns:
-            atom features after interaction
-        """
-        input_irreps = x.irreps
-
-        # Embed the inputs.
-        x = e3nn.haiku.Linear(
-            irreps_out=self.n_filters * e3nn.Irreps.spherical_harmonics(self.max_ell)
-        )(x)
-
-        # Select senders.
-        x_j = x[idx_j]
-        x_j = x_j.mul_to_axis(self.n_filters, axis=-2)
-        x_j = e3nn.tensor_product(x_j, Yr_ij)
-        x_j = x_j.axis_to_mul(axis=-2)
-
-        # Compute filter.
-        W_ij = hk.Sequential(
-            [
-                hk.Linear(self.n_filters),
-                lambda x: self.activation(x),
-                hk.Linear(x_j.irreps.num_irreps),
-            ]
-        )(f_ij)
-        W_ij = W_ij * rcut_ij[:, None]
-        W_ij = e3nn.IrrepsArray(f"{x_j.irreps.num_irreps}x0e", W_ij)
-
-        # Compute continuous-filter convolution.
-        x_ij = x_j * W_ij
-        x = e3nn.scatter_sum(x_ij, dst=idx_i, output_size=x.shape[0])
-
-        # Apply final linear and activation layers.
-        x = e3nn.haiku.Linear(
-            irreps_out=input_irreps,
-        )(x)
-        x = e3nn.scalar_activation(
-            x,
-            acts=[self.activation if ir.l == 0 else None for _, ir in input_irreps],
-        )
-        x = e3nn.haiku.Linear(irreps_out=input_irreps)(x)
-        return x
-
-
-class E3SchNet(hk.Module):
-    """A Haiku implementation of E3SchNet."""
-
-    def __init__(
-        self,
-        n_atom_basis: int,
-        n_interactions: int,
-        n_filters: int,
-        n_rbf: int,
-        activation: Callable[[jnp.ndarray], jnp.ndarray],
-        cutoff: float,
-        max_ell: int,
-        num_species: int,
-    ):
-        """
-        Args:
-            n_atom_basis: number of features to describe atomic environments.
-                This determines the size of each embedding vector; i.e. embeddings_dim.
-            n_interactions: number of interaction blocks.
-            radial_basis: layer for expanding interatomic distances in a basis set
-            cutoff_fn: cutoff function
-            n_filters: number of filters used in continuous-filter convolution
-            shared_interactions: if True, share the weights across
-                interaction blocks and filter-generating networks.
-            max_z: maximal nuclear charge
-            activation: activation function
-        """
-        super().__init__()
-        self.n_atom_basis = n_atom_basis
-        self.n_interactions = n_interactions
-        self.activation = activation
-        self.n_filters = n_filters
-        self.n_rbf = n_rbf
-        self.radial_basis = lambda x: e3nn.soft_one_hot_linspace(
-            x,
-            start=0.0,
-            end=cutoff,
-            number=self.n_rbf,
-            basis="gaussian",
-            cutoff=True,
-        )
-        self.cutoff_fn = lambda x: cosine_cutoff(x, cutoff=cutoff)
-        self.max_ell = max_ell
-        self.num_species = num_species
-
-    def __call__(self, graphs: jraph.GraphsTuple) -> jnp.ndarray:
-        # 'species' are actually atomic numbers mapped to [0, self.num_species).
-        # But we keep the same name for consistency with SchNetPack.
-        species = graphs.nodes.species
-        r_ij = (
-            graphs.nodes.positions[graphs.receivers]
-            - graphs.nodes.positions[graphs.senders]
-        )
-        idx_i = graphs.receivers
-        idx_j = graphs.senders
-
-        # Irreps for the quantities we need to compute.
-        spherical_harmonics_irreps = e3nn.Irreps.spherical_harmonics(self.max_ell)
-        latent_irreps = e3nn.Irreps(
-            (self.n_atom_basis, (ir.l, ir.p)) for _, ir in spherical_harmonics_irreps
-        )
-
-        # Compute atom embeddings.
-        # Initially, the atom embeddings are just scalars.
-        x = hk.Embed(self.num_species, self.n_atom_basis)(species)
-        x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
-        x = e3nn.haiku.Linear(irreps_out=latent_irreps)(x)
-
-        # Compute radial basis functions to cut off interactions
-        d_ij = jnp.linalg.norm(r_ij, axis=-1)
-        f_ij = self.radial_basis(d_ij)
-        rcut_ij = self.cutoff_fn(d_ij)
-        r_ij = r_ij * rcut_ij[:, None]
-
-        # Compute the spherical harmonics of relative positions.
-        # r_ij: (n_edges, 3)
-        # Yr_ij: (n_edges, (max_ell + 1) ** 2)
-        # Reshape Yr_ij to (num_edges, 1, (max_ell + 1) ** 2).
-        Yr_ij = e3nn.spherical_harmonics(
-            spherical_harmonics_irreps, r_ij, normalize=True, normalization="component"
-        )
-        Yr_ij = Yr_ij.reshape((Yr_ij.shape[0], 1, Yr_ij.shape[1]))
-
-        # Compute interaction block to update atomic embeddings
-        for _ in range(self.n_interactions):
-            v = E3SchNetInteractionBlock(
-                self.n_atom_basis, self.n_filters, self.max_ell, self.activation
-            )(x, idx_i, idx_j, f_ij, rcut_ij, Yr_ij)
-            x = x + v
-
-        # In SchNetPack, the output is only the scalar features.
-        # Here, we return the entire IrrepsArray.
-        return x
-
-
-class MACE(hk.Module):
-    """Wrapper class for MACE."""
-
-    def __init__(
-        self,
-        output_irreps: str,
-        hidden_irreps: str,
-        readout_mlp_irreps: str,
-        r_max: float,
-        num_interactions: int,
-        avg_num_neighbors: int,
-        num_species: int,
-        max_ell: int,
-        num_basis_fns: int,
-        soft_normalization: Optional[float],
-        name: Optional[str] = None,
-    ):
-        super().__init__(name=name)
-        self.output_irreps = output_irreps
-        self.r_max = r_max
-        self.num_interactions = num_interactions
-        self.hidden_irreps = hidden_irreps
-        self.readout_mlp_irreps = readout_mlp_irreps
-        self.avg_num_neighbors = avg_num_neighbors
-        self.num_species = num_species
-        self.max_ell = max_ell
-        self.num_basis_fns = num_basis_fns
-        self.soft_normalization = soft_normalization
-
-    def __call__(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
-        """Returns node embeddings for input graphs.
-        Inputs:
-            graphs: a jraph.GraphsTuple with the following fields:
-            - nodes.positions
-            - nodes.species
-            - senders
-            - receivers
-
-        Returns:
-            node_embeddings: an array of shape [num_nodes, output_irreps]
-        """
-        relative_positions = (
-            graphs.nodes.positions[graphs.receivers]
-            - graphs.nodes.positions[graphs.senders]
-        )
-        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
-        species = graphs.nodes.species
-        num_nodes = species.shape[0]
-
-        node_embeddings: e3nn.IrrepsArray = mace_jax.modules.MACE(
-            output_irreps=self.output_irreps,
-            r_max=self.r_max,
-            num_interactions=self.num_interactions,
-            hidden_irreps=self.hidden_irreps,
-            readout_mlp_irreps=self.readout_mlp_irreps,
-            avg_num_neighbors=self.avg_num_neighbors,
-            num_species=self.num_species,
-            radial_basis=lambda x, x_max: e3nn.bessel(x, self.num_basis_fns, x_max),
-            radial_envelope=e3nn.soft_envelope,
-            max_ell=self.max_ell,
-            skip_connection_first_layer=True,
-            soft_normalization=self.soft_normalization,
-        )(relative_positions, species, graphs.senders, graphs.receivers)
-
-        assert node_embeddings.shape == (
-            num_nodes,
-            self.num_interactions,
-            self.output_irreps.dim,
-        )
-        node_embeddings = node_embeddings.axis_to_mul(axis=-2)
-        return node_embeddings
-
-
-class NequIP(hk.Module):
-    """Wrapper class for NequIP."""
-
-    def __init__(
-        self,
-        num_species: int,
-        r_max: float,
-        avg_num_neighbors: float,
-        max_ell: int,
-        init_embedding_dims: int,
-        output_irreps: str,
-        num_interactions: int,
-        even_activation: Callable[[jnp.ndarray], jnp.ndarray],
-        odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
-        mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
-        mlp_n_hidden: int,
-        mlp_n_layers: int,
-        n_radial_basis: int,
-        name: Optional[str] = None,
-    ):
-        super().__init__(name=name)
-        self.num_species = num_species
-        self.r_max = r_max
-        self.avg_num_neighbors = avg_num_neighbors
-        self.max_ell = max_ell
-        self.init_embedding_dims = init_embedding_dims
-        self.output_irreps = output_irreps
-        self.num_interactions = num_interactions
-        self.even_activation = even_activation
-        self.odd_activation = odd_activation
-        self.mlp_activation = mlp_activation
-        self.mlp_n_hidden = mlp_n_hidden
-        self.mlp_n_layers = mlp_n_layers
-        self.n_radial_basis = n_radial_basis
-
-    def __call__(
-        self,
-        graphs: datatypes.Fragments,
-    ):
-        relative_positions = (
-            graphs.nodes.positions[graphs.receivers]
-            - graphs.nodes.positions[graphs.senders]
-        )
-        relative_positions = relative_positions / self.r_max
-        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
-
-        species = graphs.nodes.species
-        node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
-        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
-
-        for _ in range(self.num_interactions):
-            node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
-                avg_num_neighbors=self.avg_num_neighbors,
-                num_species=self.num_species,
-                output_irreps=self.output_irreps,
-                even_activation=self.even_activation,
-                odd_activation=self.odd_activation,
-                mlp_activation=self.mlp_activation,
-                mlp_n_hidden=self.mlp_n_hidden,
-                mlp_n_layers=self.mlp_n_layers,
-                radial_basis=nequip_jax.radial.simple_smooth_radial_basis,
-                n_radial_basis=self.n_radial_basis,
-            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
-
-        alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
-        node_feats = node_feats * alpha
-        return node_feats
-
-
-class MarioNette(hk.Module):
-    """Wrapper class for MarioNette."""
-
-    def __init__(
-        self,
-        num_species: int,
-        r_max: float,
-        avg_num_neighbors: float,
-        init_embedding_dims: int,
-        output_irreps: str,
-        soft_normalization: float,
-        num_interactions: int,
-        even_activation: Callable[[jnp.ndarray], jnp.ndarray],
-        odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
-        mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
-        mlp_n_hidden: int,
-        mlp_n_layers: int,
-        n_radial_basis: int,
-        use_bessel: bool,
-        alpha: float,
-        alphal: float,
-        name: Optional[str] = None,
-    ):
-        super().__init__(name=name)
-        self.num_species = num_species
-        self.r_max = r_max
-        self.avg_num_neighbors = avg_num_neighbors
-        self.init_embedding_dims = init_embedding_dims
-        self.output_irreps = output_irreps
-        self.soft_normalization = soft_normalization
-        self.num_interactions = num_interactions
-        self.even_activation = even_activation
-        self.odd_activation = odd_activation
-        self.mlp_activation = mlp_activation
-        self.mlp_n_hidden = mlp_n_hidden
-        self.mlp_n_layers = mlp_n_layers
-        self.n_radial_basis = n_radial_basis
-        self.use_bessel = use_bessel
-        self.alpha = alpha
-        self.alphal = alphal
-
-    def __call__(
-        self,
-        graphs: datatypes.Fragments,
-    ):
-        relative_positions = (
-            graphs.nodes.positions[graphs.receivers]
-            - graphs.nodes.positions[graphs.senders]
-        )
-        relative_positions = relative_positions / self.r_max
-        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
-
-        species = graphs.nodes.species
-        node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
-        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
-
-        for _ in range(self.num_interactions):
-            node_feats = marionette.MarioNetteLayerHaiku(
-                avg_num_neighbors=self.avg_num_neighbors,
-                num_species=self.num_species,
-                output_irreps=self.output_irreps,
-                interaction_irreps=self.output_irreps,
-                soft_normalization=self.soft_normalization,
-                even_activation=self.even_activation,
-                odd_activation=self.odd_activation,
-                mlp_activation=self.mlp_activation,
-                mlp_n_hidden=self.mlp_n_hidden,
-                mlp_n_layers=self.mlp_n_layers,
-                n_radial_basis=self.n_radial_basis,
-                use_bessel=self.use_bessel,
-            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
-
-        alpha = self.alpha * (self.alphal ** jnp.array(node_feats.irreps.ls))
-        node_feats = node_feats * alpha
-        return node_feats
-
-
-class MultiHeadAttention(hk.Module):
-    """Multi-headed attention (MHA) module.
-
-    This module is intended for attending over sequences of IrrepsArrays.
-
-    Rough sketch:
-    - Compute keys (K), queries (Q), and values (V) as projections of inputs.
-    - Attention weights are computed as W = softmax(QK^T / sqrt(key_size)).
-    - Output is another projection of WV^T.
-
-    For more detail, see the original Transformer paper:
-      "Attention is all you need" https://arxiv.org/abs/1706.03762.
-
-    Glossary of shapes:
-    - T: Sequence length.
-    - D: Vector (embedding) size.
-    - H: Number of attention heads.
-    """
-
-    def __init__(
-        self,
-        num_heads: int,
-        num_channels: int,
-        name: Optional[str] = None,
-    ):
-        """Initialises the module.
-
-        Args:
-          num_heads: Number of independent attention heads (H).
-          num_channels: The number of channels in each head to determine the embedding size (D).
-          name: Optional name for this module.
-        """
-        super().__init__(name=name)
-        self.num_heads = num_heads
-        self.num_channels = num_channels
-
-    def __call__(
-        self,
-        query: e3nn.IrrepsArray,
-        key: e3nn.IrrepsArray,
-        value: e3nn.IrrepsArray,
-        mask: Optional[jnp.ndarray] = None,
-    ) -> e3nn.IrrepsArray:
-        """Computes (optionally masked) MHA with queries, keys & values.
-
-        This module broadcasts over zero or more 'batch-like' leading dimensions.
-
-        Args:
-          query: Embeddings sequence used to compute queries; shape [..., T', D_q].
-          key: Embeddings sequence used to compute keys; shape [..., T, D_k].
-          value: Embeddings sequence used to compute values; shape [..., T, D_v].
-          mask: Optional mask applied to attention weights; shape [..., H=1, T', T].
-
-        Returns:
-          A new sequence of embeddings, consisting of a projection of the
-            attention-weighted value projections; shape [..., T', D'].
-        """
-        # In shape hints below, we suppress the leading dims [...] for brevity.
-        # Hence e.g. [A, B] should be read in every case as [..., A, B].
-        irreps = query.irreps
-        *leading_dims, sequence_length, _ = query.shape
-        projection = self._linear_projection
-
-        # Compute key/query/values (overload K/Q/V to denote the respective sizes).
-        query_heads = projection(
-            query, self.num_heads, self.num_channels, "query"
-        )  # [T', H, Q]
-        key_heads = projection(
-            key, self.num_heads, self.num_channels, "key"
-        )  # [T, H, K]
-        value_heads = projection(
-            value, self.num_heads, self.num_channels, "value"
-        )  # [T, H, V]
-
-        # Compute attention weights.
-        attn_logits = jnp.einsum(
-            "...thd,...Thd->...htT", query_heads.array, key_heads.array
-        )
-        attn_logits = attn_logits / jnp.sqrt(query_heads.shape[-1])
-        if mask is not None:
-            if mask.ndim != attn_logits.ndim:
-                raise ValueError(
-                    f"Mask dimensionality {mask.ndim} must match logits dimensionality "
-                    f"{attn_logits.ndim}."
-                )
-            attn_logits = jnp.where(mask, attn_logits, -1e30)
-        attn_weights = jax.nn.softmax(attn_logits)  # [H, T', T]
-
-        # Weight the values by the attention and flatten the head vectors.
-        attn = jnp.einsum("...htT,...Thd->...thd", attn_weights, value_heads.array)
-        attn = e3nn.IrrepsArray(self.num_channels * irreps, attn)  # [T', H, V]
-        attn = attn.axis_to_mul(axis=-2)  # [T', H * V]
-
-        # Apply another projection to get the final embeddings.
-        return e3nn.haiku.Linear(self.num_channels * irreps)(attn)  # [T', D']
-
-    @hk.transparent
-    def _linear_projection(
-        self,
-        x: e3nn.IrrepsArray,
-        num_heads: int,
-        num_channels: int,
-        name: Optional[str] = None,
-    ) -> jnp.ndarray:
-        y = e3nn.haiku.Linear(num_channels * num_heads * x.irreps, name=name)(x)
-        y = y.mul_to_axis(num_heads, axis=-2)
-        return y
-
-
 class GlobalEmbedder(hk.Module):
     """Computes a global embedding for each node in the graph."""
 
@@ -725,7 +200,7 @@ class GlobalEmbedder(hk.Module):
                 segment_ids[:, None] == segment_ids[None, :], 1.0, 0.0
             )
             attention_mask = jnp.expand_dims(attention_mask, axis=0)
-            global_embeddings = MultiHeadAttention(
+            global_embeddings = attention.MultiHeadAttention(
                 self.num_attention_heads, self.num_channels
             )(node_embeddings, node_embeddings, node_embeddings, attention_mask)
 
@@ -1124,7 +599,7 @@ def create_model(
         """Get the activation function."""
 
         if activation == "shifted_softplus":
-            return shifted_softplus
+            return e3schnet.shifted_softplus
         return getattr(jax.nn, activation)
 
     def model_fn(
@@ -1141,84 +616,76 @@ def create_model(
             num_species = 1
 
         if config.model == "MACE":
-            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-            node_embedder = MACE(
-                output_irreps=output_irreps,
-                hidden_irreps=output_irreps,
-                readout_mlp_irreps=output_irreps,
-                r_max=config.r_max,
-                num_interactions=config.num_interactions,
-                avg_num_neighbors=config.avg_num_neighbors,
-                num_species=num_species,
-                max_ell=config.max_ell,
-                num_basis_fns=config.num_basis_fns,
-                soft_normalization=config.get("soft_normalization"),
-            )
+            def node_embedder_fn():
+                output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+                return mace.MACE(
+                    output_irreps=output_irreps,
+                    hidden_irreps=output_irreps,
+                    readout_mlp_irreps=output_irreps,
+                    r_max=config.r_max,
+                    num_interactions=config.num_interactions,
+                    avg_num_neighbors=config.avg_num_neighbors,
+                    num_species=num_species,
+                    max_ell=config.max_ell,
+                    num_basis_fns=config.num_basis_fns,
+                    soft_normalization=config.get("soft_normalization"),
+                )
         elif config.model == "NequIP":
-            output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
-            node_embedder = NequIP(
-                num_species=num_species,
-                r_max=config.r_max,
-                avg_num_neighbors=config.avg_num_neighbors,
-                max_ell=config.max_ell,
-                init_embedding_dims=config.num_channels,
-                output_irreps=output_irreps,
-                num_interactions=config.num_interactions,
-                even_activation=get_activation(config.even_activation),
-                odd_activation=get_activation(config.odd_activation),
-                mlp_activation=get_activation(config.mlp_activation),
-                mlp_n_hidden=config.num_channels,
-                mlp_n_layers=config.mlp_n_layers,
-                n_radial_basis=config.num_basis_fns,
-            )
-            auxiliary_node_embedder = NequIP(
-                num_species=num_species,
-                r_max=config.r_max,
-                avg_num_neighbors=config.avg_num_neighbors,
-                max_ell=config.max_ell,
-                init_embedding_dims=config.num_channels,
-                output_irreps=output_irreps,
-                num_interactions=config.num_interactions,
-                even_activation=get_activation(config.even_activation),
-                odd_activation=get_activation(config.odd_activation),
-                mlp_activation=get_activation(config.mlp_activation),
-                mlp_n_hidden=config.num_channels,
-                mlp_n_layers=config.mlp_n_layers,
-                n_radial_basis=config.num_basis_fns,
-            )
-
+            def node_embedder_fn():
+                output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+                return nequip.NequIP(
+                    num_species=num_species,
+                    r_max=config.r_max,
+                    avg_num_neighbors=config.avg_num_neighbors,
+                    max_ell=config.max_ell,
+                    init_embedding_dims=config.num_channels,
+                    output_irreps=output_irreps,
+                    num_interactions=config.num_interactions,
+                    even_activation=get_activation(config.even_activation),
+                    odd_activation=get_activation(config.odd_activation),
+                    mlp_activation=get_activation(config.mlp_activation),
+                    mlp_n_hidden=config.num_channels,
+                    mlp_n_layers=config.mlp_n_layers,
+                    n_radial_basis=config.num_basis_fns,
+                )
         elif config.model == "MarioNette":
-            node_embedder = MarioNette(
-                num_species=num_species,
-                r_max=config.r_max,
-                avg_num_neighbors=config.avg_num_neighbors,
-                init_embedding_dims=config.num_channels,
-                output_irreps=config.num_channels * e3nn.s2_irreps(config.max_ell),
-                soft_normalization=config.soft_normalization,
-                num_interactions=config.num_interactions,
-                even_activation=get_activation(config.even_activation),
-                odd_activation=get_activation(config.odd_activation),
-                mlp_activation=get_activation(config.activation),
-                mlp_n_hidden=config.num_channels,
-                mlp_n_layers=config.mlp_n_layers,
-                n_radial_basis=config.num_basis_fns,
-                use_bessel=config.use_bessel,
-                alpha=config.alpha,
-                alphal=config.alphal,
-            )
+            def node_embedder_fn():
+                return marionette.MarioNette(
+                    num_species=num_species,
+                    r_max=config.r_max,
+                    avg_num_neighbors=config.avg_num_neighbors,
+                    init_embedding_dims=config.num_channels,
+                    output_irreps=config.num_channels * e3nn.s2_irreps(config.max_ell),
+                    soft_normalization=config.soft_normalization,
+                    num_interactions=config.num_interactions,
+                    even_activation=get_activation(config.even_activation),
+                    odd_activation=get_activation(config.odd_activation),
+                    mlp_activation=get_activation(config.activation),
+                    mlp_n_hidden=config.num_channels,
+                    mlp_n_layers=config.mlp_n_layers,
+                    n_radial_basis=config.num_basis_fns,
+                    use_bessel=config.use_bessel,
+                    alpha=config.alpha,
+                    alphal=config.alphal,
+                )
         elif config.model == "E3SchNet":
-            node_embedder = E3SchNet(
-                n_atom_basis=config.num_channels,
-                n_interactions=config.num_interactions,
-                n_filters=config.num_channels,
-                n_rbf=config.num_basis_fns,
-                activation=get_activation(config.activation),
-                cutoff=config.cutoff,
-                max_ell=config.max_ell,
-                num_species=num_species,
-            )
+            def node_embedder_fn():
+                return e3schnet.E3SchNet(
+                    n_atom_basis=config.num_channels,
+                    n_interactions=config.num_interactions,
+                    n_filters=config.num_channels,
+                    n_rbf=config.num_basis_fns,
+                    activation=get_activation(config.activation),
+                    cutoff=config.cutoff,
+                    max_ell=config.max_ell,
+                    num_species=num_species,
+                )
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
+
+        # Create the node embedders.
+        node_embedder = node_embedder_fn()
+        auxiliary_node_embedder = node_embedder_fn()
 
         if config.compute_global_embedding:
             global_embedder = GlobalEmbedder(
