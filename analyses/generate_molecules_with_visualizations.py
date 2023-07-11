@@ -107,6 +107,7 @@ def generate_for_one_seed(
     max_num_atoms,
     cutoff: float,
     rng: chex.PRNGKey,
+    return_intermediates: bool = False,
 ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
     """Generates a single molecule for a given seed."""
     step_rngs = jax.random.split(rng, num=max_num_atoms)
@@ -186,10 +187,10 @@ def generate_molecules(
     init_fragment = jax.tree_map(jnp.asarray, init_fragment)
 
     @jax.jit
-    def apply_over_all_chunks(
+    def chunk_and_apply(
         params: optax.Params, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
-        """Applies the model sequentially over all chunks."""
+        """Chunks the seeds and applies the model sequentially over all chunks."""
 
         def apply_on_chunk(
             rngs: chex.PRNGKey,
@@ -208,16 +209,16 @@ def generate_molecules(
             padded_fragments, preds = jax.vmap(generate_for_one_seed_fn)(rngs)
             return padded_fragments, preds
 
-        return jax.lax.map(apply_on_chunk, rngs)
+        rngs = rngs.reshape((num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, -1))
+        padded_fragments, preds = jax.lax.map(apply_on_chunk, rngs)
+        return jax.tree_map(
+            lambda x: x.reshape((-1, *x.shape[2:])), (padded_fragments, preds)
+        )
 
     # Generate molecules for all seeds.
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
-    rngs = rngs.reshape((num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, -1))
-    padded_fragments, preds = apply_over_all_chunks(params, rngs)
-    padded_fragments, preds = jax.tree_map(
-        lambda x: x.reshape((-1, *x.shape[2:])), (padded_fragments, preds)
-    )
+    padded_fragments, preds = chunk_and_apply(params, rngs)
 
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
         # Get the padded fragment and predictions for this seed.
