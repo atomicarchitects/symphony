@@ -124,7 +124,8 @@ def generate_molecules(
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
     step: str,
-    seeds: Sequence[int],
+    num_seeds: int,
+    num_seeds_per_chunk: int,
     init_molecule: str,
     max_num_atoms: int,
     visualize: bool,
@@ -197,9 +198,15 @@ def generate_molecules(
         padded_fragments, preds = vmapped_generate_fn(rngs)
         return padded_fragments, preds
 
+    def apply(params, rngs):
+        return jax.lax.map(lambda chunk_rngs: apply_with_params(params, chunk_rngs), rngs)
+
     # Generate molecules for all seeds.
-    rngs = jax.vmap(jax.random.PRNGKey)(jnp.asarray(seeds))
-    padded_fragments, preds = jax.jit(apply_with_params)(params, rngs)
+    seeds = jnp.arange(num_seeds)
+    rngs = jax.vmap(jax.random.PRNGKey)(seeds)
+    rngs = rngs.reshape((num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, -1))
+    padded_fragments, preds = apply(params, rngs)
+    padded_fragments, preds = jax.tree_map(lambda x: x.reshape((-1, *x.shape[2:])), (padded_fragments, preds))
 
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
         # Get the padded fragment and predictions for this seed.
@@ -296,7 +303,8 @@ def main(unused_argv: Sequence[str]) -> None:
     )
     position_inverse_temperature = FLAGS.position_inverse_temperature
     step = FLAGS.step
-    seeds = [int(seed) for seed in FLAGS.seeds]
+    num_seeds = FLAGS.num_seeds
+    num_seeds_per_chunk = FLAGS.num_seeds_per_chunk
     init = FLAGS.init
     max_num_atoms = FLAGS.max_num_atoms
     visualize = FLAGS.visualize
@@ -307,7 +315,8 @@ def main(unused_argv: Sequence[str]) -> None:
         focus_and_atom_type_inverse_temperature,
         position_inverse_temperature,
         step,
-        seeds,
+        num_seeds,
+        num_seeds_per_chunk,
         init,
         max_num_atoms,
         visualize,
@@ -338,10 +347,15 @@ if __name__ == "__main__":
         "best",
         "Step number to load model from. The default corresponds to the best model.",
     )
-    flags.DEFINE_list(
-        "seeds",
-        list(range(64)),
+    flags.DEFINE_integer(
+        "num_seeds",
+        128,
         "Seeds to attempt to generate molecules from.",
+    )
+    flags.DEFINE_integer(
+        "num_seeds_per_chunk",
+        32,
+        "Number of seeds evaluated in parallel. Reduce to avoid OOM errors.",
     )
     flags.DEFINE_string(
         "init",
