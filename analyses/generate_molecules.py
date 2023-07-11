@@ -131,6 +131,12 @@ def generate_molecules(
     visualize: bool,
 ):
     """Generates molecules from a trained model at the given workdir."""
+    # Check that we can divide the seeds into chunks properly.
+    if num_seeds % num_seeds_per_chunk != 0:
+        raise ValueError(
+            f"num_seeds ({num_seeds}) must be divisible by num_seeds_per_chunk ({num_seeds_per_chunk})"
+        )
+
     # Create initial molecule, if provided.
     init_molecule, init_molecule_name = analysis.construct_molecule(init_molecule)
     logging.info(
@@ -179,33 +185,34 @@ def generate_molecules(
     )
     init_fragment = jax.tree_map(jnp.asarray, init_fragment)
 
-    # Generate molecules, for all seeds
-    def apply_with_params(
-        params: optax.Params, rngs: chex.PRNGKey
-    ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
-        """Helper to avoid folding-in params."""
-        apply_fn = lambda padded_fragment, rng: model.apply(
-            params,
-            rng,
-            padded_fragment,
-            focus_and_atom_type_inverse_temperature,
-            position_inverse_temperature,
-        )
-        generate_for_one_seed_fn = lambda rng: generate_for_one_seed(
-            apply_fn, init_fragment, max_num_atoms, config.nn_cutoff, rng
-        )
-        vmapped_generate_fn = jax.vmap(generate_for_one_seed_fn)
-        padded_fragments, preds = vmapped_generate_fn(rngs)
-        return padded_fragments, preds
+    @jax.jit
+    def apply_over_all_chunks(params: optax.Params, rngs: chex.PRNGKey) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
+        """Applies the model sequentially over all chunks."""
 
-    def apply(params, rngs):
-        return jax.lax.map(lambda chunk_rngs: apply_with_params(params, chunk_rngs), rngs)
+        def apply_on_chunk(
+            rngs: chex.PRNGKey
+        ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
+            """Applies the model on a single chunk."""
+            apply_fn = lambda padded_fragment, rng: model.apply(
+                params,
+                rng,
+                padded_fragment,
+                focus_and_atom_type_inverse_temperature,
+                position_inverse_temperature,
+            )
+            generate_for_one_seed_fn = lambda rng: generate_for_one_seed(
+                apply_fn, init_fragment, max_num_atoms, config.nn_cutoff, rng
+            )
+            padded_fragments, preds = jax.vmap(generate_for_one_seed_fn)(rngs)
+            return padded_fragments, preds
+
+        return jax.lax.map(apply_on_chunk, rngs)
 
     # Generate molecules for all seeds.
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
     rngs = rngs.reshape((num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, -1))
-    padded_fragments, preds = apply(params, rngs)
+    padded_fragments, preds = apply_over_all_chunks(params, rngs)
     padded_fragments, preds = jax.tree_map(lambda x: x.reshape((-1, *x.shape[2:])), (padded_fragments, preds))
 
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
