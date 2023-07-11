@@ -179,7 +179,10 @@ def generate_molecules(
     init_fragment = jax.tree_map(jnp.asarray, init_fragment)
 
     # Generate molecules, for all seeds
-    def apply_with_params(params: optax.Params, rngs: chex.PRNGKey):
+    def apply_with_params(
+        params: optax.Params, rngs: chex.PRNGKey
+    ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
+        """Helper to avoid folding-in params."""
         apply_fn = lambda padded_fragment, rng: model.apply(
             params,
             rng,
