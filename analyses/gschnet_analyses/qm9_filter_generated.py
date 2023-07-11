@@ -24,8 +24,8 @@ import yaml
 sys.path.append("..")
 
 from analyses import analysis
-from analyses.check_valence import check_valence
-from analyses.utility_functions import run_threaded
+from analyses.gschnet_analyses.check_valence import check_valence
+from analyses.gschnet_analyses.utility_functions import run_threaded
 
 
 def get_parser():

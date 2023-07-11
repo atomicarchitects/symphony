@@ -19,8 +19,8 @@ import yaml
 sys.path.append("..")
 
 from analyses import analysis
-from analyses.check_valence import check_valence
-from analyses.utility_functions import (
+from analyses.gschnet_analyses.check_valence import check_valence
+from analyses.gschnet_analyses.utility_functions import (
     _get_atoms_per_type_str,
     _update_dict,
     fingerprints_similar,

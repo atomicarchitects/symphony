@@ -1,0 +1,77 @@
+from typing import Callable, Optional
+import jax.numpy as jnp
+import nequip_jax
+import haiku as hk
+import e3nn_jax as e3nn
+
+from symphony import datatypes
+
+
+class NequIP(hk.Module):
+    """Wrapper class for NequIP."""
+
+    def __init__(
+        self,
+        num_species: int,
+        r_max: float,
+        avg_num_neighbors: float,
+        max_ell: int,
+        init_embedding_dims: int,
+        output_irreps: str,
+        num_interactions: int,
+        even_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        mlp_activation: Callable[[jnp.ndarray], jnp.ndarray],
+        mlp_n_hidden: int,
+        mlp_n_layers: int,
+        n_radial_basis: int,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.num_species = num_species
+        self.r_max = r_max
+        self.avg_num_neighbors = avg_num_neighbors
+        self.max_ell = max_ell
+        self.init_embedding_dims = init_embedding_dims
+        self.output_irreps = output_irreps
+        self.num_interactions = num_interactions
+        self.even_activation = even_activation
+        self.odd_activation = odd_activation
+        self.mlp_activation = mlp_activation
+        self.mlp_n_hidden = mlp_n_hidden
+        self.mlp_n_layers = mlp_n_layers
+        self.n_radial_basis = n_radial_basis
+
+    def __call__(
+        self,
+        graphs: datatypes.Fragments,
+    ):
+        relative_positions = (
+            graphs.nodes.positions[graphs.receivers]
+            - graphs.nodes.positions[graphs.senders]
+        )
+        relative_positions = relative_positions / self.r_max
+        relative_positions = e3nn.IrrepsArray("1o", relative_positions)
+
+        species = graphs.nodes.species
+        node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
+        node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
+
+        for _ in range(self.num_interactions):
+            node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
+                avg_num_neighbors=self.avg_num_neighbors,
+                num_species=self.num_species,
+                output_irreps=self.output_irreps,
+                even_activation=self.even_activation,
+                odd_activation=self.odd_activation,
+                mlp_activation=self.mlp_activation,
+                mlp_n_hidden=self.mlp_n_hidden,
+                mlp_n_layers=self.mlp_n_layers,
+                radial_basis=nequip_jax.radial.simple_smooth_radial_basis,
+                n_radial_basis=self.n_radial_basis,
+            )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+
+        alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
+        node_feats = node_feats * alpha
+        return node_feats
+

@@ -1,6 +1,5 @@
 """Creates a series of visualizations to build up a molecule."""
 import os
-import pickle
 import sys
 from typing import Optional, Sequence, List, Tuple
 
@@ -17,9 +16,9 @@ from absl import app, flags, logging
 
 sys.path.append("..")
 
-import analyses.analysis as analysis  # noqa: E402
-import input_pipeline  # noqa: E402
-import models  # noqa: E402
+import analyses.analysis as analysis
+from symphony.data import input_pipeline
+from symphony.models import models
 
 FLAGS = flags.FLAGS
 
@@ -75,7 +74,7 @@ def visualize_atom_removals(
     outputdir: str,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
-    step: int,
+    step: str,
     molecule_str: str,
     seed: int,
 ):
@@ -122,14 +121,13 @@ def visualize_atom_removals(
     logging.info("Predictions computed.")
 
     # Create the output directory where HTML files will be saved.
-    step_name = "step=best" if step == -1 else f"step={step}"
     outputdir = os.path.join(
         outputdir,
         name,
         "visualizations",
         "atom_removal",
         f"inverse_temperature={focus_and_atom_type_inverse_temperature},{position_inverse_temperature}",
-        step_name,
+        f"step={step}",
     )
     os.makedirs(outputdir, exist_ok=True)
 
@@ -219,10 +217,10 @@ if __name__ == "__main__":
         "Inverse temperature value for sampling the position.",
         short_name="pit",
     )
-    flags.DEFINE_integer(
+    flags.DEFINE_string(
         "step",
-        -1,
-        "Step number to load model from. The default of -1 corresponds to the best model.",
+        "best",
+        "Step number to load model from. The default corresponds to the best model.",
     )
     flags.DEFINE_string(
         "molecule",
