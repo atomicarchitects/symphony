@@ -713,7 +713,7 @@ class SCNNBlock(hk.Module):
 
         # Apply activation layer.
         x_act = e3nn.scalar_activation(
-            e3nn.to_s2grid(x, self.res_beta, self.res_alpha, quadrature="gausslegendre")
+            e3nn.to_s2grid(x, self.res_beta, self.res_alpha, quadrature="gausslegendre"),
             acts=[self.activation if ir.l == 0 else None for _, ir in input_irreps],
         )
         x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
