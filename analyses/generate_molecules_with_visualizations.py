@@ -110,12 +110,12 @@ def generate_for_one_seed(
 ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
     """Generates a single molecule for a given seed."""
     step_rngs = jax.random.split(rng, num=max_num_atoms)
-    (final_padded_fragment, stop), _ = jax.lax.scan(
+    _, (padded_fragments, preds) = jax.lax.scan(
         lambda args, rng: generate_one_step(apply_fn, *args, cutoff, rng),
         (init_fragment, False),
         step_rngs,
     )
-    return (final_padded_fragment, stop)
+    return padded_fragments, preds
 
 
 def generate_molecules(
@@ -205,8 +205,8 @@ def generate_molecules(
             generate_for_one_seed_fn = lambda rng: generate_for_one_seed(
                 apply_fn, init_fragment, max_num_atoms, config.nn_cutoff, rng
             )
-            final_padded_fragments, stops = jax.vmap(generate_for_one_seed_fn)(rngs)
-            return final_padded_fragments, stops
+            padded_fragments, preds = jax.vmap(generate_for_one_seed_fn)(rngs)
+            return padded_fragments, preds
 
         return jax.lax.map(apply_on_chunk, rngs)
 
@@ -214,15 +214,55 @@ def generate_molecules(
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
     rngs = rngs.reshape((num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, -1))
-    final_padded_fragments, stops = apply_over_all_chunks(params, rngs)
-    final_padded_fragments, stops = jax.tree_map(
-        lambda x: x.reshape((-1, *x.shape[2:])), (final_padded_fragments, stops)
+    padded_fragments, preds = apply_over_all_chunks(params, rngs)
+    padded_fragments, preds = jax.tree_map(
+        lambda x: x.reshape((-1, *x.shape[2:])), (padded_fragments, preds)
     )
 
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
         # Get the padded fragment and predictions for this seed.
-        final_padded_fragment = jax.tree_map(lambda x: x[seed], final_padded_fragments)
-        stop = jax.tree_map(lambda x: x[seed], stops)
+        padded_fragments_for_seed = jax.tree_map(lambda x: x[seed], padded_fragments)
+        preds_for_seed = jax.tree_map(lambda x: x[seed], preds)
+
+        figs = []
+        nan_found = False
+        final_padded_fragment = None
+        for step in range(max_num_atoms):
+            padded_fragment = jax.tree_map(lambda x: x[step], padded_fragments_for_seed)
+            pred = jax.tree_map(lambda x: x[step], preds_for_seed)
+
+            # Check for any NaNs in the predictions.
+            num_nans = sum(
+                jax.tree_util.tree_leaves(
+                    jax.tree_util.tree_map(lambda x: jnp.isnan(x).sum(), pred)
+                )
+            )
+            if num_nans > 0:
+                logging.info(
+                    "NaNs in predictions at step %d. Stopping generation...", step
+                )
+                nan_found = True
+                final_padded_fragment = jax.tree_map(
+                    lambda x: x[step - 1], padded_fragments_for_seed
+                )
+                break
+
+            # Save visualization of generation process.
+            if visualize:
+                fragment = jraph.unpad_with_graphs(padded_fragment)
+                fig = analysis.visualize_predictions(pred, fragment)
+                figs.append(fig)
+
+            # Check if we should stop.
+            stop = pred.globals.stop[0]
+            if stop:
+                final_padded_fragment = padded_fragment
+                break
+
+        # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
+        if final_padded_fragment is None:
+            logging.info("No final fragment found. Skipping...")
+            continue
 
         num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
@@ -231,16 +271,29 @@ def generate_molecules(
                 final_padded_fragment.nodes.species[:num_valid_nodes]
             ),
         )
-
-        outputfile = f"{init_molecule_name}_seed={seed}.xyz"
-        if stop:
-            logging.info("Generated %s", generated_molecule.get_chemical_formula())
-            ase.io.write(
-                os.path.join(molecules_outputdir, outputfile), generated_molecule
-            )
-            molecule_list.append(generated_molecule)
+        logging.info("Generated %s", generated_molecule.get_chemical_formula())
+        if nan_found:
+            outputfile = f"{init_molecule_name}_seed={seed}_NaN.xyz"
         else:
-            logging.info("STOP was not produced. Discarding...")
+            outputfile = f"{init_molecule_name}_seed={seed}.xyz"
+        ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
+        molecule_list.append(generated_molecule)
+
+        if visualize:
+            for index, fig in enumerate(figs):
+                # Update the title.
+                model_name = analysis.get_title_for_name(name)
+                fig.update_layout(
+                    title=f"{model_name}: Predictions for Seed {seed}",
+                    title_x=0.5,
+                )
+
+                # Save to file.
+                outputfile = os.path.join(
+                    visualizations_dir,
+                    f"seed_{seed}_fragments_{index}.html",
+                )
+                fig.write_html(outputfile, include_plotlyjs="cdn")
 
     # Save the generated molecules as an ASE database.
     output_db = os.path.join(
