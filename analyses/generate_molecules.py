@@ -31,156 +31,52 @@ from symphony.models import models
 FLAGS = flags.FLAGS
 
 
-def get_edge_padding_mask(
-    n_node: jnp.ndarray, n_edge: jnp.ndarray, sum_n_edge: int
-) -> jnp.ndarray:
-    return jraph.get_edge_padding_mask(
-        jraph.GraphsTuple(
-            nodes=None,
-            edges=None,
-            globals=None,
-            receivers=None,
-            senders=jnp.zeros(sum_n_edge, dtype=jnp.int32),
-            n_node=n_node,
-            n_edge=n_edge,
-        )
+def append_predictions(
+    pred: datatypes.Predictions, padded_fragment: datatypes.Fragments, nn_cutoff: float
+) -> datatypes.Fragments:
+    """Appends the predictions to the padded fragment."""
+    # Update the positions of the first dummy node.
+    positions = padded_fragment.nodes.positions
+    num_valid_nodes = padded_fragment.n_node[0]
+    num_nodes = padded_fragment.nodes.positions.shape[0]
+    focus = pred.globals.focus_indices[0]
+    focus_position = positions[focus]
+    target_position = pred.globals.position_vectors[0] + focus_position
+    new_positions = positions.at[num_valid_nodes].set(target_position)
+
+    # Update the species of the first dummy node.
+    species = padded_fragment.nodes.species
+    target_species = pred.globals.target_species[0]
+    new_species = species.at[num_valid_nodes].set(target_species)
+
+    distance_matrix = jnp.linalg.norm(
+        new_positions[None, :, :] - new_positions[:, None, :], axis=-1
     )
+    node_indices = jnp.arange(num_nodes)
 
+    # Avoid self-edges.
+    valid_edges = (distance_matrix > 0) & (distance_matrix < nn_cutoff)
+    valid_edges = (
+        valid_edges
+        & (node_indices[None, :] < num_valid_nodes)
+        & (node_indices[:, None] < num_valid_nodes)
+    )
+    senders, receivers = jnp.nonzero(
+        valid_edges, size=num_nodes * num_nodes, fill_value=-1
+    )
+    num_valid_edges = jnp.sum(valid_edges)
+    num_valid_nodes += 1
 
-def create_radius_graph(
-    positions: jnp.ndarray, n_node: jnp.ndarray, cutoff: float, sum_n_edge: int
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Create a radius graph.
-
-    Args:
-        positions (jnp.ndarray): (n_node_sum, 3) array of positions, assumed to be padded, see `jraph.pad_with_graphs`
-        n_node (jnp.ndarray): (n_graph,) array of number of nodes per graph, see `jraph.batch_np` and `jraph.pad_with_graphs`
-        cutoff (float): cutoff radius
-        sum_n_edge (int): the total number of edges in output graph, the output graph will be padded with `jraph.pad_with_graphs`
-
-    Returns:
-        senders: jnp.ndarray of dimension (sum_n_edge,) array of sender indices
-        receivers: jnp.ndarray of dimension (sum_n_edge,) array of receiver indices
-        n_edge: jnp.ndarray of dimension (n_graph,) array of number of edges per graph
-        bool: True if the radius graph was created successfully
-    """
-    return jax.pure_callback(
-        _create_radius_graph_helper,
-        (
-            jnp.empty(sum_n_edge, dtype=jnp.int32),  # senders
-            jnp.empty(sum_n_edge, dtype=jnp.int32),  # receivers
-            jnp.empty(n_node.shape, dtype=jnp.int32),  # n_edge
-            jnp.empty((), dtype=jnp.bool_),  # ok
+    return padded_fragment._replace(
+        nodes=padded_fragment.nodes._replace(
+            positions=new_positions,
+            species=new_species,
         ),
-        jax.lax.stop_gradient(positions),
-        n_node,
-        cutoff,
-        sum_n_edge,
+        n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
+        n_edge=jnp.asarray([num_valid_edges, num_nodes * num_nodes - num_valid_edges]),
+        senders=senders,
+        receivers=receivers,
     )
-
-
-def _create_radius_graph_helper(
-    positions: np.ndarray, n_node: np.ndarray, cutoff: float, sum_n_edge: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Create a radius graph.
-
-    Args:
-        positions (jnp.ndarray): (n_node_sum, 3) array of positions, assumed to be padded, see `jraph.pad_with_graphs`
-        n_node (jnp.ndarray): (n_graph,) array of number of nodes per graph, see `jraph.batch_np` and `jraph.pad_with_graphs`
-        cutoff (float): cutoff radius
-        sum_n_edge (int): the total number of edges in output graph, the output graph will be padded with `jraph.pad_with_graphs`
-
-    Returns:
-        jnp.ndarray: senders: (sum_n_edge,) array of sender indices
-        jnp.ndarray: receivers: (sum_n_edge,) array of receiver indices
-        jnp.ndarray: n_edge: (n_graph,) array of number of edges per graph
-        bool: True if the radius graph was created successfully
-    """
-    sum_n_node = positions.shape[0]
-    n_graph = n_node.shape[0]
-
-    graph = jraph.GraphsTuple(
-        nodes=positions.copy(),
-        edges=None,
-        globals=None,
-        receivers=np.array([], dtype=np.int32),
-        senders=np.array([], dtype=np.int32),
-        n_node=n_node.copy(),
-        n_edge=np.array([0] * n_graph, dtype=np.int32),
-    )
-    graph = jraph.unpad_with_graphs(graph)
-    graphs = jraph.unbatch_np(graph)
-    new_graphs = []
-    for g in graphs:
-        pos = g.nodes.astype(np.float32)
-        senders, receivers = matscipy.neighbours.neighbour_list(
-            "ij", positions=pos, cutoff=float(cutoff), cell=np.eye(3)
-        )
-        g = jraph.GraphsTuple(
-            nodes=None,
-            edges=None,
-            globals=None,
-            receivers=receivers,
-            senders=senders,
-            n_node=g.n_node,
-            n_edge=np.array([len(senders)], dtype=np.int32),
-        )
-        new_graphs.append(g)
-
-    graph = jraph.batch_np(new_graphs)
-    ok = np.array(np.sum(graph.n_edge) <= sum_n_edge, dtype=np.bool_)
-
-    if not ok:
-        dummy_graph = jraph.GraphsTuple(
-            nodes=None,
-            edges=None,
-            globals=None,
-            receivers=np.zeros(sum_n_edge, dtype=np.int32),
-            senders=np.zeros(sum_n_edge, dtype=np.int32),
-            n_node=np.array([sum_n_node] + [0] * (n_graph - 1), dtype=np.int32),
-            n_edge=np.array([sum_n_edge] + [0] * (n_graph - 1), dtype=np.int32),
-        )
-        return (
-            dummy_graph.senders,
-            dummy_graph.receivers,
-            dummy_graph.n_edge,
-            ok,
-        )
-
-    graph = jraph.pad_with_graphs(
-        graph, n_node=sum_n_node, n_edge=sum_n_edge, n_graph=n_graph
-    )
-    return (
-        graph.senders,
-        graph.receivers,
-        graph.n_edge,
-        ok,
-    )
-
-
-def nan_analysis(pred: datatypes.Predictions):
-    global_attrs = [
-        "stop_probs",
-        "stop",
-        "focus_indices",
-        "target_species_logits",
-        "target_species_probs",
-        "target_species",
-        "position_coeffs",
-        "position_logits",
-        "position_probs",
-        "position_vectors",
-    ]
-    for attr in global_attrs:
-        attr_value = getattr(pred.globals, attr)
-        try:
-            num_nans = jnp.isnan(attr_value).sum()
-        except:
-            try:
-                num_nans = jnp.isnan(attr_value.array).sum()
-            except:
-                num_nans = jnp.isnan(attr_value.grid_values).sum()
-        print(f"{attr} has {num_nans} nans")
 
 
 def generate_molecules(
@@ -192,7 +88,7 @@ def generate_molecules(
     seeds: Sequence[int],
     init_molecule: str,
     max_num_atoms: int,
-    visualize: bool
+    visualize: bool,
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Create initial molecule, if provided.
@@ -206,7 +102,6 @@ def generate_molecules(
     model, params, config = analysis.load_model_at_step(
         workdir, step, run_in_evaluation_mode=True
     )
-    apply_fn = jax.jit(model.apply)
     logging.info(config.to_dict())
 
     # Create output directories.
@@ -232,60 +127,61 @@ def generate_molecules(
         os.makedirs(visualizations_dir, exist_ok=True)
     molecule_list = []
 
-    def get_predictions(
-        fragment: jraph.GraphsTuple, rng: chex.PRNGKey
-    ) -> datatypes.Predictions:
-        fragments = jraph.pad_with_graphs(fragment, n_node=80, n_edge=4096, n_graph=2)
-        preds = apply_fn(
+    # Prepare initial fragment.
+    init_fragment = input_pipeline.ase_atoms_to_jraph_graph(
+        init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
+    )
+    init_fragment = jraph.pad_with_graphs(
+        init_fragment,
+        n_node=(max_num_atoms + 1),
+        n_edge=(max_num_atoms + 1) ** 2,
+        n_graph=2,
+    )
+    init_fragment = jax.tree_map(jnp.asarray, init_fragment)
+
+    # Generate with different seeds.
+    def generate_one_step(
+        padded_fragment: datatypes.Fragments, rng: chex.PRNGKey
+    ) -> Tuple[datatypes.Fragments, Tuple[datatypes.Fragments, datatypes.Predictions]]:
+        pred = model.apply(
             params,
             rng,
-            fragments,
+            padded_fragment,
             focus_and_atom_type_inverse_temperature,
             position_inverse_temperature,
         )
-
-        # Remove the batch dimension.
-        pred = jraph.unpad_with_graphs(preds)
-        pred = pred._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+        next_padded_fragment = append_predictions(
+            pred, padded_fragment, config.nn_cutoff
         )
-        return pred
-
-    def append_predictions(
-        molecule: ase.Atoms, pred: datatypes.Predictions
-    ) -> ase.Atoms:
-        focus = pred.globals.focus_indices
-        focus_position = molecule.positions[focus]
-        new_position_relative_to_focus = pred.globals.position_vectors
-
-        new_species = jnp.array(
-            models.ATOMIC_NUMBERS[pred.globals.target_species.item()]
-        )
-        new_position = new_position_relative_to_focus + focus_position
-
-        return ase.Atoms(
-            positions=jnp.concatenate(
-                [molecule.positions, new_position[None, :]], axis=0
-            ),
-            numbers=jnp.concatenate([molecule.numbers, new_species[None]], axis=0),
+        return jax.lax.cond(
+            pred.globals.stop[0],
+            lambda: (padded_fragment, (padded_fragment, pred)),
+            lambda: (next_padded_fragment, (next_padded_fragment, pred)),
         )
 
-    # Generate with different seeds.
-    for seed in tqdm.tqdm(seeds, desc="Generating molecules"):
-        rng = jax.random.PRNGKey(seed)
-        molecule = init_molecule.copy()
-        nan_found = False
+    def generate_for_one_seed(seed: int) -> None:
+        rngs = jax.random.split(jax.random.PRNGKey(seed), num=max_num_atoms)
+        _, (padded_fragments, preds) = jax.lax.scan(
+            generate_one_step, init_fragment, rngs
+        )
+        return padded_fragments, preds
 
-        # Add atoms step-by-step.
+    # Generate molecules, for all seeds
+    vmapped_generate_fn = jax.jit(jax.vmap(generate_for_one_seed))
+    padded_fragments, preds = vmapped_generate_fn(jnp.asarray(seeds))
+    print(padded_fragments.nodes.positions.shape)
+
+    for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
+        # Get the padded fragment and predictions for this seed.
+        padded_fragments_for_seed = jax.tree_map(lambda x: x[seed], padded_fragments)
+        preds_for_seed = jax.tree_map(lambda x: x[seed], preds)
+
         figs = []
+        nan_found = False
+        final_fragment = None
         for step in range(max_num_atoms):
-            step_rng, rng = jax.random.split(rng)
-            fragment = input_pipeline.ase_atoms_to_jraph_graph(
-                molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
-            )
-
-            # Run the model on the current molecule.
-            pred = get_predictions(fragment, step_rng)
+            padded_fragment = jax.tree_map(lambda x: x[step], padded_fragments_for_seed)
+            pred = jax.tree_map(lambda x: x[step], preds_for_seed)
 
             # Check for any NaNs in the predictions.
             num_nans = sum(
@@ -298,34 +194,42 @@ def generate_molecules(
                     "NaNs in predictions at step %d. Stopping generation...", step
                 )
                 nan_found = True
+                final_fragment = jax.tree_map(
+                    lambda x: x[step - 1], padded_fragments_for_seed
+                )
                 break
 
             # Save visualization of generation process.
             if visualize:
+                fragment = jraph.unpad_with_graphs(padded_fragment)
                 fig = analysis.visualize_predictions(pred, fragment)
                 figs.append(fig)
 
             # Check if we should stop.
-            stop = pred.globals.stop.item()
+            stop = pred.globals.stop[0]
             if stop:
+                final_fragment = padded_fragment
                 break
 
-            # Append the new atom to the molecule.
-            molecule = append_predictions(molecule, pred)
-
         # We don't generate molecules with more than MAX_NUM_ATOMS atoms.
-        if molecule.numbers.shape[0] < 1000:
-            logging.info("Generated %s", molecule.get_chemical_formula())
-            if nan_found:
-                outputfile = f"{init_molecule_name}_seed={seed}_NaN.xyz"
-            else:
-                outputfile = f"{init_molecule_name}_seed={seed}.xyz"
-            ase.io.write(os.path.join(molecules_outputdir, outputfile), molecule)
-            molecule_list.append(molecule)
+        if final_fragment is None:
+            logging.info("No final fragment found. Skipping...")
+            continue
+
+        num_valid_nodes = final_fragment.n_node[0]
+        generated_molecule = ase.Atoms(
+            positions=final_fragment.nodes.positions[:num_valid_nodes],
+            numbers=models.get_atomic_numbers(
+                final_fragment.nodes.species[:num_valid_nodes]
+            ),
+        )
+        logging.info("Generated %s", generated_molecule.get_chemical_formula())
+        if nan_found:
+            outputfile = f"{init_molecule_name}_seed={seed}_NaN.xyz"
         else:
-            logging.info(
-                "Discarding %s because it is too long", molecule.get_chemical_formula()
-            )
+            outputfile = f"{init_molecule_name}_seed={seed}.xyz"
+        ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
+        molecule_list.append(generated_molecule)
 
         if visualize:
             for index, fig in enumerate(figs):
@@ -342,8 +246,6 @@ def generate_molecules(
                     f"seed_{seed}_fragments_{index}.html",
                 )
                 fig.write_html(outputfile, include_plotlyjs="cdn")
-
-
 
     # Save the generated molecules as an ASE database.
     output_db = os.path.join(
@@ -418,8 +320,8 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "max_num_atoms",
-        1000,
-        "Maximum number of atoms to generate per molecule",
+        30,
+        "Maximum number of atoms to generate per molecule.",
     )
     flags.DEFINE_bool(
         "visualize",

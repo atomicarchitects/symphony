@@ -29,20 +29,19 @@ import plotly.subplots
 
 sys.path.append("..")
 
-import qm9
-import datatypes
-import input_pipeline
-import models
-import train
+from symphony.data import qm9
+from symphony.models import models
+from symphony import datatypes, train
 from configs import root_dirs
 
 try:
-    import input_pipeline_tf
+    from symphony.data import input_pipeline_tf
 
     tf.config.experimental.set_visible_devices([], "GPU")
 except ImportError:
-    logging.warning("TensorFlow not installed. Skipping import of input_pipeline_tf.")
-    pass
+    logging.warning(
+        "TensorFlow not installed. Skipping import of symphony.data.input_pipeline_tf."
+    )
 
 
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
@@ -214,7 +213,9 @@ def get_plotly_traces_for_fragment(
     if fragment.globals is not None:
         if fragment.globals.target_positions is not None and not fragment.globals.stop:
             # The target position is relative to the fragment's focus node.
-            target_positions = fragment.globals.target_positions + fragment.nodes.positions[0]
+            target_positions = (
+                fragment.globals.target_positions + fragment.nodes.positions[0]
+            )
             target_positions = target_positions.reshape(3)
             molecule_traces.append(
                 go.Scatter3d(
@@ -315,9 +316,7 @@ def get_plotly_traces_for_predictions(
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.position_coeffs
-    position_logits = models.log_coeffs_to_logits(
-        position_coeffs, 50, 99
-    )
+    position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99)
     position_logits.grid_values -= jnp.max(position_logits.grid_values)
     position_probs = position_logits.apply(jnp.exp)
 
@@ -664,9 +663,7 @@ def load_model_at_step(
     return model, params, config
 
 
-def get_results_as_dataframe(
-    basedir: str
-) -> pd.DataFrame:
+def get_results_as_dataframe(basedir: str) -> pd.DataFrame:
     """Returns the results for the given model as a pandas dataframe for each split."""
 
     results = pd.DataFrame()
@@ -675,9 +672,7 @@ def get_results_as_dataframe(
     ):
         workdir = os.path.dirname(config_file_path)
         try:
-            config, best_state, _, metrics_for_best_state = load_from_workdir(
-                workdir
-            )
+            config, best_state, _, metrics_for_best_state = load_from_workdir(workdir)
         except FileNotFoundError:
             logging.warning(f"Skipping {workdir} because it is incomplete.")
             continue
