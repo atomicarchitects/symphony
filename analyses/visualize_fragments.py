@@ -5,23 +5,13 @@ import os
 
 from absl import flags
 from absl import app
-from absl import logging
-import chex
 import jax
 import jax.numpy as jnp
-import ase
 import numpy as np
 import jraph
-import plotly.graph_objects as go
-import plotly.subplots
 
-import sys
+from symphony.data import input_pipeline_tf
 
-sys.path.append("..")
-
-import input_pipeline_tf
-import models
-import datatypes
 from analyses import analysis
 
 FLAGS = flags.FLAGS
@@ -52,7 +42,7 @@ def visualize_predictions_and_fragments(
     outputdir: str,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
-    step: int,
+    step: str,
 ):
     """Visualize the predictions and fragments."""
     name = analysis.name_from_workdir(workdir)
@@ -104,13 +94,12 @@ def visualize_predictions_and_fragments(
         figs.append(analysis.visualize_predictions(pred, fragment))
 
     # Save to files.
-    step_name = "step=best" if step == -1 else f"step={step}"
     visualizations_dir = os.path.join(
         outputdir,
         name,
         f"fait={focus_and_atom_type_inverse_temperature}",
         f"pit={position_inverse_temperature}",
-        step_name,
+        f"step={step}",
         "visualizations",
         "train_fragments",
     )
@@ -145,10 +134,10 @@ if __name__ == "__main__":
         "Inverse temperature value for sampling the position.",
         short_name="pit",
     )
-    flags.DEFINE_integer(
+    flags.DEFINE_string(
         "step",
-        -1,
-        "Step number to load model from. The default of -1 corresponds to the best model.",
+        "best",
+        "Step number to load model from. The default corresponds to the best model.",
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

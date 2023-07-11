@@ -17,7 +17,7 @@ import sys
 sys.path.append("..")
 
 import analyses.analysis as analysis
-import analyses.check_distances as check_distances
+import analyses.gschnet_analyses.check_distances as check_distances
 
 
 ALL_METRICS = ["total_loss", "position_loss", "focus_and_atom_type_loss"]
