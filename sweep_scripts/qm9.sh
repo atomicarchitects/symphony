@@ -9,7 +9,7 @@ for model in "nequip"
 do
   for l in 1 2 3 4
   do
-    for pc in 5
+    for pc in 2
     do
       for c in 64
       do
