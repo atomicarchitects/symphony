@@ -111,20 +111,15 @@ def generate_for_one_seed(
 ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
     """Generates a single molecule for a given seed."""
     step_rngs = jax.random.split(rng, num=max_num_atoms)
+    (final_padded_fragment, stop), (padded_fragments, preds) = jax.lax.scan(
+        lambda args, rng: generate_one_step(apply_fn, *args, cutoff, rng),
+        (init_fragment, False),
+        step_rngs,
+    )
     if return_intermediates:
-         _, (padded_fragments, preds) = jax.lax.scan(
-            lambda args, rng: generate_one_step(apply_fn, *args, cutoff, rng),
-            (init_fragment, False),
-            step_rngs,
-        )
-         return padded_fragments, preds
+        return padded_fragments, preds
     else:
-        (final_padded_fragment, stop), _ = jax.lax.scan(
-            lambda args, rng: generate_one_step(apply_fn, *args, cutoff, rng),
-            (init_fragment, False),
-            step_rngs,
-        )
-        return (final_padded_fragment, stop)
+        return final_padded_fragment, stop
 
 
 def generate_molecules(
