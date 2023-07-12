@@ -222,7 +222,6 @@ def generate_molecules(
         )
     
     # Generate molecules for all seeds.
-    jax.profiler.start_trace("profile")
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
 
@@ -233,6 +232,7 @@ def generate_molecules(
     logging.info("Compilation time: %.2f s", compilation_time)
 
     # Generate molecules (and intermediate steps, if visualizing).
+    jax.profiler.start_trace("profile")
     if visualize:
         padded_fragments, preds = chunk_and_apply(params, rngs)
     else:
