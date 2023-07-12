@@ -193,12 +193,12 @@ def generate_molecules(
     )
     init_fragment = jax.tree_map(jnp.asarray, init_fragment)
 
-    @jax.jit
     def chunk_and_apply(
         params: optax.Params, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
         """Chunks the seeds and applies the model sequentially over all chunks."""
 
+        @jax.jit
         def apply_on_chunk(
             rngs: chex.PRNGKey,
         ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
@@ -213,7 +213,7 @@ def generate_molecules(
             generate_for_one_seed_fn = lambda rng: generate_for_one_seed(
                 apply_fn, init_fragment, max_num_atoms, config.nn_cutoff, rng, return_intermediates=visualize,
             )
-            return  jax.vmap(generate_for_one_seed_fn)(rngs)
+            return jax.vmap(generate_for_one_seed_fn)(rngs)
 
         rngs = rngs.reshape((num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, -1))
         results = jax.lax.map(apply_on_chunk, rngs)
