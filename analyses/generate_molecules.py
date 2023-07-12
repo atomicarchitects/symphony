@@ -81,7 +81,6 @@ def append_predictions(
     )
 
 
-# Generate with different seeds.
 def generate_one_step(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     padded_fragment: datatypes.Fragments,
@@ -223,6 +222,7 @@ def generate_molecules(
         )
     
     # Generate molecules for all seeds.
+    jax.profiler.start_trace("profiles")
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
 
@@ -237,6 +237,7 @@ def generate_molecules(
         padded_fragments, preds = chunk_and_apply(params, rngs)
     else:
         final_padded_fragments, stops = chunk_and_apply(params, rngs)
+    jax.profiler.stop_trace()
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
