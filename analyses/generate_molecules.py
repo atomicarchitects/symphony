@@ -20,6 +20,7 @@ import numpy as np
 import tqdm
 import chex
 import optax
+import time
 
 sys.path.append("..")
 
@@ -193,12 +194,12 @@ def generate_molecules(
     )
     init_fragment = jax.tree_map(jnp.asarray, init_fragment)
 
+    @jax.jit
     def chunk_and_apply(
         params: optax.Params, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
         """Chunks the seeds and applies the model sequentially over all chunks."""
 
-        @jax.jit
         def apply_on_chunk(
             rngs: chex.PRNGKey,
         ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
@@ -224,6 +225,14 @@ def generate_molecules(
     # Generate molecules for all seeds.
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
+
+    # Compute compilation time.
+    start_time = time.time()
+    chunk_and_apply.lower(params, rngs).compile()
+    compilation_time = time.time() - start_time
+    logging.info("Compilation time: %.2f s", compilation_time)
+
+    # Generate molecules (and intermediate steps, if visualizing).
     if visualize:
         padded_fragments, preds = chunk_and_apply(params, rngs)
     else:
