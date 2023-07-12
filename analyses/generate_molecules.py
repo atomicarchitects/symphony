@@ -198,7 +198,7 @@ def generate_molecules(
         params: optax.Params, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
         """Chunks the seeds and applies the model sequentially over all chunks."""
-        return jnp.matmul(jnp.ones((1000, 5)), jnp.ones((5, 30))), jnp.matmul(jnp.ones((1000, 5)), jnp.ones((5, 30)))
+        return jnp.matmul(jnp.ones((1000000, 5)), jnp.ones((5, 30))), jnp.matmul(jnp.ones((1000000, 5)), jnp.ones((5, 30)))
         def apply_on_chunk(
             rngs: chex.PRNGKey,
         ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
