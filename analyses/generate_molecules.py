@@ -198,7 +198,7 @@ def generate_molecules(
         params: optax.Params, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
         """Chunks the seeds and applies the model sequentially over all chunks."""
-
+        return jnp.matmul(jnp.ones(1000, 5), jnp.ones(5, 30)), jnp.matmul(jnp.ones(1000, 5), jnp.ones(5, 30))
         def apply_on_chunk(
             rngs: chex.PRNGKey,
         ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
@@ -222,7 +222,7 @@ def generate_molecules(
         )
     
     # Generate molecules for all seeds.
-    jax.profiler.start_trace("profiles")
+    jax.profiler.start_trace("simple_profiles")
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
 
@@ -238,6 +238,7 @@ def generate_molecules(
     else:
         final_padded_fragments, stops = chunk_and_apply(params, rngs)
     jax.profiler.stop_trace()
+    return
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
