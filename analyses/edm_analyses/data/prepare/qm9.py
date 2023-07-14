@@ -8,8 +8,8 @@ import urllib
 from os.path import join as join
 import urllib.request
 
-from qm9.data.prepare.process import process_xyz_files, process_xyz_gdb9
-from qm9.data.prepare.utils import download_data, is_int, cleanup_file
+from analyses.edm_analyses.data.prepare.process import process_xyz_files, process_xyz_gdb9
+from analyses.edm_analyses.data.prepare.utils import download_data, is_int, cleanup_file
 
 
 def download_dataset_qm9(
@@ -222,7 +222,7 @@ def get_unique_charges(charges):
     """
     # Create a dictionary of charges
     charge_counts = {
-        z: np.zeros(len(charges), dtype=np.int) for z in np.unique(charges)
+        z: np.zeros(len(charges), dtype=np.int32) for z in np.unique(charges)
     }
     print(charge_counts.keys())
 

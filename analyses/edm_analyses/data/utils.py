@@ -5,8 +5,8 @@ import logging
 import os
 
 from torch.utils.data import DataLoader
-from qm9.data.dataset_class import ProcessedDataset
-from qm9.data.prepare import prepare_dataset
+from analyses.edm_analyses.data.dataset_class import ProcessedDataset
+from analyses.edm_analyses.data.prepare import prepare_dataset
 
 
 def initialize_datasets(

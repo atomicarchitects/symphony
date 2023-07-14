@@ -6,7 +6,7 @@ from equivariant_diffusion.utils import (
     remove_mean_with_mask,
     assert_correctly_masked,
 )
-from qm9.analyze import check_stability
+from analyses.edm_analyses.analyze import check_stability
 
 
 def rotate_chain(z):

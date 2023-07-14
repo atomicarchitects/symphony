@@ -1,8 +1,8 @@
 import logging
 import os
 
-from qm9.data.prepare.md17 import download_dataset_md17
-from qm9.data.prepare.qm9 import download_dataset_qm9
+from analyses.edm_analyses.data.prepare.md17 import download_dataset_md17
+from analyses.edm_analyses.data.prepare.qm9 import download_dataset_qm9
 
 
 def prepare_dataset(
