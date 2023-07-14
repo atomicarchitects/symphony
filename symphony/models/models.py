@@ -13,7 +13,7 @@ import ml_collections
 from symphony import datatypes
 from symphony.models import nequip, marionette, e3schnet, mace, attention
 
-RADII = jnp.arange(0.5, 1.5, 0.05)
+RADII = jnp.arange(0.5, 2.5, 0.05)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
