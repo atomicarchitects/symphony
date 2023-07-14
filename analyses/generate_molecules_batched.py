@@ -1,26 +1,22 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence, Tuple, Callable
-
 import os
 import sys
+import time
+from typing import Callable, Sequence, Tuple
 
-from absl import flags
-from absl import app
-from absl import logging
 import ase
 import ase.data
-from ase.db import connect
 import ase.io
 import ase.visualize
+import chex
 import jax
 import jax.numpy as jnp
 import jraph
-import numpy as np
-import tqdm
-import chex
 import optax
-import time
+import tqdm
+from absl import app, flags, logging
+from ase.db import connect
 
 sys.path.append("..")
 
@@ -33,7 +29,10 @@ FLAGS = flags.FLAGS
 
 
 def append_predictions(
-    preds: datatypes.Predictions, stop: chex.Array, padded_fragments: datatypes.Fragments, nn_cutoff: float
+    preds: datatypes.Predictions,
+    stop: chex.Array,
+    padded_fragments: datatypes.Fragments,
+    nn_cutoff: float,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     num_nodes = padded_fragments.nodes.positions.shape[0]
@@ -44,7 +43,7 @@ def append_predictions(
     num_valid_graphs = num_graphs - num_padding_graphs
     num_edges = padded_fragments.senders.shape[0]
 
-    # 
+    #
     num_unstopped_graphs = (~stop).sum()
     dummy_nodes_indices = num_valid_nodes + jnp.arange(num_valid_graphs)
 
@@ -60,10 +59,10 @@ def append_predictions(
     positions = padded_fragments.nodes.positions
     focuses = preds.globals.focus_indices[:num_valid_graphs]
     focus_positions = positions[focuses]
-    target_positions_relative_to_focus = preds.globals.position_vectors[:num_valid_graphs]
-    target_positions = (
-        target_positions_relative_to_focus + focus_positions
-    )
+    target_positions_relative_to_focus = preds.globals.position_vectors[
+        :num_valid_graphs
+    ]
+    target_positions = target_positions_relative_to_focus + focus_positions
     dummy_positions = positions[dummy_nodes_indices]
     dummy_new_positions = jnp.where(stop[:, None], dummy_positions, target_positions)
     positions = positions.at[dummy_nodes_indices].set(dummy_new_positions)
@@ -76,7 +75,7 @@ def append_predictions(
     species = species.at[dummy_nodes_indices].set(dummy_new_species)
 
     # Sort nodes according to segment ids.
-    sort_indices = jnp.argsort(segment_ids, kind='stable')
+    sort_indices = jnp.argsort(segment_ids, kind="stable")
     segment_ids = segment_ids[sort_indices]
     positions = positions[sort_indices]
     species = species[sort_indices]
@@ -237,11 +236,16 @@ def generate_molecules(
                 position_inverse_temperature,
             )
             return generate_for_one_seed(
-                apply_fn, init_fragments, max_num_atoms, config.nn_cutoff, rng, return_intermediates=visualize,
+                apply_fn,
+                init_fragments,
+                max_num_atoms,
+                config.nn_cutoff,
+                rng,
+                return_intermediates=visualize,
             )
-        
+
         return jax.lax.map(apply_on_chunk, rngs)
-    
+
     # Generate molecules for all seeds.
     seeds = jnp.arange(num_seeds // num_seeds_per_chunk)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
@@ -260,10 +264,14 @@ def generate_molecules(
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
-        final_padded_fragments_for_seed = jax.tree_map(lambda x: x[seed], final_padded_fragments)
+        final_padded_fragments_for_seed = jax.tree_map(
+            lambda x: x[seed], final_padded_fragments
+        )
         stops_for_seed = jax.tree_map(lambda x: x[seed], stops)
 
-        for index, final_padded_fragment in enumerate(jraph.unbatch(jraph.unpad_with_graphs(final_padded_fragments_for_seed))):
+        for index, final_padded_fragment in enumerate(
+            jraph.unbatch(jraph.unpad_with_graphs(final_padded_fragments_for_seed))
+        ):
             if stops_for_seed[index]:
                 generated_molecule = ase.Atoms(
                     positions=final_padded_fragment.nodes.positions,
