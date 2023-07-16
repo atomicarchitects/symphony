@@ -54,6 +54,9 @@ def update_dummy_config(
         config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
         if train_on_split_smaller_than_chunk:
             config.train_molecules = (0, 10)
+    config.loss_kwargs.min_radius = config.target_position_predictor.min_radius
+    config.loss_kwargs.max_radius = config.target_position_predictor.max_radius
+    config.loss_kwargs.num_radii = config.target_position_predictor.num_radii
     return ml_collections.FrozenConfigDict(config)
 
 
@@ -103,8 +106,6 @@ class TrainTest(parameterized.TestCase):
     )
     def test_equivariance(self, config_name: str, rng: int):
         """Tests that models are equivariant."""
-        self.skipTest("This test is too slow.")
-
         rng = jax.random.PRNGKey(rng)
         config = _ALL_CONFIGS["qm9"][config_name]
         model = models.create_model(config, run_in_evaluation_mode=False)

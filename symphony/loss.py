@@ -24,6 +24,7 @@ def safe_norm(x: jnp.ndarray, axis) -> jnp.ndarray:
 def target_position_to_radius_weights(
     target_position: jnp.ndarray,
     radius_rbf_variance: float,
+    radii: jnp.ndarray
 ) -> jnp.ndarray:
     """Returns the radial distribution for a target position."""
     radius_weights = jax.vmap(
@@ -31,7 +32,7 @@ def target_position_to_radius_weights(
             -((radius - jnp.linalg.norm(target_position)) ** 2)
             / (2 * radius_rbf_variance)
         )
-    )(models.RADII)
+    )(radii)
     radius_weights += 1e-10
     return radius_weights / jnp.sum(radius_weights)
 
@@ -63,6 +64,9 @@ def generation_loss(
     target_position_lmax: Optional[int],
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
+    min_radius: float,
+    max_radius: float,
+    num_radii: int,
     mask_atom_types: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
@@ -70,7 +74,6 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
-    num_radii = models.RADII.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
     n_node = graphs.n_node
@@ -200,8 +203,9 @@ def generation_loss(
             return cross_entropy + normalizing_factor - self_entropy
 
         target_positions = graphs.globals.target_positions
+        radii = models.create_radii(min_radius, max_radius, num_radii)
         true_radius_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance)
+            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance, radii)
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
             lambda pos: target_position_to_log_angular_coeffs(
@@ -272,8 +276,9 @@ def generation_loss(
 
         position_coeffs = preds.globals.position_coeffs
         target_positions = graphs.globals.target_positions
+        radii = models.create_radii(min_radius, max_radius, num_radii)
         true_radius_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance)
+            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance, radii)
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
             lambda pos: target_position_to_log_angular_coeffs(

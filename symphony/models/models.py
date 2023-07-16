@@ -13,14 +13,8 @@ import ml_collections
 from symphony import datatypes
 from symphony.models import nequip, marionette, e3schnet, mace, attention
 
-RADII = jnp.arange(0.5, 2.5, 0.05)
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
-
-
-def debug_print(fmt, *args, **kwargs):
-    return
-    jax.debug.print(fmt, *args, **kwargs)
 
 
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
@@ -129,10 +123,9 @@ def segment_sample_2D(
 
 
 def log_coeffs_to_logits(
-    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int,
+    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int, num_radii: int
 ) -> e3nn.SphericalSignal:
     """Converts coefficients of the logits to a SphericalSignal representing the logits."""
-    num_radii = len(RADII)
     num_channels = log_coeffs.shape[0]
     assert log_coeffs.shape == (
         num_channels,
@@ -248,6 +241,9 @@ class TargetPositionPredictor(hk.Module):
         res_alpha: int,
         num_channels: int,
         num_species: int,
+        min_radius: float,
+        max_radius: float,
+        num_radii: int,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -256,6 +252,13 @@ class TargetPositionPredictor(hk.Module):
         self.res_alpha = res_alpha
         self.num_channels = num_channels
         self.num_species = num_species
+        self.min_radius = min_radius
+        self.max_radius = max_radius
+        self.num_radii = num_radii
+
+    def create_radii(self) -> jnp.ndarray:
+        """Creates the binned radii for the target positions."""
+        return create_radii(self.min_radius, self.max_radius, self.num_radii)
 
     def __call__(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
@@ -278,31 +281,27 @@ class TargetPositionPredictor(hk.Module):
 
         # TODO: See if we can make this more expressive.
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        num_radii = len(RADII)
-        position_coeffs = e3nn.haiku.Linear(num_radii * self.num_channels * irreps)(
+        position_coeffs = e3nn.haiku.Linear(self.num_radii * self.num_channels * irreps)(
             target_species_embeddings * focus_node_embeddings
         )
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
-        position_coeffs = position_coeffs.mul_to_axis(factor=num_radii)
+        position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
         assert position_coeffs.shape == (
             num_graphs,
             self.num_channels,
-            num_radii,
+            self.num_radii,
             irreps.dim,
         ), position_coeffs.shape
-
-        # Old logic:
-        # position_logits = e3nn.to_s2grid(position_coeffs)
 
         # Compute the position signal projected to a spherical grid for each radius.
         position_logits = jax.vmap(
             lambda coeffs: log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha
+                coeffs, self.res_beta, self.res_alpha, self.num_radii
             )
         )(position_coeffs)
         assert position_logits.shape == (
             num_graphs,
-            num_radii,
+            self.num_radii,
             self.res_beta,
             self.res_alpha,
         ), position_logits.shape
@@ -398,12 +397,12 @@ class Predictor(hk.Module):
         assert position_coeffs.shape == (
             num_graphs,
             self.target_position_predictor.num_channels,
-            len(RADII),
+            self.target_position_predictor.num_radii,
             position_coeffs.shape[-1],
         ), position_coeffs.shape
         assert position_logits.shape == (
             num_graphs,
-            len(RADII),
+            self.target_position_predictor.num_radii,
             self.target_position_predictor.res_beta,
             self.target_position_predictor.res_alpha,
         )
@@ -517,10 +516,12 @@ class Predictor(hk.Module):
         )  # [num_graphs, num_radii]
 
         # Sample the radius.
+        radii = self.target_position_predictor.create_radii()
+        num_radii = radii.shape[0]
         rng, radius_rng = jax.random.split(rng)
         radius_rngs = jax.random.split(radius_rng, num_graphs)
         radius_indices = jax.vmap(
-            lambda key, p: jax.random.choice(key, len(RADII), p=p)
+            lambda key, p: jax.random.choice(key, num_radii, p=p)
         )(
             radius_rngs, radii_probs
         )  # [num_graphs]
@@ -541,7 +542,7 @@ class Predictor(hk.Module):
 
         # Combine the radius and angles to get the position vectors.
         position_vectors = jax.vmap(
-            lambda r, b, a: RADII[r] * angular_probs.grid_vectors[b, a]
+            lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
         )(radius_indices, beta_indices, alpha_indices)
 
         # Check the shapes.
@@ -558,10 +559,10 @@ class Predictor(hk.Module):
         assert position_coeffs.shape == (
             num_graphs,
             self.target_position_predictor.num_channels,
-            len(RADII),
+            num_radii,
             irreps.dim,
         )
-        assert position_logits.shape == (num_graphs, len(RADII), res_beta, res_alpha)
+        assert position_logits.shape == (num_graphs, self.target_position_predictor.num_radii, res_beta, res_alpha)
         assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.Predictions(
@@ -588,6 +589,11 @@ class Predictor(hk.Module):
             n_node=graphs.n_node,
             n_edge=graphs.n_edge,
         )
+
+
+def create_radii(min_radius: float, max_radius: float, num_radii: int) -> jnp.ndarray:
+    """Creates the bins for the radii for the target position predictor."""
+    return jnp.linspace(min_radius, max_radius, num_radii)
 
 
 def create_model(
@@ -708,6 +714,9 @@ def create_model(
             res_alpha=config.target_position_predictor.res_alpha,
             num_channels=config.target_position_predictor.num_channels,
             num_species=num_species,
+            min_radius=config.target_position_predictor.min_radius,
+            max_radius=config.target_position_predictor.max_radius,
+            num_radii=config.target_position_predictor.num_radii,
         )
         predictor = Predictor(
             node_embedder=node_embedder,

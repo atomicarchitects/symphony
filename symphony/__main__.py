@@ -15,6 +15,7 @@ import tensorflow as tf
 
 
 from symphony import train
+from symphony.models import models
 from configs import root_dirs
 
 
@@ -54,6 +55,9 @@ def main(argv):
     # Freeze config.
     config = FLAGS.config
     config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
+    config.loss_kwargs.min_radius = config.target_position_predictor.min_radius
+    config.loss_kwargs.max_radius = config.target_position_predictor.max_radius
+    config.loss_kwargs.num_radii = config.target_position_predictor.num_radii
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
