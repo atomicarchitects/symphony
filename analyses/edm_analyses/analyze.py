@@ -17,7 +17,6 @@ try:
 except ModuleNotFoundError:
     use_rdkit = False
 
-matplotlib.use("Agg")
 
 import analyses.analysis
 from analyses.edm_analyses import dataset
@@ -485,24 +484,34 @@ def main(unused_argv: Sequence[str]) -> None:
             "molecules",
         )
 
-    dataset_info = datasets_config.qm9_with_h
+    return analyze_stability_for_molecules_in_dir(molecules_dir)
+
+
+def analyze_stability_for_molecules_in_dir(molecules_dir: str, with_hydrogens: bool = True) -> Dict[str, float]:
+    """Analyze stability for all molecules in a directory."""
+    if with_hydrogens:
+        dataset_info = datasets_config.qm9_with_h
+    else:
+        dataset_info = datasets_config.qm9_without_h
     molecule_list = read_xyz_files(molecules_dir, dataset_info)
     return analyze_stability_for_molecules(molecule_list, dataset_info, preprocessed=True)
 
 
 def read_xyz_files(molecules_dir: str, dataset_info: Dict[str, Any]) -> List[Tuple[torch.Tensor, torch.Tensor]]:
     """Read xyz files from a directory and return a list of molecules."""
+    if not os.path.isdir(molecules_dir):
+        raise ValueError(f"{molecules_dir} is not a directory.")
+
     molecule_list = []
     for molecule_file in os.listdir(molecules_dir):
         if not molecule_file.endswith(".xyz"):
             continue
         positions, atom_types, _, _ = visualizer.load_molecule_xyz(os.path.join(molecules_dir, molecule_file), dataset_info)
         molecule_list.append((positions, atom_types))
-    print(positions, atom_types)
     return molecule_list
 
 
-def analyze_stability_for_molecules(molecule_list: Dict[str, torch.Tensor], dataset_info: Dict[str, Any], preprocessed: bool = False):
+def analyze_stability_for_molecules(molecule_list: Dict[str, torch.Tensor], dataset_info: Dict[str, Any], preprocessed: bool = False) -> Dict[str, float]:
     if preprocessed:
         processed_list = molecule_list
     else:
@@ -538,22 +547,30 @@ def analyze_stability_for_molecules(molecule_list: Dict[str, torch.Tensor], data
         nr_stable_bonds += int(validity_results[1])
         n_atoms += int(validity_results[2])
 
-    # Validity
+    # Stability
     fraction_mol_stable = molecule_stable / float(n_samples)
     fraction_atm_stable = nr_stable_bonds / float(n_atoms)
-    validity_dict = {
-        "mol_stable": fraction_mol_stable,
-        "atm_stable": fraction_atm_stable,
-    }
 
+    rdkit_metrics = None
     if use_rdkit:
         metrics = BasicMolecularMetrics(dataset_info)
-        rdkit_metrics = metrics.evaluate(processed_list)
-        # print("Unique molecules:", rdkit_metrics[1])
-        return validity_dict, rdkit_metrics
+        [validity, uniqueness, novelty], _ = metrics.evaluate(processed_list)
     else:
-        raise ValueError("No rdkit")
-        return validity_dict, None
+        validity = uniqueness = novelty = None
+
+    num_generated = len(processed_list)
+    all_metrics = {
+        "fraction_molecules_stable": fraction_mol_stable,
+        "fraction_atoms_stable": fraction_atm_stable,
+        "num_generated": num_generated,
+        "num_valid_generated": validity * num_generated,
+        "num_valid_and_unique_generated": uniqueness * validity * num_generated,
+        "num_valid_and_unique_and_novel_generated": novelty * uniqueness * validity * num_generated,
+        "fraction_valid": validity,
+        "fraction_unique_of_valid": uniqueness,
+        "fraction_novel_of_valid_and_unique": novelty,
+    }
+    return all_metrics
 
 
 def analyze_node_distribution(mol_list, save_path):
