@@ -286,22 +286,24 @@ def generate_molecules(
             final_padded_fragment = jax.tree_map(lambda x: x[seed], final_padded_fragments)
             stop = jax.tree_map(lambda x: x[seed], stops)
 
+        num_valid_nodes = final_padded_fragment.n_node[0]
+        generated_molecule = ase.Atoms(
+            positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
+            numbers=models.get_atomic_numbers(
+                final_padded_fragment.nodes.species[:num_valid_nodes]
+            ),
+        )
         if stop:
-            num_valid_nodes = final_padded_fragment.n_node[0]
-            generated_molecule = ase.Atoms(
-                positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
-                numbers=models.get_atomic_numbers(
-                    final_padded_fragment.nodes.species[:num_valid_nodes]
-                ),
-            )
             logging.info("Generated %s", generated_molecule.get_chemical_formula())
             outputfile = f"{init_molecule_name}_seed={seed}.xyz"
-            ase.io.write(
-                os.path.join(molecules_outputdir, outputfile), generated_molecule
-            )
-            molecule_list.append(generated_molecule)
         else:
             logging.info("STOP was not produced. Discarding...")
+            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
+
+        ase.io.write(
+            os.path.join(molecules_outputdir, outputfile), generated_molecule
+        )
+        molecule_list.append(generated_molecule)
 
     # Save the generated molecules as an ASE database.
     output_db = os.path.join(

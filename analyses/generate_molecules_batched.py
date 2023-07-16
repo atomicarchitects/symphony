@@ -272,21 +272,24 @@ def generate_molecules(
         for index, final_padded_fragment in enumerate(
             jraph.unbatch(jraph.unpad_with_graphs(final_padded_fragments_for_seed))
         ):
+            generated_molecule = ase.Atoms(
+                positions=final_padded_fragment.nodes.positions,
+                numbers=models.get_atomic_numbers(
+                    final_padded_fragment.nodes.species
+                ),
+            )
+
             if stops_for_seed[index]:
-                generated_molecule = ase.Atoms(
-                    positions=final_padded_fragment.nodes.positions,
-                    numbers=models.get_atomic_numbers(
-                        final_padded_fragment.nodes.species
-                    ),
-                )
                 logging.info("Generated %s", generated_molecule.get_chemical_formula())
                 outputfile = f"{init_molecule_name}_seed={seed}.xyz"
-                ase.io.write(
-                    os.path.join(molecules_outputdir, outputfile), generated_molecule
-                )
-                molecule_list.append(generated_molecule)
             else:
                 logging.info("STOP was not produced. Discarding...")
+                outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
+
+            ase.io.write(
+                os.path.join(molecules_outputdir, outputfile), generated_molecule
+            )
+            molecule_list.append(generated_molecule)
 
     # Save the generated molecules as an ASE database.
     output_db = os.path.join(
