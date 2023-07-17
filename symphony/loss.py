@@ -64,9 +64,6 @@ def generation_loss(
     target_position_lmax: Optional[int],
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
-    min_radius: float,
-    max_radius: float,
-    num_radii: int,
     mask_atom_types: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
@@ -74,6 +71,8 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
+    radii = preds.globals.radii_bins
+    num_radii = radii.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
     n_node = graphs.n_node
@@ -203,7 +202,6 @@ def generation_loss(
             return cross_entropy + normalizing_factor - self_entropy
 
         target_positions = graphs.globals.target_positions
-        radii = models.create_radii(min_radius, max_radius, num_radii)
         true_radius_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance, radii)
         )(target_positions)
@@ -276,7 +274,6 @@ def generation_loss(
 
         position_coeffs = preds.globals.position_coeffs
         target_positions = graphs.globals.target_positions
-        radii = models.create_radii(min_radius, max_radius, num_radii)
         true_radius_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance, radii)
         )(target_positions)

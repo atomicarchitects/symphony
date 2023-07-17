@@ -54,9 +54,6 @@ def update_dummy_config(
         config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
         if train_on_split_smaller_than_chunk:
             config.train_molecules = (0, 10)
-    config.loss_kwargs.min_radius = config.target_position_predictor.min_radius
-    config.loss_kwargs.max_radius = config.target_position_predictor.max_radius
-    config.loss_kwargs.num_radii = config.target_position_predictor.num_radii
     return ml_collections.FrozenConfigDict(config)
 
 

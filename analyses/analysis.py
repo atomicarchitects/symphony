@@ -47,7 +47,6 @@ except ImportError:
 
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
 ELEMENTS = ["H", "C", "N", "O", "F"]
-RADII = models.RADII
 NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
 # Colors and sizes for the atoms.
@@ -324,7 +323,7 @@ def get_plotly_traces_for_predictions(
     count = 0
     cmin = 0.0
     cmax = position_probs.grid_values.max().item()
-    for i in range(len(RADII)):
+    for i in range(len(radii)):
         prob_r = position_probs[i]
 
         # Skip if the probability is too small.
@@ -333,7 +332,7 @@ def get_plotly_traces_for_predictions(
 
         count += 1
         surface_r = go.Surface(
-            **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
+            **prob_r.plotly_surface(radius=radii[i], translation=focus_position),
             colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
             showscale=False,
             cmin=cmin,
@@ -347,9 +346,10 @@ def get_plotly_traces_for_predictions(
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
+    radii = pred.globals.radii_bins
     radius = jnp.linalg.norm(pred.globals.position_vectors, axis=-1)
-    most_likely_radius_index = jnp.abs(RADII - radius).argmin()
-    most_likely_radius = RADII[most_likely_radius_index]
+    most_likely_radius_index = jnp.abs(radii - radius).argmin()
+    most_likely_radius = radii[most_likely_radius_index]
     all_sigs = e3nn.to_s2grid(
         position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
     )
