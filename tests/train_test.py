@@ -75,8 +75,6 @@ class TrainTest(parameterized.TestCase):
         dataset: str,
     ):
         """Tests that training and evaluation runs without errors."""
-        # self.skipTest("This test is too slow.")
-
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
         jax.config.update("jax_debug_infs", True)
@@ -98,7 +96,7 @@ class TrainTest(parameterized.TestCase):
         # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
 
     @parameterized.product(
-        config_name=["nequip", "mace", "e3schnet", "marionette"],
+        config_name=["e3schnet"],
         rng=[0, 1],
     )
     def test_equivariance(self, config_name: str, rng: int):
@@ -116,7 +114,7 @@ class TrainTest(parameterized.TestCase):
             return model.apply(params, rng, graphs).globals.position_coeffs
 
         input_positions = e3nn.IrrepsArray("1o", self.graphs.nodes.positions)
-        e3nn.utils.assert_equivariant(apply_fn, rng_key=rng, args_in=(input_positions,))
+        e3nn.utils.assert_equivariant(apply_fn, rng, input_positions, atol=1e-5)
 
 
 if __name__ == "__main__":

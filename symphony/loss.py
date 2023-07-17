@@ -69,7 +69,7 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
-    radii = preds.globals.radii_bins
+    radii = preds.globals.radii_bins[0] # Assume all radii are the same.
     num_radii = radii.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
@@ -212,7 +212,7 @@ def generation_loss(
         )(target_positions)
         log_predicted_dist = position_logits
 
-        assert true_radius_weights.shape == (num_graphs, num_radii)
+        assert true_radius_weights.shape == (num_graphs, num_radii), true_radius_weights.shape
         assert log_true_angular_coeffs.shape == (
             num_graphs,
             log_true_angular_coeffs.irreps.dim,

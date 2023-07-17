@@ -24,9 +24,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     # Dummy predictions and graphs.
     num_radii = 5
     coeffs_array = jnp.asarray([[1.0, 0.0, 0.0, 0.0], [2.0, 0.0, 0.0, 0.0]])
-    coeffs_array = jnp.repeat(
-        coeffs_array[:, None, :], repeats=num_radii, axis=1
-    )
+    coeffs_array = jnp.repeat(coeffs_array[:, None, :], repeats=num_radii, axis=1)
     position_coeffs = e3nn.IrrepsArray("0e + 1o", coeffs_array)
     position_logits = e3nn.to_s2grid(
         position_coeffs,
@@ -62,6 +60,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             position_logits=position_logits,
             position_probs=None,
             position_vectors=None,
+            radii_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1))
         ),
         edges=None,
         senders=None,
@@ -114,9 +113,6 @@ class LossTest(parameterized.TestCase):
             target_position_lmax=1,
             ignore_position_loss_for_small_fragments=False,
             position_loss_type="kl_divergence",
-            min_radius=0.5,
-            max_radius=5.0,
-            num_radii=5,
         )
         logits = self.preds.nodes.focus_and_target_species_logits
         stop_logits = self.preds.globals.stop_logits
@@ -233,7 +229,7 @@ class LossTest(parameterized.TestCase):
     def test_kl_divergence_position_loss(
         self, target_position_inverse_temperature: float
     ):
-        num_radii = self.preds.globals.position_logits.shape[-3]
+        num_radii = self.preds.globals.radii_bins.shape[-1]
         _, (_, position_loss) = loss.generation_loss(
             preds=self.preds,
             graphs=self.graphs,
@@ -242,9 +238,6 @@ class LossTest(parameterized.TestCase):
             target_position_lmax=1,
             ignore_position_loss_for_small_fragments=False,
             position_loss_type="kl_divergence",
-            min_radius=0.5,
-            max_radius=3.0,
-            num_radii=num_radii,
         )
 
         # Compute self-entropy.
@@ -269,7 +262,9 @@ class LossTest(parameterized.TestCase):
         """Test that shifting the logits by a constant does not change the loss."""
         preds = self.preds._replace(
             globals=self.preds.globals._replace(
-                position_logits=self.preds.globals.position_logits.apply(lambda x: x + 1),
+                position_logits=self.preds.globals.position_logits.apply(
+                    lambda x: x + 1
+                ),
             )
         )
 
@@ -285,7 +280,9 @@ class LossTest(parameterized.TestCase):
 
         preds_shifted = self.preds._replace(
             globals=self.preds.globals._replace(
-                position_logits=self.preds.globals.position_logits.apply(lambda x: x + 2),
+                position_logits=self.preds.globals.position_logits.apply(
+                    lambda x: x + 2
+                ),
             )
         )
 
@@ -300,7 +297,6 @@ class LossTest(parameterized.TestCase):
         )
 
         np.testing.assert_allclose(position_loss, position_loss_shifted, atol=1e-4)
-
 
 
 if __name__ == "__main__":

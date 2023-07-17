@@ -282,7 +282,8 @@ class TargetPositionPredictor(hk.Module):
         # TODO: See if we can make this more expressive.
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         position_coeffs = e3nn.haiku.Linear(
-            self.num_radii * self.num_channels * irreps
+            self.num_radii * self.num_channels * irreps,
+            force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
@@ -291,7 +292,7 @@ class TargetPositionPredictor(hk.Module):
             self.num_channels,
             self.num_radii,
             irreps.dim,
-        ), position_coeffs.shape
+        )
 
         # Compute the position signal projected to a spherical grid for each radius.
         position_logits = jax.vmap(
