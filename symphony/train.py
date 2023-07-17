@@ -379,9 +379,8 @@ def train_and_evaluate(
             logging.info("No more training data. Continuing with final evaluation.")
             break
 
-
         # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):            
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             state, batch_metrics = train_step(
                 state,
                 graphs,

@@ -22,5 +22,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.activation = "softplus"
     config.mlp_n_layers = 2
     config.num_basis_fns = 8
+    config.skip_connection = True
 
     return config

@@ -281,9 +281,9 @@ class TargetPositionPredictor(hk.Module):
 
         # TODO: See if we can make this more expressive.
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        position_coeffs = e3nn.haiku.Linear(self.num_radii * self.num_channels * irreps)(
-            target_species_embeddings * focus_node_embeddings
-        )
+        position_coeffs = e3nn.haiku.Linear(
+            self.num_radii * self.num_channels * irreps
+        )(target_species_embeddings * focus_node_embeddings)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
         assert position_coeffs.shape == (
@@ -518,7 +518,6 @@ class Predictor(hk.Module):
             lambda logit: jnp.exp(logit - max_logit)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
-
         # Sample the radius.
         radii = self.target_position_predictor.create_radii()
         radii_bins = jnp.tile(radii, (num_graphs, 1))
@@ -570,7 +569,12 @@ class Predictor(hk.Module):
             num_radii,
             irreps.dim,
         )
-        assert position_logits.shape == (num_graphs, self.target_position_predictor.num_radii, res_beta, res_alpha)
+        assert position_logits.shape == (
+            num_graphs,
+            self.target_position_predictor.num_radii,
+            res_beta,
+            res_alpha,
+        )
         assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.Predictions(
@@ -626,6 +630,7 @@ def create_model(
             num_species = 1
 
         if config.model == "MACE":
+
             def node_embedder_fn():
                 output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
                 return mace.MACE(
@@ -640,7 +645,9 @@ def create_model(
                     num_basis_fns=config.num_basis_fns,
                     soft_normalization=config.get("soft_normalization"),
                 )
+
         elif config.model == "NequIP":
+
             def node_embedder_fn():
                 output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
                 return nequip.NequIP(
@@ -657,8 +664,11 @@ def create_model(
                     mlp_n_hidden=config.num_channels,
                     mlp_n_layers=config.mlp_n_layers,
                     n_radial_basis=config.num_basis_fns,
+                    skip_connection=config.skip_connection,
                 )
+
         elif config.model == "MarioNette":
+
             def node_embedder_fn():
                 return marionette.MarioNette(
                     num_species=num_species,
@@ -678,7 +688,9 @@ def create_model(
                     alpha=config.alpha,
                     alphal=config.alphal,
                 )
+
         elif config.model == "E3SchNet":
+
             def node_embedder_fn():
                 return e3schnet.E3SchNet(
                     n_atom_basis=config.num_channels,
@@ -690,6 +702,7 @@ def create_model(
                     max_ell=config.max_ell,
                     num_species=num_species,
                 )
+
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 

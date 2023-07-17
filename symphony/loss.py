@@ -22,9 +22,7 @@ def safe_norm(x: jnp.ndarray, axis) -> jnp.ndarray:
 
 
 def target_position_to_radius_weights(
-    target_position: jnp.ndarray,
-    radius_rbf_variance: float,
-    radii: jnp.ndarray
+    target_position: jnp.ndarray, radius_rbf_variance: float, radii: jnp.ndarray
 ) -> jnp.ndarray:
     """Returns the radial distribution for a target position."""
     radius_weights = jax.vmap(
@@ -203,7 +201,9 @@ def generation_loss(
 
         target_positions = graphs.globals.target_positions
         true_radius_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance, radii)
+            lambda pos: target_position_to_radius_weights(
+                pos, radius_rbf_variance, radii
+            )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
             lambda pos: target_position_to_log_angular_coeffs(
@@ -275,7 +275,9 @@ def generation_loss(
         position_coeffs = preds.globals.position_coeffs
         target_positions = graphs.globals.target_positions
         true_radius_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(pos, radius_rbf_variance, radii)
+            lambda pos: target_position_to_radius_weights(
+                pos, radius_rbf_variance, radii
+            )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
             lambda pos: target_position_to_log_angular_coeffs(
