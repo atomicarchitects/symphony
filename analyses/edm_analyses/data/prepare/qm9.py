@@ -8,7 +8,10 @@ import urllib
 from os.path import join as join
 import urllib.request
 
-from analyses.edm_analyses.data.prepare.process import process_xyz_files, process_xyz_gdb9
+from analyses.edm_analyses.data.prepare.process import (
+    process_xyz_files,
+    process_xyz_gdb9,
+)
 from analyses.edm_analyses.data.prepare.utils import download_data, is_int, cleanup_file
 
 

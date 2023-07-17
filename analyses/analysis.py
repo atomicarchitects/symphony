@@ -25,6 +25,7 @@ import plotly.graph_objects as go
 import plotly.subplots
 
 from analyses.edm_analyses import analyze as edm_analyze
+
 # from openbabel import pybel
 # from openbabel import openbabel as ob
 
@@ -664,18 +665,22 @@ def load_model_at_step(
     return model, params, config
 
 
-def get_edm_analyses_results_as_dataframe(molecules_basedir: str, extract_hyperparams_from_path: bool) -> pd.DataFrame:
+def get_edm_analyses_results_as_dataframe(
+    molecules_basedir: str, extract_hyperparams_from_path: bool
+) -> pd.DataFrame:
     """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
-    
+
     def find_in_path_fn(string):
         """Returns a function that finds a substring in a path."""
-        return lambda path: [subs[len(string):] for subs in path.split("/") if subs.startswith(string)][0]
+        return lambda path: [
+            subs[len(string) :] for subs in path.split("/") if subs.startswith(string)
+        ][0]
 
     def find_model_in_path(path, all_models: Optional[Sequence[str]] = None):
         """Returns the model name from the path."""
         if all_models is None:
             all_models = ["nequip", "e3schnet", "mace", "marionette"]
-        
+
         for subs in path.split("/"):
             for model in all_models:
                 if model in subs:
@@ -690,18 +695,21 @@ def get_edm_analyses_results_as_dataframe(molecules_basedir: str, extract_hyperp
 
     for molecules_dir in molecules_dirs:
         metrics = edm_analyze.analyze_stability_for_molecules_in_dir(molecules_dir)
-        metrics_df = pd.DataFrame().from_dict({
-            "path": molecules_dir,
-            **{key: [val] for key, val in metrics.items()}
-        })
+        metrics_df = pd.DataFrame().from_dict(
+            {"path": molecules_dir, **{key: [val] for key, val in metrics.items()}}
+        )
         results = pd.concat([results, metrics_df], ignore_index=True)
 
-    if extract_hyperparams_from_path:    
+    if extract_hyperparams_from_path:
         paths = results["path"]
         for hyperparam, substring, dtype in [
             ("config.num_interactions", "interactions=", int),
             ("max_l", "l=", int),
-            ("config.target_position_predictor.num_channels", "position_channels=", int),
+            (
+                "config.target_position_predictor.num_channels",
+                "position_channels=",
+                int,
+            ),
             ("config.num_channels", "channels=", int),
             ("focus_and_atom_type_inverse_temperature", "fait=", float),
             ("position_inverse_temperature", "pit=", float),

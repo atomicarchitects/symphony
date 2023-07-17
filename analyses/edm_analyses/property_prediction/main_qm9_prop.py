@@ -1,7 +1,11 @@
 import sys, os
 
 sys.path.append(os.path.abspath(os.path.join("../../")))
-from analyses.edm_analyses.property_prediction.models_property import EGNN, Naive, NumNodes
+from analyses.edm_analyses.property_prediction.models_property import (
+    EGNN,
+    Naive,
+    NumNodes,
+)
 import torch
 from torch import nn, optim
 import argparse

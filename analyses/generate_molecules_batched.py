@@ -274,9 +274,7 @@ def generate_molecules(
         ):
             generated_molecule = ase.Atoms(
                 positions=final_padded_fragment.nodes.positions,
-                numbers=models.get_atomic_numbers(
-                    final_padded_fragment.nodes.species
-                ),
+                numbers=models.get_atomic_numbers(final_padded_fragment.nodes.species),
             )
 
             if stops_for_seed[index]:
