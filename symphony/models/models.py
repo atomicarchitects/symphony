@@ -258,7 +258,7 @@ class TargetPositionPredictor(hk.Module):
 
     def create_radii(self) -> jnp.ndarray:
         """Creates the binned radii for the target positions."""
-        return create_radii(self.min_radius, self.max_radius, self.num_radii)
+        return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
 
     def __call__(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
@@ -359,6 +359,7 @@ class Predictor(hk.Module):
         )
         stop_logits = jnp.zeros((num_graphs,))
 
+        # Get the species and stop probabilities.
         focus_and_target_species_probs, stop_probs = segment_softmax_2D_with_stop(
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
         )
@@ -374,8 +375,9 @@ class Predictor(hk.Module):
             true_focus_node_embeddings, graphs.globals.target_species
         )
 
-        # Integrate the position signal over each sphere to get the normalizing factors for the radii.
+        # Get the position probabilities.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
+        # Our loss accounts for unnormalized probabilities.
         position_max = jnp.max(
             position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
         )
@@ -383,7 +385,10 @@ class Predictor(hk.Module):
         position_probs = position_logits.apply(
             lambda pos: jnp.exp(pos - position_max)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
-        # position_probs = position_probs / position_probs.integrate()
+
+        # The radii bins used for the position prediction, repeated for each graph.
+        radii = self.target_position_predictor.create_radii()
+        radii_bins = jnp.tile(radii, (num_graphs, 1))
 
         # Check the shapes.
         assert focus_and_target_species_logits.shape == (
@@ -425,6 +430,7 @@ class Predictor(hk.Module):
                 position_logits=position_logits,
                 position_probs=position_probs,
                 position_vectors=None,
+                radii_bins=radii_bins,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -474,8 +480,9 @@ class Predictor(hk.Module):
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
         )
 
-        # We stop a graph if the stop probability is greater than 0.5.
-        stop = stop_probs > 0.5
+        # We stop a graph, if we sample a stop.
+        rng, stop_rng = jax.random.split(rng)
+        stop = jax.random.bernoulli(stop_rng, stop_probs)
 
         # Renormalize the focus and target species probabilities, if we have not stopped.
         focus_and_target_species_probs = focus_and_target_species_probs / (
@@ -511,12 +518,13 @@ class Predictor(hk.Module):
             lambda logit: jnp.exp(logit - max_logit)
         )  # [num_graphs, num_radii, res_beta, res_alpha]
 
-        radii_probs = position_probs.integrate().array.squeeze(
-            axis=-1
-        )  # [num_graphs, num_radii]
 
         # Sample the radius.
         radii = self.target_position_predictor.create_radii()
+        radii_bins = jnp.tile(radii, (num_graphs, 1))
+        radii_probs = position_probs.integrate().array.squeeze(
+            axis=-1
+        )  # [num_graphs, num_radii]
         num_radii = radii.shape[0]
         rng, radius_rng = jax.random.split(rng)
         radius_rngs = jax.random.split(radius_rng, num_graphs)
@@ -583,17 +591,13 @@ class Predictor(hk.Module):
                 position_logits=position_logits,
                 position_probs=position_probs,
                 position_vectors=position_vectors,
+                radii_bins=radii_bins,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
             n_node=graphs.n_node,
             n_edge=graphs.n_edge,
         )
-
-
-def create_radii(min_radius: float, max_radius: float, num_radii: int) -> jnp.ndarray:
-    """Creates the bins for the radii for the target position predictor."""
-    return jnp.linspace(min_radius, max_radius, num_radii)
 
 
 def create_model(
