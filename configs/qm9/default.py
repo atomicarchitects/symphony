@@ -50,6 +50,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.position_loss_type = "kl_divergence"
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
+    config.add_noise_to_positions = False
+    config.position_noise_std = None
 
     # Prediction heads.
     config.compute_global_embedding = True

@@ -55,6 +55,8 @@ def update_dummy_config(
         if train_on_split_smaller_than_chunk:
             config.train_molecules = (0, 10)
     config.use_pseudoscalars_and_pseudovectors = True
+    config.add_noise_to_positions = True
+    config.position_noise_std = 0.1
     return ml_collections.FrozenConfigDict(config)
 
 
