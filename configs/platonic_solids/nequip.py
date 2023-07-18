@@ -23,5 +23,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.mlp_n_layers = 2
     config.num_basis_fns = 8
     config.skip_connection = True
+    config.use_pseudoscalars_and_pseudovectors = False
 
     return config

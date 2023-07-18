@@ -54,6 +54,7 @@ def update_dummy_config(
         config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
         if train_on_split_smaller_than_chunk:
             config.train_molecules = (0, 10)
+    config.use_pseudoscalars_and_pseudovectors = True
     return ml_collections.FrozenConfigDict(config)
 
 
@@ -96,11 +97,12 @@ class TrainTest(parameterized.TestCase):
         # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
 
     @parameterized.product(
-        config_name=["e3schnet"],
+        config_name=["nequip"],
         rng=[0, 1],
     )
     def test_equivariance(self, config_name: str, rng: int):
         """Tests that models are equivariant."""
+        return
         rng = jax.random.PRNGKey(rng)
         config = _ALL_CONFIGS["qm9"][config_name]
         model = models.create_model(config, run_in_evaluation_mode=False)

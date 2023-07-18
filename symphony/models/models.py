@@ -282,8 +282,7 @@ class TargetPositionPredictor(hk.Module):
         # TODO: See if we can make this more expressive.
         irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         position_coeffs = e3nn.haiku.Linear(
-            self.num_radii * self.num_channels * irreps,
-            force_irreps_out=True
+            self.num_radii * self.num_channels * irreps, force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
@@ -650,7 +649,10 @@ def create_model(
         elif config.model == "NequIP":
 
             def node_embedder_fn():
-                output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
+                irreps = e3nn.s2_irreps(config.max_ell)
+                if config.use_pseudoscalars_and_pseudovectors:
+                    irreps += e3nn.Irreps("0o + 1e")
+                output_irreps = config.num_channels * irreps
                 return nequip.NequIP(
                     num_species=num_species,
                     r_max=config.r_max,

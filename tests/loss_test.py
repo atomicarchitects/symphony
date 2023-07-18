@@ -60,7 +60,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             position_logits=position_logits,
             position_probs=None,
             position_vectors=None,
-            radii_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1))
+            radii_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1)),
         ),
         edges=None,
         senders=None,

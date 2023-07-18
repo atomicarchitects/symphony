@@ -72,6 +72,10 @@ class NequIP(hk.Module):
                 radial_basis=nequip_jax.radial.simple_smooth_radial_basis,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+            new_node_feats = e3nn.haiku.Linear(
+                irreps_out=self.output_irreps, force_irreps_out=True
+            )(new_node_feats)
+
             if self.skip_connection and interaction > 0:
                 new_node_feats += node_feats
             node_feats = new_node_feats
