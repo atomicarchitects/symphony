@@ -49,6 +49,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.position_loss_type = "kl_divergence"
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
+    config.add_noise_to_positions = False
+    config.position_noise_std = 0.
 
     # Prediction heads.
     config.compute_global_embedding = True
@@ -65,5 +67,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
     config.target_position_predictor.num_channels = 1
+    config.target_position_predictor.min_radius = 0.5
+    config.target_position_predictor.max_radius = 1.5
+    config.target_position_predictor.num_radii = 20
 
     return config

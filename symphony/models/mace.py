@@ -1,5 +1,5 @@
 from typing import Optional
-import mace_jax
+import mace_jax.modules
 import haiku as hk
 import e3nn_jax as e3nn
 

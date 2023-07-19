@@ -12,7 +12,7 @@ def get_config() -> ml_collections.ConfigDict:
     # NequIP hyperparameters.
     config.model = "NequIP"
     config.num_channels = 64
-    config.r_max = 3.
+    config.r_max = 3.0
     config.avg_num_neighbors = 400.0  # NequIP is not properly normalized.
     config.num_interactions = 4
     config.max_ell = 1
@@ -22,5 +22,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.activation = "softplus"
     config.mlp_n_layers = 2
     config.num_basis_fns = 8
+    config.skip_connection = True
+    config.use_pseudoscalars_and_pseudovectors = False
 
     return config

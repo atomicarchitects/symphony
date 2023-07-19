@@ -24,6 +24,8 @@ from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
 
+from analyses.edm_analyses import analyze as edm_analyze
+
 # from openbabel import pybel
 # from openbabel import openbabel as ob
 
@@ -46,7 +48,6 @@ except ImportError:
 
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
 ELEMENTS = ["H", "C", "N", "O", "F"]
-RADII = models.RADII
 NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
 # Colors and sizes for the atoms.
@@ -316,14 +317,16 @@ def get_plotly_traces_for_predictions(
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.position_coeffs
-    position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99)
+    radii = pred.globals.radii_bins
+    num_radii = radii.shape[0]
+    position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99, num_radii)
     position_logits.grid_values -= jnp.max(position_logits.grid_values)
     position_probs = position_logits.apply(jnp.exp)
 
     count = 0
     cmin = 0.0
     cmax = position_probs.grid_values.max().item()
-    for i in range(len(RADII)):
+    for i in range(len(radii)):
         prob_r = position_probs[i]
 
         # Skip if the probability is too small.
@@ -332,7 +335,7 @@ def get_plotly_traces_for_predictions(
 
         count += 1
         surface_r = go.Surface(
-            **prob_r.plotly_surface(radius=RADII[i], translation=focus_position),
+            **prob_r.plotly_surface(radius=radii[i], translation=focus_position),
             colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
             showscale=False,
             cmin=cmin,
@@ -346,9 +349,10 @@ def get_plotly_traces_for_predictions(
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
+    radii = pred.globals.radii_bins
     radius = jnp.linalg.norm(pred.globals.position_vectors, axis=-1)
-    most_likely_radius_index = jnp.abs(RADII - radius).argmin()
-    most_likely_radius = RADII[most_likely_radius_index]
+    most_likely_radius_index = jnp.abs(radii - radius).argmin()
+    most_likely_radius = radii[most_likely_radius_index]
     all_sigs = e3nn.to_s2grid(
         position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
     )
@@ -663,8 +667,64 @@ def load_model_at_step(
     return model, params, config
 
 
+def get_edm_analyses_results_as_dataframe(
+    molecules_basedir: str, extract_hyperparams_from_path: bool
+) -> pd.DataFrame:
+    """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
+
+    def find_in_path_fn(string):
+        """Returns a function that finds a substring in a path."""
+        return lambda path: [
+            subs[len(string) :] for subs in path.split("/") if subs.startswith(string)
+        ][0]
+
+    def find_model_in_path(path, all_models: Optional[Sequence[str]] = None):
+        """Returns the model name from the path."""
+        if all_models is None:
+            all_models = ["nequip", "e3schnet", "mace", "marionette"]
+
+        for subs in path.split("/"):
+            for model in all_models:
+                if model in subs:
+                    return model
+
+    molecules_dirs = set()
+    results = pd.DataFrame()
+    for molecules_file in glob.glob(
+        os.path.join(molecules_basedir, "**", "*.xyz"), recursive=True
+    ):
+        molecules_dirs.add(os.path.dirname(molecules_file))
+
+    for molecules_dir in molecules_dirs:
+        metrics = edm_analyze.analyze_stability_for_molecules_in_dir(molecules_dir)
+        metrics_df = pd.DataFrame().from_dict(
+            {"path": molecules_dir, **{key: [val] for key, val in metrics.items()}}
+        )
+        results = pd.concat([results, metrics_df], ignore_index=True)
+
+    if extract_hyperparams_from_path:
+        paths = results["path"]
+        for hyperparam, substring, dtype in [
+            ("config.num_interactions", "interactions=", int),
+            ("max_l", "l=", int),
+            (
+                "config.target_position_predictor.num_channels",
+                "position_channels=",
+                int,
+            ),
+            ("config.num_channels", "channels=", int),
+            ("focus_and_atom_type_inverse_temperature", "fait=", float),
+            ("position_inverse_temperature", "pit=", float),
+            ("step", "step=", str),
+        ]:
+            results[hyperparam] = paths.apply(find_in_path_fn(substring)).astype(dtype)
+        results["model"] = paths.apply(find_model_in_path)
+
+    return results
+
+
 def get_results_as_dataframe(basedir: str) -> pd.DataFrame:
-    """Returns the results for the given model as a pandas dataframe for each split."""
+    """Returns the results for the given model as a pandas dataframe."""
 
     results = pd.DataFrame()
     for config_file_path in glob.glob(
