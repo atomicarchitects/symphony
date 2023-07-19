@@ -268,10 +268,12 @@ def generate_molecules(
                 fig = analysis.visualize_predictions(pred, fragment)
                 figs.append(fig)
 
+                # This may be the final padded fragment.
+                final_padded_fragment = padded_fragment
+
                 # Check if we should stop.
                 stop = pred.globals.stop
                 if stop:
-                    final_padded_fragment = padded_fragment
                     break
 
             # Save the visualizations of the generation process.
