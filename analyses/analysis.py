@@ -674,9 +674,14 @@ def get_edm_analyses_results_as_dataframe(
 
     def find_in_path_fn(string):
         """Returns a function that finds a substring in a path."""
-        return lambda path: [
-            subs[len(string) :] for subs in path.split("/") if subs.startswith(string)
-        ][0]
+        def find_in_path(path):
+            occurrences = [
+                subs[len(string) :] for subs in path.split("/") if subs.startswith(string)
+            ]
+            print(string, occurrences)
+            if len(occurrences):
+                return occurrences[0]
+        return find_in_path
 
     def find_model_in_path(path, all_models: Optional[Sequence[str]] = None):
         """Returns the model name from the path."""
@@ -716,6 +721,7 @@ def get_edm_analyses_results_as_dataframe(
             ("focus_and_atom_type_inverse_temperature", "fait=", float),
             ("position_inverse_temperature", "pit=", float),
             ("step", "step=", str),
+            ("global_embedding", "global_embed=", str)
         ]:
             results[hyperparam] = paths.apply(find_in_path_fn(substring)).astype(dtype)
         results["model"] = paths.apply(find_model_in_path)

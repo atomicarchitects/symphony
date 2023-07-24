@@ -1,4 +1,4 @@
-from rdkit import Chem
+from rdkit.Chem import AllChem as Chem
 import numpy as np
 from analyses.edm_analyses.bond_analyze import get_bond_order, geom_predictor
 from . import dataset
