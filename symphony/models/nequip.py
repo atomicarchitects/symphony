@@ -69,7 +69,6 @@ class NequIP(hk.Module):
                 mlp_activation=self.mlp_activation,
                 mlp_n_hidden=self.mlp_n_hidden,
                 mlp_n_layers=self.mlp_n_layers,
-                radial_basis=nequip_jax.radial.simple_smooth_radial_basis,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
             new_node_feats = e3nn.haiku.Linear(
