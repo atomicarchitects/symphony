@@ -4,6 +4,12 @@ from typing import Callable, Optional, Tuple
 
 import chex
 import e3nn_jax as e3nn
+from e3nn_jax._src.s2grid import (
+    _expand_matrix,
+    _rollout_sh,
+    _normalization,
+    _spherical_harmonics_s2grid,
+)
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -129,7 +135,9 @@ def segment_sample_2D(
 
 
 def log_coeffs_to_logits(
-    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int,
+    log_coeffs: e3nn.IrrepsArray,
+    res_beta: int,
+    res_alpha: int,
 ) -> e3nn.SphericalSignal:
     """Converts coefficients of the logits to a SphericalSignal representing the logits."""
     num_radii = len(RADII)
@@ -188,7 +196,9 @@ class SCNNBlock(hk.Module):
 
         # Apply activation layer.
         x_act = e3nn.scalar_activation(
-            e3nn.to_s2grid(x, self.res_beta, self.res_alpha, quadrature="gausslegendre"),
+            e3nn.to_s2grid(
+                x, self.res_beta, self.res_alpha, quadrature="gausslegendre"
+            ),
             acts=[self.activation if ir.l == 0 else None for _, ir in input_irreps],
         )
         x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
@@ -196,13 +206,17 @@ class SCNNBlock(hk.Module):
         l_arr = 2 * jnp.arange(self.max_ell) + 1  # number of coefficients per l
         coeffs_first_ndx = jnp.concatenate([jnp.array([0]), jnp.cumsum(l_arr)])
         h_first = jnp.repeat(h[coeffs_first_ndx,], repeats=l_arr)
-        y_prime = 2 * jnp.pi * jnp.sqrt(4 * jnp.pi / (2 * l_arr + 1)) * x_prime * h_first
+        y_prime = (
+            2 * jnp.pi * jnp.sqrt(4 * jnp.pi / (2 * l_arr + 1)) * x_prime * h_first
+        )
 
-        return e3nn.to_s2grid(y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre")
+        return e3nn.to_s2grid(
+            y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre"
+        )
 
 
-class SCNNBlock(hk.Module):
-    r"""E(3)-equivariant spherical CNN."""
+class SphericalConvolution(hk.Module):
+    r"""E(3)-equivariant spherical convolution."""
 
     def __init__(
         self,
@@ -217,39 +231,48 @@ class SCNNBlock(hk.Module):
             res_alpha (int): number of points on the sphere in the :math:`\phi` direction
             activation: if None, no activation function is used.
         """
-        super(SCNNBlock, self).__init__()
+        super(SphericalConvolution, self).__init__()
         self.res_beta = res_beta
         self.res_alpha = res_alpha
         self.max_ell = max_ell
-        self.activation = activation
+        self.activation = e3nn.normalize_function(activation)
 
     def __call__(
         self,
         x: e3nn.IrrepsArray,
-        h: e3nn.IrrepsArray,
+        h: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
-        """Compute the output of a spherical CNN block. Assumes that all inputs are in fourier space.
+        """Compute the output of a spherical convolution. Assumes that all inputs are in fourier space.
         Args:
             x: input IrrepsArray indicating node features
-            h: spherical filter
+            h: spherical filter along `beta` angle
         Returns:
             atom features after interaction
         """
-        input_irreps = x.irreps
-
         # Apply activation layer.
-        x_act = e3nn.scalar_activation(
-            e3nn.to_s2grid(x, self.res_beta, self.res_alpha, quadrature="gausslegendre"),
-            acts=[self.activation if ir.l == 0 else None for _, ir in input_irreps],
+        x_grid = e3nn.to_s2grid(
+            x, self.res_beta, self.res_alpha, quadrature="gausslegendre"
         )
+        x_act = x_grid.apply(self.activation)
         x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
+        h_prime = e3nn.legendre_transform_from_s2grid(
+            h,
+            self.max_ell,
+            self.res_beta,
+            quadrature="gausslegendre",
+        )
 
-        l_arr = 2 * jnp.arange(self.max_ell) + 1  # number of coefficients per l
-        coeffs_first_ndx = jnp.concatenate([jnp.array([0]), jnp.cumsum(l_arr)])
-        h_first = jnp.repeat(h[coeffs_first_ndx,], repeats=l_arr)
-        y_prime = 2 * jnp.pi * jnp.sqrt(4 * jnp.pi / (2 * l_arr + 1)) * x_prime * h_first
+        y_prime = (
+            2
+            * jnp.pi
+            * jnp.sqrt(4 * jnp.pi / (2 * jnp.arange(self.max_ell + 1) + 1))
+            * x_prime
+            * jnp.repeat(h_prime, jnp.arange(self.max_ell + 1) * 2 + 1)
+        )
 
-        return e3nn.to_s2grid(y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre")
+        return e3nn.to_s2grid(
+            y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre"
+        )
 
 
 class GlobalEmbedder(hk.Module):
@@ -398,9 +421,7 @@ class TargetPositionPredictor(hk.Module):
 
         # Compute the position signal projected to a spherical grid for each radius.
         position_logits = jax.vmap(
-            lambda coeffs: log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha
-            )
+            lambda coeffs: log_coeffs_to_logits(coeffs, self.res_beta, self.res_alpha)
         )(position_coeffs)
         assert position_logits.shape == (
             num_graphs,
@@ -718,6 +739,7 @@ def create_model(
             num_species = 1
 
         if config.model == "MACE":
+
             def node_embedder_fn():
                 output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
                 return mace.MACE(
@@ -732,7 +754,9 @@ def create_model(
                     num_basis_fns=config.num_basis_fns,
                     soft_normalization=config.get("soft_normalization"),
                 )
+
         elif config.model == "NequIP":
+
             def node_embedder_fn():
                 output_irreps = config.num_channels * e3nn.s2_irreps(config.max_ell)
                 return nequip.NequIP(
@@ -750,7 +774,9 @@ def create_model(
                     mlp_n_layers=config.mlp_n_layers,
                     n_radial_basis=config.num_basis_fns,
                 )
+
         elif config.model == "MarioNette":
+
             def node_embedder_fn():
                 return marionette.MarioNette(
                     num_species=num_species,
@@ -770,7 +796,9 @@ def create_model(
                     alpha=config.alpha,
                     alphal=config.alphal,
                 )
+
         elif config.model == "E3SchNet":
+
             def node_embedder_fn():
                 return e3schnet.E3SchNet(
                     n_atom_basis=config.num_channels,
@@ -782,6 +810,7 @@ def create_model(
                     max_ell=config.max_ell,
                     num_species=num_species,
                 )
+
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
