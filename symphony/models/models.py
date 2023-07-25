@@ -11,7 +11,7 @@ import jraph
 import ml_collections
 
 from symphony import datatypes
-from symphony.models import nequip, marionette, e3schnet, mace, attention
+from symphony.models import nequip, marionette, e3schnet, mace, attention, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
@@ -704,6 +704,27 @@ def create_model(
                     cutoff=config.cutoff,
                     max_ell=config.max_ell,
                     num_species=num_species,
+                )
+
+        elif config.model == "Allegro":
+
+            def node_embedder_fn():
+                irreps = e3nn.s2_irreps(config.max_ell)
+                if config.use_pseudoscalars_and_pseudovectors:
+                    irreps += e3nn.Irreps("0o + 1e")
+                output_irreps = config.num_channels * irreps
+
+                return allegro.Allegro(
+                    num_species=num_species,
+                    r_max=config.r_max,
+                    avg_num_neighbors=config.avg_num_neighbors,
+                    max_ell=config.max_ell,
+                    output_irreps=output_irreps,
+                    num_interactions=config.num_interactions,
+                    mlp_activation=get_activation(config.mlp_activation),
+                    mlp_n_hidden=config.num_channels,
+                    mlp_n_layers=config.mlp_n_layers,
+                    n_radial_basis=config.num_basis_fns,
                 )
 
         else:
