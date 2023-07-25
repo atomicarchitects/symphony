@@ -698,14 +698,17 @@ def get_edm_analyses_results_as_dataframe(
 
     # Find all directories containing molecules.
     molecules_dirs = set()
-    results = pd.DataFrame()
     suffix = "*.sdf" if read_as_sdf else "*.xyz"
     for molecules_file in glob.glob(
         os.path.join(molecules_basedir, "**", suffix), recursive=True
     ):
         molecules_dirs.add(os.path.dirname(molecules_file))
 
+    if not len(molecules_dirs):
+        raise ValueError(f"No molecules found in {molecules_basedir}.")
+
     # Analyze each directory.
+    results = pd.DataFrame()
     for molecules_dir in molecules_dirs:
         metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
             molecules_dir, read_as_sdf=read_as_sdf
