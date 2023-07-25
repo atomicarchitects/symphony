@@ -1,13 +1,17 @@
 import sys, os
 
 sys.path.append(os.path.abspath(os.path.join("../../")))
-from qm9.property_prediction.models_property import EGNN, Naive, NumNodes
+from analyses.edm_analyses.property_prediction.models_property import (
+    EGNN,
+    Naive,
+    NumNodes,
+)
 import torch
 from torch import nn, optim
 import argparse
-from qm9.property_prediction import prop_utils
+from analyses.edm_analyses.property_prediction import prop_utils
 import json
-from qm9 import dataset, utils
+from analyses.edm_analyses import dataset, utils
 import pickle
 
 loss_l1 = nn.L1Loss()

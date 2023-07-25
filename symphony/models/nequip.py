@@ -25,6 +25,7 @@ class NequIP(hk.Module):
         mlp_n_hidden: int,
         mlp_n_layers: int,
         n_radial_basis: int,
+        skip_connection: bool,
         name: Optional[str] = None,
     ):
         super().__init__(name=name)
@@ -41,6 +42,7 @@ class NequIP(hk.Module):
         self.mlp_n_hidden = mlp_n_hidden
         self.mlp_n_layers = mlp_n_layers
         self.n_radial_basis = n_radial_basis
+        self.skip_connection = skip_connection
 
     def __call__(
         self,
@@ -57,8 +59,8 @@ class NequIP(hk.Module):
         node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
-        for _ in range(self.num_interactions):
-            node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
+        for interaction in range(self.num_interactions):
+            new_node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
                 num_species=self.num_species,
                 output_irreps=self.output_irreps,
@@ -70,8 +72,14 @@ class NequIP(hk.Module):
                 radial_basis=nequip_jax.radial.simple_smooth_radial_basis,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
+            new_node_feats = e3nn.haiku.Linear(
+                irreps_out=self.output_irreps, force_irreps_out=True
+            )(new_node_feats)
+
+            if self.skip_connection and interaction > 0:
+                new_node_feats += node_feats
+            node_feats = new_node_feats
 
         alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
         node_feats = node_feats * alpha
         return node_feats
-

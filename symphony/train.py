@@ -174,6 +174,16 @@ def evaluate_model(
     return eval_metrics
 
 
+@jax.jit
+def add_noise_to_positions(graphs: datatypes.Fragments, rng: chex.PRNGKey, noise_std: float) -> datatypes.Fragments:
+    """Add noise to atom positions in graphs."""
+    noisy_positions = graphs.nodes.positions + jax.random.normal(rng, graphs.nodes.positions.shape) * noise_std
+    return graphs._replace(
+        nodes=graphs.nodes._replace(positions=noisy_positions)
+    )
+
+
+@jax.jit
 def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
     """Mask atom types in graphs."""
 
@@ -372,6 +382,10 @@ def train_and_evaluate(
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
 
+            if config.add_noise_to_positions:
+                noise_rng, rng = jax.random.split(rng)
+                graphs = add_noise_to_positions(graphs, noise_rng, config.position_noise_std)
+
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)
 
@@ -379,9 +393,8 @@ def train_and_evaluate(
             logging.info("No more training data. Continuing with final evaluation.")
             break
 
-
         # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):            
+        with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             state, batch_metrics = train_step(
                 state,
                 graphs,

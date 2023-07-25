@@ -15,6 +15,7 @@ import tensorflow as tf
 
 
 from symphony import train
+from symphony.models import models
 from configs import root_dirs
 
 

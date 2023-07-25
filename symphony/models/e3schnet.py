@@ -161,7 +161,7 @@ class E3SchNet(hk.Module):
         idx_i = fragments.receivers
         idx_j = fragments.senders
 
-        # Irreps for the quantities we need to compute.
+        # Irreps for the quantities we need to compute.]
         spherical_harmonics_irreps = e3nn.Irreps.spherical_harmonics(self.max_ell)
         latent_irreps = e3nn.Irreps(
             (self.n_atom_basis, (ir.l, ir.p)) for _, ir in spherical_harmonics_irreps
@@ -171,7 +171,7 @@ class E3SchNet(hk.Module):
         # Initially, the atom embeddings are just scalars.
         x = hk.Embed(self.num_species, self.n_atom_basis)(species)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
-        x = e3nn.haiku.Linear(irreps_out=latent_irreps)(x)
+        x = e3nn.haiku.Linear(irreps_out=latent_irreps, force_irreps_out=True)(x)
 
         # Compute radial basis functions to cut off interactions
         d_ij = jnp.linalg.norm(r_ij, axis=-1)
@@ -194,7 +194,6 @@ class E3SchNet(hk.Module):
                 self.n_atom_basis, self.n_filters, self.max_ell, self.activation
             )(x, idx_i, idx_j, f_ij, rcut_ij, Yr_ij)
             x = x + v
-
         # In SchNetPack, the output is only the scalar features.
         # Here, we return the entire IrrepsArray.
         return x

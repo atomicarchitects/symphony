@@ -1,20 +1,30 @@
-try:
-    from rdkit import Chem
-    from qm9.rdkit_functions import BasicMolecularMetrics
-
-    use_rdkit = True
-except ModuleNotFoundError:
-    use_rdkit = False
-import qm9.dataset as dataset
+from typing import List, Dict, Tuple, Any, Optional, Sequence
 import torch
 import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as sp_stats
-from qm9 import bond_analyze
+import os
+from absl import flags
+from absl import app
 
+from rdkit import Chem
+from analyses.edm_analyses.rdkit_functions import BasicMolecularMetrics
+
+
+try:
+    use_rdkit = True
+except ModuleNotFoundError:
+    use_rdkit = False
+
+
+import analyses.analysis
+from analyses.edm_analyses import dataset
+from analyses.edm_analyses import bond_analyze
+from analyses.edm_analyses import visualizer
+from analyses.edm_analyses import datasets_config
+
+FLAGS = flags.FLAGS
 
 # 'atom_decoder': ['H', 'B', 'C', 'N', 'O', 'F', 'Al', 'Si', 'P', 'S', 'Cl', 'As', 'Br', 'I', 'Hg', 'Bi'],
 
@@ -384,8 +394,8 @@ def process_loader(dataloader):
 
 
 def main_check_stability(remove_h: bool, batch_size=32):
-    from configs import datasets_config
-    import qm9.dataset as dataset
+    from analyses.edm_analyses import datasets_config
+    import analyses.edm_analyses.dataset as dataset
 
     class Config:
         def __init__(self):
@@ -404,7 +414,7 @@ def main_check_stability(remove_h: bool, batch_size=32):
     dataset_info = datasets_config.qm9_with_h
     dataloaders, charge_scale = dataset.retrieve_dataloaders(cfg)
     if use_rdkit:
-        from qm9.rdkit_functions import BasicMolecularMetrics
+        from analyses.edm_analyses.rdkit_functions import BasicMolecularMetrics
 
         metrics = BasicMolecularMetrics(dataset_info)
 
@@ -448,31 +458,98 @@ def main_check_stability(remove_h: bool, batch_size=32):
         test_validity_for(test_loader)
 
 
-def analyze_stability_for_molecules(molecule_list, dataset_info):
-    one_hot = molecule_list["one_hot"]
-    x = molecule_list["x"]
-    node_mask = molecule_list["node_mask"]
+def main(unused_argv: Sequence[str]) -> None:
+    del unused_argv
 
-    if isinstance(node_mask, torch.Tensor):
-        atomsxmol = torch.sum(node_mask, dim=1)
+    molecules_dir = FLAGS.molecules_dir
+    if molecules_dir is None:
+        if FLAGS.workdir is None:
+            raise ValueError("Either molecules_dir or workdir must be specified")
+
+        workdir = os.path.abspath(FLAGS.workdir)
+        outputdir = FLAGS.outputdir
+        focus_and_atom_type_inverse_temperature = (
+            FLAGS.focus_and_atom_type_inverse_temperature
+        )
+        position_inverse_temperature = FLAGS.position_inverse_temperature
+        step = FLAGS.step
+
+        name = analyses.analysis.name_from_workdir(workdir)
+        molecules_dir = os.path.join(
+            outputdir,
+            name,
+            f"fait={focus_and_atom_type_inverse_temperature}",
+            f"pit={position_inverse_temperature}",
+            f"step={step}",
+            "molecules",
+        )
+
+    return analyze_stability_for_molecules_in_dir(molecules_dir)
+
+
+def analyze_stability_for_molecules_in_dir(
+    molecules_dir: str, with_hydrogens: bool = True
+) -> Dict[str, float]:
+    """Analyze stability for all molecules in a directory."""
+    if with_hydrogens:
+        dataset_info = datasets_config.qm9_with_h
     else:
-        atomsxmol = [torch.sum(m) for m in node_mask]
+        dataset_info = datasets_config.qm9_without_h
+    molecule_list = read_xyz_files(molecules_dir, dataset_info)
+    return analyze_stability_for_molecules(
+        molecule_list, dataset_info, preprocessed=True
+    )
 
-    n_samples = len(x)
 
+def read_xyz_files(
+    molecules_dir: str, dataset_info: Dict[str, Any]
+) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+    """Read xyz files from a directory and return a list of molecules."""
+    if not os.path.isdir(molecules_dir):
+        raise ValueError(f"{molecules_dir} is not a directory.")
+
+    molecule_list = []
+    for molecule_file in os.listdir(molecules_dir):
+        if not molecule_file.endswith(".xyz"):
+            continue
+        positions, atom_types, _, _ = visualizer.load_molecule_xyz(
+            os.path.join(molecules_dir, molecule_file), dataset_info
+        )
+        molecule_list.append((positions, atom_types))
+    return molecule_list
+
+
+def analyze_stability_for_molecules(
+    molecule_list: Dict[str, torch.Tensor],
+    dataset_info: Dict[str, Any],
+    preprocessed: bool = False,
+) -> Dict[str, float]:
+    if preprocessed:
+        processed_list = molecule_list
+    else:
+        one_hot = molecule_list["one_hot"]
+        x = molecule_list["x"]
+        node_mask = molecule_list["node_mask"]
+
+        if isinstance(node_mask, torch.Tensor):
+            atomsxmol = torch.sum(node_mask, dim=1)
+        else:
+            atomsxmol = [torch.sum(m) for m in node_mask]
+
+        processed_list = []
+
+        for i in range(n_samples):
+            atom_type = one_hot[i].argmax(1).cpu().detach()
+            pos = x[i].cpu().detach()
+
+            atom_type = atom_type[0 : int(atomsxmol[i])]
+            pos = pos[0 : int(atomsxmol[i])]
+            processed_list.append((pos, atom_type))
+
+    n_samples = len(processed_list)
     molecule_stable = 0
     nr_stable_bonds = 0
     n_atoms = 0
-
-    processed_list = []
-
-    for i in range(n_samples):
-        atom_type = one_hot[i].argmax(1).cpu().detach()
-        pos = x[i].cpu().detach()
-
-        atom_type = atom_type[0 : int(atomsxmol[i])]
-        pos = pos[0 : int(atomsxmol[i])]
-        processed_list.append((pos, atom_type))
 
     for mol in processed_list:
         pos, atom_type = mol
@@ -482,21 +559,33 @@ def analyze_stability_for_molecules(molecule_list, dataset_info):
         nr_stable_bonds += int(validity_results[1])
         n_atoms += int(validity_results[2])
 
-    # Validity
+    # Stability
     fraction_mol_stable = molecule_stable / float(n_samples)
     fraction_atm_stable = nr_stable_bonds / float(n_atoms)
-    validity_dict = {
-        "mol_stable": fraction_mol_stable,
-        "atm_stable": fraction_atm_stable,
-    }
 
+    rdkit_metrics = None
     if use_rdkit:
         metrics = BasicMolecularMetrics(dataset_info)
-        rdkit_metrics = metrics.evaluate(processed_list)
-        # print("Unique molecules:", rdkit_metrics[1])
-        return validity_dict, rdkit_metrics
+        [validity, uniqueness, novelty], _ = metrics.evaluate(processed_list)
     else:
-        return validity_dict, None
+        validity = uniqueness = novelty = None
+
+    num_generated = len(processed_list)
+    all_metrics = {
+        "fraction_molecules_stable": fraction_mol_stable,
+        "fraction_atoms_stable": fraction_atm_stable,
+        "num_generated": num_generated,
+        "num_valid_generated": validity * num_generated,
+        "num_valid_and_unique_generated": uniqueness * validity * num_generated,
+        "num_valid_and_unique_and_novel_generated": novelty
+        * uniqueness
+        * validity
+        * num_generated,
+        "fraction_valid": validity,
+        "fraction_unique_of_valid": uniqueness,
+        "fraction_novel_of_valid_and_unique": novelty,
+    }
+    return all_metrics
 
 
 def analyze_node_distribution(mol_list, save_path):
@@ -515,5 +604,32 @@ def analyze_node_distribution(mol_list, save_path):
 
 
 if __name__ == "__main__":
-    # main_analyze_qm9(remove_h=False, dataset_name='qm9')
-    main_check_stability(remove_h=False)
+    flags.DEFINE_string(
+        "molecules_dir",
+        None,
+        "Directory where generated molecules are stored. If passed, all other arguments are ignored.",
+    )
+    flags.DEFINE_string("workdir", None, "Workdir for model.")
+    flags.DEFINE_string(
+        "outputdir",
+        os.path.join(os.getcwd(), "analyses", "analysed_workdirs"),
+        "Directory where molecules should be saved.",
+    )
+    flags.DEFINE_float(
+        "focus_and_atom_type_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the focus and atom type.",
+        short_name="fait",
+    )
+    flags.DEFINE_float(
+        "position_inverse_temperature",
+        1.0,
+        "Inverse temperature value for sampling the position.",
+        short_name="pit",
+    )
+    flags.DEFINE_string(
+        "step",
+        "best",
+        "Step number to load model from. The default corresponds to the best model.",
+    )
+    app.run(main)

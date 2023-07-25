@@ -7,9 +7,8 @@ import matplotlib
 import imageio
 
 
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from qm9 import bond_analyze
+from analyses.edm_analyses import bond_analyze
 
 ##############
 ### Files ####
@@ -58,19 +57,27 @@ def save_xyz_file(
 
 def load_molecule_xyz(file, dataset_info):
     with open(file, encoding="utf8") as f:
-        n_atoms = int(f.readline())
+        try:
+            firstline = f.readline().rstrip()
+            n_atoms = int(firstline)
+        except UnicodeDecodeError:
+            print(file)
         one_hot = torch.zeros(n_atoms, len(dataset_info["atom_decoder"]))
         charges = torch.zeros(n_atoms, 1)
         positions = torch.zeros(n_atoms, 3)
+        atom_types = torch.zeros(n_atoms, 1, dtype=torch.int32)
         f.readline()
         atoms = f.readlines()
         for i in range(n_atoms):
-            atom = atoms[i].split(" ")
+            atom = atoms[i].rstrip().split(" ")
+            atom = [e for e in atom if e != ""]
             atom_type = atom[0]
             one_hot[i, dataset_info["atom_encoder"][atom_type]] = 1
             position = torch.Tensor([float(e) for e in atom[1:]])
+            assert len(position) == 3
             positions[i, :] = position
-        return positions, one_hot, charges
+            atom_types[i, 0] = dataset_info["atom_encoder"][atom_type]
+        return positions, atom_types, one_hot, charges
 
 
 def load_xyz_files(path, shuffle=True):
@@ -470,7 +477,7 @@ def visualize_chain_uncertainty(
 
 if __name__ == "__main__":
     # plot_grid()
-    import qm9.dataset as dataset
+    import analyses.edm_analyses.dataset as dataset
     from configs.datasets_config import qm9_with_h, geom_with_h
 
     matplotlib.use("macosx")

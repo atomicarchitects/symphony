@@ -6,7 +6,7 @@ import torch
 
 import logging, os, urllib
 
-from qm9.data.prepare.utils import download_data, is_int, cleanup_file
+from analyses.edm_analyses.data.prepare.utils import download_data, is_int, cleanup_file
 
 md17_base_url = "http://quantum-machine.org/gdml/data/npz/"
 
