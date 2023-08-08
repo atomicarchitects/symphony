@@ -1,15 +1,9 @@
 """Definition of the generative models."""
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 import chex
 import e3nn_jax as e3nn
-from e3nn_jax._src.s2grid import (
-    _expand_matrix,
-    _rollout_sh,
-    _normalization,
-    _spherical_harmonics_s2grid,
-)
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -149,63 +143,6 @@ def log_coeffs_to_logits(
     return log_dist
 
 
-class SCNNBlock(hk.Module):
-    r"""E(3)-equivariant spherical CNN."""
-
-    def __init__(
-        self,
-        res_beta: int,
-        res_alpha: int,
-        max_ell: int,
-        activation: Callable[[jnp.ndarray], jnp.ndarray],
-    ):
-        """
-        Args:
-            res_beta (int): number of points on the sphere in the :math:`\theta` direction
-            res_alpha (int): number of points on the sphere in the :math:`\phi` direction
-            activation: if None, no activation function is used.
-        """
-        super(SCNNBlock, self).__init__()
-        self.res_beta = res_beta
-        self.res_alpha = res_alpha
-        self.max_ell = max_ell
-        self.activation = activation
-
-    def __call__(
-        self,
-        x: e3nn.IrrepsArray,
-        h: e3nn.IrrepsArray,
-    ) -> e3nn.IrrepsArray:
-        """Compute the output of a spherical CNN block. Assumes that all inputs are in fourier space.
-        Args:
-            x: input IrrepsArray indicating node features
-            h: spherical filter
-        Returns:
-            atom features after interaction
-        """
-        input_irreps = x.irreps
-
-        # Apply activation layer.
-        x_act = e3nn.scalar_activation(
-            e3nn.to_s2grid(
-                x, self.res_beta, self.res_alpha, quadrature="gausslegendre"
-            ),
-            acts=[self.activation if ir.l == 0 else None for _, ir in input_irreps],
-        )
-        x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
-
-        l_arr = 2 * jnp.arange(self.max_ell) + 1  # number of coefficients per l
-        coeffs_first_ndx = jnp.concatenate([jnp.array([0]), jnp.cumsum(l_arr)])
-        h_first = jnp.repeat(h[coeffs_first_ndx,], repeats=l_arr)
-        y_prime = (
-            2 * jnp.pi * jnp.sqrt(4 * jnp.pi / (2 * l_arr + 1)) * x_prime * h_first
-        )
-
-        return e3nn.to_s2grid(
-            y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre"
-        )
-
-
 class SphericalConvolution(hk.Module):
     r"""E(3)-equivariant spherical convolution."""
 
@@ -214,31 +151,33 @@ class SphericalConvolution(hk.Module):
         res_beta: int,
         res_alpha: int,
         max_ell: int,
+        h: jnp.ndarray,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
     ):
         """
         Args:
             res_beta (int): number of points on the sphere in the :math:`\theta` direction
             res_alpha (int): number of points on the sphere in the :math:`\phi` direction
+            max_ell (int)
+            h (jnp.ndarray): spherical filter along `beta` angle, shape (res_beta,)
             activation: if None, no activation function is used.
         """
         super(SphericalConvolution, self).__init__()
         self.res_beta = res_beta
         self.res_alpha = res_alpha
         self.max_ell = max_ell
+        self.h = h
         self.activation = e3nn.normalize_function(activation)
 
     def __call__(
         self,
         x: e3nn.IrrepsArray,
-        h: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
         """Compute the output of a spherical convolution. Assumes that all inputs are in fourier space.
         Args:
             x: input IrrepsArray indicating node features
-            h: spherical filter along `beta` angle
         Returns:
-            atom features after interaction
+            IrrepsArray of atom features after interaction
         """
         # Apply activation layer.
         x_grid = e3nn.to_s2grid(
@@ -247,23 +186,36 @@ class SphericalConvolution(hk.Module):
         x_act = x_grid.apply(self.activation)
         x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
         h_prime = e3nn.legendre_transform_from_s2grid(
-            h,
+            self.h,
             self.max_ell,
             self.res_beta,
             quadrature="gausslegendre",
         )
 
-        y_prime = (
+        w = (
             2
             * jnp.pi
             * jnp.sqrt(4 * jnp.pi / (2 * jnp.arange(self.max_ell + 1) + 1))
-            * x_prime
-            * jnp.repeat(h_prime, jnp.arange(self.max_ell + 1) * 2 + 1)
+            * jnp.repeat(h_prime, jnp.arange(self.max_ell + 1) * 2 + 1, axis=-1)
         )
+        y_prime = hk.Linear(h_prime.shape[-1], w_init=WeightInitializer(w))(x_prime)
 
-        return e3nn.to_s2grid(
-            y_prime, self.res_beta, self.res_alpha, quadrature="gausslegendre"
-        )
+        return y_prime
+    
+
+class WeightInitializer(hk.initializers.Initializer):
+  """Initializes a haiku module with a given array of weights.."""
+
+  def __init__(self, weights: jnp.ndarray):
+    """Constructs a Weight initializer.
+
+    Args:
+      weights: array of weights to initialize with.
+    """
+    self.weights = weights
+
+  def __call__(self) -> jax.ndarray:
+    return self.weights
 
 
 class GlobalEmbedder(hk.Module):

@@ -96,7 +96,7 @@ def _make_first_fragment(
     beta_com=0.0,
 ):
     # get distances from (approximate) center of mass - assume all atoms have the same mass
-    com = jnp.average(
+    com = np.average(
         graph.nodes.positions,
         axis=0,
         weights=(graph.nodes.species > 0) if heavy_first else None,
