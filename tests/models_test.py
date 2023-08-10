@@ -2,6 +2,8 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import e3nn_jax as e3nn
+import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -82,6 +84,47 @@ class ModelsTest(parameterized.TestCase):
 
         np.testing.assert_allclose(species_probs, expected_species_probs)
         np.testing.assert_allclose(stop_probs, expected_stop_probs)
+
+    @parameterized.product(
+        irreps=[
+            e3nn.Irreps("0e"),
+            e3nn.Irreps("0e + 1o"),
+            e3nn.Irreps("1o + 2e"),
+            e3nn.Irreps("2e + 0e"),
+            e3nn.s2_irreps(4),
+        ],
+        n_channels=[1, 3],
+    )
+    def test_spherical_convolution(self, irreps, n_channels):
+        res_beta = 30
+        res_alpha = 51
+        l_max = irreps.lmax
+        keys = jnp.asarray([jax.random.PRNGKey(0)])
+        x = e3nn.IrrepsArray(
+            irreps, jax.random.normal(keys, (n_channels, irreps.dim))
+        )
+
+        def f(input):
+            return models.SphericalConvolution(
+                res_beta,
+                res_alpha,
+                l_max,
+                jax.random.normal(keys[0], (n_channels, res_beta)),
+                jax.nn.softplus,
+                1,
+                -1
+            )(input)
+
+        sphconv = hk.transform(f)
+        sphconv.init(keys[0], x)
+
+        R = -e3nn.rand_matrix(keys[0], ())  # random rotation and inversion
+
+        out1 = sphconv.apply({}, None, x.transform_by_matrix(R))
+        out2 = sphconv.apply({}, None, x).transform_by_matrix(R)
+
+        assert out1.irreps == out2.irreps
+        np.testing.assert_allclose(out1.array, out2.array, atol=1e-5, rtol=1e-5)
 
 
 if __name__ == "__main__":

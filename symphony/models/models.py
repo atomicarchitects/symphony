@@ -17,6 +17,31 @@ ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
 
 
+# TODO remove
+def m0_values_to_irrepsarray(m0_values, lmax, p_val, p_arg) -> e3nn.IrrepsArray:
+    """
+    Convert m=0 spherical harmonic components to an IrrepsArray.
+
+    Args:
+        m0_values (`jnp.ndarray`): values along m=0, shape (..., lmax+1)
+        lmax (int): maximum l of the resulting irreps
+        p_val (int): parity of the value of the signal
+        p_arg (int): parity of the argument of the signal
+    Returns:
+        `e3nn.IrrepsArray`: IrrepsArray with `irreps` and values `m0_values`
+    """
+    m0_indices = jnp.cumsum(jnp.repeat(jnp.arange(lmax + 1), 2))[::2] + jnp.arange(
+        lmax + 1
+    )
+    irreps = e3nn.s2_irreps(lmax, p_val, p_arg)
+    return e3nn.IrrepsArray(
+        irreps,
+        jnp.zeros((*m0_values.shape[:-1], (lmax + 1) ** 2))
+        .at[:, m0_indices]
+        .set(m0_values),
+    )
+
+
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
     return jnp.asarray(ATOMIC_NUMBERS)[species]
@@ -153,13 +178,15 @@ class SphericalConvolution(hk.Module):
         max_ell: int,
         h: jnp.ndarray,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
+        p_val: int = 1,
+        p_arg: int = -1,
     ):
         """
         Args:
             res_beta (int): number of points on the sphere in the :math:`\theta` direction
             res_alpha (int): number of points on the sphere in the :math:`\phi` direction
             max_ell (int)
-            h (jnp.ndarray): spherical filter along `beta` angle, shape (res_beta,)
+            h (jnp.ndarray): array of spherical filters along `beta` angle, shape (..., res_beta)
             activation: if None, no activation function is used.
         """
         super(SphericalConvolution, self).__init__()
@@ -168,6 +195,8 @@ class SphericalConvolution(hk.Module):
         self.max_ell = max_ell
         self.h = h
         self.activation = e3nn.normalize_function(activation)
+        self.p_val = p_val
+        self.p_arg = p_arg
 
     def __call__(
         self,
@@ -181,7 +210,12 @@ class SphericalConvolution(hk.Module):
         """
         # Apply activation layer.
         x_grid = e3nn.to_s2grid(
-            x, self.res_beta, self.res_alpha, quadrature="gausslegendre"
+            x,
+            self.res_beta,
+            self.res_alpha,
+            quadrature="gausslegendre",
+            p_val=self.p_val,
+            p_arg=self.p_arg,
         )
         x_act = x_grid.apply(self.activation)
         x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
@@ -191,31 +225,29 @@ class SphericalConvolution(hk.Module):
             self.res_beta,
             quadrature="gausslegendre",
         )
-
         w = (
             2
             * jnp.pi
-            * jnp.sqrt(4 * jnp.pi / (2 * jnp.arange(self.max_ell + 1) + 1))
-            * jnp.repeat(h_prime, jnp.arange(self.max_ell + 1) * 2 + 1, axis=-1)
+            * jnp.sqrt(
+                4
+                * jnp.pi
+                / (
+                    2
+                    * jnp.repeat(
+                        jnp.arange(self.max_ell + 1).reshape(1, h_prime.shape[1]),
+                        h_prime.shape[0],
+                        axis=0,
+                    )
+                    + 1
+                )
+            )
+            * h_prime
         )
-        y_prime = hk.Linear(h_prime.shape[-1], w_init=WeightInitializer(w))(x_prime)
+        y_prime = x_prime.array * jnp.repeat(
+            w, 2 * jnp.arange(self.max_ell + 1) + 1, axis=-1
+        )
 
-        return y_prime
-    
-
-class WeightInitializer(hk.initializers.Initializer):
-  """Initializes a haiku module with a given array of weights.."""
-
-  def __init__(self, weights: jnp.ndarray):
-    """Constructs a Weight initializer.
-
-    Args:
-      weights: array of weights to initialize with.
-    """
-    self.weights = weights
-
-  def __call__(self) -> jax.ndarray:
-    return self.weights
+        return e3nn.IrrepsArray(x_prime.irreps, y_prime)
 
 
 class GlobalEmbedder(hk.Module):
