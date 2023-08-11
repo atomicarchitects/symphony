@@ -176,8 +176,8 @@ class SphericalConvolution(hk.Module):
         res_beta: int,
         res_alpha: int,
         max_ell: int,
-        h: jnp.ndarray,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
+        h_init: hk.initializers.Initializer = hk.initializers.RandomNormal(),
         p_val: int = 1,
         p_arg: int = -1,
     ):
@@ -186,14 +186,16 @@ class SphericalConvolution(hk.Module):
             res_beta (int): number of points on the sphere in the :math:`\theta` direction
             res_alpha (int): number of points on the sphere in the :math:`\phi` direction
             max_ell (int)
-            h (jnp.ndarray): array of spherical filters along `beta` angle, shape (..., res_beta)
             activation: if None, no activation function is used.
+            h_init (hk.initializers.Initializer): initializer for an array of spherical filters along `beta` angle, shape (..., res_beta)
+        p_val (int, optional): parity of the value of the signal
+        p_arg (int, optional): parity of the argument of the signal
         """
         super(SphericalConvolution, self).__init__()
         self.res_beta = res_beta
         self.res_alpha = res_alpha
         self.max_ell = max_ell
-        self.h = h
+        self.h_init = h_init
         self.activation = e3nn.normalize_function(activation)
         self.p_val = p_val
         self.p_arg = p_arg
@@ -208,6 +210,12 @@ class SphericalConvolution(hk.Module):
         Returns:
             IrrepsArray of atom features after interaction
         """
+        h = hk.get_parameter(
+            "h",
+            shape=(x.shape[0], self.res_beta),
+            dtype=x.dtype,
+            init=self.h_init,
+        )
         # Apply activation layer.
         x_grid = e3nn.to_s2grid(
             x,
@@ -220,7 +228,7 @@ class SphericalConvolution(hk.Module):
         x_act = x_grid.apply(self.activation)
         x_prime = e3nn.from_s2grid(x_act, e3nn.Irreps.spherical_harmonics(self.max_ell))
         h_prime = e3nn.legendre_transform_from_s2grid(
-            self.h,
+            h,
             self.max_ell,
             self.res_beta,
             quadrature="gausslegendre",
