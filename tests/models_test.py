@@ -100,28 +100,23 @@ class ModelsTest(parameterized.TestCase):
         res_alpha = 51
         l_max = irreps.lmax
         keys = jnp.asarray([jax.random.PRNGKey(0)])
-        x = e3nn.IrrepsArray(
-            irreps, jax.random.normal(keys, (n_channels, irreps.dim))
-        )
+        x = e3nn.IrrepsArray(irreps, jax.random.normal(keys, (n_channels, irreps.dim)))
 
         def f(input):
             return models.SphericalConvolution(
                 res_beta,
                 res_alpha,
                 l_max,
-                jax.random.normal(keys[0], (n_channels, res_beta)),
                 jax.nn.softplus,
-                1,
-                -1
             )(input)
 
         sphconv = hk.transform(f)
-        sphconv.init(keys[0], x)
+        params = sphconv.init(keys[0], x)
 
         R = -e3nn.rand_matrix(keys[0], ())  # random rotation and inversion
 
-        out1 = sphconv.apply({}, None, x.transform_by_matrix(R))
-        out2 = sphconv.apply({}, None, x).transform_by_matrix(R)
+        out1 = sphconv.apply(params, None, x.transform_by_matrix(R))
+        out2 = sphconv.apply(params, None, x).transform_by_matrix(R)
 
         assert out1.irreps == out2.irreps
         np.testing.assert_allclose(out1.array, out2.array, atol=1e-5, rtol=1e-5)
