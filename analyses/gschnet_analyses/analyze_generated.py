@@ -11,6 +11,7 @@ import time
 import sys
 
 from ase.db import connect
+import ase.io
 import numpy as np
 import pandas as pd
 import tqdm
@@ -422,9 +423,12 @@ if __name__ == "__main__":
         )
         raise FileNotFoundError
     else:
-        with connect(mol_path) as conn:
-            for row in conn.select():
-                molecules.append(row.toatoms())
+        if mol_path.endswith(".db"):
+            with connect(mol_path) as conn:
+                for row in conn.select():
+                    molecules.append(row.toatoms())
+        else:
+            molecules.append(ase.io.read(mol_path))
 
     # compute array with valence of provided atom types
     max_type = max(args.valence[::2])
