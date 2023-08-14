@@ -175,12 +175,15 @@ def evaluate_model(
 
 
 @jax.jit
-def add_noise_to_positions(graphs: datatypes.Fragments, rng: chex.PRNGKey, noise_std: float) -> datatypes.Fragments:
+def add_noise_to_positions(
+    graphs: datatypes.Fragments, rng: chex.PRNGKey, noise_std: float
+) -> datatypes.Fragments:
     """Add noise to atom positions in graphs."""
-    noisy_positions = graphs.nodes.positions + jax.random.normal(rng, graphs.nodes.positions.shape) * noise_std
-    return graphs._replace(
-        nodes=graphs.nodes._replace(positions=noisy_positions)
+    noisy_positions = (
+        graphs.nodes.positions
+        + jax.random.normal(rng, graphs.nodes.positions.shape) * noise_std
     )
+    return graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
 
 @jax.jit
@@ -386,7 +389,9 @@ def train_and_evaluate(
 
             if config.add_noise_to_positions:
                 noise_rng, rng = jax.random.split(rng)
-                graphs = add_noise_to_positions(graphs, noise_rng, config.position_noise_std)
+                graphs = add_noise_to_positions(
+                    graphs, noise_rng, config.position_noise_std
+                )
 
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)

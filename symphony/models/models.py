@@ -143,6 +143,33 @@ def log_coeffs_to_logits(
     return log_dist
 
 
+def position_logits_to_position_distribution(
+    position_logits: e3nn.SphericalSignal,
+) -> e3nn.SphericalSignal:
+    """Converts logits to a SphericalSignal representing the position distribution."""
+
+    assert len(position_logits.shape) == 3  # [num_radii, res_beta, res_alpha]
+    max_logit = jnp.max(position_logits.grid_values)
+    max_logit = jax.lax.stop_gradient(max_logit)
+
+    position_probs = position_logits.apply(lambda logit: jnp.exp(logit - max_logit))
+
+    position_probs.grid_values /= position_probs.integrate().array.sum()
+    return position_probs
+
+
+def safe_log(x: jnp.ndarray, eps: float = 1e-9) -> jnp.ndarray:
+    """Computes the log of x, replacing 0 with a small value (1e-9) for numerical stability."""
+    return jnp.log(jnp.where(x == 0, eps, x))
+
+
+def position_distribution_to_radial_distribution(
+    position_probs: e3nn.SphericalSignal,
+) -> jnp.ndarray:
+    """Returns the marginal radial distribution for a logits of a distribution over all positions."""
+    return position_probs.integrate().array.squeeze(axis=-1)  # [..., num_radii]
+
+
 class GlobalEmbedder(hk.Module):
     """Computes a global embedding for each node in the graph."""
 
@@ -229,6 +256,105 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         )(node_embeddings).array
         assert species_logits.shape == (num_nodes, self.num_species)
         return species_logits
+
+
+class FactorizedTargetPositionPredictor(hk.Module):
+    """Predicts the position coefficients for the target species."""
+
+    def __init__(
+        self,
+        position_coeffs_lmax: int,
+        res_beta: int,
+        res_alpha: int,
+        num_channels: int,
+        num_species: int,
+        min_radius: float,
+        max_radius: float,
+        num_radii: int,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name)
+        self.position_coeffs_lmax = position_coeffs_lmax
+        self.res_beta = res_beta
+        self.res_alpha = res_alpha
+        self.num_channels = num_channels
+        self.num_species = num_species
+        self.min_radius = min_radius
+        self.max_radius = max_radius
+        self.num_radii = num_radii
+
+    def create_radii(self) -> jnp.ndarray:
+        """Creates the binned radii for the target positions."""
+        return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
+
+    def __call__(
+        self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
+    ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+        num_graphs = focus_node_embeddings.shape[0]
+
+        assert focus_node_embeddings.shape == (
+            num_graphs,
+            focus_node_embeddings.irreps.dim,
+        )
+
+        target_species_embeddings = hk.Embed(
+            self.num_species, embed_dim=focus_node_embeddings.irreps.num_irreps
+        )(target_species)
+
+        assert target_species_embeddings.shape == (
+            num_graphs,
+            focus_node_embeddings.irreps.num_irreps,
+        )
+
+        # Predict the radii for the target positions.
+        radii_logits = e3nn.haiku.Linear(f"{self.num_radii}x0e")(
+            target_species_embeddings * focus_node_embeddings
+        )
+        radii_logits = e3nn.haiku.MultiLayerPerceptron(
+            list_neurons=[self.radii_mlp_latent_size] * (self.radii_mlp_num_layers - 1)
+            + [self.num_radii],
+            act=self.activation,
+            output_activation=False,
+        )(radii_logits).array
+        assert radii_logits.shape == (num_graphs, self.num_radii)
+
+        # Predict the angular coefficients for the position signal.
+        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
+        position_angular_coeffs = e3nn.haiku.Linear(
+            1 * self.num_channels * irreps, force_irreps_out=True
+        )(target_species_embeddings * focus_node_embeddings)
+        position_angular_coeffs = position_angular_coeffs.mul_to_axis(
+            factor=self.num_channels
+        )
+        position_angular_coeffs = position_angular_coeffs.mul_to_axis(factor=1)
+        assert position_angular_coeffs.shape == (
+            num_graphs,
+            self.num_channels,
+            1,
+            irreps.dim,
+        )
+
+        # Mix the angular coefficients with the radii.
+        position_coeffs = position_angular_coeffs * radii_logits[:, :, None, None]
+
+        # Compute the position signal projected to a spherical grid for each radius.
+        position_logits = jax.vmap(
+            lambda coeffs: log_coeffs_to_logits(
+                coeffs, self.res_beta, self.res_alpha, self.num_radii
+            )
+        )(position_angular_coeffs)
+        assert position_logits.shape == (
+            num_graphs,
+            self.num_radii,
+            self.res_beta,
+            self.res_alpha,
+        ), position_logits.shape
+
+        position_logits.grid_values -= position_logits.grid_values.max(
+            axis=(-3, -2, -1), keepdims=True
+        )
+
+        return position_coeffs, position_logits
 
 
 class TargetPositionPredictor(hk.Module):
@@ -378,13 +504,9 @@ class Predictor(hk.Module):
         # Get the position probabilities.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
         # Our loss accounts for unnormalized probabilities.
-        position_max = jnp.max(
-            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+        position_probs = jax.vmap(position_logits_to_position_distribution)(
+            position_logits
         )
-        position_max = jax.lax.stop_gradient(position_max)
-        position_probs = position_logits.apply(
-            lambda pos: jnp.exp(pos - position_max)
-        )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # The radii bins used for the position prediction, repeated for each graph.
         radii = self.target_position_predictor.create_radii()
@@ -510,20 +632,16 @@ class Predictor(hk.Module):
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        max_logit = jnp.max(
-            position_logits.grid_values, axis=(-3, -2, -1), keepdims=True
+        position_probs = jax.vmap(position_logits_to_position_distribution)(
+            position_logits
         )
-        max_logit = jax.lax.stop_gradient(max_logit)
-        position_probs = position_logits.apply(
-            lambda logit: jnp.exp(logit - max_logit)
-        )  # [num_graphs, num_radii, res_beta, res_alpha]
 
         # Sample the radius.
         radii = self.target_position_predictor.create_radii()
         radii_bins = jnp.tile(radii, (num_graphs, 1))
-        radii_probs = position_probs.integrate().array.squeeze(
-            axis=-1
-        )  # [num_graphs, num_radii]
+        radii_probs = jax.vmap(position_distribution_to_radial_distribution)(
+            position_probs
+        )
         num_radii = radii.shape[0]
         rng, radius_rng = jax.random.split(rng)
         radius_rngs = jax.random.split(radius_rng, num_graphs)

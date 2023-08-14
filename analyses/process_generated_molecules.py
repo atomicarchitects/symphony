@@ -84,7 +84,7 @@ def relax_structures_of_molecules(molecules_dir: str, output_dir: str) -> None:
         writer.write(mol, confId=0)
 
 
-def process_molecules_dir(molecules_dir: str) -> None:
+def process_molecules_dir(molecules_dir: str, relax_structures: bool) -> None:
     """Adds bonds and relaxes structures of molecules in a directory."""
     parent_dir = os.path.dirname(molecules_dir)
     bonded_molecules_dir = os.path.join(parent_dir, "bonded_molecules")
@@ -97,16 +97,15 @@ def process_molecules_dir(molecules_dir: str) -> None:
     logging.info("Adding bonds to molecules in %s", molecules_dir)
     add_bonds_to_molecules(molecules_dir, bonded_molecules_dir)
 
-    logging.info("Relaxing structures of molecules in %s", bonded_molecules_dir)
-    relax_structures_of_molecules(
-        bonded_molecules_dir, bonded_and_relaxed_molecules_dir
-    )
+    if relax_structures:
+        logging.info("Relaxing structures of molecules in %s", bonded_molecules_dir)
+        relax_structures_of_molecules(
+            bonded_molecules_dir, bonded_and_relaxed_molecules_dir
+        )
 
 
-def main(unused_argv: Sequence[str]):
-    del unused_argv
-
-    molecules_basedir = FLAGS.molecules_basedir
+def process_molecules_dirs(molecules_basedir: str, relax_structures: bool) -> None:
+    """Searches for molecules in a directory and processes them."""
     molecules_dirs = set()
     for molecules_file in glob.glob(
         os.path.join(molecules_basedir, "**", "*.xyz"), recursive=True
@@ -118,11 +117,25 @@ def main(unused_argv: Sequence[str]):
 
     for molecules_dir in molecules_dirs:
         logging.info("Processing molecules in %s", molecules_dir)
-        process_molecules_dir(molecules_dir)
+        process_molecules_dir(molecules_dir, relax_structures=relax_structures)
+
+
+def main(unused_argv: Sequence[str]) -> None:
+    del unused_argv
+
+    molecules_basedir = FLAGS.molecules_basedir
+    relax_structures = FLAGS.relax_structures
+
+    process_molecules_dirs(molecules_basedir, relax_structures)
 
 
 if __name__ == "__main__":
-    flags.DEFINE_string("molecules_basedir", None, "Directory containing all molecules.")
+    flags.DEFINE_string(
+        "molecules_basedir", None, "Directory containing all molecules."
+    )
+    flags.DEFINE_bool(
+        "relax_structures", True, "Whether to relax the structures of molecules."
+    )
 
     flags.mark_flags_as_required(["molecules_basedir"])
     app.run(main)

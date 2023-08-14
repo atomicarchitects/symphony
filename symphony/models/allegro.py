@@ -61,7 +61,9 @@ class Allegro(hk.Module):
             output_irreps=self.output_irreps,
             num_layers=self.num_interactions,
         )(node_feats, relative_positions, graphs.senders, graphs.receivers)
-        
+
         # Aggregate edge features to nodes
-        node_feats = jax.ops.segment_sum(edge_feats, graphs.receivers) + jax.ops.segment_sum(edge_feats, graphs.senders)
+        node_feats = jax.ops.segment_sum(
+            edge_feats, graphs.receivers
+        ) + jax.ops.segment_sum(edge_feats, graphs.senders)
         return node_feats

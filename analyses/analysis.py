@@ -23,6 +23,7 @@ from clu import checkpoint
 from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
+import optax
 
 from analyses.edm_analyses import analyze as edm_analyze
 
@@ -645,7 +646,7 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
 
 def load_model_at_step(
     workdir: str, step: str, run_in_evaluation_mode: bool
-) -> Tuple[ml_collections.ConfigDict, hk.Transformed, Dict[str, jnp.ndarray]]:
+) -> Tuple[hk.Transformed, optax.Params, ml_collections.ConfigDict]:
     """Loads the model at a given step.
 
     This is a lightweight version of load_from_workdir, that only constructs the model and not the training state.

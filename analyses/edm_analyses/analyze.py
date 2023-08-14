@@ -595,7 +595,6 @@ def analyze_stability_for_molecules(
     fraction_mol_stable = molecule_stable / float(n_samples)
     fraction_atm_stable = nr_stable_bonds / float(n_atoms)
 
-    rdkit_metrics = None
     if use_rdkit:
         metrics = BasicMolecularMetrics(dataset_info)
         [validity, uniqueness, novelty], _ = metrics.evaluate(processed_list)
