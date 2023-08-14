@@ -6,19 +6,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import jraph
+import ott
 
 from symphony import datatypes, models
 
 
-def safe_log(x: jnp.ndarray) -> jnp.ndarray:
-    """Computes the log of x, replacing 0 with 1 for numerical stability."""
-    return jnp.log(jnp.where(x == 0, 1.0, x))
-
-
-def safe_norm(x: jnp.ndarray, axis) -> jnp.ndarray:
-    """Computes the norm of x, replacing 0 with 1 for numerical stability."""
+def safe_norm(x: jnp.ndarray, axis: int, eps: float = 1e-9) -> jnp.ndarray:
+    """Computes the norm of x, replacing 0 with a small value (1e-9) for numerical stability."""
     x2 = jnp.sum(x**2, axis=axis)
-    return jnp.sqrt(jnp.where(x2 == 0, 1.0, x2))
+    return jnp.sqrt(jnp.where(x2 == 0, eps, x2))
 
 
 def target_position_to_radius_weights(
@@ -116,9 +112,11 @@ def generation_loss(
         )
 
         # Compute the lower bound on cross-entropy loss as the entropy of the target distribution.
-        lower_bounds = -(species_targets * safe_log(species_targets)).sum(axis=-1)
+        lower_bounds = -(species_targets * models.safe_log(species_targets)).sum(
+            axis=-1
+        )
         lower_bounds = jraph.segment_sum(lower_bounds, segment_ids, num_graphs)
-        lower_bounds += -stop_targets * safe_log(stop_targets)
+        lower_bounds += -stop_targets * models.safe_log(stop_targets)
         lower_bounds = jax.lax.stop_gradient(lower_bounds)
 
         # Subtract out self-entropy (lower bound) to get the KL divergence.
@@ -193,7 +191,7 @@ def generation_loss(
 
             # Compute the self-entropy of the true distribution.
             self_entropy = (
-                -(true_dist * true_dist.apply(safe_log)).integrate().array.sum()
+                -(true_dist * true_dist.apply(models.safe_log)).integrate().array.sum()
             )
 
             # This should be non-negative, upto numerical precision.
@@ -308,12 +306,159 @@ def generation_loss(
 
         return loss_position
 
+    def position_loss_with_earth_mover() -> jnp.ndarray:
+        """Computes the loss over position probabilities using the Earthmover's distance for the radial component and KL divergence loss for the angular component."""
+
+        position_logits = preds.globals.position_logits
+        res_beta, res_alpha, quadrature = (
+            position_logits.res_beta,
+            position_logits.res_alpha,
+            position_logits.quadrature,
+        )
+
+        def kl_divergence_for_angular_coeffs(
+            log_true_angular_coeffs: e3nn.IrrepsArray,
+            log_predicted_dist: e3nn.SphericalSignal,
+        ) -> jnp.ndarray:
+            """Compute the L2 loss in Fourier space between the logits of two distributions on the spheres."""
+            # Convert coefficients to a distribution on the sphere.
+            log_true_angular_dist = e3nn.to_s2grid(
+                log_true_angular_coeffs,
+                res_beta,
+                res_alpha,
+                quadrature=quadrature,
+                p_val=1,
+                p_arg=-1,
+            )
+
+            # Subtract the maximum value for numerical stability.
+            log_true_angular_dist_max = jnp.max(
+                log_true_angular_dist.grid_values, axis=(-2, -1), keepdims=True
+            )
+            log_true_angular_dist_max = jax.lax.stop_gradient(log_true_angular_dist_max)
+            log_true_angular_dist = log_true_angular_dist.apply(
+                lambda x: x - log_true_angular_dist_max
+            )
+
+            # Convert to a probability distribution, by taking the exponential and normalizing.
+            true_angular_dist = log_true_angular_dist.apply(jnp.exp)
+            true_angular_dist = true_angular_dist / true_angular_dist.integrate()
+            true_dist = true_angular_dist
+
+            # Check that shapes are correct.
+            assert true_dist.grid_values.shape == (
+                res_beta,
+                res_alpha,
+            ), true_dist.grid_values.shape
+
+            # Now, compute the unnormalized predicted distribution over all spheres.
+            # Subtract the maximum value for numerical stability.
+            log_predicted_dist_max = jnp.max(log_predicted_dist.grid_values)
+            log_predicted_dist_max = jax.lax.stop_gradient(log_predicted_dist_max)
+            log_predicted_dist = log_predicted_dist.apply(
+                lambda x: x - log_predicted_dist_max
+            )
+
+            # Compute the cross-entropy including a normalizing factor to account for the fact that the predicted distribution is not normalized.
+            cross_entropy = -(true_dist * log_predicted_dist).integrate().array.sum()
+            normalizing_factor = jnp.log(
+                log_predicted_dist.apply(jnp.exp).integrate().array.sum()
+            )
+
+            # Compute the self-entropy of the true distribution.
+            self_entropy = (
+                -(true_dist * true_dist.apply(models.safe_log)).integrate().array.sum()
+            )
+
+            # This should be non-negative, upto numerical precision.
+            return cross_entropy + normalizing_factor - self_entropy
+
+        def earthmover_distance_for_radii(
+            true_radii_weights: e3nn.IrrepsArray,
+            predicted_radii_weights: e3nn.SphericalSignal,
+        ) -> jnp.ndarray:
+            """Compute the Earthmover's distance between the logits of two distributions on the radii."""
+            geom = ott.geometry.grid.Grid(x=[radii])
+            prob = ott.problems.linear.linear_problem.LinearProblem(
+                geom, a=predicted_radii_weights, b=true_radii_weights
+            )
+            solver = ott.solvers.linear.sinkhorn.Sinkhorn()
+            out = solver(prob)
+            return out.reg_ot_cost
+
+        target_positions = graphs.globals.target_positions
+        true_radius_weights = jax.vmap(
+            lambda pos: target_position_to_radius_weights(
+                pos, radius_rbf_variance, radii
+            )
+        )(target_positions)
+        log_true_angular_coeffs = jax.vmap(
+            lambda pos: target_position_to_log_angular_coeffs(
+                pos, target_position_inverse_temperature, lmax
+            )
+        )(target_positions)
+
+        assert true_radius_weights.shape == (
+            num_graphs,
+            num_radii,
+        ), true_radius_weights.shape
+        assert log_true_angular_coeffs.shape == (
+            num_graphs,
+            log_true_angular_coeffs.irreps.dim,
+        )
+
+        position_logits = preds.globals.position_logits
+
+        position_probs = jax.vmap(models.position_logits_to_position_distribution)(
+            position_logits
+        )
+        predicted_radial_dist = jax.vmap(
+            models.position_distribution_to_radial_distribution,
+        )(position_probs)
+
+        assert predicted_radial_dist.shape == (
+            num_graphs,
+            num_radii,
+        )
+
+        jax.debug.print(
+            "predicted_radial_dist_sum={x}", x=predicted_radial_dist.sum(axis=-1)
+        )
+        jax.debug.print(
+            "true_radius_weights_sum={x}", x=true_radius_weights.sum(axis=-1)
+        )
+        loss_radial = jax.vmap(earthmover_distance_for_radii)(
+            true_radius_weights, predicted_radial_dist
+        )
+
+        log_predicted_angular_dist = position_logits
+        log_predicted_angular_dist.grid_values = jax.vmap(
+            lambda logits, radii_weights: (logits * radii_weights[:, None, None]).sum(
+                axis=0
+            )
+        )(position_logits.grid_values, true_radius_weights)
+        assert log_predicted_angular_dist.shape == (
+            num_graphs,
+            res_beta,
+            res_alpha,
+        ), log_predicted_angular_dist.shape
+
+        loss_angular = jax.vmap(kl_divergence_for_angular_coeffs)(
+            log_true_angular_coeffs, log_predicted_angular_dist
+        )
+        loss_position = loss_angular + loss_radial
+        assert loss_position.shape == (num_graphs,)
+
+        return loss_position
+
     def position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities."""
         if position_loss_type == "kl_divergence":
             return position_loss_with_kl_divergence()
         elif position_loss_type == "l2":
             return position_loss_with_l2()
+        elif position_loss_type == "earth_mover":
+            return position_loss_with_earth_mover()
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 

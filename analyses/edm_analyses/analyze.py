@@ -537,8 +537,6 @@ def read_sdf_files(
     for molecule_file in os.listdir(molecules_dir):
         if not molecule_file.endswith(".sdf"):
             continue
-        if molecule_file.startswith("C6H5"):
-            continue
         positions, atom_types, _, _, bond_orders = visualizer.load_molecule_sdf(
             os.path.join(molecules_dir, molecule_file), dataset_info
         )
@@ -597,7 +595,6 @@ def analyze_stability_for_molecules(
     fraction_mol_stable = molecule_stable / float(n_samples)
     fraction_atm_stable = nr_stable_bonds / float(n_atoms)
 
-    rdkit_metrics = None
     if use_rdkit:
         metrics = BasicMolecularMetrics(dataset_info)
         [validity, uniqueness, novelty], _ = metrics.evaluate(processed_list)

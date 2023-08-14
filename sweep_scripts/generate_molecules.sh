@@ -10,7 +10,7 @@ do
     do
       for pc in 2
       do
-        for step in 100000 200000 500000 1000000 2000000 5000000
+        for step in best
         do
             CUDA_VISIBLE_DEVICES=1 python -m analyses.generate_molecules  --workdir=workdirs/"$workdir"/nequip/interactions="$i"/l="$l"/position_channels="$pc"/channels="$c"/global_embed=False  --fait=1 --pit=1 --init=H  --step="$step"  --max_num_atoms=35 --num_seeds=1000 --num_seeds_per_chunk=25
         done
