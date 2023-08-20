@@ -51,7 +51,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
     config.add_noise_to_positions = False
-    config.position_noise_std = 0.
+    config.position_noise_std = 0.0
 
     # Prediction heads.
     config.compute_global_embedding = True

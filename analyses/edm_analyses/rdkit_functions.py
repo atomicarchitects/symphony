@@ -1,4 +1,4 @@
-from rdkit import Chem
+from rdkit.Chem import AllChem as Chem
 import numpy as np
 from analyses.edm_analyses.bond_analyze import get_bond_order, geom_predictor
 from . import dataset
@@ -102,7 +102,14 @@ class BasicMolecularMetrics(object):
         valid = []
 
         for graph in generated:
-            mol = build_molecule(*graph, self.dataset_info)
+            if len(graph) == 2:
+                positions, atom_types = graph
+                bond_orders = None
+            elif len(graph) == 3:
+                positions, atom_types, bond_orders = graph
+            mol = build_molecule(
+                positions, atom_types, self.dataset_info, bond_orders=bond_orders
+            )
             smiles = mol2smiles(mol)
             if smiles is not None:
                 mol_frags = Chem.rdmolops.GetMolFrags(mol, asMols=True)
@@ -158,9 +165,9 @@ def mol2smiles(mol):
     return Chem.MolToSmiles(mol)
 
 
-def build_molecule(positions, atom_types, dataset_info):
+def build_molecule(positions, atom_types, dataset_info, bond_orders=None):
     atom_decoder = dataset_info["atom_decoder"]
-    X, A, E = build_xae_molecule(positions, atom_types, dataset_info)
+    X, A, E = build_xae_molecule(positions, atom_types, dataset_info, bond_orders)
     mol = Chem.RWMol()
     for atom in X:
         a = Chem.Atom(atom_decoder[atom.item()])
@@ -174,7 +181,7 @@ def build_molecule(positions, atom_types, dataset_info):
     return mol
 
 
-def build_xae_molecule(positions, atom_types, dataset_info):
+def build_xae_molecule(positions, atom_types, dataset_info, bond_orders=None):
     """Returns a triplet (X, A, E): atom_types, adjacency matrix, edge_types
     args:
     positions: N x 3  (already masked to keep final number nodes)
@@ -194,21 +201,24 @@ def build_xae_molecule(positions, atom_types, dataset_info):
     dists = torch.cdist(pos, pos, p=2).squeeze(0)
     for i in range(n):
         for j in range(i):
-            pair = sorted([atom_types[i], atom_types[j]])
-            if (
-                dataset_info["name"] == "qm9"
-                or dataset_info["name"] == "qm9_second_half"
-                or dataset_info["name"] == "qm9_first_half"
-            ):
-                order = get_bond_order(
-                    atom_decoder[pair[0]], atom_decoder[pair[1]], dists[i, j]
-                )
-            elif dataset_info["name"] == "geom":
-                order = geom_predictor(
-                    (atom_decoder[pair[0]], atom_decoder[pair[1]]),
-                    dists[i, j],
-                    limit_bonds_to_one=True,
-                )
+            if bond_orders is not None:
+                order = bond_orders[i, j]
+            else:
+                pair = sorted([atom_types[i], atom_types[j]])
+                if (
+                    dataset_info["name"] == "qm9"
+                    or dataset_info["name"] == "qm9_second_half"
+                    or dataset_info["name"] == "qm9_first_half"
+                ):
+                    order = get_bond_order(
+                        atom_decoder[pair[0]], atom_decoder[pair[1]], dists[i, j]
+                    )
+                elif dataset_info["name"] == "geom":
+                    order = geom_predictor(
+                        (atom_decoder[pair[0]], atom_decoder[pair[1]]),
+                        dists[i, j],
+                        limit_bonds_to_one=True,
+                    )
             # TODO: a batched version of get_bond_order to avoid the for loop
             if order > 0:
                 # Warning: the graph should be DIRECTED

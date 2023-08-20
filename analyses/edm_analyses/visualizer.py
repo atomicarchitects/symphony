@@ -6,6 +6,8 @@ import random
 import matplotlib
 import imageio
 
+import rdkit
+from rdkit import Chem
 
 import matplotlib.pyplot as plt
 from analyses.edm_analyses import bond_analyze
@@ -53,6 +55,28 @@ def save_xyz_file(
                 )
             )
         f.close()
+
+
+def load_molecule_sdf(file, dataset_info):
+    """Load molecule from SDF file."""
+    mol = Chem.SDMolSupplier(file, removeHs=False)[0]
+    if mol is None:
+        raise ValueError("Could not load molecule from file %s" % file)
+
+    n_atoms = mol.GetNumAtoms()
+    one_hot = torch.zeros(n_atoms, len(dataset_info["atom_decoder"]))
+    charges = torch.zeros(n_atoms, 1)
+    positions = torch.zeros(n_atoms, 3)
+    atom_types = torch.zeros(n_atoms, 1, dtype=torch.int32)
+
+    for i, atom in enumerate(mol.GetAtoms()):
+        positions[i, :] = torch.tensor(mol.GetConformer().GetAtomPosition(i))
+        atom_types[i, 0] = dataset_info["atom_encoder"][atom.GetSymbol()]
+        one_hot[i, dataset_info["atom_encoder"][atom.GetSymbol()]] = 1
+        charges[i, 0] = atom.GetFormalCharge()
+
+    bond_orders = rdkit.Chem.rdmolops.GetAdjacencyMatrix(mol, useBO=True)
+    return positions, atom_types, one_hot, charges, bond_orders
 
 
 def load_molecule_xyz(file, dataset_info):

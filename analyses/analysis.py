@@ -23,6 +23,7 @@ from clu import checkpoint
 from flax.training import train_state
 import plotly.graph_objects as go
 import plotly.subplots
+import optax
 
 from analyses.edm_analyses import analyze as edm_analyze
 
@@ -645,7 +646,7 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
 
 def load_model_at_step(
     workdir: str, step: str, run_in_evaluation_mode: bool
-) -> Tuple[ml_collections.ConfigDict, hk.Transformed, Dict[str, jnp.ndarray]]:
+) -> Tuple[hk.Transformed, optax.Params, ml_collections.ConfigDict]:
     """Loads the model at a given step.
 
     This is a lightweight version of load_from_workdir, that only constructs the model and not the training state.
@@ -668,15 +669,23 @@ def load_model_at_step(
 
 
 def get_edm_analyses_results_as_dataframe(
-    molecules_basedir: str, extract_hyperparams_from_path: bool
+    molecules_basedir: str, extract_hyperparams_from_path: bool, read_as_sdf: bool
 ) -> pd.DataFrame:
     """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
 
     def find_in_path_fn(string):
         """Returns a function that finds a substring in a path."""
-        return lambda path: [
-            subs[len(string) :] for subs in path.split("/") if subs.startswith(string)
-        ][0]
+
+        def find_in_path(path):
+            occurrences = [
+                subs[len(string) :]
+                for subs in path.split("/")
+                if subs.startswith(string)
+            ]
+            if len(occurrences):
+                return occurrences[0]
+
+        return find_in_path
 
     def find_model_in_path(path, all_models: Optional[Sequence[str]] = None):
         """Returns the model name from the path."""
@@ -688,20 +697,29 @@ def get_edm_analyses_results_as_dataframe(
                 if model in subs:
                     return model
 
+    # Find all directories containing molecules.
     molecules_dirs = set()
-    results = pd.DataFrame()
+    suffix = "*.sdf" if read_as_sdf else "*.xyz"
     for molecules_file in glob.glob(
-        os.path.join(molecules_basedir, "**", "*.xyz"), recursive=True
+        os.path.join(molecules_basedir, "**", suffix), recursive=True
     ):
         molecules_dirs.add(os.path.dirname(molecules_file))
 
+    if not len(molecules_dirs):
+        raise ValueError(f"No molecules found in {molecules_basedir}.")
+
+    # Analyze each directory.
+    results = pd.DataFrame()
     for molecules_dir in molecules_dirs:
-        metrics = edm_analyze.analyze_stability_for_molecules_in_dir(molecules_dir)
+        metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
+            molecules_dir, read_as_sdf=read_as_sdf
+        )
         metrics_df = pd.DataFrame().from_dict(
             {"path": molecules_dir, **{key: [val] for key, val in metrics.items()}}
         )
         results = pd.concat([results, metrics_df], ignore_index=True)
 
+    # Extract hyperparameters from path.
     if extract_hyperparams_from_path:
         paths = results["path"]
         for hyperparam, substring, dtype in [
@@ -716,6 +734,7 @@ def get_edm_analyses_results_as_dataframe(
             ("focus_and_atom_type_inverse_temperature", "fait=", float),
             ("position_inverse_temperature", "pit=", float),
             ("step", "step=", str),
+            ("global_embedding", "global_embed=", str),
         ]:
             results[hyperparam] = paths.apply(find_in_path_fn(substring)).astype(dtype)
         results["model"] = paths.apply(find_model_in_path)

@@ -331,8 +331,8 @@ def main_analyze_qm9(remove_h: bool, dataset_name="qm9", n_atoms=None):
 
 
 ############################
-# Validity and bond analysis
-def check_stability(positions, atom_type, dataset_info, debug=False):
+# Stability and bond analysis
+def check_stability(positions, atom_type, dataset_info, debug=True, bond_orders=None):
     assert len(positions.shape) == 2
     assert positions.shape[1] == 3
     atom_decoder = dataset_info["atom_decoder"]
@@ -340,25 +340,29 @@ def check_stability(positions, atom_type, dataset_info, debug=False):
     y = positions[:, 1]
     z = positions[:, 2]
 
-    nr_bonds = np.zeros(len(x), dtype="int")
+    nr_bonds = np.zeros(len(x), dtype=np.float32)
 
     for i in range(len(x)):
         for j in range(i + 1, len(x)):
-            p1 = np.array([x[i], y[i], z[i]])
-            p2 = np.array([x[j], y[j], z[j]])
-            dist = np.sqrt(np.sum((p1 - p2) ** 2))
-            atom1, atom2 = atom_decoder[atom_type[i]], atom_decoder[atom_type[j]]
-            pair = sorted([atom_type[i], atom_type[j]])
-            if (
-                dataset_info["name"] == "qm9"
-                or dataset_info["name"] == "qm9_second_half"
-                or dataset_info["name"] == "qm9_first_half"
-            ):
-                order = bond_analyze.get_bond_order(atom1, atom2, dist)
-            elif dataset_info["name"] == "geom":
-                order = bond_analyze.geom_predictor(
-                    (atom_decoder[pair[0]], atom_decoder[pair[1]]), dist
-                )
+            if bond_orders is not None:
+                order = bond_orders[i, j]
+            else:
+                p1 = np.array([x[i], y[i], z[i]])
+                p2 = np.array([x[j], y[j], z[j]])
+                dist = np.sqrt(np.sum((p1 - p2) ** 2))
+                atom1, atom2 = atom_decoder[atom_type[i]], atom_decoder[atom_type[j]]
+                if (
+                    dataset_info["name"] == "qm9"
+                    or dataset_info["name"] == "qm9_second_half"
+                    or dataset_info["name"] == "qm9_first_half"
+                ):
+                    order = bond_analyze.get_bond_order(atom1, atom2, dist)
+                elif dataset_info["name"] == "geom":
+                    pair = sorted([atom_type[i], atom_type[j]])
+                    order = bond_analyze.geom_predictor(
+                        (atom_decoder[pair[0]], atom_decoder[pair[1]]), dist
+                    )
+
             nr_bonds[i] += order
             nr_bonds[j] += order
     nr_stable_bonds = 0
@@ -488,14 +492,17 @@ def main(unused_argv: Sequence[str]) -> None:
 
 
 def analyze_stability_for_molecules_in_dir(
-    molecules_dir: str, with_hydrogens: bool = True
+    molecules_dir: str, with_hydrogens: bool = True, read_as_sdf: bool = False
 ) -> Dict[str, float]:
     """Analyze stability for all molecules in a directory."""
     if with_hydrogens:
         dataset_info = datasets_config.qm9_with_h
     else:
         dataset_info = datasets_config.qm9_without_h
-    molecule_list = read_xyz_files(molecules_dir, dataset_info)
+    if read_as_sdf:
+        molecule_list = read_sdf_files(molecules_dir, dataset_info)
+    else:
+        molecule_list = read_xyz_files(molecules_dir, dataset_info)
     return analyze_stability_for_molecules(
         molecule_list, dataset_info, preprocessed=True
     )
@@ -516,6 +523,24 @@ def read_xyz_files(
             os.path.join(molecules_dir, molecule_file), dataset_info
         )
         molecule_list.append((positions, atom_types))
+    return molecule_list
+
+
+def read_sdf_files(
+    molecules_dir: str, dataset_info: Dict[str, Any]
+) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+    """Read sdf files from a directory and return a list of molecules."""
+    if not os.path.isdir(molecules_dir):
+        raise ValueError(f"{molecules_dir} is not a directory.")
+
+    molecule_list = []
+    for molecule_file in os.listdir(molecules_dir):
+        if not molecule_file.endswith(".sdf"):
+            continue
+        positions, atom_types, _, _, bond_orders = visualizer.load_molecule_sdf(
+            os.path.join(molecules_dir, molecule_file), dataset_info
+        )
+        molecule_list.append((positions, atom_types, bond_orders))
     return molecule_list
 
 
@@ -552,18 +577,24 @@ def analyze_stability_for_molecules(
     n_atoms = 0
 
     for mol in processed_list:
-        pos, atom_type = mol
-        validity_results = check_stability(pos, atom_type, dataset_info)
+        if len(mol) == 2:
+            pos, atom_type = mol
+            bond_orders = None
+        elif len(mol) == 3:
+            pos, atom_type, bond_orders = mol
 
-        molecule_stable += int(validity_results[0])
-        nr_stable_bonds += int(validity_results[1])
-        n_atoms += int(validity_results[2])
+        stability_results = check_stability(
+            pos, atom_type, dataset_info, bond_orders=bond_orders
+        )
+
+        molecule_stable += int(stability_results[0])
+        nr_stable_bonds += int(stability_results[1])
+        n_atoms += int(stability_results[2])
 
     # Stability
     fraction_mol_stable = molecule_stable / float(n_samples)
     fraction_atm_stable = nr_stable_bonds / float(n_atoms)
 
-    rdkit_metrics = None
     if use_rdkit:
         metrics = BasicMolecularMetrics(dataset_info)
         [validity, uniqueness, novelty], _ = metrics.evaluate(processed_list)

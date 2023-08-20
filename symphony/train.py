@@ -175,12 +175,15 @@ def evaluate_model(
 
 
 @jax.jit
-def add_noise_to_positions(graphs: datatypes.Fragments, rng: chex.PRNGKey, noise_std: float) -> datatypes.Fragments:
+def add_noise_to_positions(
+    graphs: datatypes.Fragments, rng: chex.PRNGKey, noise_std: float
+) -> datatypes.Fragments:
     """Add noise to atom positions in graphs."""
-    noisy_positions = graphs.nodes.positions + jax.random.normal(rng, graphs.nodes.positions.shape) * noise_std
-    return graphs._replace(
-        nodes=graphs.nodes._replace(positions=noisy_positions)
+    noisy_positions = (
+        graphs.nodes.positions
+        + jax.random.normal(rng, graphs.nodes.positions.shape) * noise_std
     )
+    return graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
 
 @jax.jit
@@ -303,14 +306,16 @@ def train_and_evaluate(
             "best_state": state,
             "step_for_best_state": 1.0,
             "metrics_for_best_state": None,
-            "min_val_loss": 1e9,
         }
     )
     state = restored["state"]
     best_state = restored["best_state"]
     step_for_best_state = restored["step_for_best_state"]
     metrics_for_best_state = restored["metrics_for_best_state"]
-    min_val_loss = restored["min_val_loss"]
+    if metrics_for_best_state is None:
+        min_val_loss = float("inf")
+    else:
+        min_val_loss = metrics_for_best_state["val_eval"]["loss"]
     initial_step = int(state.step) + 1
 
     # Save the config for reproducibility.
@@ -358,6 +363,7 @@ def train_and_evaluate(
             # Best state is defined as the state with the lowest validation loss.
             if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
                 min_val_loss = eval_metrics["val_eval"]["total_loss"]
+                metrics_for_best_state = eval_metrics
                 best_state = state
                 step_for_best_state = step
                 logging.info("New best state found at step %d.", step)
@@ -372,8 +378,7 @@ def train_and_evaluate(
                     "state": state,
                     "best_state": best_state,
                     "step_for_best_state": step_for_best_state,
-                    "metrics_for_best_state": None,
-                    "min_val_loss": min_val_loss,
+                    "metrics_for_best_state": metrics_for_best_state,
                 }
             )
 
@@ -384,7 +389,9 @@ def train_and_evaluate(
 
             if config.add_noise_to_positions:
                 noise_rng, rng = jax.random.split(rng)
-                graphs = add_noise_to_positions(graphs, noise_rng, config.position_noise_std)
+                graphs = add_noise_to_positions(
+                    graphs, noise_rng, config.position_noise_std
+                )
 
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)
@@ -439,7 +446,6 @@ def train_and_evaluate(
                 "best_state": best_state,
                 "step_for_best_state": step_for_best_state,
                 "metrics_for_best_state": metrics_for_best_state,
-                "min_val_loss": min_val_loss,
             }
         )
 
