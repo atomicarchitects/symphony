@@ -176,6 +176,8 @@ class SphericalConvolution(hk.Module):
         res_beta: int,
         res_alpha: int,
         max_ell: int,
+        channels_in: int,
+        channels_out: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         h_init: hk.initializers.Initializer = hk.initializers.RandomNormal(),
         p_val: int = 1,
@@ -185,7 +187,9 @@ class SphericalConvolution(hk.Module):
         Args:
             res_beta (int): number of points on the sphere in the :math:`\theta` direction
             res_alpha (int): number of points on the sphere in the :math:`\phi` direction
-            max_ell (int)
+            max_ell (int): maximum l
+            channels_in (int)
+            channels_out (int)
             activation: if None, no activation function is used.
             h_init (hk.initializers.Initializer): initializer for an array of spherical filters along `beta` angle, shape (..., res_beta)
             p_val (int, optional): parity of the value of the signal
@@ -195,8 +199,10 @@ class SphericalConvolution(hk.Module):
         self.res_beta = res_beta
         self.res_alpha = res_alpha
         self.max_ell = max_ell
-        self.h_init = h_init
+        self.channels_in = channels_in
+        self.channels_out = channels_out
         self.activation = e3nn.normalize_function(activation)
+        self.h_init = h_init
         self.p_val = p_val
         self.p_arg = p_arg
 
@@ -212,7 +218,7 @@ class SphericalConvolution(hk.Module):
         """
         h = hk.get_parameter(
             "h",
-            shape=(x.shape[0], self.res_beta),
+            shape=(self.channels_out, self.channels_in, self.res_beta),
             dtype=x.dtype,
             init=self.h_init,
         )
@@ -242,8 +248,8 @@ class SphericalConvolution(hk.Module):
                 / (
                     2
                     * jnp.repeat(
-                        jnp.arange(self.max_ell + 1).reshape(1, h_prime.shape[1]),
-                        h_prime.shape[0],
+                        jnp.arange(self.max_ell + 1).reshape(1, 1, self.max_ell + 1),
+                        self.channels_out,
                         axis=0,
                     )
                     + 1
@@ -251,9 +257,10 @@ class SphericalConvolution(hk.Module):
             )
             * h_prime
         )
-        y_prime = x_prime.array * jnp.repeat(
+        w_reshaped = jnp.repeat(
             w, 2 * jnp.arange(self.max_ell + 1) + 1, axis=-1
-        )
+        )  # [channels_out, channels_in, (lmax + 1)**2]
+        y_prime = jnp.einsum('jk,ijk->ik', x_prime.array, w_reshaped)
 
         return e3nn.IrrepsArray(x_prime.irreps, y_prime)
 

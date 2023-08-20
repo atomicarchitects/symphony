@@ -93,20 +93,23 @@ class ModelsTest(parameterized.TestCase):
             e3nn.Irreps("2e + 0e"),
             e3nn.s2_irreps(4),
         ],
-        n_channels=[1, 3],
+        channels_in=[1, 2, 4],
+        channels_out=[1, 2, 4],
     )
-    def test_spherical_convolution(self, irreps, n_channels):
+    def test_spherical_convolution(self, irreps, channels_in, channels_out):
         res_beta = 30
         res_alpha = 51
         l_max = irreps.lmax
         keys = jnp.asarray([jax.random.PRNGKey(0)])
-        x = e3nn.IrrepsArray(irreps, jax.random.normal(keys, (n_channels, irreps.dim)))
+        x = e3nn.IrrepsArray(irreps, jax.random.normal(keys, (channels_in, irreps.dim)))
 
         def f(input):
             return models.SphericalConvolution(
                 res_beta,
                 res_alpha,
                 l_max,
+                channels_in,
+                channels_out,
                 jax.nn.softplus,
             )(input)
 
