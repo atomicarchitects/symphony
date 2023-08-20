@@ -49,6 +49,30 @@ def target_position_to_log_angular_coeffs(
     )
 
 
+def kl_divergence_for_radii(
+    true_radii_weights: jnp.ndarray,
+    predicted_radii_weights: jnp.ndarray
+) -> jnp.ndarray:
+    """Compute the KL divergence between two distributions on the radii."""
+    return (true_radii_weights * (models.safe_log(true_radii_weights) - models.safe_log(predicted_radii_weights))).sum()
+
+
+def earthmover_distance_for_radii(
+    true_radii_weights: jnp.ndarray,
+    predicted_radii_weights: jnp.ndarray,
+    radii_bins: jnp.ndarray,
+) -> jnp.ndarray:
+    """Compute the Earthmover's distance between the logits of two distributions on the radii."""
+    geom = ott.geometry.grid.Grid(x=[radii_bins])
+    predicted_radii_weights = jnp.where(predicted_radii_weights == 0, 1e-9, predicted_radii_weights)
+    prob = ott.problems.linear.linear_problem.LinearProblem(
+        geom, a=predicted_radii_weights, b=true_radii_weights
+    )
+    solver = ott.solvers.linear.sinkhorn.Sinkhorn(lse_mode=True)
+    out = solver(prob)
+    return out.reg_ot_cost
+
+
 @functools.partial(jax.profiler.annotate_function, name="generation_loss")
 def generation_loss(
     preds: datatypes.Predictions,
@@ -307,7 +331,7 @@ def generation_loss(
 
         return loss_position
 
-    def position_loss_with_earth_mover() -> jnp.ndarray:
+    def factorized_position_loss(position_loss_type: str) -> jnp.ndarray:
         """Computes the loss over position probabilities using the Earthmover's distance for the radial component and KL divergence loss for the angular component."""
 
         position_logits = preds.globals.position_logits
@@ -374,20 +398,6 @@ def generation_loss(
             # This should be non-negative, upto numerical precision.
             return cross_entropy + normalizing_factor - self_entropy
 
-        def earthmover_distance_for_radii(
-            true_radii_weights: jnp.ndarray,
-            predicted_radii_weights: jnp.ndarray,
-        ) -> jnp.ndarray:
-            """Compute the Earthmover's distance between the logits of two distributions on the radii."""
-            geom = ott.geometry.grid.Grid(x=[radii_bins])
-            predicted_radii_weights = jnp.where(predicted_radii_weights == 0, 1e-9, predicted_radii_weights)
-            prob = ott.problems.linear.linear_problem.LinearProblem(
-                geom, a=predicted_radii_weights, b=true_radii_weights
-            )
-            solver = ott.solvers.linear.sinkhorn.Sinkhorn(lse_mode=True)
-            out = solver(prob)
-            return out.reg_ot_cost
-
         target_positions = graphs.globals.target_positions
         true_radius_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
@@ -424,9 +434,14 @@ def generation_loss(
             num_radii,
         )
 
-        loss_radial = jax.vmap(earthmover_distance_for_radii)(
-            true_radius_weights, predicted_radial_dist
-        )
+        if position_loss_type == "factorized_kl_divergence":
+            loss_radial = jax.vmap(kl_divergence_for_radii)(
+                true_radius_weights, predicted_radial_dist
+            )
+        elif position_loss_type == "factorized_earth_mover":
+            loss_radial = jax.vmap(earthmover_distance_for_radii, in_axes=(0, 0, None))(
+                true_radius_weights, predicted_radial_dist, radii_bins
+            )
         loss_radial = radial_loss_scaling_factor * loss_radial
 
         predicted_angular_dist = jax.vmap(
@@ -455,8 +470,8 @@ def generation_loss(
             return position_loss_with_kl_divergence()
         elif position_loss_type == "l2":
             return position_loss_with_l2()
-        elif position_loss_type == "earth_mover":
-            return position_loss_with_earth_mover()
+        elif position_loss_type.startswith("factorized"):
+            return factorized_position_loss(position_loss_type)
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
