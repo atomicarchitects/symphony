@@ -138,7 +138,7 @@ def log_coeffs_to_logits(
     )
     assert log_dist.shape == (num_channels, num_radii, res_beta, res_alpha)
 
-    # Softmax over all channels.
+    # Combine over all channels.
     log_dist.grid_values = jax.scipy.special.logsumexp(log_dist.grid_values, axis=0)
     return log_dist
 
@@ -159,7 +159,7 @@ def position_logits_to_position_distribution(
 
 
 def safe_log(x: jnp.ndarray, eps: float = 1e-9) -> jnp.ndarray:
-    """Computes the log of x, replacing 0 with a small value (1e-9) for numerical stability."""
+    """Computes the log of x, replacing 0 with a small value for numerical stability."""
     return jnp.log(jnp.where(x == 0, eps, x))
 
 
@@ -167,7 +167,18 @@ def position_distribution_to_radial_distribution(
     position_probs: e3nn.SphericalSignal,
 ) -> jnp.ndarray:
     """Returns the marginal radial distribution for a logits of a distribution over all positions."""
+    assert len(position_probs.shape) == 3  # [num_radii, res_beta, res_alpha]
     return position_probs.integrate().array.squeeze(axis=-1)  # [..., num_radii]
+
+
+
+def position_distribution_to_angular_distribution(
+    position_probs: e3nn.SphericalSignal,
+) -> jnp.ndarray:
+    """Returns the marginal radial distribution for a logits of a distribution over all positions."""
+    assert len(position_probs.shape) == 3  # [num_radii, res_beta, res_alpha]
+    position_probs.grid_values = position_probs.grid_values.sum(axis=0)
+    return position_probs
 
 
 class GlobalEmbedder(hk.Module):

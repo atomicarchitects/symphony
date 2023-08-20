@@ -102,6 +102,10 @@ def train_step(
         _,
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
+    grad_norms = jnp.asarray(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
+    jax.debug.print("grad_norms={x}", x=grad_norms)
+    jax.debug.print("grad_norms_med={x}", x=jnp.median(grad_norms))
+    jax.debug.print("grad_norms_max={x}", x=jnp.max(grad_norms))
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -348,6 +352,7 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
+            continue
             eval_state = eval_state.replace(params=state.params)
 
             # Evaluate on validation and test splits.

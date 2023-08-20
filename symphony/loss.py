@@ -58,6 +58,7 @@ def generation_loss(
     target_position_lmax: Optional[int],
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
+    radial_loss_scaling_factor: float = 1e4,
     mask_atom_types: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
@@ -65,8 +66,8 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
-    radii = preds.globals.radii_bins[0]  # Assume all radii are the same.
-    num_radii = radii.shape[0]
+    radii_bins = preds.globals.radii_bins[0]  # Assume all radii are the same.
+    num_radii = radii_bins.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
     n_node = graphs.n_node
@@ -200,7 +201,7 @@ def generation_loss(
         target_positions = graphs.globals.target_positions
         true_radius_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radii
+                pos, radius_rbf_variance, radii_bins
             )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
@@ -277,7 +278,7 @@ def generation_loss(
         target_positions = graphs.globals.target_positions
         true_radius_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radii
+                pos, radius_rbf_variance, radii_bins
             )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
@@ -316,11 +317,11 @@ def generation_loss(
             position_logits.quadrature,
         )
 
-        def kl_divergence_for_angular_coeffs(
+        def kl_divergence_on_sphere(
             log_true_angular_coeffs: e3nn.IrrepsArray,
             log_predicted_dist: e3nn.SphericalSignal,
         ) -> jnp.ndarray:
-            """Compute the L2 loss in Fourier space between the logits of two distributions on the spheres."""
+            """Compute the KL divergence between two distributions on a sphere."""
             # Convert coefficients to a distribution on the sphere.
             log_true_angular_dist = e3nn.to_s2grid(
                 log_true_angular_coeffs,
@@ -374,22 +375,23 @@ def generation_loss(
             return cross_entropy + normalizing_factor - self_entropy
 
         def earthmover_distance_for_radii(
-            true_radii_weights: e3nn.IrrepsArray,
-            predicted_radii_weights: e3nn.SphericalSignal,
+            true_radii_weights: jnp.ndarray,
+            predicted_radii_weights: jnp.ndarray,
         ) -> jnp.ndarray:
             """Compute the Earthmover's distance between the logits of two distributions on the radii."""
-            geom = ott.geometry.grid.Grid(x=[radii])
+            geom = ott.geometry.grid.Grid(x=[radii_bins])
+            predicted_radii_weights = jnp.where(predicted_radii_weights == 0, 1e-9, predicted_radii_weights)
             prob = ott.problems.linear.linear_problem.LinearProblem(
                 geom, a=predicted_radii_weights, b=true_radii_weights
             )
-            solver = ott.solvers.linear.sinkhorn.Sinkhorn()
+            solver = ott.solvers.linear.sinkhorn.Sinkhorn(lse_mode=True)
             out = solver(prob)
             return out.reg_ot_cost
 
         target_positions = graphs.globals.target_positions
         true_radius_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radii
+                pos, radius_rbf_variance, radii_bins
             )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
@@ -408,10 +410,17 @@ def generation_loss(
         )
 
         position_logits = preds.globals.position_logits
+        jax.debug.print(
+            "position_coeffs={x}", x=preds.globals.position_coeffs[0]
+        )
 
         position_probs = jax.vmap(models.position_logits_to_position_distribution)(
             position_logits
         )
+        jax.debug.print(
+            "position_probs_invalid_sum={x}", x=jax.vmap(lambda x: jnp.isnan(x).sum())(position_probs.grid_values)[0]
+        )
+
         predicted_radial_dist = jax.vmap(
             models.position_distribution_to_radial_distribution,
         )(position_probs)
@@ -422,30 +431,44 @@ def generation_loss(
         )
 
         jax.debug.print(
-            "predicted_radial_dist_sum={x}", x=predicted_radial_dist.sum(axis=-1)
+            "predicted_radial_dist[0]={x}", x=predicted_radial_dist[0]
         )
         jax.debug.print(
-            "true_radius_weights_sum={x}", x=true_radius_weights.sum(axis=-1)
+            "predicted_radial_dist_sum={x}", x=predicted_radial_dist.sum(axis=-1)[0]
+        )
+        jax.debug.print(
+            "true_radius_weights_sum={x}", x=true_radius_weights.sum(axis=-1)[0]
         )
         loss_radial = jax.vmap(earthmover_distance_for_radii)(
             true_radius_weights, predicted_radial_dist
         )
+        loss_radial = radial_loss_scaling_factor * loss_radial
 
-        log_predicted_angular_dist = position_logits
-        log_predicted_angular_dist.grid_values = jax.vmap(
-            lambda logits, radii_weights: (logits * radii_weights[:, None, None]).sum(
-                axis=0
-            )
-        )(position_logits.grid_values, true_radius_weights)
+        jax.debug.print(
+            "loss_radial={x}", x=loss_radial[0]
+        )
+
+        predicted_angular_dist = jax.vmap(
+            models.position_distribution_to_angular_distribution,
+        )(position_probs)
+        log_predicted_angular_dist = predicted_angular_dist.apply(models.safe_log)
+
         assert log_predicted_angular_dist.shape == (
             num_graphs,
             res_beta,
             res_alpha,
         ), log_predicted_angular_dist.shape
 
-        loss_angular = jax.vmap(kl_divergence_for_angular_coeffs)(
+        loss_angular = jax.vmap(kl_divergence_on_sphere)(
             log_true_angular_coeffs, log_predicted_angular_dist
         )
+        # loss_angular = jnp.zeros_like(loss_angular)
+        jax.debug.print(
+            "loss_angular={x}", x=loss_angular[0]
+        )
+        jax.debug.print("done")
+        jax.debug.print("")
+
         loss_position = loss_angular + loss_radial
         assert loss_position.shape == (num_graphs,)
 
@@ -463,7 +486,8 @@ def generation_loss(
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
-    loss_focus_and_atom_type = focus_and_atom_type_loss()
+    # loss_focus_and_atom_type = focus_and_atom_type_loss()
+    loss_focus_and_atom_type = jnp.zeros(num_graphs)
     loss_position = (1 - graphs.globals.stop) * position_loss()
 
     # Mask out the loss for atom types?
