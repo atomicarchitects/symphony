@@ -410,15 +410,9 @@ def generation_loss(
         )
 
         position_logits = preds.globals.position_logits
-        jax.debug.print(
-            "position_coeffs={x}", x=preds.globals.position_coeffs[0]
-        )
 
         position_probs = jax.vmap(models.position_logits_to_position_distribution)(
             position_logits
-        )
-        jax.debug.print(
-            "position_probs_invalid_sum={x}", x=jax.vmap(lambda x: jnp.isnan(x).sum())(position_probs.grid_values)[0]
         )
 
         predicted_radial_dist = jax.vmap(
@@ -430,23 +424,10 @@ def generation_loss(
             num_radii,
         )
 
-        jax.debug.print(
-            "predicted_radial_dist[0]={x}", x=predicted_radial_dist[0]
-        )
-        jax.debug.print(
-            "predicted_radial_dist_sum={x}", x=predicted_radial_dist.sum(axis=-1)[0]
-        )
-        jax.debug.print(
-            "true_radius_weights_sum={x}", x=true_radius_weights.sum(axis=-1)[0]
-        )
         loss_radial = jax.vmap(earthmover_distance_for_radii)(
             true_radius_weights, predicted_radial_dist
         )
         loss_radial = radial_loss_scaling_factor * loss_radial
-
-        jax.debug.print(
-            "loss_radial={x}", x=loss_radial[0]
-        )
 
         predicted_angular_dist = jax.vmap(
             models.position_distribution_to_angular_distribution,
@@ -462,12 +443,6 @@ def generation_loss(
         loss_angular = jax.vmap(kl_divergence_on_sphere)(
             log_true_angular_coeffs, log_predicted_angular_dist
         )
-        # loss_angular = jnp.zeros_like(loss_angular)
-        jax.debug.print(
-            "loss_angular={x}", x=loss_angular[0]
-        )
-        jax.debug.print("done")
-        jax.debug.print("")
 
         loss_position = loss_angular + loss_radial
         assert loss_position.shape == (num_graphs,)
@@ -486,8 +461,7 @@ def generation_loss(
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
-    # loss_focus_and_atom_type = focus_and_atom_type_loss()
-    loss_focus_and_atom_type = jnp.zeros(num_graphs)
+    loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
 
     # Mask out the loss for atom types?
