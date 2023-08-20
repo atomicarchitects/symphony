@@ -58,8 +58,8 @@ def generation_loss(
     target_position_lmax: Optional[int],
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
-    radial_loss_scaling_factor: float = 1e4,
-    mask_atom_types: bool = False,
+    radial_loss_scaling_factor: Optional[float],
+    mask_atom_types: bool,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
