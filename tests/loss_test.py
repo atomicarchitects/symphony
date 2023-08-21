@@ -60,7 +60,9 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             position_logits=position_logits,
             position_probs=None,
             position_vectors=None,
-            radii_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1)),
+            radial_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1)),
+            radial_logits=None,
+            angular_logits=None,
         ),
         edges=None,
         senders=None,
@@ -229,7 +231,7 @@ class LossTest(parameterized.TestCase):
     def test_kl_divergence_position_loss(
         self, target_position_inverse_temperature: float
     ):
-        num_radii = self.preds.globals.radii_bins.shape[-1]
+        num_radii = self.preds.globals.radial_bins.shape[-1]
         _, (_, position_loss) = loss.generation_loss(
             preds=self.preds,
             graphs=self.graphs,

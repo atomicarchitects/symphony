@@ -614,7 +614,9 @@ def analyze_stability_for_molecules(
         * num_generated,
         "fraction_valid": validity,
         "fraction_unique_of_valid": uniqueness,
+        "fraction_valid_and_unique": uniqueness * validity,
         "fraction_novel_of_valid_and_unique": novelty,
+        "fraction_valid_and_unique_and_novel": novelty * uniqueness * validity,
     }
     return all_metrics
 

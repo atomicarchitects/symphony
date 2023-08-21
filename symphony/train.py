@@ -102,6 +102,7 @@ def train_step(
         _,
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
+    grad_norms = jnp.asarray(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(

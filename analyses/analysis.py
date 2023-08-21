@@ -318,7 +318,7 @@ def get_plotly_traces_for_predictions(
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.position_coeffs
-    radii = pred.globals.radii_bins
+    radii = pred.globals.radial_bins
     num_radii = radii.shape[0]
     position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99, num_radii)
     position_logits.grid_values -= jnp.max(position_logits.grid_values)
@@ -350,7 +350,7 @@ def get_plotly_traces_for_predictions(
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
-    radii = pred.globals.radii_bins
+    radii = pred.globals.radial_bins
     radius = jnp.linalg.norm(pred.globals.position_vectors, axis=-1)
     most_likely_radius_index = jnp.abs(radii - radius).argmin()
     most_likely_radius = radii[most_likely_radius_index]
