@@ -67,7 +67,7 @@ class TrainTest(parameterized.TestCase):
     @parameterized.product(
         config_name=["nequip"],
         train_on_split_smaller_than_chunk=[True],
-        position_loss_type=["earth_mover"],
+        position_loss_type=["factorized_kl_divergence"],
         dataset=["platonic_solids"],
     )
     def test_train_and_evaluate(
@@ -79,7 +79,7 @@ class TrainTest(parameterized.TestCase):
     ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
-        # jax.config.update("jax_debug_nans", True)
+        jax.config.update("jax_debug_nans", True)
         # jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.

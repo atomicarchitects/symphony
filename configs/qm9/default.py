@@ -48,7 +48,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.position_loss_type = "kl_divergence"
-    config.loss_kwargs.radial_loss_scaling_factor = 1.
+    config.loss_kwargs.radial_loss_scaling_factor = 1.0
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
     config.add_noise_to_positions = False
@@ -72,5 +72,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.min_radius = 0.5
     config.target_position_predictor.max_radius = 5.0
     config.target_position_predictor.num_radii = 64
+    config.target_position_predictor.apply_gate = False
+    config.target_position_predictor.factorized = False
+    config.target_position_predictor.radial_mlp_latent_size = 128
+    config.target_position_predictor.radial_mlp_num_layers = 2
+    config.target_position_predictor.radial_mlp_activation = "swish"
 
     return config
