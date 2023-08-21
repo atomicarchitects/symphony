@@ -163,13 +163,21 @@ def safe_log(x: jnp.ndarray, eps: float = 1e-9) -> jnp.ndarray:
     return jnp.log(jnp.where(x == 0, eps, x))
 
 
+def position_logits_to_radial_logits(
+    position_logits: e3nn.SphericalSignal,
+) -> jnp.ndarray:
+    """Computes the marginal radial logits from a logits of a distribution over all positions."""
+
+    assert len(position_logits.shape) == 3  # [num_radii, res_beta, res_alpha]
+    return jax.scipy.special.logsumexp(position_logits.grid_values, axis=(1, 2))
+
+
 def position_distribution_to_radial_distribution(
     position_probs: e3nn.SphericalSignal,
 ) -> jnp.ndarray:
-    """Returns the marginal radial distribution for a logits of a distribution over all positions."""
+    """Computes the marginal radial distribution from a logits of a distribution over all positions."""
     assert len(position_probs.shape) == 3  # [num_radii, res_beta, res_alpha]
     return position_probs.integrate().array.squeeze(axis=-1)  # [..., num_radii]
-
 
 
 def position_distribution_to_angular_distribution(

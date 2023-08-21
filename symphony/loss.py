@@ -50,11 +50,16 @@ def target_position_to_log_angular_coeffs(
 
 
 def kl_divergence_for_radii(
-    true_radii_weights: jnp.ndarray,
-    predicted_radii_weights: jnp.ndarray
+    true_radii_weights: jnp.ndarray, predicted_radii_weights: jnp.ndarray
 ) -> jnp.ndarray:
     """Compute the KL divergence between two distributions on the radii."""
-    return (true_radii_weights * (models.safe_log(true_radii_weights) - models.safe_log(predicted_radii_weights))).sum()
+    return (
+        true_radii_weights
+        * (
+            models.safe_log(true_radii_weights)
+            - models.safe_log(predicted_radii_weights)
+        )
+    ).sum()
 
 
 def earthmover_distance_for_radii(
@@ -64,7 +69,9 @@ def earthmover_distance_for_radii(
 ) -> jnp.ndarray:
     """Compute the Earthmover's distance between the logits of two distributions on the radii."""
     geom = ott.geometry.grid.Grid(x=[radii_bins])
-    predicted_radii_weights = jnp.where(predicted_radii_weights == 0, 1e-9, predicted_radii_weights)
+    predicted_radii_weights = jnp.where(
+        predicted_radii_weights == 0, 1e-9, predicted_radii_weights
+    )
     prob = ott.problems.linear.linear_problem.LinearProblem(
         geom, a=predicted_radii_weights, b=true_radii_weights
     )
@@ -435,9 +442,10 @@ def generation_loss(
         )
 
         if position_loss_type == "factorized_kl_divergence":
-            loss_radial = jax.vmap(kl_divergence_for_radii)(
-                true_radius_weights, predicted_radial_dist
-            )
+            loss_radial = jnp.zeros((num_graphs,))
+            # loss_radial = jax.vmap(kl_divergence_for_radii)(
+            #     true_radius_weights, predicted_radial_dist
+            # )
         elif position_loss_type == "factorized_earth_mover":
             loss_radial = jax.vmap(earthmover_distance_for_radii, in_axes=(0, 0, None))(
                 true_radius_weights, predicted_radial_dist, radii_bins
