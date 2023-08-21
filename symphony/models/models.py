@@ -163,15 +163,6 @@ def safe_log(x: jnp.ndarray, eps: float = 1e-9) -> jnp.ndarray:
     return jnp.log(jnp.where(x == 0, eps, x))
 
 
-def position_logits_to_radial_logits(
-    position_logits: e3nn.SphericalSignal,
-) -> jnp.ndarray:
-    """Computes the marginal radial logits from a logits of a distribution over all positions."""
-
-    assert len(position_logits.shape) == 3  # [num_radii, res_beta, res_alpha]
-    return jax.scipy.special.logsumexp(position_logits.grid_values, axis=(1, 2))
-
-
 def position_distribution_to_radial_distribution(
     position_probs: e3nn.SphericalSignal,
 ) -> jnp.ndarray:
@@ -290,6 +281,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         min_radius: float,
         max_radius: float,
         num_radii: int,
+        apply_gate: bool,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -301,6 +293,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         self.min_radius = min_radius
         self.max_radius = max_radius
         self.num_radii = num_radii
+        self.apply_gate = apply_gate
 
     def create_radii(self) -> jnp.ndarray:
         """Creates the binned radii for the target positions."""
@@ -308,7 +301,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
     def __call__(
         self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
-    ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+    ) -> Tuple[e3nn.SphericalSignal, jnp.ndarray]:
         num_graphs = focus_node_embeddings.shape[0]
 
         assert focus_node_embeddings.shape == (
@@ -338,42 +331,46 @@ class FactorizedTargetPositionPredictor(hk.Module):
         assert radii_logits.shape == (num_graphs, self.num_radii)
 
         # Predict the angular coefficients for the position signal.
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        position_angular_coeffs = e3nn.haiku.Linear(
+        s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
+        if self.apply_gate:
+            irreps = e3nn.Irreps(f"{self.position_coeffs_lmax}x0e") + s2_irreps
+        else:
+            irreps = s2_irreps
+
+        angular_coeffs = e3nn.haiku.Linear(
             1 * self.num_channels * irreps, force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
-        position_angular_coeffs = position_angular_coeffs.mul_to_axis(
-            factor=self.num_channels
-        )
-        position_angular_coeffs = position_angular_coeffs.mul_to_axis(factor=1)
-        assert position_angular_coeffs.shape == (
+        angular_coeffs = angular_coeffs.mul_to_axis(factor=self.num_channels)
+        angular_coeffs = angular_coeffs.mul_to_axis(factor=1)
+
+        if self.apply_gate:
+            angular_coeffs = e3nn.gate(angular_coeffs)
+
+        assert angular_coeffs.shape == (
             num_graphs,
             self.num_channels,
             1,
-            irreps.dim,
+            s2_irreps.dim,
         )
 
-        # Mix the angular coefficients with the radii.
-        position_coeffs = position_angular_coeffs * radii_logits[:, :, None, None]
-
         # Compute the position signal projected to a spherical grid for each radius.
-        position_logits = jax.vmap(
+        angular_logits = jax.vmap(
             lambda coeffs: log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, self.num_radii
+                coeffs, self.res_beta, self.res_alpha, 1
             )
-        )(position_angular_coeffs)
-        assert position_logits.shape == (
+        )(angular_coeffs)
+        assert angular_logits.shape == (
             num_graphs,
-            self.num_radii,
+            1,
             self.res_beta,
             self.res_alpha,
-        ), position_logits.shape
+        )
 
-        position_logits.grid_values -= position_logits.grid_values.max(
+        angular_logits.grid_values -= angular_logits.grid_values.max(
             axis=(-3, -2, -1), keepdims=True
         )
 
-        return position_coeffs, position_logits
+        return angular_logits, radii_logits
 
 
 class TargetPositionPredictor(hk.Module):
@@ -389,6 +386,7 @@ class TargetPositionPredictor(hk.Module):
         min_radius: float,
         max_radius: float,
         num_radii: int,
+        apply_gate: bool,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -400,6 +398,7 @@ class TargetPositionPredictor(hk.Module):
         self.min_radius = min_radius
         self.max_radius = max_radius
         self.num_radii = num_radii
+        self.apply_gate = apply_gate
 
     def create_radii(self) -> jnp.ndarray:
         """Creates the binned radii for the target positions."""
@@ -424,18 +423,30 @@ class TargetPositionPredictor(hk.Module):
             focus_node_embeddings.irreps.num_irreps,
         )
 
-        # TODO: See if we can make this more expressive.
-        irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
+        # Create the irreps for projecting onto the spherical harmonics.
+        # Also, add a few scalars for the gate activation.
+        s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
+        if self.apply_gate:
+            irreps = e3nn.Irreps(f"{self.position_coeffs_lmax}x0e") + s2_irreps
+        else:
+            irreps = s2_irreps
+
         position_coeffs = e3nn.haiku.Linear(
             self.num_radii * self.num_channels * irreps, force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
+
+        # Apply the gate activation.
+        if self.apply_gate:
+            position_coeffs = e3nn.gate(position_coeffs)
+
+        # We should have the correct number of irreps.
         assert position_coeffs.shape == (
             num_graphs,
             self.num_channels,
             self.num_radii,
-            irreps.dim,
+            s2_irreps.dim,
         )
 
         # Compute the position signal projected to a spherical grid for each radius.
@@ -516,9 +527,18 @@ class Predictor(hk.Module):
         true_focus_node_embeddings = auxiliary_node_embeddings[focus_node_indices]
 
         # Get the position coefficients.
-        position_coeffs, position_logits = self.target_position_predictor(
-            true_focus_node_embeddings, graphs.globals.target_species
-        )
+        if isinstance(self.target_position_predictor, TargetPositionPredictor):
+            position_coeffs, position_logits = self.target_position_predictor(
+                true_focus_node_embeddings, graphs.globals.target_species
+            )
+            angular_logits, radii_logits = None, None
+        elif isinstance(
+            self.target_position_predictor, FactorizedTargetPositionPredictor
+        ):
+            radii_logits, angular_logits = self.target_position_predictor(
+                true_focus_node_embeddings, graphs.globals.target_species
+            )
+            position_coeffs, position_logits = None, None
 
         # Get the position probabilities.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
@@ -572,6 +592,8 @@ class Predictor(hk.Module):
                 position_probs=position_probs,
                 position_vectors=None,
                 radii_bins=radii_bins,
+                radii_logits=radii_logits,
+                angular_logits=angular_logits,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

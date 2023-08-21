@@ -61,6 +61,8 @@ class GlobalPredictions(NamedTuple):
     position_probs: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
     position_vectors: jnp.ndarray  # [n_graph, 3] float array
     radii_bins: jnp.ndarray  # [n_graph, n_radii] float array
+    radii_logits: jnp.ndarray  # [n_graph, n_radii] float array
+    angular_logits: e3nn.SphericalSignal  # [n_graph, n_radii, n_angular] float array
 
 
 class Predictions(jraph.GraphsTuple):
