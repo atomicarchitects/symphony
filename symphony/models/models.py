@@ -728,6 +728,11 @@ class Predictor(hk.Module):
         focus_node_embeddings = auxiliary_node_embeddings[focus_indices]
 
         # Get the position coefficients.
+        res_beta, res_alpha, num_radii = (
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
+            self.target_position_predictor.num_radii,
+        )
         if isinstance(self.target_position_predictor, TargetPositionPredictor):
             angular_logits, radial_logits = None, None
             position_coeffs = self.target_position_predictor(
@@ -800,10 +805,6 @@ class Predictor(hk.Module):
 
         # Check the shapes.
         irreps = e3nn.s2_irreps(self.target_position_predictor.position_coeffs_lmax)
-        res_beta, res_alpha = (
-            self.target_position_predictor.res_beta,
-            self.target_position_predictor.res_alpha,
-        )
 
         assert stop.shape == (num_graphs,)
         assert focus_indices.shape == (num_graphs,)
