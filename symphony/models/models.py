@@ -587,7 +587,7 @@ class Predictor(hk.Module):
             )
             angular_logits = jax.vmap(
                 lambda coeffs: log_coeffs_to_logits(coeffs, res_beta, res_alpha, 1)
-            )(log_angular_coeffs[:, None, :])
+            )(log_angular_coeffs[:, None, :]) # only one radius
             # Mix the radial components with each channel of the angular components.
             position_coeffs = jax.vmap(
                 jax.vmap(
@@ -728,13 +728,35 @@ class Predictor(hk.Module):
         focus_node_embeddings = auxiliary_node_embeddings[focus_indices]
 
         # Get the position coefficients.
-        position_coeffs, position_logits = self.target_position_predictor(
-            focus_node_embeddings, target_species
-        )
+        if isinstance(self.target_position_predictor, TargetPositionPredictor):
+            angular_logits, radial_logits = None, None
+            position_coeffs = self.target_position_predictor(
+                focus_node_embeddings, graphs.globals.target_species
+            )
+        elif isinstance(
+            self.target_position_predictor, FactorizedTargetPositionPredictor
+        ):
+            radial_logits, log_angular_coeffs = self.target_position_predictor(
+                focus_node_embeddings, graphs.globals.target_species
+            )
+            angular_logits = jax.vmap(
+                lambda coeffs: log_coeffs_to_logits(coeffs, res_beta, res_alpha, 1)
+            )(log_angular_coeffs[:, None, :])
+            # Mix the radial components with each channel of the angular components.
+            position_coeffs = jax.vmap(
+                jax.vmap(
+                    compute_coefficients_of_logits_of_joint_distribution,
+                    in_axes=(None, 0),
+                )
+            )(radial_logits, log_angular_coeffs)
 
         # Scale by inverse temperature.
         position_coeffs = position_inverse_temperature * position_coeffs
-        position_logits = position_inverse_temperature * position_logits
+
+        # Compute the position signal projected to a spherical grid for each radius.
+        position_logits = jax.vmap(
+            lambda coeffs: log_coeffs_to_logits(coeffs, res_beta, res_alpha, num_radii)
+        )(position_coeffs)
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
@@ -820,6 +842,8 @@ class Predictor(hk.Module):
                 position_probs=position_probs,
                 position_vectors=position_vectors,
                 radial_bins=radial_bins,
+                radial_logits=radial_logits,
+                angular_logits=angular_logits,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
