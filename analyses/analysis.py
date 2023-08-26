@@ -25,8 +25,6 @@ import plotly.graph_objects as go
 import plotly.subplots
 import optax
 
-from analyses.edm_analyses import analyze as edm_analyze
-
 # from openbabel import pybel
 # from openbabel import openbabel as ob
 
@@ -672,6 +670,9 @@ def get_edm_analyses_results_as_dataframe(
     molecules_basedir: str, extract_hyperparams_from_path: bool, read_as_sdf: bool
 ) -> pd.DataFrame:
     """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
+
+    # Import edm_analyses here, as it requires Torch.
+    from analyses.edm_analyses import analyze as edm_analyze
 
     def find_in_path_fn(string):
         """Returns a function that finds a substring in a path."""
