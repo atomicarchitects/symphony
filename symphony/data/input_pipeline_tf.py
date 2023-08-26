@@ -521,7 +521,13 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     """Converts a dictionary of tf.Tensors to a GraphsTuple."""
     positions = graph["positions"]
     species = graph["species"]
-    focus_and_target_species_probs = graph["focus_and_target_species_probs"]
+    if "focus_and_target_species_probs" in graph:
+        focus_and_target_species_probs = graph["focus_and_target_species_probs"]
+    elif "target_species_probs" in graph:
+        focus_and_target_species_probs = graph["target_species_probs"]
+    else:
+        raise ValueError(list(graph.keys()))
+
     stop = graph["stop"]
     receivers = graph["receivers"]
     senders = graph["senders"]
