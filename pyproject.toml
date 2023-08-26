@@ -33,6 +33,7 @@ dependencies = [
     "scipy",
     "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
+    "allegro-jax @ git+https://github.com/mariogeiger/allegro-jax",
 ]
 dynamic = ["version"]
 
