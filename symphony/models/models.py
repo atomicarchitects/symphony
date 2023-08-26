@@ -731,13 +731,13 @@ class Predictor(hk.Module):
         if isinstance(self.target_position_predictor, TargetPositionPredictor):
             angular_logits, radial_logits = None, None
             position_coeffs = self.target_position_predictor(
-                focus_node_embeddings, graphs.globals.target_species
+                focus_node_embeddings, target_species
             )
         elif isinstance(
             self.target_position_predictor, FactorizedTargetPositionPredictor
         ):
             radial_logits, log_angular_coeffs = self.target_position_predictor(
-                focus_node_embeddings, graphs.globals.target_species
+                focus_node_embeddings, target_species
             )
             angular_logits = jax.vmap(
                 lambda coeffs: log_coeffs_to_logits(coeffs, res_beta, res_alpha, 1)
