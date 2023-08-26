@@ -12,9 +12,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.train_molecules = (0, 47616)
-    config.val_molecules = (47616, 53568)
-    config.test_molecules = (53568, 133920)
+    config.train_molecules = (0, 98208)
+    config.val_molecules = (98208, 119040)
+    config.test_molecules = (119040, 133920)
     config.shuffle_datasets = True
 
     # Optimizer.
@@ -39,7 +39,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
-    config.max_n_graphs = 32
+    config.max_n_graphs = 16
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
@@ -55,7 +55,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.position_noise_std = 0.0
 
     # Prediction heads.
-    config.compute_global_embedding = True
+    config.compute_global_embedding = False
     config.global_embedder = ml_collections.ConfigDict()
     config.global_embedder.num_channels = 1
     config.global_embedder.pooling = "attention"
