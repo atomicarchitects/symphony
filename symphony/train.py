@@ -420,12 +420,14 @@ def train_and_evaluate(
                 preds: datatypes.Predictions = get_predictions(state, problematic_graph, rng=None)
 
                 raise ValueError(
-                    focus_and_atom_type_loss,
-                    problematic_graph.nodes.positions,
-                    problematic_graph.nodes.species,
-                    problematic_graph.nodes.focus_and_target_species_probs,
-                    preds.nodes.embeddings,
+                    "focus_and_atom_type_loss", focus_and_atom_type_loss,
+                    "positions", problematic_graph.nodes.positions,
+                    "species", problematic_graph.nodes.species,
+                    "target_focus_and_target_species_probs", problematic_graph.nodes.focus_and_target_species_probs,
+                    "embeddings", preds.nodes.embeddings,
+                    "focus_and_target_species_logits",
                     preds.nodes.focus_and_target_species_logits,
+                    "focus_and_target_species_probs",
                     preds.nodes.focus_and_target_species_probs,
                 )
             
