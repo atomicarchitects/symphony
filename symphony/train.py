@@ -409,13 +409,14 @@ def train_and_evaluate(
             )
 
             focus_and_atom_type_loss = batch_metrics.compute()["focus_and_atom_type_loss"]
-            if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e2:
-                preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
+            if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e1:
+                first_graph = jraph.unbatch(graphs)[0]
+                preds: datatypes.Predictions = get_predictions(state, first_graph, rng=None)
                 raise ValueError(
                     focus_and_atom_type_loss,
-                    graphs.nodes.positions,
-                    graphs.nodes.species,
-                    graphs.nodes.focus_and_target_species_probs,
+                    first_graph.nodes.positions,
+                    first_graph.nodes.species,
+                    first_graph.nodes.focus_and_target_species_probs,
                     preds.nodes.embeddings,
                     preds.nodes.focus_and_target_species_logits,
                     preds.nodes.focus_and_target_species_probs,
