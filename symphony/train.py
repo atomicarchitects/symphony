@@ -63,6 +63,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     if config.optimizer == "adam":
         return optax.chain(
             optax.adam(learning_rate=learning_rate_or_schedule),
+            optax.clip_by_global_norm(0.1),
         )
     if config.optimizer == "sgd":
         return optax.sgd(
@@ -411,7 +412,7 @@ def train_and_evaluate(
             )
 
             focus_and_atom_type_loss = batch_metrics.compute()["focus_and_atom_type_loss"]
-            if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e1:
+            if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e2:
                 preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
                 _, (focus_and_atom_type_loss, _) = loss.generation_loss(preds, graphs, **config.loss_kwargs)
                 mask = jraph.get_graph_padding_mask(graphs)
