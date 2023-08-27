@@ -410,13 +410,20 @@ def train_and_evaluate(
 
             focus_and_atom_type_loss = batch_metrics.compute()["focus_and_atom_type_loss"]
             if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e1:
-                first_graph = jraph.unbatch(graphs)[0]
-                preds: datatypes.Predictions = get_predictions(state, first_graph, rng=None)
+                preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
+                _, (focus_and_atom_type_loss, _) = loss.generation_loss(preds, graphs, **config.loss_kwargs)
+                mask = jraph.get_graph_padding_mask(graphs)
+                focus_and_atom_type_loss = jnp.where(mask, focus_and_atom_type_loss, 0.0)
+                index = jnp.argmax(focus_and_atom_type_loss)
+
+                problematic_graph = jraph.unbatch(graphs)[index]
+                preds: datatypes.Predictions = get_predictions(state, problematic_graph, rng=None)
+
                 raise ValueError(
                     focus_and_atom_type_loss,
-                    first_graph.nodes.positions,
-                    first_graph.nodes.species,
-                    first_graph.nodes.focus_and_target_species_probs,
+                    problematic_graph.nodes.positions,
+                    problematic_graph.nodes.species,
+                    problematic_graph.nodes.focus_and_target_species_probs,
                     preds.nodes.embeddings,
                     preds.nodes.focus_and_target_species_logits,
                     preds.nodes.focus_and_target_species_probs,
