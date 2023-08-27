@@ -409,6 +409,14 @@ def train_and_evaluate(
                 loss_kwargs=config.loss_kwargs,
             )
 
+            if jnp.isnan(batch_metrics.compute()["total_loss"]):
+                preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
+                raise ValueError(
+                    preds.nodes.focus_and_target_species_logits,
+                    preds.nodes.focus_and_target_species_probs,
+                    graphs.nodes.focus_and_target_species_probs)
+            
+
         # Update metrics.
         if train_metrics is None:
             train_metrics = batch_metrics

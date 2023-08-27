@@ -279,19 +279,22 @@ def generation_loss(
         log_true_dist_coeffs = jax.vmap(
             models.compute_coefficients_of_logits_of_joint_distribution
         )(true_radial_logits, log_true_angular_coeffs)
-        log_predicted_dist_coeffs = position_coeffs
+        # We only support num_channels = 1.
+        log_predicted_dist_coeffs = position_coeffs.reshape(
+            log_true_dist_coeffs.shape
+        )
 
         assert target_positions.shape == (num_graphs, 3)
         assert log_true_dist_coeffs.shape == (
             num_graphs,
             num_radii,
-            log_predicted_dist_coeffs.irreps.dim,
-        )
+            log_true_dist_coeffs.irreps.dim,
+        ), (log_true_dist_coeffs.shape, (num_graphs, num_radii, log_predicted_dist_coeffs.irreps.dim))
         assert log_predicted_dist_coeffs.shape == (
             num_graphs,
             num_radii,
             log_predicted_dist_coeffs.irreps.dim,
-        )
+        ), (log_predicted_dist_coeffs.shape, (num_graphs, num_radii, log_predicted_dist_coeffs.irreps.dim))
 
         loss_position = jax.vmap(l2_loss_on_spheres)(
             log_true_dist_coeffs, log_predicted_dist_coeffs
@@ -418,6 +421,9 @@ def generation_loss(
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
+    
+    # UNCOMMENT LATER.
+    loss_position = jnp.zeros_like(loss_position)
 
     # Mask out the loss for atom types?
     if mask_atom_types:
