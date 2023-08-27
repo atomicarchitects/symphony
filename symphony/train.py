@@ -63,7 +63,6 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     if config.optimizer == "adam":
         return optax.chain(
             optax.adam(learning_rate=learning_rate_or_schedule),
-            optax.clip_by_global_norm(1.),
         )
     if config.optimizer == "sgd":
         return optax.sgd(
@@ -420,6 +419,14 @@ def train_and_evaluate(
                 index = jnp.argmax(focus_and_atom_type_loss)
 
                 problematic_graph = jraph.unbatch(graphs)[index]
+                import ase
+                import ase.io
+                problematic_graph_ase = ase.Atoms(
+                    numbers=models.get_atomic_numbers(problematic_graph.nodes.species),
+                    positions=problematic_graph.nodes.positions,
+                )
+                ase.io.write(f"problematic_graph_{step}.xyz", problematic_graph_ase)
+                
                 preds: datatypes.Predictions = get_predictions(state, problematic_graph, rng=None)
 
                 raise ValueError(
