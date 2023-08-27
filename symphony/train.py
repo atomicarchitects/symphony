@@ -61,7 +61,10 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         learning_rate_or_schedule = config.learning_rate
 
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=learning_rate_or_schedule)
+        return optax.chain(
+            optax.adam(learning_rate=learning_rate_or_schedule),
+            optax.clip_by_global_norm(1.),
+        )
     if config.optimizer == "sgd":
         return optax.sgd(
             learning_rate=learning_rate_or_schedule, momentum=config.momentum
