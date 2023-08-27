@@ -102,7 +102,6 @@ def train_step(
         _,
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
-    grad_norms = jnp.asarray(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -409,16 +408,18 @@ def train_and_evaluate(
                 loss_kwargs=config.loss_kwargs,
             )
 
-            if jnp.isnan(batch_metrics.compute()["total_loss"]):
+            focus_and_atom_type_loss = batch_metrics.compute()["focus_and_atom_type_loss"]
+            if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e2:
                 preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
                 raise ValueError(
+                    focus_and_atom_type_loss,
                     graphs.nodes.positions,
                     graphs.nodes.species,
                     graphs.nodes.focus_and_target_species_probs,
                     preds.nodes.embeddings,
                     preds.nodes.focus_and_target_species_logits,
                     preds.nodes.focus_and_target_species_probs,
-                    )
+                )
             
 
         # Update metrics.
