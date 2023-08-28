@@ -411,37 +411,50 @@ def train_and_evaluate(
                 loss_kwargs=config.loss_kwargs,
             )
 
-            focus_and_atom_type_loss = batch_metrics.compute()["focus_and_atom_type_loss"]
+            focus_and_atom_type_loss = batch_metrics.compute()[
+                "focus_and_atom_type_loss"
+            ]
             if jnp.isnan(focus_and_atom_type_loss) or focus_and_atom_type_loss > 1e2:
                 preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
-                _, (focus_and_atom_type_loss, _) = loss.generation_loss(preds, graphs, **config.loss_kwargs)
+                _, (focus_and_atom_type_loss, _) = loss.generation_loss(
+                    preds, graphs, **config.loss_kwargs
+                )
                 mask = jraph.get_graph_padding_mask(graphs)
-                focus_and_atom_type_loss = jnp.where(mask, focus_and_atom_type_loss, 0.0)
+                focus_and_atom_type_loss = jnp.where(
+                    mask, focus_and_atom_type_loss, 0.0
+                )
                 index = jnp.argmax(focus_and_atom_type_loss)
 
                 problematic_graph = jraph.unbatch(graphs)[index]
                 import ase
                 import ase.io
+
                 problematic_graph_ase = ase.Atoms(
                     numbers=models.get_atomic_numbers(problematic_graph.nodes.species),
                     positions=problematic_graph.nodes.positions,
                 )
                 ase.io.write(f"problematic_graph_{step}.xyz", problematic_graph_ase)
-                
-                preds: datatypes.Predictions = get_predictions(state, problematic_graph, rng=None)
+
+                preds: datatypes.Predictions = get_predictions(
+                    state, problematic_graph, rng=None
+                )
 
                 raise ValueError(
-                    "focus_and_atom_type_loss", focus_and_atom_type_loss,
-                    "positions", problematic_graph.nodes.positions,
-                    "species", problematic_graph.nodes.species,
-                    "target_focus_and_target_species_probs", problematic_graph.nodes.focus_and_target_species_probs,
-                    "embeddings", preds.nodes.embeddings,
+                    "focus_and_atom_type_loss",
+                    focus_and_atom_type_loss,
+                    "positions",
+                    problematic_graph.nodes.positions,
+                    "species",
+                    problematic_graph.nodes.species,
+                    "target_focus_and_target_species_probs",
+                    problematic_graph.nodes.focus_and_target_species_probs,
+                    "embeddings",
+                    preds.nodes.embeddings,
                     "focus_and_target_species_logits",
                     preds.nodes.focus_and_target_species_logits,
                     "focus_and_target_species_probs",
                     preds.nodes.focus_and_target_species_probs,
                 )
-            
 
         # Update metrics.
         if train_metrics is None:

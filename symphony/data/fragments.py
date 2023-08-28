@@ -27,7 +27,7 @@ def generate_fragments(
         n_species: The number of different species considered.
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
-        mode:
+        mode: How to generate the fragments. Either "nn" or "radius".
         heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
         beta_com: Inverse temperature value for the center of mass.
 

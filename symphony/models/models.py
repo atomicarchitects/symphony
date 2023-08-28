@@ -587,7 +587,9 @@ class Predictor(hk.Module):
             )
             angular_logits = jax.vmap(
                 lambda coeffs: log_coeffs_to_logits(coeffs, res_beta, res_alpha, 1)
-            )(log_angular_coeffs[:, None, :]) # only one radius
+            )(
+                log_angular_coeffs[:, None, :]
+            )  # only one radius
             # Mix the radial components with each channel of the angular components.
             position_coeffs = jax.vmap(
                 jax.vmap(
