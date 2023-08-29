@@ -318,7 +318,7 @@ def train_and_evaluate(
     if metrics_for_best_state is None:
         min_val_loss = float("inf")
     else:
-        min_val_loss = metrics_for_best_state["val_eval"]["loss"]
+        min_val_loss = metrics_for_best_state["val_eval"]["total_loss"]
     initial_step = int(state.step) + 1
 
     # Save the config for reproducibility.
