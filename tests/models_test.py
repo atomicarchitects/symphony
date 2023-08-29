@@ -95,13 +95,17 @@ class ModelsTest(parameterized.TestCase):
         ],
         channels_in=[1, 2, 4],
         channels_out=[1, 2, 4],
+        batch_size=[1, 2],
     )
-    def test_spherical_convolution(self, irreps, channels_in, channels_out):
-        res_beta = 30
-        res_alpha = 51
+    def test_spherical_convolution(self, irreps, channels_in, channels_out, batch_size):
+        res_beta = 300
+        res_alpha = 501
         l_max = irreps.lmax
         keys = jnp.asarray([jax.random.PRNGKey(0)])
-        x = e3nn.IrrepsArray(irreps, jax.random.normal(keys, (channels_in, irreps.dim)))
+        if batch_size == 1:
+            x = e3nn.IrrepsArray(irreps, jax.random.normal(keys, (channels_in, irreps.dim)))
+        else:
+            x = e3nn.IrrepsArray(irreps, jax.random.normal(keys, (batch_size, channels_in, irreps.dim)))
 
         def f(input):
             return models.SphericalConvolution(
@@ -111,6 +115,8 @@ class ModelsTest(parameterized.TestCase):
                 channels_in,
                 channels_out,
                 jax.nn.softplus,
+                p_val=1,
+                p_arg=-1
             )(input)
 
         sphconv = hk.transform(f)
