@@ -279,7 +279,7 @@ def pieces_to_unbatched_datasets(
 
     # Convert to molecules, and then jraph.GraphsTuples.
     pieces_as_molecules = [
-        ase.Atoms(numbers=np.asarray([1] * len(piece)), positions=np.array(piece))
+        ase.Atoms(numbers=np.asarray([1] * len(piece)), positions=np.asarray(piece))
         for piece in pieces
     ]
     pieces_as_graphs = [
