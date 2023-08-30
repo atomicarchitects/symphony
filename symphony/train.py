@@ -340,6 +340,7 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
+    all_grad_norms = []
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
