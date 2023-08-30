@@ -343,10 +343,10 @@ def create_model(
 
             def node_embedder_fn():
                 return e3schnet.E3SchNet(
-                    n_atom_basis=config.num_channels,
-                    n_interactions=config.num_interactions,
-                    n_filters=config.num_channels,
-                    n_rbf=config.num_basis_fns,
+                    init_embedding_dim=config.num_channels,
+                    num_interactions=config.num_interactions,
+                    num_filters=config.num_filters,
+                    num_radial_basis_functions=config.num_radial_basis_functions,
                     activation=get_activation(config.activation),
                     cutoff=config.cutoff,
                     max_ell=config.max_ell,

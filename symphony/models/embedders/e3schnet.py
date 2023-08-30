@@ -26,21 +26,18 @@ class E3SchNetInteractionBlock(hk.Module):
 
     def __init__(
         self,
-        n_atom_basis: int,
-        n_filters: int,
+        num_filters: int,
         max_ell: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
     ):
         """
         Args:
-            n_atom_basis: number of features to describe atomic environments.
-            n_rbf (int): number of radial basis functions.
-            n_filters: number of filters used in continuous-filter convolution.
+            num_filters: number of filters used in continuous-filter convolution.
+            max_ell: maximal ell for spherical harmonics.
             activation: if None, no activation function is used.
         """
         super(E3SchNetInteractionBlock, self).__init__()
-        self.n_atom_basis = n_atom_basis
-        self.n_filters = n_filters
+        self.num_filters = num_filters
         self.max_ell = max_ell
         self.activation = activation
 
@@ -69,19 +66,19 @@ class E3SchNetInteractionBlock(hk.Module):
 
         # Embed the inputs.
         x = e3nn.haiku.Linear(
-            irreps_out=self.n_filters * e3nn.Irreps.spherical_harmonics(self.max_ell)
+            irreps_out=self.num_filters * e3nn.Irreps.spherical_harmonics(self.max_ell)
         )(x)
 
         # Select senders.
         x_j = x[idx_j]
-        x_j = x_j.mul_to_axis(self.n_filters, axis=-2)
+        x_j = x_j.mul_to_axis(self.num_filters, axis=-2)
         x_j = e3nn.tensor_product(x_j, Yr_ij)
         x_j = x_j.axis_to_mul(axis=-2)
 
         # Compute filter.
         W_ij = hk.Sequential(
             [
-                hk.Linear(self.n_filters),
+                hk.Linear(self.num_filters),
                 lambda x: self.activation(x),
                 hk.Linear(x_j.irreps.num_irreps),
             ]
@@ -110,10 +107,10 @@ class E3SchNet(hk.Module):
 
     def __init__(
         self,
-        n_atom_basis: int,
-        n_interactions: int,
-        n_filters: int,
-        n_rbf: int,
+        init_embedding_dim: int,
+        num_interactions: int,
+        num_filters: int,
+        num_radial_basis_functions: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         cutoff: float,
         max_ell: int,
@@ -121,28 +118,26 @@ class E3SchNet(hk.Module):
     ):
         """
         Args:
-            n_atom_basis: number of features to describe atomic environments.
-                This determines the size of each embedding vector; i.e. embeddings_dim.
-            n_interactions: number of interaction blocks.
-            radial_basis: layer for expanding interatomic distances in a basis set
-            cutoff_fn: cutoff function
-            n_filters: number of filters used in continuous-filter convolution
-            shared_interactions: if True, share the weights across
-                interaction blocks and filter-generating networks.
-            max_z: maximal nuclear charge
+            init_embedding_dim: the size of the initial embedding for atoms
+            num_interactions: number of interaction blocks
+            num_filters: number of filters used in continuous-filter convolution
+            num_radial_basis_functions: number of radial basis functions
             activation: activation function
+            cutoff: cutoff radius
+            max_ell: maximal ell for spherical harmonics
+            num_species: number of species
         """
         super().__init__()
-        self.n_atom_basis = n_atom_basis
-        self.n_interactions = n_interactions
+        self.init_embedding_dim = init_embedding_dim
+        self.num_interactions = num_interactions
         self.activation = activation
-        self.n_filters = n_filters
-        self.n_rbf = n_rbf
+        self.num_filters = num_filters
+        self.num_radial_basis_functions = num_radial_basis_functions
         self.radial_basis = lambda x: e3nn.soft_one_hot_linspace(
             x,
             start=0.0,
             end=cutoff,
-            number=self.n_rbf,
+            number=self.num_radial_basis_functions,
             basis="gaussian",
             cutoff=True,
         )
@@ -164,12 +159,12 @@ class E3SchNet(hk.Module):
         # Irreps for the quantities we need to compute.]
         spherical_harmonics_irreps = e3nn.Irreps.spherical_harmonics(self.max_ell)
         latent_irreps = e3nn.Irreps(
-            (self.n_atom_basis, (ir.l, ir.p)) for _, ir in spherical_harmonics_irreps
+            (self.init_embedding_dim, (ir.l, ir.p)) for _, ir in spherical_harmonics_irreps
         )
 
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
-        x = hk.Embed(self.num_species, self.n_atom_basis)(species)
+        x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps, force_irreps_out=True)(x)
 
@@ -189,9 +184,9 @@ class E3SchNet(hk.Module):
         Yr_ij = Yr_ij.reshape((Yr_ij.shape[0], 1, Yr_ij.shape[1]))
 
         # Compute interaction block to update atomic embeddings
-        for _ in range(self.n_interactions):
+        for _ in range(self.num_interactions):
             v = E3SchNetInteractionBlock(
-                self.n_atom_basis, self.n_filters, self.max_ell, self.activation
+                self.num_filters, self.max_ell, self.activation
             )(x, idx_i, idx_j, f_ij, rcut_ij, Yr_ij)
             x = x + v
         # In SchNetPack, the output is only the scalar features.
