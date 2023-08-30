@@ -114,7 +114,7 @@ def train_step(
         position_loss=position_loss,
         mask=mask,
     )
-    return state, batch_metrics, grad_norms
+    return state, batch_metrics
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
