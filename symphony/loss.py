@@ -426,8 +426,8 @@ def generation_loss(
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
 
-    # UNCOMMENT LATER.
-    loss_position = jnp.zeros_like(loss_position)
+    # COMMENT LATER.
+    # loss_position = jnp.zeros_like(loss_position)
 
     # Mask out the loss for atom types?
     if mask_atom_types:

@@ -340,7 +340,7 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
-    all_grad_norms = []
+    # all_grad_norms = []
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
@@ -407,65 +407,65 @@ def train_and_evaluate(
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-            state, batch_metrics, grad_norms = train_step(
+            state, batch_metrics = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
             )
 
-            all_grad_norms.append(grad_norms)
-            focus_and_atom_type_loss = batch_metrics.compute()[
-                "focus_and_atom_type_loss"
-            ]
-            if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
-                plt.plot(all_grad_norms)
-                plt.yscale("log")
-                plt.xlabel("step")
-                plt.ylabel("grad norm")
-                plt.title("Gradient norms")
-                plt.savefig("grad_norms.png")
-                plt.close()
+            # all_grad_norms.append(grad_norms)
+            # focus_and_atom_type_loss = batch_metrics.compute()[
+            #     "focus_and_atom_type_loss"
+            # ]
+            # if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
+            #     plt.plot(all_grad_norms)
+            #     plt.yscale("log")
+            #     plt.xlabel("step")
+            #     plt.ylabel("grad norm")
+            #     plt.title("Gradient norms")
+            #     plt.savefig("grad_norms.png")
+            #     plt.close()
 
-                preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
-                _, (focus_and_atom_type_loss, _) = loss.generation_loss(
-                    preds, graphs, **config.loss_kwargs
-                )
-                mask = jraph.get_graph_padding_mask(graphs)
-                focus_and_atom_type_loss = jnp.where(
-                    mask, focus_and_atom_type_loss, 0.0
-                )
-                index = jnp.argmax(focus_and_atom_type_loss)
+            #     preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
+            #     _, (focus_and_atom_type_loss, _) = loss.generation_loss(
+            #         preds, graphs, **config.loss_kwargs
+            #     )
+            #     mask = jraph.get_graph_padding_mask(graphs)
+            #     focus_and_atom_type_loss = jnp.where(
+            #         mask, focus_and_atom_type_loss, 0.0
+            #     )
+            #     index = jnp.argmax(focus_and_atom_type_loss)
 
-                problematic_graph = jraph.unbatch(graphs)[index]
-                import ase
-                import ase.io
+            #     problematic_graph = jraph.unbatch(graphs)[index]
+            #     import ase
+            #     import ase.io
 
-                problematic_graph_ase = ase.Atoms(
-                    numbers=models.get_atomic_numbers(problematic_graph.nodes.species),
-                    positions=problematic_graph.nodes.positions,
-                )
-                ase.io.write(f"problematic_graph_{step}.xyz", problematic_graph_ase)
+            #     problematic_graph_ase = ase.Atoms(
+            #         numbers=models.get_atomic_numbers(problematic_graph.nodes.species),
+            #         positions=problematic_graph.nodes.positions,
+            #     )
+            #     ase.io.write(f"problematic_graph_{step}.xyz", problematic_graph_ase)
 
-                preds: datatypes.Predictions = get_predictions(
-                    state, problematic_graph, rng=None
-                )
+            #     preds: datatypes.Predictions = get_predictions(
+            #         state, problematic_graph, rng=None
+            #     )
 
-                raise ValueError(
-                    "focus_and_atom_type_loss",
-                    focus_and_atom_type_loss,
-                    "positions",
-                    problematic_graph.nodes.positions,
-                    "species",
-                    problematic_graph.nodes.species,
-                    "target_focus_and_target_species_probs",
-                    problematic_graph.nodes.focus_and_target_species_probs,
-                    "embeddings",
-                    preds.nodes.embeddings,
-                    "focus_and_target_species_logits",
-                    preds.nodes.focus_and_target_species_logits,
-                    "focus_and_target_species_probs",
-                    preds.nodes.focus_and_target_species_probs,
-                )
+            #     raise ValueError(
+            #         "focus_and_atom_type_loss",
+            #         focus_and_atom_type_loss,
+            #         "positions",
+            #         problematic_graph.nodes.positions,
+            #         "species",
+            #         problematic_graph.nodes.species,
+            #         "target_focus_and_target_species_probs",
+            #         problematic_graph.nodes.focus_and_target_species_probs,
+            #         "embeddings",
+            #         preds.nodes.embeddings,
+            #         "focus_and_target_species_logits",
+            #         preds.nodes.focus_and_target_species_logits,
+            #         "focus_and_target_species_probs",
+            #         preds.nodes.focus_and_target_species_probs,
+            #     )
 
         # Update metrics.
         if train_metrics is None:
