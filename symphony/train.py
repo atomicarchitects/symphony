@@ -61,10 +61,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         learning_rate_or_schedule = config.learning_rate
 
     if config.optimizer == "adam":
-        return optax.chain(
-            optax.adam(learning_rate=learning_rate_or_schedule),
-            optax.clip_by_global_norm(0.1),
-        )
+        return optax.adam(learning_rate=learning_rate_or_schedule)
     if config.optimizer == "sgd":
         return optax.sgd(
             learning_rate=learning_rate_or_schedule, momentum=config.momentum
@@ -105,6 +102,8 @@ def train_step(
         _,
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
+    # Log norms of gradients.
+    jax.debug.print("grad_norms={grad_norms}", grad_norms=sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads))))        
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
