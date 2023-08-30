@@ -35,7 +35,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_train_steps = 1_000_000
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 5000
-    config.log_every_steps = 100
+    config.log_every_steps = 1000
     config.eval_every_steps = 20000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
@@ -73,7 +73,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.min_radius = 1.0
     config.target_position_predictor.max_radius = 2.0
     config.target_position_predictor.num_radii = 128
-    config.target_position_predictor.apply_gate = False
+    config.target_position_predictor.apply_gate = True
     config.target_position_predictor.factorized = False
     config.target_position_predictor.radial_mlp_latent_size = 128
     config.target_position_predictor.radial_mlp_num_layers = 2
