@@ -13,7 +13,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.model = "NequIP"
     config.num_channels = 64
     config.r_max = 5
-    config.avg_num_neighbors = 500.0  # NequIP is not properly normalized.
+    config.avg_num_neighbors = 400.0  # NequIP is not properly normalized.
     config.num_interactions = 4
     config.max_ell = 1
     config.even_activation = "swish"
