@@ -417,7 +417,7 @@ def train_and_evaluate(
             focus_and_atom_type_loss = batch_metrics.compute()[
                 "focus_and_atom_type_loss"
             ]
-            if jnp.isnan(focus_and_atom_type_loss):
+            if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
                 plt.plot(all_grad_norms)
                 plt.yscale("log")
                 plt.xlabel("step")
