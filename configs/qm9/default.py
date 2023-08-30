@@ -19,6 +19,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Optimizer.
     config.optimizer = "sgd"
+    config.momentum = None
     config.learning_rate = 1e-3
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
