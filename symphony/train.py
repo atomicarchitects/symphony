@@ -14,6 +14,7 @@ import ml_collections
 import optax
 import yaml
 from absl import logging
+import matplotlib.pyplot as plt
 
 from clu import (
     checkpoint,
@@ -103,7 +104,8 @@ def train_step(
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
     # Log norms of gradients.
-    jax.debug.print("grad_norms={grad_norms}", grad_norms=sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads))))        
+    grad_norms = jax.tree_map(jnp.linalg.norm, grads)
+    # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)        
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -112,7 +114,7 @@ def train_step(
         position_loss=position_loss,
         mask=mask,
     )
-    return state, batch_metrics
+    return state, batch_metrics, grad_norms
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
@@ -404,16 +406,25 @@ def train_and_evaluate(
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-            state, batch_metrics = train_step(
+            state, batch_metrics, grad_norms = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
             )
 
+            all_grad_norms.append(grad_norms)
             focus_and_atom_type_loss = batch_metrics.compute()[
                 "focus_and_atom_type_loss"
             ]
             if jnp.isnan(focus_and_atom_type_loss):
+                plt.plot(all_grad_norms)
+                plt.yscale("log")
+                plt.xlabel("step")
+                plt.ylabel("grad norm")
+                plt.title("Gradient norms")
+                plt.savefig("grad_norms.png")
+                plt.close()
+
                 preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
                 _, (focus_and_atom_type_loss, _) = loss.generation_loss(
                     preds, graphs, **config.loss_kwargs
