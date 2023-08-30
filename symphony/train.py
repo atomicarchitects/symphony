@@ -104,7 +104,7 @@ def train_step(
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
     # Log norms of gradients.
-    grad_norms = jax.tree_map(jnp.linalg.norm, grads)
+    grad_norms = sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
     # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)        
     state = state.apply_gradients(grads=grads)
 
