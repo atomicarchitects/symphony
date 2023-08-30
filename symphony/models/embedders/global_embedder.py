@@ -3,6 +3,10 @@ import jax
 import jax.numpy as jnp
 import e3nn_jax as e3nn
 import haiku as hk
+import jraph
+
+from symphony import datatypes
+from symphony.models import utils
 
 
 class MultiHeadAttention(hk.Module):
@@ -111,3 +115,63 @@ class MultiHeadAttention(hk.Module):
         y = e3nn.haiku.Linear(num_channels * num_heads * x.irreps, name=name)(x)
         y = y.mul_to_axis(num_heads, axis=-2)
         return y
+
+
+class GlobalEmbedder(hk.Module):
+    """Computes a global embedding for each node in the graph."""
+
+    def __init__(
+        self,
+        num_channels: int,
+        pooling: str,
+        num_attention_heads: Optional[int] = None,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name)
+        self.num_channels = num_channels
+        self.pooling = pooling
+        if self.pooling == "attention":
+            assert num_attention_heads is not None
+            self.num_attention_heads = num_attention_heads
+        else:
+            assert num_attention_heads is None
+
+    def __call__(self, graphs: datatypes.Fragments) -> jnp.ndarray:
+        node_embeddings: e3nn.IrrepsArray = graphs.nodes
+        num_nodes = node_embeddings.shape[0]
+        num_graphs = graphs.n_node.shape[0]
+        irreps = node_embeddings.irreps
+        segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
+
+        if self.pooling == "mean":
+            global_embeddings = jraph.segment_mean(
+                node_embeddings.array, segment_ids, num_segments=num_graphs
+            )
+            global_embeddings = e3nn.IrrepsArray(irreps, global_embeddings)
+            global_embeddings = e3nn.haiku.Linear(self.num_channels * irreps)(
+                global_embeddings
+            )
+
+        elif self.pooling == "sum":
+            global_embeddings = jraph.segment_sum(
+                node_embeddings.array, segment_ids, num_segments=num_graphs
+            )
+            global_embeddings = e3nn.IrrepsArray(irreps, global_embeddings)
+            global_embeddings = e3nn.haiku.Linear(self.num_channels * irreps)(
+                global_embeddings
+            )
+
+        elif self.pooling == "attention":
+            # Only attend to nodes within the same graph.
+            attention_mask = jnp.where(
+                segment_ids[:, None] == segment_ids[None, :], 1.0, 0.0
+            )
+            attention_mask = jnp.expand_dims(attention_mask, axis=0)
+            global_embeddings = MultiHeadAttention(
+                self.num_attention_heads, self.num_channels
+            )(node_embeddings, node_embeddings, node_embeddings, attention_mask)
+
+        assert global_embeddings.shape == (num_nodes, self.num_channels * irreps.dim)
+        return global_embeddings
+
+
