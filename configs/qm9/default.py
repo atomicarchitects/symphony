@@ -18,7 +18,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.shuffle_datasets = True
 
     # Optimizer.
-    config.optimizer = "adam"
+    config.optimizer = "sgd"
     config.learning_rate = 1e-3
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
