@@ -11,7 +11,7 @@ import jraph
 import ml_collections
 
 from symphony import datatypes
-from symphony.models import nequip, marionette, e3schnet, mace, SphericalConvolution, attention, allegro
+from symphony.models import nequip, marionette, e3schnet, mace, attention, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
