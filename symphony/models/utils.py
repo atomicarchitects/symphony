@@ -18,7 +18,7 @@ from symphony.models.position_predictor import (
     TargetPositionPredictor,
     FactorizedTargetPositionPredictor,
 )
-from symphony.models.position_denoiser import PositionDenoiser
+from symphony.models.position_updater import PositionUpdater
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -300,7 +300,7 @@ def create_model(
                     num_interactions=config.num_interactions,
                     avg_num_neighbors=config.avg_num_neighbors,
                     num_species=num_species,
-                    max_ell=l,
+                    max_ell=lmax,
                     num_basis_fns=config.num_basis_fns,
                     soft_normalization=config.get("soft_normalization"),
                 )
@@ -432,17 +432,17 @@ def create_model(
                 apply_gate=config.target_position_predictor.apply_gate,
             )
 
-        if config.get("position_denoiser") is None:
-            position_denoiser = None
+        if config.get("position_updater") is None:
+            position_updater = None
         else:
-            position_denoiser = PositionDenoiser(
+            position_updater = PositionUpdater(
                 node_embedder=node_embedder_fn(config.max_ell),
             )
 
         predictor = Predictor(
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
-            position_denoiser=position_denoiser,
+            position_updater=position_updater,
         )
 
         if run_in_evaluation_mode:

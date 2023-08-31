@@ -154,7 +154,7 @@ def generation_loss(
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes)
     if target_position_lmax is None:
-        lmax = preds.globals.position_coeffs.irreps.lmax
+        lmax = preds.globals.log_position_coeffs.irreps.lmax
     else:
         lmax = target_position_lmax
 
@@ -264,7 +264,7 @@ def generation_loss(
     def position_loss_with_l2() -> jnp.ndarray:
         """Computes the loss over position probabilities using the L2 loss on the logits."""
 
-        position_coeffs = preds.globals.position_coeffs
+        log_position_coeffs = preds.globals.log_position_coeffs
         target_positions = graphs.globals.target_positions
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
@@ -281,7 +281,7 @@ def generation_loss(
             models.compute_coefficients_of_logits_of_joint_distribution
         )(true_radial_logits, log_true_angular_coeffs)
         # We only support num_channels = 1.
-        log_predicted_dist_coeffs = position_coeffs.reshape(log_true_dist_coeffs.shape)
+        log_predicted_dist_coeffs = log_position_coeffs.reshape(log_true_dist_coeffs.shape)
 
         assert target_positions.shape == (num_graphs, 3)
         assert log_true_dist_coeffs.shape == (
@@ -428,18 +428,20 @@ def generation_loss(
         predicted_position_noise = preds.nodes.position_noise
         true_position_noise = position_noise
 
-
         if true_position_noise is None or predicted_position_noise is None:
             return jnp.zeros((num_graphs,))
 
         # Subtract out the mean position noise.
         # This handles translation invariance.
+        # Maybe drop? Depending on the results.
         predicted_position_noise -= jraph.segment_mean(
             predicted_position_noise, segment_ids, num_graphs
         )[segment_ids]
         true_position_noise -= jraph.segment_mean(
             true_position_noise, segment_ids, num_graphs
         )[segment_ids]
+
+        # TODO: Handle rotation.
 
         # Compute the L2 loss.
         loss_denoising = jraph.segment_mean(

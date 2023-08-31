@@ -44,7 +44,7 @@ class Fragments(jraph.GraphsTuple):
 
 
 class NodePredictions(NamedTuple):
-    position_noise: jnp.ndarray  # [n_node, 3] float array
+    position_updates: jnp.ndarray  # [n_node, 3] float array
     embeddings_for_focus: e3nn.IrrepsArray  # [n_node, irreps] float array
     embeddings_for_positions: e3nn.IrrepsArray  # [n_node, irreps] float array
     focus_and_target_species_logits: jnp.ndarray  # [n_node, n_species] float array

@@ -115,6 +115,7 @@ def train_step(
             mask,
         )
 
+    # Add noise to positions, if required.
     if add_noise_to_positions:
         noise_rng, rng = jax.random.split(rng)
         position_noise = (
@@ -123,7 +124,6 @@ def train_step(
     else:
         position_noise = jnp.zeros_like(graphs.nodes.positions)
 
-    # Add noise to positions, if required.
     noisy_positions = graphs.nodes.positions + position_noise
     graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
