@@ -25,7 +25,7 @@ from flax.training import train_state
 sys.path.append("..")
 
 from symphony.data import qm9
-from symphony.models import models
+from symphony import models
 from symphony import train
 from configs import root_dirs
 
