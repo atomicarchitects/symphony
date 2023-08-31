@@ -107,7 +107,7 @@ def train_step(
 
     # Log norms of gradients.
     # grad_norms = sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
-    # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)        
+    # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,

@@ -54,13 +54,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.position_noise_std = 0.0
 
     # Prediction heads.
-    config.compute_global_embedding = True
-    config.global_embedder = ml_collections.ConfigDict()
-    config.global_embedder.num_channels = 1
-    config.global_embedder.pooling = "attention"
-    config.global_embedder.num_attention_heads = 2
-
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
+    config.focus_and_target_species_predictor.compute_global_embedding = False
+    config.focus_and_target_species_predictor.global_embedder = ml_collections.ConfigDict()
+    config.focus_and_target_species_predictor.global_embedder.num_channels = 1
+    config.focus_and_target_species_predictor.global_embedder.pooling = "attention"
+    config.focus_and_target_species_predictor.global_embedder.num_attention_heads = 2
     config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
 

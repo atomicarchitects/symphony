@@ -14,7 +14,10 @@ from symphony import datatypes
 from symphony.models.predictor import Predictor
 from symphony.models.embedders.global_embedder import GlobalEmbedder
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
-from symphony.models.position_predictor import (TargetPositionPredictor, FactorizedTargetPositionPredictor)
+from symphony.models.position_predictor import (
+    TargetPositionPredictor,
+    FactorizedTargetPositionPredictor,
+)
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -377,11 +380,7 @@ def create_model(
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
-        # Create the node embedders.
-        node_embedder_for_focus = node_embedder_fn()
-        node_embedder_for_positions = node_embedder_fn()
-
-        if config.compute_global_embedding:
+        if config.focus_and_target_species_predictor.compute_global_embedding:
             global_embedder = GlobalEmbedder(
                 num_channels=config.global_embedder.num_channels,
                 pooling=config.global_embedder.pooling,
@@ -391,6 +390,8 @@ def create_model(
             global_embedder = None
 
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
+            node_embedder=node_embedder_fn(),
+            global_embedder=global_embedder,
             latent_size=config.focus_and_target_species_predictor.latent_size,
             num_layers=config.focus_and_target_species_predictor.num_layers,
             activation=get_activation(config.activation),
@@ -398,6 +399,7 @@ def create_model(
         )
         if config.target_position_predictor.get("factorized"):
             target_position_predictor = FactorizedTargetPositionPredictor(
+                node_embedder=node_embedder_fn(),
                 position_coeffs_lmax=config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
                 res_alpha=config.target_position_predictor.res_alpha,
@@ -415,6 +417,7 @@ def create_model(
             )
         else:
             target_position_predictor = TargetPositionPredictor(
+                node_embedder=node_embedder_fn(),
                 position_coeffs_lmax=config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
                 res_alpha=config.target_position_predictor.res_alpha,
@@ -426,9 +429,6 @@ def create_model(
                 apply_gate=config.target_position_predictor.apply_gate,
             )
         predictor = Predictor(
-            node_embedder_for_focus=node_embedder_for_focus,
-            node_embedder_for_positions=node_embedder_for_positions,
-            global_embedder=global_embedder,
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
         )

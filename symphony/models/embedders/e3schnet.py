@@ -159,7 +159,8 @@ class E3SchNet(hk.Module):
         # Irreps for the quantities we need to compute.]
         spherical_harmonics_irreps = e3nn.Irreps.spherical_harmonics(self.max_ell)
         latent_irreps = e3nn.Irreps(
-            (self.init_embedding_dim, (ir.l, ir.p)) for _, ir in spherical_harmonics_irreps
+            (self.init_embedding_dim, (ir.l, ir.p))
+            for _, ir in spherical_harmonics_irreps
         )
 
         # Compute atom embeddings.

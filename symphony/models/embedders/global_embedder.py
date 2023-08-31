@@ -173,5 +173,3 @@ class GlobalEmbedder(hk.Module):
 
         assert global_embeddings.shape == (num_nodes, self.num_channels * irreps.dim)
         return global_embeddings
-
-

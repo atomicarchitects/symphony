@@ -1,4 +1,3 @@
-
 from typing import List
 
 import logging
@@ -36,7 +35,9 @@ def generate_all_fragments(
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
     logging.info(f"Saving to {output_dir}")
     logging.info(f"Mode: {mode}, heavy_first: {heavy_first}, beta_com: {beta_com}")
-    logging.info(f"NN tolerance: {nn_tolerance}, NN cutoff: {nn_cutoff}, max_radius: {max_radius}")
+    logging.info(
+        f"NN tolerance: {nn_tolerance}, NN cutoff: {nn_cutoff}, max_radius: {max_radius}"
+    )
 
     seed = jax.random.PRNGKey(seed)
 
@@ -144,7 +145,10 @@ def main(unused_argv) -> None:
             seed,
             start,
             start + chunk_size,
-            os.path.join(FLAGS.output_dir, f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}"),
+            os.path.join(
+                FLAGS.output_dir,
+                f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
+            ),
             FLAGS.mode,
             FLAGS.heavy_first,
             FLAGS.beta_com,

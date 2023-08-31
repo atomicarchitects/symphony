@@ -2,7 +2,11 @@ from typing import Callable, Optional, Tuple
 
 import e3nn_jax as e3nn
 import haiku as hk
+import jax
 import jax.numpy as jnp
+
+from symphony import datatypes
+from symphony.models import utils
 
 
 class TargetPositionPredictor(hk.Module):
@@ -10,6 +14,7 @@ class TargetPositionPredictor(hk.Module):
 
     def __init__(
         self,
+        node_embedder: hk.Module,
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
@@ -22,6 +27,7 @@ class TargetPositionPredictor(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name)
+        self.node_embedder = node_embedder
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
@@ -36,10 +42,22 @@ class TargetPositionPredictor(hk.Module):
         """Creates the binned radii for the target positions."""
         return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
 
+    def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
+        """Computes the node embeddings for the target positions."""
+        return self.node_embedder(graphs)
+
     def __call__(
-        self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
+        self,
+        graphs: datatypes.Fragments,
+        focus_indices: jnp.ndarray,
+        target_species: jnp.ndarray,
+        inverse_temperature: float = 1.0,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
-        num_graphs = focus_node_embeddings.shape[0]
+        num_graphs = graphs.n_node.shape[0]
+
+        # Compute the focus node embeddings.
+        node_embeddings = self.compute_node_embeddings(graphs)
+        focus_node_embeddings = node_embeddings[focus_indices]
 
         assert focus_node_embeddings.shape == (
             num_graphs,
@@ -63,26 +81,43 @@ class TargetPositionPredictor(hk.Module):
         else:
             irreps = s2_irreps
 
-        position_coeffs = e3nn.haiku.Linear(
+        log_position_coeffs = e3nn.haiku.Linear(
             self.num_radii * self.num_channels * irreps, force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
-        position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
-        position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
+        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
+        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
 
         # Apply the gate activation.
         if self.apply_gate:
-            position_coeffs = e3nn.gate(position_coeffs)
+            log_position_coeffs = e3nn.gate(log_position_coeffs)
 
-        # We should have the correct number of irreps.
-        assert position_coeffs.shape == (
+        assert log_position_coeffs.shape == (
             num_graphs,
             self.num_channels,
             self.num_radii,
             s2_irreps.dim,
         )
 
-        return position_coeffs
+        # Not relevant for the unfactorized case.
+        angular_logits, radial_logits = None, None
 
+        # Scale the coefficients of logits by the inverse temperature.
+        log_position_coeffs = log_position_coeffs * inverse_temperature
+
+        # Convert the coefficients to a signal on the grid.
+        position_logits = jax.vmap(
+            lambda coeffs: utils.log_coeffs_to_logits(
+                coeffs, self.res_beta, self.res_alpha, self.num_radii
+            )
+        )(log_position_coeffs)
+        assert position_logits.shape == (
+            num_graphs,
+            self.num_radii,
+            self.res_beta,
+            self.res_alpha,
+        )
+
+        return log_position_coeffs, position_logits, angular_logits, radial_logits
 
 
 class FactorizedTargetPositionPredictor(hk.Module):
@@ -90,6 +125,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
     def __init__(
         self,
+        node_embedder: hk.Module,
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
@@ -105,6 +141,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name)
+        self.node_embedder = node_embedder
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
@@ -122,10 +159,22 @@ class FactorizedTargetPositionPredictor(hk.Module):
         """Creates the binned radii for the target positions."""
         return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
 
+    def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
+        """Computes the node embeddings for the target positions."""
+        return self.node_embedder(graphs)
+
     def __call__(
-        self, focus_node_embeddings: e3nn.IrrepsArray, target_species: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, e3nn.IrrepsArray]:
-        num_graphs = focus_node_embeddings.shape[0]
+        self,
+        graphs: datatypes.Fragments,
+        focus_indices: jnp.ndarray,
+        target_species: jnp.ndarray,
+        inverse_temperature: float = 1.0,
+    ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+        num_graphs = graphs.n_node.shape[0]
+
+        # Compute the focus node embeddings.
+        node_embeddings = self.compute_node_embeddings(graphs)
+        focus_node_embeddings = node_embeddings[focus_indices]
 
         assert focus_node_embeddings.shape == (
             num_graphs,
@@ -176,4 +225,43 @@ class FactorizedTargetPositionPredictor(hk.Module):
             s2_irreps.dim,
         )
 
-        return radial_logits, log_angular_coeffs
+        angular_logits = jax.vmap(
+            lambda coeffs: utils.log_coeffs_to_logits(
+                coeffs, self.res_beta, self.res_alpha, 1
+            )
+        )(
+            log_angular_coeffs[:, None, :]
+        )  # only one radius
+
+        # Mix the radial components with each channel of the angular components.
+        log_position_coeffs = jax.vmap(
+            jax.vmap(
+                utils.compute_coefficients_of_logits_of_joint_distribution,
+                in_axes=(None, 0),
+            )
+        )(radial_logits, log_angular_coeffs)
+
+        assert log_position_coeffs.shape == (
+            num_graphs,
+            self.num_channels,
+            self.num_radii,
+            s2_irreps.dim,
+        )
+
+        # Scale the coefficients of logits by the inverse temperature.
+        log_position_coeffs = log_position_coeffs * inverse_temperature
+
+        # Convert the coefficients to a signal on the grid.
+        position_logits = jax.vmap(
+            lambda coeffs: utils.log_coeffs_to_logits(
+                coeffs, self.res_beta, self.res_alpha, self.num_radii
+            )
+        )(log_position_coeffs)
+        assert position_logits.shape == (
+            num_graphs,
+            self.num_radii,
+            self.res_beta,
+            self.res_alpha,
+        )
+
+        return log_position_coeffs, position_logits, angular_logits, radial_logits
