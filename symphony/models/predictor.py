@@ -10,7 +10,7 @@ from symphony.models.position_predictor import (
     FactorizedTargetPositionPredictor,
     TargetPositionPredictor,
 )
-from symphony.models.embedders.global_embedder import GlobalEmbedder
+from symphony.models.position_denoiser import PositionDenoiser
 from symphony.models import utils
 
 
@@ -23,11 +23,13 @@ class Predictor(hk.Module):
         target_position_predictor: Union[
             TargetPositionPredictor, FactorizedTargetPositionPredictor
         ],
+        position_denoiser: Optional[PositionDenoiser] = None,
         name: str = None,
     ):
         super().__init__(name=name)
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
+        self.position_denoiser = position_denoiser
 
     def get_training_predictions(
         self, graphs: datatypes.Fragments
@@ -72,6 +74,12 @@ class Predictor(hk.Module):
             position_logits
         )
 
+        # Compute noise in positions for all nodes.
+        if self.position_denoiser is None:
+            position_noise = None
+        else:
+            position_noise = self.position_denoiser(graphs)
+
         # The radii bins used for the position prediction, repeated for each graph.
         radii = self.target_position_predictor.create_radii()
         radial_bins = jnp.tile(radii, (num_graphs, 1))
@@ -102,8 +110,13 @@ class Predictor(hk.Module):
             nodes=datatypes.NodePredictions(
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
-                embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(graphs),
-                embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(graphs),
+                embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(
+                    graphs
+                ),
+                embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
+                    graphs
+                ),
+                position_noise=position_noise,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -251,8 +264,12 @@ class Predictor(hk.Module):
             nodes=datatypes.NodePredictions(
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
-                embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(graphs),
-                embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(graphs),
+                embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(
+                    graphs
+                ),
+                embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
+                    graphs
+                ),
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(

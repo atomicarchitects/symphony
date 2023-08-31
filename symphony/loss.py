@@ -129,10 +129,11 @@ def earthmover_distance_for_radii(
     return out.reg_ot_cost
 
 
-@functools.partial(jax.profiler.annotate_function, name="generation_loss")
+@jax.profiler.annotate_function
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
+    position_noise: Optional[jnp.ndarray],
     radius_rbf_variance: float,
     target_position_inverse_temperature: float,
     target_position_lmax: Optional[int],
@@ -422,9 +423,39 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
+    def denoising_loss() -> jnp.ndarray:
+        """Computes the loss for denoising atom positions."""
+        predicted_position_noise = preds.nodes.position_noise
+        true_position_noise = position_noise
+
+
+        if true_position_noise is None or predicted_position_noise is None:
+            return jnp.zeros((num_graphs,))
+
+        # Subtract out the mean position noise.
+        # This handles translation invariance.
+        predicted_position_noise -= jraph.segment_mean(
+            predicted_position_noise, segment_ids, num_graphs
+        )[segment_ids]
+        true_position_noise -= jraph.segment_mean(
+            true_position_noise, segment_ids, num_graphs
+        )[segment_ids]
+
+        # Compute the L2 loss.
+        loss_denoising = jraph.segment_mean(
+            jnp.sum(
+                jnp.square(predicted_position_noise - true_position_noise), axis=-1
+            ),
+            segment_ids,
+            num_graphs,
+        )
+        assert loss_denoising.shape == (num_graphs,)
+        return loss_denoising
+
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
+    loss_denoising = denoising_loss()
 
     # COMMENT LATER.
     # loss_position = jnp.zeros_like(loss_position)
@@ -438,8 +469,8 @@ def generation_loss(
     if ignore_position_loss_for_small_fragments:
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_focus_and_atom_type + loss_position
-    return total_loss, (loss_focus_and_atom_type, loss_position)
+    total_loss = loss_focus_and_atom_type + loss_position + loss_denoising
+    return total_loss, (loss_focus_and_atom_type, loss_position, loss_denoising)
 
 
 def clash_loss(

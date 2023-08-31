@@ -18,6 +18,7 @@ from symphony.models.position_predictor import (
     TargetPositionPredictor,
     FactorizedTargetPositionPredictor,
 )
+from symphony.models.position_denoiser import PositionDenoiser
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
@@ -428,9 +429,18 @@ def create_model(
                 num_radii=config.target_position_predictor.num_radii,
                 apply_gate=config.target_position_predictor.apply_gate,
             )
+
+        if config.get("position_denoiser") is None:
+            position_denoiser = None
+        else:
+            position_denoiser = PositionDenoiser(
+                node_embedder=node_embedder_fn(),
+            )
+
         predictor = Predictor(
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
+            position_denoiser=position_denoiser,
         )
 
         if run_in_evaluation_mode:
