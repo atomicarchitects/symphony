@@ -11,7 +11,7 @@ import jraph
 import ml_collections
 
 from symphony import datatypes
-from symphony.models import nequip, marionette, e3schnet, mace, attention, allegro
+from symphony.models import nequip, marionette, e3schnet, mace, SphericalConvolution, attention, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 NUM_ELEMENTS = len(ATOMIC_NUMBERS)
@@ -513,9 +513,17 @@ class TargetPositionPredictor(hk.Module):
         else:
             irreps = s2_irreps
 
-        position_coeffs = e3nn.haiku.Linear(
-            self.num_radii * self.num_channels * irreps, force_irreps_out=True
-        )(target_species_embeddings * focus_node_embeddings)
+        # force_irreps_out=True
+        irreps_in = target_species_embeddings * focus_node_embeddings
+        irreps_out = self.num_radii * self.num_channels * irreps
+        position_coeffs = SphericalConvolution(
+            self.res_beta,
+            self.res_alpha,
+            irreps_out.irreps.lmax,
+            irreps_in.array.shape[0],  # sus
+            self.num_channels,
+            jax.nn.softplus,
+        )(irreps_in)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_channels)
         position_coeffs = position_coeffs.mul_to_axis(factor=self.num_radii)
 
