@@ -434,12 +434,12 @@ def generation_loss(
         # Subtract out the mean position noise.
         # This handles translation invariance.
         # Maybe drop? Depending on the results.
-        predicted_position_noise -= jraph.segment_mean(
-            predicted_position_noise, segment_ids, num_graphs
-        )[segment_ids]
-        true_position_noise -= jraph.segment_mean(
-            true_position_noise, segment_ids, num_graphs
-        )[segment_ids]
+        # predicted_position_noise -= jraph.segment_mean(
+        #     predicted_position_noise, segment_ids, num_graphs
+        # )[segment_ids]
+        # true_position_noise -= jraph.segment_mean(
+        #     true_position_noise, segment_ids, num_graphs
+        # )[segment_ids]
 
         # TODO: Handle rotation.
 
@@ -455,9 +455,10 @@ def generation_loss(
         return loss_denoising
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
+    # We predict a denoising loss only for finished fragments.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
-    loss_denoising = denoising_loss()
+    loss_denoising = (graphs.globals.stop) * denoising_loss()
 
     # COMMENT LATER.
     # loss_position = jnp.zeros_like(loss_position)
