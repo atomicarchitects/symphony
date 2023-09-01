@@ -14,6 +14,13 @@ from rdkit.Chem import rdDetermineBonds
 import e3nn_jax as e3nn
 import posebusters
 import pandas as pd
+from absl import logging
+
+try:
+    # This requires Torch.
+    import analyses.edm_analyses.analyze as edm_analyze
+except ImportError:
+    logging.info("EDM analyses not available.")
 
 
 def xyz_to_rdkit_molecule(molecules_file: str) -> Chem.Mol:
@@ -449,3 +456,77 @@ def _get_sdf_files(molecules_dir: str) -> List[str]:
 def get_posebusters_results(molecules_sdf_dir: str, full_report: bool = False) -> pd.DataFrame:
     """Returns the results from Posebusters (https://github.com/maabuu/posebusters)."""
     return posebusters.PoseBusters(config="mol").bust(mol_pred=_get_sdf_files(molecules_sdf_dir), full_report=full_report)
+
+
+def get_edm_analyses_results(
+    molecules_basedir: str, extract_hyperparams_from_path: bool, read_as_sdf: bool
+) -> pd.DataFrame:
+    """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
+
+    def find_in_path_fn(string):
+        """Returns a function that finds a substring in a path."""
+
+        def find_in_path(path):
+            occurrences = [
+                subs[len(string) :]
+                for subs in path.split("/")
+                if subs.startswith(string)
+            ]
+            if len(occurrences):
+                return occurrences[0]
+
+        return find_in_path
+
+    def find_model_in_path(path, all_models: Optional[Sequence[str]] = None):
+        """Returns the model name from the path."""
+        if all_models is None:
+            all_models = ["nequip", "e3schnet", "mace", "marionette"]
+
+        for subs in path.split("/"):
+            for model in all_models:
+                if model in subs:
+                    return model
+
+    # Find all directories containing molecules.
+    molecules_dirs = set()
+    suffix = "*.sdf" if read_as_sdf else "*.xyz"
+    for molecules_file in glob.glob(
+        os.path.join(molecules_basedir, "**", suffix), recursive=True
+    ):
+        molecules_dirs.add(os.path.dirname(molecules_file))
+
+    if not len(molecules_dirs):
+        raise ValueError(f"No molecules found in {molecules_basedir}.")
+
+    # Analyze each directory.
+    results = pd.DataFrame()
+    for molecules_dir in molecules_dirs:
+        metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
+            molecules_dir, read_as_sdf=read_as_sdf
+        )
+        metrics_df = pd.DataFrame().from_dict(
+            {"path": molecules_dir, **{key: [val] for key, val in metrics.items()}}
+        )
+        results = pd.concat([results, metrics_df], ignore_index=True)
+
+    # Extract hyperparameters from path.
+    if extract_hyperparams_from_path:
+        paths = results["path"]
+        for hyperparam, substring, dtype in [
+            ("config.num_interactions", "interactions=", int),
+            ("max_l", "l=", int),
+            (
+                "config.target_position_predictor.num_channels",
+                "position_channels=",
+                int,
+            ),
+            ("config.num_channels", "channels=", int),
+            ("focus_and_atom_type_inverse_temperature", "fait=", float),
+            ("position_inverse_temperature", "pit=", float),
+            ("step", "step=", str),
+            ("global_embedding", "global_embed=", str),
+        ]:
+            results[hyperparam] = paths.apply(find_in_path_fn(substring)).astype(dtype)
+        results["model"] = paths.apply(find_model_in_path)
+
+    return results
