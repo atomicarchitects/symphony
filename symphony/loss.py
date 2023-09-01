@@ -460,8 +460,9 @@ def generation_loss(
     loss_denoising = (graphs.globals.stop) * denoising_loss()
 
     # COMMENT LATER.
-    # loss_position = jnp.zeros_like(loss_position)
+    loss_position = jnp.zeros_like(loss_position)
     # loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
+    loss_denoising = jnp.zeros_like(loss_denoising)
 
     # Mask out the loss for atom types?
     if mask_atom_types:
