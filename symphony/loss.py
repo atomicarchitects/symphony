@@ -426,9 +426,8 @@ def generation_loss(
     def denoising_loss() -> jnp.ndarray:
         """Computes the loss for denoising atom positions."""
         predicted_position_updates = preds.nodes.position_updates
-        true_position_noise = position_noise
 
-        if true_position_noise is None or predicted_position_updates is None:
+        if position_noise is None or predicted_position_updates is None:
             return jnp.zeros((num_graphs,))
 
         # Subtract out the mean position noise.
@@ -437,8 +436,8 @@ def generation_loss(
         # predicted_position_noise -= jraph.segment_mean(
         #     predicted_position_noise, segment_ids, num_graphs
         # )[segment_ids]
-        # true_position_noise -= jraph.segment_mean(
-        #     true_position_noise, segment_ids, num_graphs
+        # position_noise -= jraph.segment_mean(
+        #     position_noise, segment_ids, num_graphs
         # )[segment_ids]
 
         # TODO: Handle rotation.
@@ -446,7 +445,7 @@ def generation_loss(
         # Compute the L2 loss.
         loss_denoising = jraph.segment_mean(
             jnp.sum(
-                jnp.square(predicted_position_updates - true_position_noise), axis=-1
+                jnp.square(predicted_position_updates - position_noise), axis=-1
             ),
             segment_ids,
             num_graphs,

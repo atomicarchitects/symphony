@@ -1,4 +1,4 @@
-"""Ameya's Metrics."""
+"""Metrics for evaluating generative models for molecules."""
 from typing import Dict, Tuple, List
 
 import chex
@@ -20,6 +20,45 @@ def xyz_to_rdkit_molecule(molecules_file: str) -> Chem.Mol:
     """Converts a molecule from xyz format to an RDKit molecule."""
     mol = Chem.MolFromXYZFile(molecules_file)
     return Chem.Mol(mol)
+
+
+def count_molecule_sizes(molecules_dir: str) -> np.ndarray:
+    """Computes the distribution of sizes for valid molecules."""
+    sizes = []
+    for molecules_file in os.listdir(molecules_dir):
+        if not molecules_file.endswith(".xyz"):
+            continue
+
+        molecules_file = os.path.join(molecules_dir, molecules_file)
+        if not check_molecule_validity(molecules_file):
+            continue
+
+        mol = xyz_to_rdkit_molecule(molecules_file)
+        sizes.append(mol.GetNumAtoms())
+
+    return np.asarray(sizes)
+
+
+def count_atom_types(molecules_dir: str, normalize: bool = False) -> Dict[str, np.ndarray]:
+    """Computes the number of atoms of each kind in each valid molecule."""
+    atom_counts = collections.defaultdict(lambda: 0)
+    for molecules_file in os.listdir(molecules_dir):
+        if not molecules_file.endswith(".xyz"):
+            continue
+
+        molecules_file = os.path.join(molecules_dir, molecules_file)
+        if not check_molecule_validity(molecules_file):
+            continue
+
+        mol = xyz_to_rdkit_molecule(molecules_file)
+        for atom in mol.GetAtoms():
+            atom_counts[atom.GetSymbol()] += 1
+
+    if normalize:
+        total = sum(atom_counts.values())
+        atom_counts = {atom: count / total for atom, count in atom_counts.items()}
+    
+    return dict(atom_counts)
 
 
 @functools.partial(jax.jit, static_argnames=("batch_size", "num_batches"))

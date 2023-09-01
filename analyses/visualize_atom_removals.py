@@ -20,7 +20,7 @@ sys.path.append("..")
 from analyses import analysis
 from analyses import visualizer
 from symphony.data import input_pipeline
-from symphony.models import models
+from symphony import models
 
 FLAGS = flags.FLAGS
 

@@ -14,7 +14,7 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
-from symphony.models import models
+from symphony import models
 from symphony import datatypes
 
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
