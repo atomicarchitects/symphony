@@ -4,7 +4,12 @@ import os
 import glob
 import random
 import matplotlib
-import imageio
+
+try:
+    import imageio
+except ImportError:
+    print("Could not import imageio.")
+    pass
 
 import rdkit
 from rdkit import Chem

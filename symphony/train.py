@@ -14,6 +14,7 @@ import ml_collections
 import optax
 import yaml
 from absl import logging
+import matplotlib.pyplot as plt
 
 from clu import (
     checkpoint,
@@ -33,6 +34,7 @@ class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     focus_and_atom_type_loss: metrics.Average.from_output("focus_and_atom_type_loss")
     position_loss: metrics.Average.from_output("position_loss")
+    denoising_loss: metrics.Average.from_output("denoising_loss")
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -62,6 +64,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
     if config.optimizer == "adam":
         return optax.adam(learning_rate=learning_rate_or_schedule)
+
     if config.optimizer == "sgd":
         return optax.sgd(
             learning_rate=learning_rate_or_schedule, momentum=config.momentum
@@ -69,7 +72,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-@functools.partial(jax.profiler.annotate_function, name="get_predictions")
+@jax.profiler.annotate_function
 def get_predictions(
     state: train_state.TrainState,
     graphs: datatypes.Fragments,
@@ -79,36 +82,66 @@ def get_predictions(
     return state.apply_fn(state.params, rng, graphs)
 
 
-@functools.partial(jax.jit, static_argnames=["loss_kwargs"])
+@functools.partial(jax.jit, static_argnames=["loss_kwargs", "add_noise_to_positions"])
 def train_step(
     state: train_state.TrainState,
     graphs: datatypes.Fragments,
     loss_kwargs: Dict[str, Union[float, int]],
+    rng: chex.PRNGKey,
+    add_noise_to_positions: bool,
+    noise_std: float,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rng=None)
-        total_loss, (focus_and_atom_type_loss, position_loss) = loss.generation_loss(
-            preds=preds, graphs=graphs, **loss_kwargs
+        total_loss, (
+            focus_and_atom_type_loss,
+            position_loss,
+            denoising_loss,
+        ) = loss.generation_loss(
+            preds=preds, graphs=graphs, position_noise=position_noise, **loss_kwargs
         )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
-        return mean_loss, (total_loss, focus_and_atom_type_loss, position_loss, mask)
+        return mean_loss, (
+            total_loss,
+            focus_and_atom_type_loss,
+            position_loss,
+            denoising_loss,
+            mask,
+        )
 
+    # Add noise to positions, if required.
+    if add_noise_to_positions:
+        noise_rng, rng = jax.random.split(rng)
+        position_noise = (
+            jax.random.normal(noise_rng, graphs.nodes.positions.shape) * noise_std
+        )
+    else:
+        position_noise = jnp.zeros_like(graphs.nodes.positions)
+
+    noisy_positions = graphs.nodes.positions + position_noise
+    graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
+
+    # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_and_atom_type_loss, position_loss, mask),
+        (total_loss, focus_and_atom_type_loss, position_loss, denoising_loss, mask),
     ), grads = grad_fn(state.params, graphs)
-    grad_norms = jnp.asarray(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
     state = state.apply_gradients(grads=grads)
+
+    # Log norms of gradients.
+    # grad_norms = sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
+    # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
 
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
+        denoising_loss=denoising_loss,
         mask=mask,
     )
     return state, batch_metrics
@@ -124,8 +157,12 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
     preds = get_predictions(eval_state, graphs, rng)
-    total_loss, (focus_and_atom_type_loss, position_loss) = loss.generation_loss(
-        preds=preds, graphs=graphs, **loss_kwargs
+    total_loss, (
+        focus_and_atom_type_loss,
+        position_loss,
+        denoising_loss,
+    ) = loss.generation_loss(
+        preds=preds, graphs=graphs, position_noise=None, **loss_kwargs
     )
 
     # Consider only valid graphs.
@@ -134,6 +171,7 @@ def evaluate_step(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
+        denoising_loss=denoising_loss,
         mask=mask,
     )
 
@@ -173,18 +211,6 @@ def evaluate_model(
         eval_metrics[split] = split_metrics
 
     return eval_metrics
-
-
-@jax.jit
-def add_noise_to_positions(
-    graphs: datatypes.Fragments, rng: chex.PRNGKey, noise_std: float
-) -> datatypes.Fragments:
-    """Add noise to atom positions in graphs."""
-    noisy_positions = (
-        graphs.nodes.positions
-        + jax.random.normal(rng, graphs.nodes.positions.shape) * noise_std
-    )
-    return graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
 
 @jax.jit
@@ -316,7 +342,7 @@ def train_and_evaluate(
     if metrics_for_best_state is None:
         min_val_loss = float("inf")
     else:
-        min_val_loss = metrics_for_best_state["val_eval"]["loss"]
+        min_val_loss = metrics_for_best_state["val_eval"]["total_loss"]
     initial_step = int(state.step) + 1
 
     # Save the config for reproducibility.
@@ -337,6 +363,7 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
+    # all_grad_norms = []
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
@@ -388,12 +415,6 @@ def train_and_evaluate(
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
 
-            if config.add_noise_to_positions:
-                noise_rng, rng = jax.random.split(rng)
-                graphs = add_noise_to_positions(
-                    graphs, noise_rng, config.position_noise_std
-                )
-
             if config.mask_atom_types:
                 graphs = mask_atom_types(graphs)
 
@@ -403,11 +424,69 @@ def train_and_evaluate(
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+            step_rng, rng = jax.random.split(rng)
             state, batch_metrics = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
+                rng=step_rng,
+                add_noise_to_positions=config.add_noise_to_positions,
+                noise_std=config.position_noise_std,
             )
+
+            # all_grad_norms.append(grad_norms)
+            # focus_and_atom_type_loss = batch_metrics.compute()[
+            #     "focus_and_atom_type_loss"
+            # ]
+            # if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
+            #     plt.plot(all_grad_norms)
+            #     plt.yscale("log")
+            #     plt.xlabel("step")
+            #     plt.ylabel("grad norm")
+            #     plt.title("Gradient norms")
+            #     plt.savefig("grad_norms.png")
+            #     plt.close()
+
+            #     preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
+            #     _, (focus_and_atom_type_loss, _) = loss.generation_loss(
+            #         preds, graphs, **config.loss_kwargs
+            #     )
+            #     mask = jraph.get_graph_padding_mask(graphs)
+            #     focus_and_atom_type_loss = jnp.where(
+            #         mask, focus_and_atom_type_loss, 0.0
+            #     )
+            #     index = jnp.argmax(focus_and_atom_type_loss)
+
+            #     problematic_graph = jraph.unbatch(graphs)[index]
+            #     import ase
+            #     import ase.io
+
+            #     problematic_graph_ase = ase.Atoms(
+            #         numbers=models.get_atomic_numbers(problematic_graph.nodes.species),
+            #         positions=problematic_graph.nodes.positions,
+            #     )
+            #     ase.io.write(f"problematic_graph_{step}.xyz", problematic_graph_ase)
+
+            #     preds: datatypes.Predictions = get_predictions(
+            #         state, problematic_graph, rng=None
+            #     )
+
+            #     raise ValueError(
+            #         "focus_and_atom_type_loss",
+            #         focus_and_atom_type_loss,
+            #         "positions",
+            #         problematic_graph.nodes.positions,
+            #         "species",
+            #         problematic_graph.nodes.species,
+            #         "target_focus_and_target_species_probs",
+            #         problematic_graph.nodes.focus_and_target_species_probs,
+            #         "embeddings",
+            #         preds.nodes.embeddings,
+            #         "focus_and_target_species_logits",
+            #         preds.nodes.focus_and_target_species_logits,
+            #         "focus_and_target_species_probs",
+            #         preds.nodes.focus_and_target_species_probs,
+            #     )
 
         # Update metrics.
         if train_metrics is None:

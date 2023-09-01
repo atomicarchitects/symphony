@@ -9,16 +9,17 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
-    config.fragment_logic = "nn"
+    config.fragment_logic = "nn_heavy_first"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.train_molecules = (0, 47616)
-    config.val_molecules = (47616, 53568)
-    config.test_molecules = (53568, 133920)
+    config.train_molecules = (0, 100000)
+    config.val_molecules = (100000, 120000)
+    config.test_molecules = (120000, 135000)
     config.shuffle_datasets = True
 
     # Optimizer.
     config.optimizer = "adam"
+    config.momentum = None
     config.learning_rate = 1e-3
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
@@ -39,11 +40,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
-    config.max_n_graphs = 32
+    config.max_n_graphs = 16
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
-    config.loss_kwargs.radius_rbf_variance = 1e-3
+    config.loss_kwargs.radius_rbf_variance = 1e-2
     config.loss_kwargs.target_position_inverse_temperature = 20.0
     config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
@@ -51,17 +52,16 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.radial_loss_scaling_factor = 1.0
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
-    config.add_noise_to_positions = False
-    config.position_noise_std = 0.0
+    config.add_noise_to_positions = True
+    config.position_noise_std = 0.05
 
     # Prediction heads.
-    config.compute_global_embedding = True
-    config.global_embedder = ml_collections.ConfigDict()
-    config.global_embedder.num_channels = 1
-    config.global_embedder.pooling = "attention"
-    config.global_embedder.num_attention_heads = 2
-
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
+    config.focus_and_target_species_predictor.compute_global_embedding = False
+    # config.focus_and_target_species_predictor.global_embedder = ml_collections.ConfigDict()
+    # config.focus_and_target_species_predictor.global_embedder.num_channels = 1
+    # config.focus_and_target_species_predictor.global_embedder.pooling = "attention"
+    # config.focus_and_target_species_predictor.global_embedder.num_attention_heads = 2
     config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
 
@@ -69,13 +69,14 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
     config.target_position_predictor.num_channels = 5
-    config.target_position_predictor.min_radius = 0.5
-    config.target_position_predictor.max_radius = 5.0
-    config.target_position_predictor.num_radii = 64
+    config.target_position_predictor.min_radius = 1.0
+    config.target_position_predictor.max_radius = 2.0
+    config.target_position_predictor.num_radii = 128
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
     config.target_position_predictor.radial_mlp_latent_size = 128
     config.target_position_predictor.radial_mlp_num_layers = 2
     config.target_position_predictor.radial_mlp_activation = "swish"
 
+    config.position_updater = ml_collections.ConfigDict()
     return config

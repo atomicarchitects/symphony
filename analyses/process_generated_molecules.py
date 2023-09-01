@@ -14,12 +14,6 @@ from absl import logging
 
 FLAGS = flags.FLAGS
 
-import sys
-
-sys.path.append("..")
-
-import analyses.analysis as analysis
-
 
 def add_bonds_to_molecules(molecules_dir: str, output_dir: str) -> None:
     """Adds bonds to all molecules in a directory."""
@@ -55,7 +49,9 @@ def add_bonds_to_molecules(molecules_dir: str, output_dir: str) -> None:
         writer.write(mol, confId=0)
 
 
-def relax_structures_of_molecules(molecules_dir: str, output_dir: str) -> None:
+def relax_structures_of_molecules(
+    molecules_dir: str, output_dir: str, unbonded_output_dir: str
+) -> None:
     """Relaxes the structures of all molecules in a directory."""
 
     for molecules_file in os.listdir(molecules_dir):
@@ -79,9 +75,14 @@ def relax_structures_of_molecules(molecules_dir: str, output_dir: str) -> None:
         )
 
         # Save the relaxed and bonded molecules.
-        output_molecules_file = molecules_file
-        writer = Chem.SDWriter(os.path.join(output_dir, output_molecules_file))
+        writer = Chem.SDWriter(os.path.join(output_dir, molecules_file))
         writer.write(mol, confId=0)
+
+        # Also, save the relaxed molecule without bonds.
+        Chem.MolToXYZFile(
+            mol,
+            os.path.join(unbonded_output_dir, molecules_file.replace(".sdf", ".xyz")),
+        )
 
 
 def process_molecules_dir(molecules_dir: str, relax_structures: bool) -> None:
@@ -91,8 +92,11 @@ def process_molecules_dir(molecules_dir: str, relax_structures: bool) -> None:
     bonded_and_relaxed_molecules_dir = os.path.join(
         parent_dir, "bonded_and_relaxed_molecules"
     )
+    relaxed_molecules_dir = os.path.join(parent_dir, "relaxed_molecules")
+
     os.makedirs(bonded_molecules_dir, exist_ok=True)
     os.makedirs(bonded_and_relaxed_molecules_dir, exist_ok=True)
+    os.makedirs(relaxed_molecules_dir, exist_ok=True)
 
     logging.info("Adding bonds to molecules in %s", molecules_dir)
     add_bonds_to_molecules(molecules_dir, bonded_molecules_dir)
@@ -100,7 +104,9 @@ def process_molecules_dir(molecules_dir: str, relax_structures: bool) -> None:
     if relax_structures:
         logging.info("Relaxing structures of molecules in %s", bonded_molecules_dir)
         relax_structures_of_molecules(
-            bonded_molecules_dir, bonded_and_relaxed_molecules_dir
+            bonded_molecules_dir,
+            bonded_and_relaxed_molecules_dir,
+            relaxed_molecules_dir,
         )
 
 

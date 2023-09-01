@@ -1,16 +1,15 @@
-import functools
 from typing import Iterator
 
 import jax
-import jax.numpy as jnp
 import jraph
 import numpy as np
+import chex
 
 from symphony import datatypes
 
 
 def generate_fragments(
-    rng: jnp.ndarray,
+    rng: chex.PRNGKey,
     graph: jraph.GraphsTuple,
     n_species: int,
     nn_tolerance: float = 0.01,
@@ -27,7 +26,7 @@ def generate_fragments(
         n_species: The number of different species considered.
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
-        mode:
+        mode: How to generate the fragments. Either "nn" or "radius".
         heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
         beta_com: Inverse temperature value for the center of mass.
 
@@ -126,10 +125,9 @@ def _make_first_fragment(
     if len(targets) == 0:
         raise ValueError("No targets found.")
 
-    species_probability = (
-        jnp.zeros((graph.nodes.positions.shape[0], n_species))
-        .at[first_node]
-        .set(_normalized_bitcount(graph.nodes.species[targets], n_species))
+    species_probability = np.zeros((graph.nodes.positions.shape[0], n_species))
+    species_probability[first_node] = _normalized_bitcount(
+        graph.nodes.species[targets], n_species
     )
 
     # pick a random target
@@ -181,17 +179,17 @@ def _make_middle_fragment(
     if mode == "radius":
         mask = mask & (dist < max_radius)
 
-    n = jnp.zeros((n_nodes, n_species))
+    counts = np.zeros((n_nodes, n_species))
     for focus_node in range(n_nodes):
         targets = receivers[(senders == focus_node) & mask]
-        n = n.at[focus_node].set(
-            np.bincount(graph.nodes.species[targets], minlength=n_species)
+        counts[focus_node] = np.bincount(
+            graph.nodes.species[targets], minlength=n_species
         )
 
-    if np.sum(n) == 0:
+    if np.sum(counts) == 0:
         raise ValueError("No targets found.")
 
-    target_species_probability = n / np.sum(n)
+    target_species_probability = counts / np.sum(counts)
 
     # pick a random focus node
     rng, k = jax.random.split(rng)
@@ -246,7 +244,7 @@ def _into_fragment(
         focus_and_target_species_probs=target_species_probability,
     )
     globals = datatypes.FragmentsGlobals(
-        stop=jnp.array([stop], dtype=bool),  # [1]
+        stop=np.array([stop], dtype=bool),  # [1]
         target_species=graph.nodes.species[target_node][None],  # [1]
         target_positions=(pos[target_node] - pos[focus_node])[None],  # [1, 3]
     )
@@ -264,15 +262,13 @@ def _into_fragment(
         return subgraph(graph, visited)
 
 
-@jax.jit
 def _move_first(xs, x):
-    return jnp.roll(xs, -jnp.where(xs == x, size=1)[0][0])
+    return np.roll(xs, -np.where(xs == x)[0][0])
 
 
-@functools.partial(jax.jit, static_argnums=(1,))
 def _normalized_bitcount(xs, n: int):
     assert xs.ndim == 1
-    return jnp.bincount(xs, length=n) / len(xs)
+    return np.bincount(xs, minlength=n) / len(xs)
 
 
 def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
@@ -292,9 +288,8 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
     # Find all edges that connect to the nodes.
     edges = np.isin(graph.senders, nodes) & np.isin(graph.receivers, nodes)
 
-    new_node_indices = -jnp.ones(graph.n_node[0], dtype=int)
-    new_node_indices = new_node_indices.at[nodes].set(np.arange(len(nodes)))
-    # new_node_indices[nodes] = jnp.arange(len(nodes))
+    new_node_indices = -np.ones(graph.n_node[0], dtype=int)
+    new_node_indices[nodes] = np.arange(len(nodes))
 
     return jraph.GraphsTuple(
         nodes=jax.tree_util.tree_map(lambda x: x[nodes], graph.nodes),

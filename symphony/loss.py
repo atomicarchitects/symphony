@@ -129,10 +129,11 @@ def earthmover_distance_for_radii(
     return out.reg_ot_cost
 
 
-@functools.partial(jax.profiler.annotate_function, name="generation_loss")
+@jax.profiler.annotate_function
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
+    position_noise: Optional[jnp.ndarray],
     radius_rbf_variance: float,
     target_position_inverse_temperature: float,
     target_position_lmax: Optional[int],
@@ -153,7 +154,7 @@ def generation_loss(
     n_node = graphs.n_node
     segment_ids = models.get_segment_ids(n_node, num_nodes)
     if target_position_lmax is None:
-        lmax = preds.globals.position_coeffs.irreps.lmax
+        lmax = preds.globals.log_position_coeffs.irreps.lmax
     else:
         lmax = target_position_lmax
 
@@ -263,7 +264,7 @@ def generation_loss(
     def position_loss_with_l2() -> jnp.ndarray:
         """Computes the loss over position probabilities using the L2 loss on the logits."""
 
-        position_coeffs = preds.globals.position_coeffs
+        log_position_coeffs = preds.globals.log_position_coeffs
         target_positions = graphs.globals.target_positions
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
@@ -279,18 +280,25 @@ def generation_loss(
         log_true_dist_coeffs = jax.vmap(
             models.compute_coefficients_of_logits_of_joint_distribution
         )(true_radial_logits, log_true_angular_coeffs)
-        log_predicted_dist_coeffs = position_coeffs
+        # We only support num_channels = 1.
+        log_predicted_dist_coeffs = log_position_coeffs.reshape(log_true_dist_coeffs.shape)
 
         assert target_positions.shape == (num_graphs, 3)
         assert log_true_dist_coeffs.shape == (
             num_graphs,
             num_radii,
-            log_predicted_dist_coeffs.irreps.dim,
+            log_true_dist_coeffs.irreps.dim,
+        ), (
+            log_true_dist_coeffs.shape,
+            (num_graphs, num_radii, log_predicted_dist_coeffs.irreps.dim),
         )
         assert log_predicted_dist_coeffs.shape == (
             num_graphs,
             num_radii,
             log_predicted_dist_coeffs.irreps.dim,
+        ), (
+            log_predicted_dist_coeffs.shape,
+            (num_graphs, num_radii, log_predicted_dist_coeffs.irreps.dim),
         )
 
         loss_position = jax.vmap(l2_loss_on_spheres)(
@@ -415,9 +423,45 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
+    def denoising_loss() -> jnp.ndarray:
+        """Computes the loss for denoising atom positions."""
+        predicted_position_updates = preds.nodes.position_updates
+
+        if position_noise is None or predicted_position_updates is None:
+            return jnp.zeros((num_graphs,))
+
+        # Subtract out the mean position noise.
+        # This handles translation invariance.
+        # Maybe drop? Depending on the results.
+        # predicted_position_noise -= jraph.segment_mean(
+        #     predicted_position_noise, segment_ids, num_graphs
+        # )[segment_ids]
+        # position_noise -= jraph.segment_mean(
+        #     position_noise, segment_ids, num_graphs
+        # )[segment_ids]
+
+        # TODO: Handle rotation.
+
+        # Compute the L2 loss.
+        loss_denoising = jraph.segment_mean(
+            jnp.sum(
+                jnp.square(predicted_position_updates - position_noise), axis=-1
+            ),
+            segment_ids,
+            num_graphs,
+        )
+        assert loss_denoising.shape == (num_graphs,)
+        return loss_denoising
+
     # If we should predict a STOP for this fragment, we do not have to predict a position.
+    # We predict a denoising loss only for finished fragments.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
+    loss_denoising = (graphs.globals.stop) * denoising_loss()
+
+    # COMMENT LATER.
+    # loss_position = jnp.zeros_like(loss_position)
+    # loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
 
     # Mask out the loss for atom types?
     if mask_atom_types:
@@ -428,8 +472,8 @@ def generation_loss(
     if ignore_position_loss_for_small_fragments:
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_focus_and_atom_type + loss_position
-    return total_loss, (loss_focus_and_atom_type, loss_position)
+    total_loss = loss_focus_and_atom_type + loss_position + loss_denoising
+    return total_loss, (loss_focus_and_atom_type, loss_position, loss_denoising)
 
 
 def clash_loss(

@@ -28,7 +28,7 @@ sys.path.append("..")
 import analyses.analysis as analysis
 from symphony import datatypes
 from symphony.data import input_pipeline
-from symphony.models import models
+from symphony import models
 
 MAX_NUM_ATOMS = 30
 

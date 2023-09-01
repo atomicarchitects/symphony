@@ -1,4 +1,5 @@
-"""Creates a series of visualizations to build up a molecule."""
+"""Creates a series of visualizations when building up a molecule."""
+
 import os
 import sys
 from typing import Optional, Sequence, List, Tuple
@@ -16,31 +17,12 @@ from absl import app, flags, logging
 
 sys.path.append("..")
 
-import analyses.analysis as analysis
+from analyses import analysis
+from analyses import visualizer
 from symphony.data import input_pipeline
-from symphony.models import models
+from symphony import models
 
 FLAGS = flags.FLAGS
-
-ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
-ELEMENTS = ["H", "C", "N", "O", "F"]
-RADII = models.RADII
-
-# Colors and sizes for the atoms.
-ATOMIC_COLORS = {
-    1: "rgb(150, 150, 150)",  # H
-    6: "rgb(50, 50, 50)",  # C
-    7: "rgb(0, 100, 255)",  # N
-    8: "rgb(255, 0, 0)",  # O
-    9: "rgb(255, 0, 255)",  # F
-}
-ATOMIC_SIZES = {
-    1: 10,  # H
-    6: 30,  # C
-    7: 30,  # N
-    8: 30,  # O
-    9: 30,  # F
-}
 
 
 def _remove_target_atoms(
@@ -148,7 +130,7 @@ def visualize_atom_removals(
         )
 
         # Visualize predictions for this target.
-        fig = analysis.visualize_predictions(
+        fig = visualizer.visualize_predictions(
             pred, molecules_with_target_removed[target], molecule, target
         )
 
