@@ -13,7 +13,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.model = "E3SchNet"
     config.cutoff = 5.0
     config.num_interactions = 1
-    config.num_basis_fns = 25
+    config.num_filters = 32
+    config.num_radial_basis_functions = 8
     config.num_channels = 32
     config.max_ell = 3
     config.activation = "shifted_softplus"
