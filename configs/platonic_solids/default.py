@@ -76,5 +76,5 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_mlp_num_layers = 2
     config.target_position_predictor.radial_mlp_activation = "swish"
 
-    config.position_denoiser = ml_collections.ConfigDict()
+    config.position_updater = ml_collections.ConfigDict()
     return config

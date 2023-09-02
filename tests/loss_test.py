@@ -25,9 +25,9 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     num_radii = 5
     coeffs_array = jnp.asarray([[1.0, 0.0, 0.0, 0.0], [2.0, 0.0, 0.0, 0.0]])
     coeffs_array = jnp.repeat(coeffs_array[:, None, :], repeats=num_radii, axis=1)
-    position_coeffs = e3nn.IrrepsArray("0e + 1o", coeffs_array)
+    log_position_coeffs = e3nn.IrrepsArray("0e + 1o", coeffs_array)
     position_logits = e3nn.to_s2grid(
-        position_coeffs,
+        log_position_coeffs,
         res_beta=180,
         res_alpha=359,
         quadrature="gausslegendre",
@@ -47,8 +47,9 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
                 ]
             ),
             focus_and_target_species_probs=None,
-            embeddings=None,
-            auxiliary_node_embeddings=None,
+            embeddings_for_focus=None,
+            embeddings_for_positions=None,
+            position_noise=None,
         ),
         globals=datatypes.GlobalPredictions(
             stop_logits=jnp.asarray([0.0, 0.0]),
@@ -56,7 +57,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             stop=None,
             focus_indices=None,
             target_species=None,
-            position_coeffs=position_coeffs,
+            log_position_coeffs=log_position_coeffs,
             position_logits=position_logits,
             position_probs=None,
             position_vectors=None,

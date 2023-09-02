@@ -13,6 +13,7 @@ import jraph
 from symphony.data import input_pipeline_tf
 
 from analyses import analysis
+from analyses import visualizer
 
 FLAGS = flags.FLAGS
 
@@ -91,7 +92,7 @@ def visualize_predictions_and_fragments(
         pred = pred._replace(
             globals=pred.globals._replace(focus_indices=corrected_focus_indices)
         )
-        figs.append(analysis.visualize_predictions(pred, fragment))
+        figs.append(visualizer.visualize_predictions(pred, fragment))
 
     # Save to files.
     visualizations_dir = os.path.join(

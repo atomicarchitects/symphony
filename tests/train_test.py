@@ -8,12 +8,10 @@ from absl.testing import parameterized
 import e3nn_jax as e3nn
 import jax
 import jax.profiler
-import jax.numpy as jnp
-import scipy
 import ml_collections
 import logging
 
-from symphony import models, datatypes, train
+from symphony import models, train
 from . import loss_test
 
 from configs.qm9 import mace, e3schnet, nequip, marionette
@@ -67,7 +65,7 @@ class TrainTest(parameterized.TestCase):
     @parameterized.product(
         config_name=["nequip"],
         train_on_split_smaller_than_chunk=[True],
-        position_loss_type=["factorized_kl_divergence"],
+        position_loss_type=["kl_divergence"],
         dataset=["platonic_solids"],
     )
     def test_train_and_evaluate(
@@ -80,7 +78,7 @@ class TrainTest(parameterized.TestCase):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
         jax.config.update("jax_debug_nans", True)
-        # jax.config.update("jax_debug_infs", True)
+        jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[dataset][config_name]

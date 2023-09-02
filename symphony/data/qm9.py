@@ -3,11 +3,12 @@ from typing import List
 import logging
 import os
 import zipfile
-import functools
 from urllib.request import urlopen
 from urllib.error import URLError
+import numpy as np
+import ase
+import rdkit.Chem as Chem
 
-from ase.atoms import Atoms
 
 QM9_URL = (
     "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip"
@@ -85,45 +86,52 @@ def extract_zip(path: str, root: str):
             f.extract(name, root)
 
 
-def read_sdf(f):
-    while True:
-        name = f.readline()
-        if not name:
-            break
+def check_molecule_sanity(mol: Chem.Mol) -> bool:
+    """Check that the molecule passes some basic sanity checks from Posebusters.
+    Source: https://github.com/maabuu/posebusters/blob/main/posebusters/modules/sanity.py
+    """
 
-        f.readline()
-        f.readline()
+    errors = Chem.rdmolops.DetectChemistryProblems(
+        mol, sanitizeOps=Chem.rdmolops.SanitizeFlags.SANITIZE_ALL
+    )
+    types = [error.GetType() for error in errors]
+    num_frags = len(Chem.rdmolops.GetMolFrags(mol, asMols=False, sanitizeFrags=False))
 
-        L1 = f.readline().split()
-        try:
-            natoms = int(L1[0])
-        except IndexError:
-            print(L1)
-            break
-
-        positions = []
-        symbols = []
-        for _ in range(natoms):
-            line = f.readline()
-            x, y, z, symbol = line.split()[:4]
-            symbols.append(symbol)
-            positions.append([float(x), float(y), float(z)])
-
-        yield Atoms(symbols=symbols, positions=positions)
-
-        while True:
-            line = f.readline()
-            if line.startswith("$$$$"):
-                break
+    results = {
+        "passes_valence_checks": "AtomValenceException" not in types,
+        "passes_kekulization": "AtomKekulizeException" not in types,
+        "passes_rdkit_sanity_checks": len(errors) == 0,
+        "all_atoms_connected": num_frags <= 1,
+    }
+    return all(results.values())
 
 
-@functools.lru_cache(maxsize=1)
-def load_qm9(root_dir: str) -> List[Atoms]:
+def load_qm9(root_dir: str) -> List[ase.Atoms]:
+    """Load the QM9 dataset."""
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
 
     path = download_url(QM9_URL, root_dir)
     extract_zip(path, root_dir)
 
-    with open(os.path.join(root_dir, "gdb9.sdf")) as f:
-        return list(read_sdf(f))
+    raw_mols_path = os.path.join(root_dir, "gdb9.sdf")
+    supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=True)
+
+    mols_as_ase = []
+    for mol in supplier:
+        if mol is None:
+            continue
+
+        # Check that the molecule passes some basic checks
+        sane = check_molecule_sanity(mol)
+        if not sane:
+            continue
+
+        # Convert to ASE.
+        mol_as_ase = ase.Atoms(
+            numbers=np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
+            positions=np.asarray(mol.GetConformer(0).GetPositions()),
+        )
+        mols_as_ase.append(mol_as_ase)
+
+    return mols_as_ase
