@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from symphony import datatypes
-from symphony.models import utils
+from symphony.models import utils, sphericalconv
 
 
 class TargetPositionPredictor(hk.Module):
@@ -84,6 +84,14 @@ class TargetPositionPredictor(hk.Module):
         log_position_coeffs = e3nn.haiku.Linear(
             self.num_radii * self.num_channels * irreps, force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
+        log_position_coeffs = sphericalconv.SphericalConvolution(
+            self.res_beta,
+            self.res_alpha,
+            log_position_coeffs.irreps.lmax,
+            self.num_channels,
+            self.num_channels,
+            jax.nn.softplus,
+        )(log_position_coeffs)
         log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
         log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
 
