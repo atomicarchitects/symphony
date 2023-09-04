@@ -367,6 +367,9 @@ def train_and_evaluate(
     all_param_norms = []
     all_params = []
     all_focus_and_atom_type_losses = []
+    all_num_nodes = []
+    all_num_edges = []
+
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
@@ -446,6 +449,9 @@ def train_and_evaluate(
                 "focus_and_atom_type_loss"
             ])
             all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
+            unpadded = jraph.unpad_with_graphs(graphs)
+            all_num_nodes.append(np.asarray(unpadded.n_node))
+            all_num_edges.append(np.asarray(unpadded.n_edge))
 
             if step % 1000 == 0:
                 # Save arrays.
@@ -455,6 +461,8 @@ def train_and_evaluate(
                         "param_norms": all_param_norms,
                         "params": all_params,
                         "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
+                        "num_nodes": all_num_nodes,
+                        "num_edges": all_num_edges,
                         }, f)
 
 
