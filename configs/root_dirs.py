@@ -14,7 +14,7 @@ def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
         if hostname == "potato.mit.edu":
             return f"/radish/qm9_fragments_fixed/{fragment_logic}"
         if username == "ameyad":
-            return f"/Users/ameyad/Documents/qm9_data_tf/{fragment_logic}"
+            return f"/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/{fragment_logic}"
         if username == "songk":
             return "/Users/songk/atomicarchitects/spherical_harmonic_net/qm9_data_tf/data_tf2"
     if dataset == "tetris":

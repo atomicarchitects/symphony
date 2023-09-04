@@ -412,7 +412,7 @@ def create_model(
         else:
             target_position_predictor = TargetPositionPredictor(
                 node_embedder=node_embedder_fn(config.target_position_predictor.embedder_config),
-                position_coeffs_lmax=config.max_ell,
+                position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
                 res_alpha=config.target_position_predictor.res_alpha,
                 num_channels=config.target_position_predictor.num_channels,
