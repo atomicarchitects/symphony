@@ -134,7 +134,7 @@ def train_step(
     state = state.apply_gradients(grads=grads)
 
     # Log norms of gradients.
-    # grad_norms = sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
+    grad_norms = sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
     # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -144,7 +144,7 @@ def train_step(
         denoising_loss=denoising_loss,
         mask=mask,
     )
-    return state, batch_metrics
+    return state, batch_metrics, grad_norms
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
@@ -363,7 +363,9 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
-    # all_grad_norms = []
+    all_grad_norms = []
+    all_param_norms = []
+    all_focus_and_atom_type_losses = []
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
@@ -425,7 +427,7 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             step_rng, rng = jax.random.split(rng)
-            state, batch_metrics = train_step(
+            state, batch_metrics, grad_norms = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
@@ -434,18 +436,36 @@ def train_and_evaluate(
                 noise_std=config.position_noise_std,
             )
 
-            # all_grad_norms.append(grad_norms)
-            # focus_and_atom_type_loss = batch_metrics.compute()[
-            #     "focus_and_atom_type_loss"
-            # ]
-            # if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
-            #     plt.plot(all_grad_norms)
-            #     plt.yscale("log")
-            #     plt.xlabel("step")
-            #     plt.ylabel("grad norm")
-            #     plt.title("Gradient norms")
-            #     plt.savefig("grad_norms.png")
-            #     plt.close()
+            all_grad_norms.append(grad_norms)
+            all_param_norms.append(sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, state.params))))
+            focus_and_atom_type_loss = batch_metrics.compute()[
+                "focus_and_atom_type_loss"
+            ]
+            all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
+            if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
+                plt.plot(all_grad_norms)
+                plt.yscale("log")
+                plt.xlabel("Step")
+                plt.ylabel("Sum of gradient norms")
+                plt.title("Gradient norms")
+                plt.savefig("grad_norms.png")
+                plt.close()
+
+                plt.plot(all_param_norms)
+                plt.yscale("log")
+                plt.xlabel("Step")
+                plt.ylabel("Sum of parameter norms")
+                plt.title("Parameter norms")
+                plt.savefig("param_norms.png")
+                plt.close()
+
+                plt.plot(all_focus_and_atom_type_losses)
+                plt.yscale("log")
+                plt.xlabel("Step")
+                plt.ylabel("Focus and Atom Type Loss")
+                plt.title("Parameter norms")
+                plt.savefig("focus_and_atom_type_loss.png")
+                plt.close()
 
             #     preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
             #     _, (focus_and_atom_type_loss, _) = loss.generation_loss(
