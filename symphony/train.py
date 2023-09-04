@@ -342,7 +342,6 @@ def train_and_evaluate(
     if metrics_for_best_state is None:
         min_val_loss = float("inf")
     else:
-        raise ValueError(list(metrics_for_best_state.keys()))
         min_val_loss = metrics_for_best_state["val_eval"]["total_loss"]
     initial_step = int(state.step) + 1
 
@@ -509,7 +508,7 @@ def train_and_evaluate(
 
     # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
-    metrics_for_best_state = evaluate_model_helper(
+    final_metrics_for_best_state = evaluate_model_helper(
         eval_state,
         step,
         eval_rng,
@@ -530,4 +529,4 @@ def train_and_evaluate(
             }
         )
 
-    return best_state, metrics_for_best_state
+    return best_state, final_metrics_for_best_state
