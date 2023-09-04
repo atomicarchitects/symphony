@@ -5,10 +5,9 @@ import ml_collections
 from configs.qm9 import default
 
 
-def get_config() -> ml_collections.ConfigDict:
+def get_embedder_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the E3SchNet model."""
-    config = default.get_config()
-
+    config = ml_collections.ConfigDict()
     # E3SchNet hyperparameters.
     config.model = "E3SchNet"
     config.cutoff = 5.0
@@ -19,4 +18,16 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_ell = 3
     config.activation = "shifted_softplus"
 
+    return config
+
+
+def get_config() -> ml_collections.ConfigDict:
+    """Get the hyperparameter configuration for the NequIP model."""
+    config = default.get_config()
+
+    config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
+    config.target_position_predictor.embedder_config = get_embedder_config()
+    config.position_updater.embedder_config = get_embedder_config()
+
+    # NequIP hyperparameters.
     return config

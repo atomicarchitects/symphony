@@ -53,17 +53,14 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
-    config.position_noise_std = 0.05
+    config.position_noise_std = 0.1
 
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    # config.focus_and_target_species_predictor.global_embedder = ml_collections.ConfigDict()
-    # config.focus_and_target_species_predictor.global_embedder.num_channels = 1
-    # config.focus_and_target_species_predictor.global_embedder.pooling = "attention"
-    # config.focus_and_target_species_predictor.global_embedder.num_attention_heads = 2
     config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
+    config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 180
@@ -78,5 +75,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_mlp_num_layers = 2
     config.target_position_predictor.radial_mlp_activation = "swish"
 
+    config.learn_position_updater = False
     config.position_updater = ml_collections.ConfigDict()
     return config
