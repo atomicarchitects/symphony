@@ -28,6 +28,7 @@ from flax.training import train_state
 from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
 
+LOGGING_DIR = "logging_outputs"
 
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
@@ -455,7 +456,7 @@ def train_and_evaluate(
 
             if step % 1000 == 0:
                 # Save arrays.
-                with open(f"logging_outputs/log_{step}.pkl", "wb") as f:
+                with open(f"{LOGGING_DIR}/log_{step}.pkl", "wb") as f:
                     pickle.dump({
                         "grad_norms": all_grad_norms,
                         "param_norms": all_param_norms,
