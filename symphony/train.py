@@ -379,6 +379,7 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
+            continue
             eval_state = eval_state.replace(params=state.params)
 
             # Evaluate on validation and test splits.
@@ -446,9 +447,9 @@ def train_and_evaluate(
             ]
             all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
             
-            if step % 100 == 0:
+            if step % 1000 == 0:
                 # Save arrays.
-                with open(f"logging_outputs/log_{step}.pkl", "wb") as f:
+                with open(f"logging_outputs/log.pkl", "wb") as f:
                     pickle.dump({
                         "grad_norms": all_grad_norms,
                         "param_norms": all_param_norms,
