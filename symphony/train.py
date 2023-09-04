@@ -4,7 +4,7 @@ import functools
 import os
 import pickle
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
-
+import numpy as np
 import chex
 import flax
 import jax
@@ -438,18 +438,18 @@ def train_and_evaluate(
                 noise_std=config.position_noise_std,
             )
 
-            all_params.append(state.params)
+            all_params.append(jax.tree_map(np.asarray, state.params))
             all_params = all_params[-16:]
-            all_grad_norms.append(grad_norms)
-            all_param_norms.append(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, state.params)))
-            focus_and_atom_type_loss = batch_metrics.compute()[
+            all_grad_norms.append(jax.tree_map(np.asarray, grad_norms))
+            all_param_norms.append(jax.tree_map(np.asarray, jax.tree_map(jnp.linalg.norm, state.params)))
+            focus_and_atom_type_loss = np.asarray(batch_metrics.compute()[
                 "focus_and_atom_type_loss"
-            ]
+            ])
             all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
-            
+
             if step % 1000 == 0:
                 # Save arrays.
-                with open(f"logging_outputs/log.pkl", "wb") as f:
+                with open(f"logging_outputs/log_{step}.pkl", "wb") as f:
                     pickle.dump({
                         "grad_norms": all_grad_norms,
                         "param_norms": all_param_norms,
