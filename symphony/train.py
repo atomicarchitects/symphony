@@ -445,8 +445,8 @@ def train_and_evaluate(
                 "focus_and_atom_type_loss"
             ]
             all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
-            if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
-                
+            
+            if step % 100 == 0:
                 # Save arrays.
                 with open(f"logging_outputs/log_{step}.pkl", "wb") as f:
                     pickle.dump({
@@ -456,6 +456,9 @@ def train_and_evaluate(
                         "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
                         }, f)
 
+
+            # if sum(jax.tree_leavesgrad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
+                
                 # plt.plot(all_grad_norms)
                 # plt.yscale("log")
                 # plt.xlabel("Step")
