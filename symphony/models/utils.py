@@ -288,10 +288,9 @@ def create_model(
         if dataset in ["tetris", "platonic_solids"]:
             num_species = 1
 
-        if config.model == "MACE":
-
-            def node_embedder_fn(lmax: int):
-                output_irreps = _irreps_from_lmax(lmax, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
+        def node_embedder_fn(config: ml_collections.ConfigDict) -> hk.Module:
+            if config.model == "MACE":
+                output_irreps = _irreps_from_lmax(config.max_ell, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
                 return mace.MACE(
                     output_irreps=output_irreps,
                     hidden_irreps=output_irreps,
@@ -300,20 +299,18 @@ def create_model(
                     num_interactions=config.num_interactions,
                     avg_num_neighbors=config.avg_num_neighbors,
                     num_species=num_species,
-                    max_ell=lmax,
+                    max_ell=config.max_ell,
                     num_basis_fns=config.num_basis_fns,
                     soft_normalization=config.get("soft_normalization"),
                 )
 
-        elif config.model == "NequIP":
-
-            def node_embedder_fn(lmax: int):
-                output_irreps = _irreps_from_lmax(lmax, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
+            elif config.model == "NequIP":
+                output_irreps = _irreps_from_lmax(config.max_ell, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
                 return nequip.NequIP(
                     num_species=num_species,
                     r_max=config.r_max,
                     avg_num_neighbors=config.avg_num_neighbors,
-                    max_ell=lmax,
+                    max_ell=config.max_ell,
                     init_embedding_dims=config.num_channels,
                     output_irreps=output_irreps,
                     num_interactions=config.num_interactions,
@@ -326,10 +323,8 @@ def create_model(
                     skip_connection=config.skip_connection,
                 )
 
-        elif config.model == "MarioNette":
-
-            def node_embedder_fn(lmax: int):
-                output_irreps = _irreps_from_lmax(lmax, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
+            elif config.model == "MarioNette":
+                output_irreps = _irreps_from_lmax(config.max_ell, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
                 return marionette.MarioNette(
                     num_species=num_species,
                     r_max=config.r_max,
@@ -349,9 +344,7 @@ def create_model(
                     alphal=config.alphal,
                 )
 
-        elif config.model == "E3SchNet":
-
-            def node_embedder_fn(lmax: int):
+            elif config.model == "E3SchNet":
                 return e3schnet.E3SchNet(
                     init_embedding_dim=config.num_channels,
                     num_interactions=config.num_interactions,
@@ -359,19 +352,17 @@ def create_model(
                     num_radial_basis_functions=config.num_radial_basis_functions,
                     activation=get_activation(config.activation),
                     cutoff=config.cutoff,
-                    max_ell=lmax,
+                    max_ell=config.max_ell,
                     num_species=num_species,
                 )
 
-        elif config.model == "Allegro":
-
-            def node_embedder_fn(lmax: int):
-                output_irreps = _irreps_from_lmax(lmax, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
+            elif config.model == "Allegro":
+                output_irreps = _irreps_from_lmax(config.max_ell, config.num_channels, config.use_pseudoscalars_and_pseudovectors)
                 return allegro.Allegro(
                     num_species=num_species,
                     r_max=config.r_max,
                     avg_num_neighbors=config.avg_num_neighbors,
-                    max_ell=lmax,
+                    max_ell=config.max_ell,
                     output_irreps=output_irreps,
                     num_interactions=config.num_interactions,
                     mlp_activation=get_activation(config.mlp_activation),
@@ -380,8 +371,8 @@ def create_model(
                     n_radial_basis=config.num_basis_fns,
                 )
 
-        else:
-            raise ValueError(f"Unsupported model: {config.model}.")
+            else:
+                raise ValueError(f"Unsupported model: {config.model}.")
 
         if config.focus_and_target_species_predictor.compute_global_embedding:
             global_embedder = GlobalEmbedder(
@@ -393,17 +384,17 @@ def create_model(
             global_embedder = None
 
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
-            node_embedder=node_embedder_fn(config.max_ell),
+            node_embedder=node_embedder_fn(config.focus_and_target_species_predictor.embedder_config),
             global_embedder=global_embedder,
             latent_size=config.focus_and_target_species_predictor.latent_size,
             num_layers=config.focus_and_target_species_predictor.num_layers,
-            activation=get_activation(config.activation),
+            activation=get_activation(config.focus_and_target_species_predictor.activation),
             num_species=num_species,
         )
         if config.target_position_predictor.get("factorized"):
             target_position_predictor = FactorizedTargetPositionPredictor(
-                node_embedder=node_embedder_fn(config.max_ell),
-                position_coeffs_lmax=config.max_ell,
+                node_embedder=node_embedder_fn(config.target_position_predictor.embedder_config),
+                position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
                 res_alpha=config.target_position_predictor.res_alpha,
                 num_channels=config.target_position_predictor.num_channels,
@@ -420,7 +411,7 @@ def create_model(
             )
         else:
             target_position_predictor = TargetPositionPredictor(
-                node_embedder=node_embedder_fn(config.max_ell),
+                node_embedder=node_embedder_fn(config.target_position_predictor.embedder_config),
                 position_coeffs_lmax=config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
                 res_alpha=config.target_position_predictor.res_alpha,
@@ -432,11 +423,11 @@ def create_model(
                 apply_gate=config.target_position_predictor.apply_gate,
             )
 
-        if config.get("position_updater") is None:
+        if config.get("learn_position_updater"):
             position_updater = None
         else:
             position_updater = PositionUpdater(
-                node_embedder=node_embedder_fn(config.max_ell),
+                node_embedder=node_embedder_fn(config.position_updater.embedder_config),
             )
 
         predictor = Predictor(
