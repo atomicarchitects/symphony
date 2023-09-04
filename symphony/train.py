@@ -134,7 +134,7 @@ def train_step(
     state = state.apply_gradients(grads=grads)
 
     # Log norms of gradients.
-    grad_norms = sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, grads)))
+    grad_norms = jax.tree_map(jnp.linalg.norm, grads)
     # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -365,6 +365,7 @@ def train_and_evaluate(
     train_metrics = None
     all_grad_norms = []
     all_param_norms = []
+    all_params = []
     all_focus_and_atom_type_losses = []
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
@@ -436,36 +437,48 @@ def train_and_evaluate(
                 noise_std=config.position_noise_std,
             )
 
+            all_params.append(state.params)
+            all_params = all_params[-16:]
             all_grad_norms.append(grad_norms)
-            all_param_norms.append(sum(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, state.params))))
+            all_param_norms.append(jax.tree_leaves(jax.tree_map(jnp.linalg.norm, state.params)))
             focus_and_atom_type_loss = batch_metrics.compute()[
                 "focus_and_atom_type_loss"
             ]
             all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
             if grad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
-                plt.plot(all_grad_norms)
-                plt.yscale("log")
-                plt.xlabel("Step")
-                plt.ylabel("Sum of gradient norms")
-                plt.title("Gradient norms")
-                plt.savefig("grad_norms.png")
-                plt.close()
+                
+                # Save arrays.
+                with open(f"logging_outputs/log_{step}.pkl", "wb") as f:
+                    pickle.dump({
+                        "grad_norms": all_grad_norms,
+                        "param_norms": all_param_norms,
+                        "params": all_params,
+                        "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
+                        }, f)
 
-                plt.plot(all_param_norms)
-                plt.yscale("log")
-                plt.xlabel("Step")
-                plt.ylabel("Sum of parameter norms")
-                plt.title("Parameter norms")
-                plt.savefig("param_norms.png")
-                plt.close()
+                # plt.plot(all_grad_norms)
+                # plt.yscale("log")
+                # plt.xlabel("Step")
+                # plt.ylabel("Sum of gradient norms")
+                # plt.title("Gradient norms")
+                # plt.savefig("grad_norms.png")
+                # plt.close()
 
-                plt.plot(all_focus_and_atom_type_losses)
-                plt.yscale("log")
-                plt.xlabel("Step")
-                plt.ylabel("Focus and Atom Type Loss")
-                plt.title("Parameter norms")
-                plt.savefig("focus_and_atom_type_loss.png")
-                plt.close()
+                # plt.plot(all_param_norms)
+                # plt.yscale("log")
+                # plt.xlabel("Step")
+                # plt.ylabel("Sum of parameter norms")
+                # plt.title("Parameter norms")
+                # plt.savefig("param_norms.png")
+                # plt.close()
+
+                # plt.plot(all_focus_and_atom_type_losses)
+                # plt.yscale("log")
+                # plt.xlabel("Step")
+                # plt.ylabel("Focus and Atom Type Loss")
+                # plt.title("Focus and Atom Type Loss")
+                # plt.savefig("logging_outputs/focus_and_atom_type_loss.png")
+                # plt.close()
 
             #     preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
             #     _, (focus_and_atom_type_loss, _) = loss.generation_loss(
