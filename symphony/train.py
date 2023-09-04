@@ -29,6 +29,7 @@ from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
 
 LOGGING_DIR = "logging_outputs"
+os.makedirs(LOGGING_DIR, exist_ok=True)
 
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
