@@ -28,6 +28,7 @@ from flax.training import train_state
 from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
 
+LOG = False
 LOGGING_DIR = "logging_outputs"
 os.makedirs(LOGGING_DIR, exist_ok=True)
 
@@ -384,7 +385,6 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
-            continue
             eval_state = eval_state.replace(params=state.params)
 
             # Evaluate on validation and test splits.
@@ -443,97 +443,32 @@ def train_and_evaluate(
                 noise_std=config.position_noise_std,
             )
 
-            all_params.append(jax.tree_map(np.asarray, state.params))
-            all_params = all_params[-16:]
-            all_grad_norms.append(jax.tree_map(np.asarray, grad_norms))
-            all_param_norms.append(jax.tree_map(np.asarray, jax.tree_map(jnp.linalg.norm, state.params)))
-            focus_and_atom_type_loss = np.asarray(batch_metrics.compute()[
-                "focus_and_atom_type_loss"
-            ])
-            all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
-            unpadded = jraph.unpad_with_graphs(graphs)
-            all_num_nodes.append(np.asarray(unpadded.n_node))
-            all_num_edges.append(np.asarray(unpadded.n_edge))
+            if LOG:
+                all_params.append(jax.tree_map(np.asarray, state.params))
+                all_params = all_params[-16:]
+                all_grad_norms.append(jax.tree_map(np.asarray, grad_norms))
+                all_param_norms.append(jax.tree_map(np.asarray, jax.tree_map(jnp.linalg.norm, state.params)))
+                focus_and_atom_type_loss = np.asarray(batch_metrics.compute()[
+                    "focus_and_atom_type_loss"
+                ])
+                all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
+                unpadded = jraph.unpad_with_graphs(graphs)
+                all_num_nodes.append(np.asarray(unpadded.n_node))
+                all_num_edges.append(np.asarray(unpadded.n_edge))
 
-            if step % 1000 == 0:
-                # Save arrays.
-                with open(f"{LOGGING_DIR}/log_{step}.pkl", "wb") as f:
-                    pickle.dump({
-                        "grad_norms": all_grad_norms,
-                        "param_norms": all_param_norms,
-                        "params": all_params,
-                        "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
-                        "num_nodes": all_num_nodes,
-                        "num_edges": all_num_edges,
-                        }, f)
+                if step % 1000 == 0:
+                    # Save arrays.
+                    with open(f"{LOGGING_DIR}/log_{step}.pkl", "wb") as f:
+                        pickle.dump({
+                            "grad_norms": all_grad_norms,
+                            "param_norms": all_param_norms,
+                            "params": all_params,
+                            "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
+                            "num_nodes": all_num_nodes,
+                            "num_edges": all_num_edges,
+                            }, f)
 
 
-            # if sum(jax.tree_leavesgrad_norms > 1e3 or jnp.isnan(focus_and_atom_type_loss):
-                
-                # plt.plot(all_grad_norms)
-                # plt.yscale("log")
-                # plt.xlabel("Step")
-                # plt.ylabel("Sum of gradient norms")
-                # plt.title("Gradient norms")
-                # plt.savefig("grad_norms.png")
-                # plt.close()
-
-                # plt.plot(all_param_norms)
-                # plt.yscale("log")
-                # plt.xlabel("Step")
-                # plt.ylabel("Sum of parameter norms")
-                # plt.title("Parameter norms")
-                # plt.savefig("param_norms.png")
-                # plt.close()
-
-                # plt.plot(all_focus_and_atom_type_losses)
-                # plt.yscale("log")
-                # plt.xlabel("Step")
-                # plt.ylabel("Focus and Atom Type Loss")
-                # plt.title("Focus and Atom Type Loss")
-                # plt.savefig("logging_outputs/focus_and_atom_type_loss.png")
-                # plt.close()
-
-            #     preds: datatypes.Predictions = get_predictions(state, graphs, rng=None)
-            #     _, (focus_and_atom_type_loss, _) = loss.generation_loss(
-            #         preds, graphs, **config.loss_kwargs
-            #     )
-            #     mask = jraph.get_graph_padding_mask(graphs)
-            #     focus_and_atom_type_loss = jnp.where(
-            #         mask, focus_and_atom_type_loss, 0.0
-            #     )
-            #     index = jnp.argmax(focus_and_atom_type_loss)
-
-            #     problematic_graph = jraph.unbatch(graphs)[index]
-            #     import ase
-            #     import ase.io
-
-            #     problematic_graph_ase = ase.Atoms(
-            #         numbers=models.get_atomic_numbers(problematic_graph.nodes.species),
-            #         positions=problematic_graph.nodes.positions,
-            #     )
-            #     ase.io.write(f"problematic_graph_{step}.xyz", problematic_graph_ase)
-
-            #     preds: datatypes.Predictions = get_predictions(
-            #         state, problematic_graph, rng=None
-            #     )
-
-            #     raise ValueError(
-            #         "focus_and_atom_type_loss",
-            #         focus_and_atom_type_loss,
-            #         "positions",
-            #         problematic_graph.nodes.positions,
-            #         "species",
-            #         problematic_graph.nodes.species,
-            #         "target_focus_and_target_species_probs",
-            #         problematic_graph.nodes.focus_and_target_species_probs,
-            #         "embeddings",
-            #         preds.nodes.embeddings,
-            #         "focus_and_target_species_logits",
-            #         preds.nodes.focus_and_target_species_logits,
-            #         "focus_and_target_species_probs",
-            #         preds.nodes.focus_and_target_species_probs,
-            #     )
 
         # Update metrics.
         if train_metrics is None:
