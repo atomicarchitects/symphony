@@ -28,7 +28,6 @@ config_flags.DEFINE_config_file(
     "File path to the training hyperparameter configuration.",
     lock_config=True,
 )
-flags.DEFINE_bool("position_updater", False, "Whether we are training the position updater.")
 
 
 def main(argv):
@@ -62,7 +61,7 @@ def main(argv):
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
-    if FLAGS.position_updater:
+    if config.position_updater:
         train_position_updater.train_and_evaluate(config, FLAGS.workdir)
     else:
         train.train_and_evaluate(config, FLAGS.workdir)
