@@ -14,7 +14,7 @@ from ml_collections import config_flags
 import tensorflow as tf
 
 
-from symphony import train
+from symphony import train, train_position_updater
 from configs import root_dirs
 
 
@@ -27,6 +27,7 @@ config_flags.DEFINE_config_file(
     "File path to the training hyperparameter configuration.",
     lock_config=True,
 )
+flags.DEFINE_bool("position_updater", False, "Whether we are training the position updater.")
 
 
 def main(argv):
@@ -57,7 +58,10 @@ def main(argv):
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
-    train.train_and_evaluate(config, FLAGS.workdir)
+    if FLAGS.position_updater:
+        train_position_updater.train_and_evaluate(config, FLAGS.workdir)
+    else:
+        train.train_and_evaluate(config, FLAGS.workdir)
 
 
 if __name__ == "__main__":

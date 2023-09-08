@@ -387,15 +387,20 @@ def create_node_embedder(
 
 def create_position_updater(
     config: ml_collections.ConfigDict,
-) -> PositionUpdater:
+) -> hk.Transformed:
     """Create a position updater as specified by the config."""
     dataset = config.get("dataset", "qm9")
     num_species = get_num_species_for_dataset(dataset)
-    return PositionUpdater(
-        node_embedder=create_node_embedder(
-            config.position_updater.embedder_config, num_species
-        )
-    )
+
+    def model_fn(graphs: datatypes.Fragments):
+        return PositionUpdater(
+            node_embedder=create_node_embedder(
+                config.position_updater.embedder_config, num_species
+            )
+        )(graphs)
+
+    return hk.transform(model_fn)
+
 
 
 def create_model(

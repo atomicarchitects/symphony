@@ -25,57 +25,13 @@ from flax.training import train_state
 
 from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
+from symphony import train
 
 
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     denoising_loss: metrics.Average.from_output("denoising_loss")
-
-
-def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
-    """Adds a prefix to the keys of a dict, returning a new dict."""
-    return {f"{prefix}/{key}": val for key, val in result.items()}
-
-
-def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
-    """Create an optimizer as specified by the config."""
-    # If a learning rate schedule is specified, use it.
-    if config.get("learning_rate_schedule") is not None:
-        if config.learning_rate_schedule == "constant":
-            learning_rate_or_schedule = optax.constant_schedule(config.learning_rate)
-        elif config.learning_rate_schedule == "sgdr":
-            num_cycles = (
-                1
-                + config.num_train_steps
-                // config.learning_rate_schedule_kwargs.decay_steps
-            )
-            learning_rate_or_schedule = optax.sgdr_schedule(
-                cosine_kwargs=(
-                    config.learning_rate_schedule_kwargs for _ in range(num_cycles)
-                )
-            )
-    else:
-        learning_rate_or_schedule = config.learning_rate
-
-    if config.optimizer == "adam":
-        return optax.adam(learning_rate=learning_rate_or_schedule)
-
-    if config.optimizer == "sgd":
-        return optax.sgd(
-            learning_rate=learning_rate_or_schedule, momentum=config.momentum
-        )
-    raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
-
-
-@jax.profiler.annotate_function
-def get_predictions(
-    state: train_state.TrainState,
-    graphs: datatypes.Fragments,
-    rng: Optional[chex.Array],
-) -> datatypes.Predictions:
-    """Get predictions from the network for input graphs."""
-    return state.apply_fn(state.params, rng, graphs)
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs", "add_noise_to_positions"])
@@ -91,11 +47,9 @@ def train_step(
 
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
-        preds = get_predictions(curr_state, graphs, rng=None)
+        preds = train.get_predictions(curr_state, graphs, rng=None)
         total_loss, (
-            focus_and_atom_type_loss,
-            position_loss,
-            denoising_loss,
+           denoising_loss,
         ) = loss.denoising_loss(
             preds=preds, graphs=graphs, position_noise=position_noise, **loss_kwargs
         )
@@ -103,8 +57,6 @@ def train_step(
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (
             total_loss,
-            focus_and_atom_type_loss,
-            position_loss,
             denoising_loss,
             mask,
         )
@@ -125,14 +77,12 @@ def train_step(
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_and_atom_type_loss, position_loss, denoising_loss, mask),
+        (total_loss, denoising_loss, mask),
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
-        focus_and_atom_type_loss=focus_and_atom_type_loss,
-        position_loss=position_loss,
         denoising_loss=denoising_loss,
         mask=mask,
     )
@@ -148,10 +98,8 @@ def evaluate_step(
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
-    preds = get_predictions(eval_state, graphs, rng)
+    preds = train.get_predictions(eval_state, graphs, rng)
     total_loss, (
-        focus_and_atom_type_loss,
-        position_loss,
         denoising_loss,
     ) = loss.denoising_loss(
         preds=preds, graphs=graphs, position_noise=None, **loss_kwargs
@@ -161,8 +109,6 @@ def evaluate_step(
     mask = jraph.get_graph_padding_mask(graphs)
     return Metrics.single_from_model_output(
         total_loss=total_loss,
-        focus_and_atom_type_loss=focus_and_atom_type_loss,
-        position_loss=position_loss,
         denoising_loss=denoising_loss,
         mask=mask,
     )
@@ -174,7 +120,6 @@ def evaluate_model(
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
-    mask_atom_types_in_fragments: bool,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -186,9 +131,6 @@ def evaluate_model(
         # Loop over graphs.
         for graphs in datasets[split].as_numpy_iterator():
             graphs = datatypes.Fragments.from_graphstuple(graphs)
-
-            if mask_atom_types_in_fragments:
-                graphs = mask_atom_types(graphs)
 
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
@@ -203,36 +145,6 @@ def evaluate_model(
         eval_metrics[split] = split_metrics
 
     return eval_metrics
-
-
-@jax.jit
-def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
-    """Mask atom types in graphs."""
-
-    def aggregate_sum(arr: jnp.ndarray) -> jnp.ndarray:
-        """Aggregates the sum of all elements upto the last in arr into the first element."""
-        # Set the first element of arr as the sum of all elements upto the last element.
-        # Keep the last element as is.
-        # Set all of the other elements to 0.
-        return jnp.concatenate(
-            [arr[:-1].sum(axis=0, keepdims=True), jnp.zeros_like(arr[:-1]), arr[-1:]],
-            axis=0,
-        )
-
-    focus_and_target_species_probs = graphs.nodes.focus_and_target_species_probs
-    focus_and_target_species_probs = jax.vmap(aggregate_sum)(
-        focus_and_target_species_probs
-    )
-    graphs = graphs._replace(
-        nodes=graphs.nodes._replace(
-            species=jnp.zeros_like(graphs.nodes.species),
-            focus_and_target_species_probs=focus_and_target_species_probs,
-        ),
-        globals=graphs.globals._replace(
-            target_species=jnp.zeros_like(graphs.globals.target_species)
-        ),
-    )
-    return graphs
 
 
 def train_and_evaluate(
@@ -271,13 +183,12 @@ def train_and_evaluate(
                 splits,
                 rng,
                 config.loss_kwargs,
-                config.mask_atom_types,
             )
 
         # Compute and write metrics.
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
-            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
+            writer.write_scalars(step, train.add_prefix_to_keys(eval_metrics[split], split))
         writer.flush()
 
         return eval_metrics
@@ -297,14 +208,14 @@ def train_and_evaluate(
     logging.info("Initializing network.")
     train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    net = models.create_model(config, run_in_evaluation_mode=False)
+    net = models.create_position_updater(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
     # Create the optimizer.
-    tx = create_optimizer(config)
+    tx = train.create_optimizer(config)
 
     # Create the training state.
     state = train_state.TrainState.create(
@@ -362,7 +273,7 @@ def train_and_evaluate(
         if step % config.log_every_steps == 0 or first_or_last_step:
             if train_metrics is not None:
                 writer.write_scalars(
-                    step, add_prefix_to_keys(train_metrics.compute(), "train")
+                    step, train.add_prefix_to_keys(train_metrics.compute(), "train")
                 )
             train_metrics = None
 
@@ -406,9 +317,6 @@ def train_and_evaluate(
         try:
             graphs = next(train_iter)
             graphs = datatypes.Fragments.from_graphstuple(graphs)
-
-            if config.mask_atom_types:
-                graphs = mask_atom_types(graphs)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
