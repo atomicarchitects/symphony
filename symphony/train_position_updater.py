@@ -38,20 +38,19 @@ class Metrics(metrics.Collection):
 def train_step(
     state: train_state.TrainState,
     graphs: datatypes.Fragments,
-    loss_kwargs: Dict[str, Union[float, int]],
     rng: chex.PRNGKey,
     add_noise_to_positions: bool,
     noise_std: float,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
-    def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
+    def loss_fn(params: optax.Params, graphs: datatypes.Fragments, position_noise: Optional[jnp.ndarray]) -> float:
         curr_state = state.replace(params=params)
         preds = train.get_predictions(curr_state, graphs, rng=None)
         total_loss, (
            denoising_loss,
         ) = loss.denoising_loss(
-            preds=preds, graphs=graphs, position_noise=position_noise, **loss_kwargs
+            preds=preds, graphs=graphs, position_noise=position_noise,
         )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
@@ -67,18 +66,17 @@ def train_step(
         position_noise = (
             jax.random.normal(noise_rng, graphs.nodes.positions.shape) * noise_std
         )
+        noisy_positions = graphs.nodes.positions + position_noise
+        graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
     else:
-        position_noise = jnp.zeros_like(graphs.nodes.positions)
-
-    noisy_positions = graphs.nodes.positions + position_noise
-    graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
+        position_noise = None
 
     # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
         (total_loss, denoising_loss, mask),
-    ), grads = grad_fn(state.params, graphs)
+    ), grads = grad_fn(state.params, graphs, position_noise)
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -94,15 +92,26 @@ def evaluate_step(
     eval_state: train_state.TrainState,
     graphs: datatypes.Fragments,
     rng: chex.PRNGKey,
-    loss_kwargs: Dict[str, Union[float, int]],
+    add_noise_to_positions: bool,
+    noise_std: float,
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
+    if add_noise_to_positions:
+        noise_rng, rng = jax.random.split(rng)
+        position_noise = (
+            jax.random.normal(noise_rng, graphs.nodes.positions.shape) * noise_std
+        )
+        noisy_positions = graphs.nodes.positions + position_noise
+        graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
+    else:
+        position_noise = None
+
     # Compute predictions and resulting loss.
     preds = train.get_predictions(eval_state, graphs, rng)
     total_loss, (
         denoising_loss,
     ) = loss.denoising_loss(
-        preds=preds, graphs=graphs, position_noise=None, **loss_kwargs
+        preds=preds, graphs=graphs, position_noise=None
     )
 
     # Consider only valid graphs.
@@ -119,7 +128,8 @@ def evaluate_model(
     datasets: Iterator[datatypes.Fragments],
     splits: Iterable[str],
     rng: chex.PRNGKey,
-    loss_kwargs: Dict[str, Union[float, int]],
+    add_noise_to_positions: bool,
+    noise_std: float,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -134,7 +144,7 @@ def evaluate_model(
 
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
-            batch_metrics = evaluate_step(eval_state, graphs, step_rng, loss_kwargs)
+            batch_metrics = evaluate_step(eval_state, graphs, step_rng, add_noise_to_positions, noise_std)
 
             # Update metrics.
             if split_metrics is None:
@@ -182,7 +192,8 @@ def train_and_evaluate(
                 datasets,
                 splits,
                 rng,
-                config.loss_kwargs,
+                add_noise_to_positions=config.add_noise_to_positions,
+                noise_std=config.position_noise_std,
             )
 
         # Compute and write metrics.
@@ -208,7 +219,7 @@ def train_and_evaluate(
     logging.info("Initializing network.")
     train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
-    net = models.create_position_updater(config, run_in_evaluation_mode=False)
+    net = models.create_model(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
@@ -328,7 +339,6 @@ def train_and_evaluate(
             state, batch_metrics = train_step(
                 state,
                 graphs,
-                loss_kwargs=config.loss_kwargs,
                 rng=step_rng,
                 add_noise_to_positions=config.add_noise_to_positions,
                 noise_std=config.position_noise_std,
