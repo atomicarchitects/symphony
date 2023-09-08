@@ -48,7 +48,7 @@ def train_step(
         curr_state = state.replace(params=params)
         preds = train.get_predictions(curr_state, graphs, rng=None)
         total_loss, (
-           denoising_loss,
+           denoising_loss, _
         ) = loss.denoising_loss(
             preds=preds, graphs=graphs, position_noise=position_noise,
         )
@@ -108,9 +108,9 @@ def evaluate_step(
     # Compute predictions and resulting loss.
     preds = train.get_predictions(eval_state, graphs, rng)
     total_loss, (
-        denoising_loss,
+        denoising_loss, _
     ) = loss.denoising_loss(
-        preds=preds, graphs=graphs, position_noise=None
+        preds=preds, graphs=graphs, position_noise=position_noise
     )
 
     # Consider only valid graphs.

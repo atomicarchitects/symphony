@@ -454,14 +454,15 @@ def denoising_loss(
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray]]:
     """Computes the loss for denoising atom positions."""
     num_graphs = graphs.n_node.shape[0]
+    num_nodes = graphs.nodes.positions.shape[0]
+    segment_ids = models.get_segment_ids(graphs.n_node, num_nodes)
+
     if position_noise is None or preds is None:
         return jnp.zeros((num_graphs,))
 
     # Subtract out the mean position noise.
     # This handles translation invariance.
     if center_at_zero:
-        num_nodes = graphs.nodes.positions.shape[0]
-        segment_ids = models.get_segment_ids(graphs.n_node, num_nodes)
         preds -= jraph.segment_mean(preds, segment_ids, num_graphs)[segment_ids]
         position_noise -= jraph.segment_mean(position_noise, segment_ids, num_graphs)[
             segment_ids
@@ -477,7 +478,7 @@ def denoising_loss(
 
     # We predict a denoising loss only for finished fragments.
     loss_denoising = (graphs.globals.stop) * loss_denoising
-    return loss_denoising, (loss_denoising,)
+    return loss_denoising, (loss_denoising, None)
 
 
 def clash_loss(
