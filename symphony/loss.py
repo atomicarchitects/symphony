@@ -450,7 +450,7 @@ def denoising_loss(
     preds: jnp.ndarray,
     graphs: datatypes.Fragments,
     position_noise: jnp.ndarray,
-    center_at_zero: bool,
+    center_at_zero: bool = False,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray]]:
     """Computes the loss for denoising atom positions."""
     num_graphs = graphs.n_node.shape[0]
