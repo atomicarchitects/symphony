@@ -33,7 +33,6 @@ def get_config() -> ml_collections.ConfigDict:
 
     config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
     config.target_position_predictor.embedder_config = get_embedder_config()
-    config.position_updater.embedder_config = get_embedder_config()
 
     # NequIP hyperparameters.
     return config

@@ -10,7 +10,6 @@ from symphony.models.position_predictor import (
     FactorizedTargetPositionPredictor,
     TargetPositionPredictor,
 )
-from symphony.models.position_updater import PositionUpdater
 from symphony.models import utils
 
 
@@ -23,13 +22,11 @@ class Predictor(hk.Module):
         target_position_predictor: Union[
             TargetPositionPredictor, FactorizedTargetPositionPredictor
         ],
-        position_updater: Optional[PositionUpdater] = None,
         name: str = None,
     ):
         super().__init__(name=name)
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
-        self.position_updater = position_updater
 
     def get_training_predictions(
         self, graphs: datatypes.Fragments
@@ -78,14 +75,6 @@ class Predictor(hk.Module):
         radii = self.target_position_predictor.create_radii()
         radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_graphs))
 
-
-        # Compute noise in positions for all nodes.
-        if self.position_updater is None:
-            position_updates = None
-        else:
-            position_updates = self.position_updater(graphs)
-
-
         # Check the shapes.
         assert focus_and_target_species_logits.shape == (
             num_nodes,
@@ -118,7 +107,6 @@ class Predictor(hk.Module):
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-                position_updates=position_updates,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -238,12 +226,6 @@ class Predictor(hk.Module):
             lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
         )(radius_indices, beta_indices, alpha_indices)
 
-        # Predict position updates.
-        if self.position_updater is None:
-            position_updates = None
-        else:
-            position_updates = self.position_updater(graphs)
-
         assert stop.shape == (num_graphs,)
         assert focus_indices.shape == (num_graphs,)
         assert focus_and_target_species_logits.shape == (
@@ -278,7 +260,6 @@ class Predictor(hk.Module):
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-                position_updates=position_updates,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(

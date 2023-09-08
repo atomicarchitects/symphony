@@ -4,7 +4,6 @@ import functools
 import os
 import pickle
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
-import numpy as np
 import chex
 import flax
 import jax
@@ -14,7 +13,6 @@ import ml_collections
 import optax
 import yaml
 from absl import logging
-import matplotlib.pyplot as plt
 
 from clu import (
     checkpoint,
@@ -28,16 +26,11 @@ from flax.training import train_state
 from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
 
-LOG = False
-LOGGING_DIR = "logging_outputs"
-os.makedirs(LOGGING_DIR, exist_ok=True)
-
 
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
-    focus_and_atom_type_loss: metrics.Average.from_output("focus_and_atom_type_loss")
-    position_loss: metrics.Average.from_output("position_loss")
+    denoising_loss: metrics.Average.from_output("denoising_loss")
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -102,13 +95,17 @@ def train_step(
         total_loss, (
             focus_and_atom_type_loss,
             position_loss,
-        ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
+            denoising_loss,
+        ) = loss.denoising_loss(
+            preds=preds, graphs=graphs, position_noise=position_noise, **loss_kwargs
+        )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (
             total_loss,
             focus_and_atom_type_loss,
             position_loss,
+            denoising_loss,
             mask,
         )
 
@@ -128,21 +125,18 @@ def train_step(
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_and_atom_type_loss, position_loss, mask),
+        (total_loss, focus_and_atom_type_loss, position_loss, denoising_loss, mask),
     ), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
-
-    # Log norms of gradients.
-    grad_norms = jax.tree_map(jnp.linalg.norm, grads)
-    # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
 
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
+        denoising_loss=denoising_loss,
         mask=mask,
     )
-    return state, batch_metrics, grad_norms
+    return state, batch_metrics
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
@@ -158,7 +152,8 @@ def evaluate_step(
     total_loss, (
         focus_and_atom_type_loss,
         position_loss,
-    ) = loss.generation_loss(
+        denoising_loss,
+    ) = loss.denoising_loss(
         preds=preds, graphs=graphs, position_noise=None, **loss_kwargs
     )
 
@@ -168,6 +163,7 @@ def evaluate_step(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
+        denoising_loss=denoising_loss,
         mask=mask,
     )
 
@@ -359,12 +355,6 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
-    all_grad_norms = []
-    all_param_norms = []
-    all_params = []
-    all_focus_and_atom_type_losses = []
-    all_num_nodes = []
-    all_num_edges = []
 
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
@@ -427,7 +417,7 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             step_rng, rng = jax.random.split(rng)
-            state, batch_metrics, grad_norms = train_step(
+            state, batch_metrics = train_step(
                 state,
                 graphs,
                 loss_kwargs=config.loss_kwargs,
@@ -435,38 +425,6 @@ def train_and_evaluate(
                 add_noise_to_positions=config.add_noise_to_positions,
                 noise_std=config.position_noise_std,
             )
-
-            if LOG:
-                all_params.append(jax.tree_map(np.asarray, state.params))
-                all_params = all_params[-16:]
-                all_grad_norms.append(jax.tree_map(np.asarray, grad_norms))
-                all_param_norms.append(
-                    jax.tree_map(
-                        np.asarray, jax.tree_map(jnp.linalg.norm, state.params)
-                    )
-                )
-                focus_and_atom_type_loss = np.asarray(
-                    batch_metrics.compute()["focus_and_atom_type_loss"]
-                )
-                all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
-                unpadded = jraph.unpad_with_graphs(graphs)
-                all_num_nodes.append(np.asarray(unpadded.n_node))
-                all_num_edges.append(np.asarray(unpadded.n_edge))
-
-                if step % 1000 == 0:
-                    # Save arrays.
-                    with open(f"{LOGGING_DIR}/log_{step}.pkl", "wb") as f:
-                        pickle.dump(
-                            {
-                                "grad_norms": all_grad_norms,
-                                "param_norms": all_param_norms,
-                                "params": all_params,
-                                "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
-                                "num_nodes": all_num_nodes,
-                                "num_edges": all_num_edges,
-                            },
-                            f,
-                        )
 
         # Update metrics.
         if train_metrics is None:
