@@ -122,7 +122,6 @@ def evaluate_step(
     )
 
 
-@functools.partial(jax.jit, static_argnames=["add_noise_to_positions"])
 def evaluate_model(
     eval_state: train_state.TrainState,
     datasets: Iterator[datatypes.Fragments],
