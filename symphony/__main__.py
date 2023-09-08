@@ -3,6 +3,7 @@
 This file is intentionally kept short.
 The majority for logic is in libraries that can be easily tested.
 """
+import os
 
 from absl import app
 from absl import flags
@@ -33,6 +34,9 @@ flags.DEFINE_bool("position_updater", False, "Whether we are training the positi
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
+
+    # Make sure the dataloader is deterministic.
+    os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 
     # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
     # it unavailable to JAX.
