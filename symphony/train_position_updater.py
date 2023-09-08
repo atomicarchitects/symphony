@@ -34,7 +34,7 @@ class Metrics(metrics.Collection):
     denoising_loss: metrics.Average.from_output("denoising_loss")
 
 
-@functools.partial(jax.jit, static_argnames=["loss_kwargs", "add_noise_to_positions"])
+@functools.partial(jax.jit, static_argnames=["add_noise_to_positions"])
 def train_step(
     state: train_state.TrainState,
     graphs: datatypes.Fragments,
@@ -87,7 +87,6 @@ def train_step(
     return state, batch_metrics
 
 
-@functools.partial(jax.jit, static_argnames=["loss_kwargs"])
 def evaluate_step(
     eval_state: train_state.TrainState,
     graphs: datatypes.Fragments,
@@ -123,6 +122,7 @@ def evaluate_step(
     )
 
 
+@functools.partial(jax.jit, static_argnames=["add_noise_to_positions"])
 def evaluate_model(
     eval_state: train_state.TrainState,
     datasets: Iterator[datatypes.Fragments],
