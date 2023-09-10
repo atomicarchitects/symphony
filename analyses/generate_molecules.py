@@ -154,7 +154,8 @@ def generate_molecules(
         workdir, step, run_in_evaluation_mode=True
     )
     config = config.unlock()
-    del config.position_updater
+    if "position_updater" in config:
+        del config["position_updater"]
     logging.info(config.to_dict())
 
     # Create output directories.
