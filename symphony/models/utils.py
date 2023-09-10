@@ -383,7 +383,7 @@ def create_model(
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
-        if config.focus_and_target_species_predictor.compute_global_embedding:
+        if config.focus_and_target_species_predictor.get("compute_global_embedding"):
             global_embedder = GlobalEmbedder(
                 num_channels=config.focus_and_target_species_predictor.global_embedder.num_channels,
                 pooling=config.focus_and_target_species_predictor.global_embedder.pooling,
