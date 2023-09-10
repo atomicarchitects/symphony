@@ -32,20 +32,6 @@ from symphony import models
 FLAGS = flags.FLAGS
 
 
-def update_positions(
-    pred: datatypes.Predictions, padded_fragment: datatypes.Fragments
-) -> datatypes.Fragments:
-    """Updates the positions of all nodes according to the position updates."""
-    positions = padded_fragment.nodes.positions
-    new_positions = positions + pred.nodes.position_updates
-
-    return padded_fragment._replace(
-        nodes=padded_fragment.nodes._replace(
-            positions=new_positions,
-        )
-    )
-
-
 def append_predictions(
     pred: datatypes.Predictions, padded_fragment: datatypes.Fragments, nn_cutoff: float,
 ) -> datatypes.Fragments:
@@ -106,16 +92,6 @@ def generate_one_step(
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-
-    # If this is the first time we declared a STOP,
-    # we need to update the positions of all nodes, according to the position updates.
-    first_stop = pred.globals.stop[0] & (~stop)
-    padded_fragment = jax.lax.cond(
-        first_stop,
-        lambda: padded_fragment,
-        lambda: update_positions(pred, padded_fragment),
-    )
-
     next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
