@@ -1,5 +1,5 @@
 """Metrics for evaluating generative models for molecules."""
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional, Sequence, Any
 
 import chex
 import collections
@@ -22,6 +22,12 @@ try:
 except ImportError:
     logging.info("EDM analyses not available.")
 
+try:
+    from openbabel import openbabel
+    from openbabel import pybel
+except ImportError:
+    logging.info("OpenBabel not available.")
+
 
 def xyz_to_rdkit_molecule(molecules_file: str) -> Chem.Mol:
     """Converts a molecule from xyz format to an RDKit molecule."""
@@ -37,10 +43,11 @@ def count_molecule_sizes(molecules_dir: str) -> np.ndarray:
             continue
 
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        if not check_molecule_validity(molecules_file):
+        mol = xyz_to_rdkit_molecule(molecules_file)
+        
+        if not check_molecule_validity(mol):
             continue
 
-        mol = xyz_to_rdkit_molecule(molecules_file)
         sizes.append(mol.GetNumAtoms())
 
     return np.asarray(sizes)
@@ -54,10 +61,11 @@ def count_atom_types(molecules_dir: str, normalize: bool = False) -> Dict[str, n
             continue
 
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        if not check_molecule_validity(molecules_file):
+        mol = xyz_to_rdkit_molecule(molecules_file)
+        
+        if not check_molecule_validity(mol):
             continue
 
-        mol = xyz_to_rdkit_molecule(molecules_file)
         for atom in mol.GetAtoms():
             atom_counts[atom.GetSymbol()] += 1
 
@@ -68,16 +76,38 @@ def count_atom_types(molecules_dir: str, normalize: bool = False) -> Dict[str, n
     return dict(atom_counts)
 
 
-@functools.partial(jax.jit, static_argnames=("batch_size", "num_batches"))
+def compute_jensen_shannon_divergence(
+    source_dist: Dict[str, float], target_dist: Dict[str, float]
+) -> float:
+    """Computes the Jensen-Shannon divergence between two distributions."""
+    def kl_divergence(p: np.ndarray, q: np.ndarray) -> float:
+        """Computes the KL divergence between two distributions."""
+        log_p = np.where(p > 0, np.log(p), 0)
+        return (p * log_p - p * np.log(q)).sum()
+
+    # Compute the union of the dictionary keys.
+    # We assign a probability of 0 to any key that is not present in a distribution.
+    keys = set(source_dist.keys()).union(set(target_dist.keys()))
+    source_dist = np.asarray([source_dist.get(key, 0) for key in keys])
+    target_dist = np.asarray([target_dist.get(key, 0) for key in keys])
+
+    mean_dist = 0.5 * (source_dist + target_dist)
+    return 0.5 * (
+        kl_divergence(source_dist, mean_dist) + kl_divergence(target_dist, mean_dist)
+    )
+
+
+@functools.partial(jax.jit, static_argnames=("batch_size", "num_batches", "num_kernels"))
 def compute_maximum_mean_discrepancy(
     source_samples: chex.Array,
     target_samples: chex.Array,
     rng: chex.PRNGKey,
     batch_size: int,
     num_batches: int,
+    num_kernels: int = 30,
 ) -> float:
     """
-    Calculate the `maximum mean discrepancy distance <https://jmlr.csail.mit.edu/papers/v13/gretton12a.html>`_ between two lists of samples.
+    Calculate the `maximum mean discrepancy distance <https://jmlr.csail.mit.edu/papers/v13/gretton12a.html>` between two lists of samples.
     Adapted from https://github.com/jindongwang/transferlearning/blob/master/code/distance/mmd_numpy_sklearn.py
     """
 
@@ -102,11 +132,10 @@ def compute_maximum_mean_discrepancy(
         X_indices = jax.random.randint(
             X_rng, shape=(batch_size,), minval=0, maxval=len(X)
         )
-        X_batch = X[X_indices]
         Y_indices = jax.random.randint(
             Y_rng, shape=(batch_size,), minval=0, maxval=len(Y)
         )
-        Y_batch = Y[Y_indices]
+        X_batch, Y_batch = X[X_indices], Y[Y_indices]
         return mmd_rbf(X_batch, Y_batch, gammas)
 
     X = jnp.asarray(source_samples)
@@ -123,17 +152,20 @@ def compute_maximum_mean_discrepancy(
     # We can only compute the MMD if the number of features is the same.
     assert X.shape[1] == Y.shape[1]
 
-    gammas = jnp.logspace(-2, 2, 30)
-    mmd_estimates = jax.vmap(lambda rng: mmd_rbf_batched(X, Y, gammas, rng))(
+    # We set the kernel widths based on the pairwise distances between samples.
+    pairwise_distances = jnp.linalg.norm(X[:batch_size, :, None] - Y[:batch_size][None, :batch_size, :], axis=-1)
+    assert pairwise_distances.shape == (batch_size, batch_size)
+    pairwise_distance_percentiles = jnp.percentile(pairwise_distances, q=jnp.linspace(0, 100, num_kernels))
+    pairwise_distance_percentiles = jnp.where(pairwise_distances < 1e-3, 1e-3, pairwise_distance_percentiles)
+    gammas = 1.0 / (2 * (pairwise_distance_percentiles ** 2))
+
+    return jax.vmap(lambda rng: mmd_rbf_batched(X, Y, gammas, rng))(
         jax.random.split(rng, num_batches)
-    )
-    return mmd_estimates.mean()
+    ).mean()
 
 
-def check_molecule_validity(molecules_file: str) -> bool:
+def check_molecule_validity(mol: Chem.Mol) -> bool:
     """Checks whether a molecule is valid using xyz2mol."""
-    mol = Chem.MolFromXYZFile(molecules_file)
-    mol = Chem.Mol(mol)
 
     # We should only have one conformer.
     assert mol.GetNumConformers() == 1
@@ -155,9 +187,95 @@ def compute_validity(molecules_dir: str) -> float:
 
         total += 1
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        valid += check_molecule_validity(molecules_file)
+        mol = xyz_to_rdkit_molecule(molecules_file)
+        
+        valid += check_molecule_validity(mol)
 
     return valid / total
+
+
+def check_molecule_validity_with_openbabel(
+    mol: openbabel.OBMol,
+) -> bool:
+    # Table of valences for each atom type.
+    expected_valences = {
+        "H": 1,
+        "C": 4,
+        "N": 3,
+        "O": 2,
+        "F": 1,
+    }
+
+    invalid = False
+    for atom in openbabel.OBMolAtomIter(mol):
+        atomic_num = atom.GetAtomicNum()
+        atomic_symbol = openbabel.GetSymbol(atomic_num)
+        atom_valency = atom.GetExplicitValence()
+        if atom_valency != expected_valences[atomic_symbol]:
+            invalid = True
+            break
+
+    return not invalid
+
+
+def compute_validity_with_openbabel(molecules_dir: str) -> float:
+    """Computes the fraction of molecules in a directory that are valid using OpenBabel."""
+
+    obConversion = openbabel.OBConversion()
+    obConversion.SetInFormat("xyz")
+
+    valid = total = 0
+    for molecules_file in os.listdir(molecules_dir):
+        if not molecules_file.endswith(".xyz"):
+            continue
+
+        total += 1
+        molecules_file = os.path.join(molecules_dir, molecules_file)
+
+        mol = openbabel.OBMol()
+        obConversion.ReadFile(mol, molecules_file)
+
+        valid += check_molecule_validity_with_openbabel(mol)
+
+    return valid / total
+
+
+def compute_uniqueness(molecules_dir: str) -> float:
+    """Computes the fraction of molecules in a directory that are unique using xyz2mol."""
+    all_smiles = []
+    for molecules_file in os.listdir(molecules_dir):
+        if not molecules_file.endswith(".xyz"):
+            continue
+
+        molecules_file = os.path.join(molecules_dir, molecules_file)
+        mol = xyz_to_rdkit_molecule(molecules_file)
+
+        if not check_molecule_validity(mol):
+            continue
+
+        smiles = Chem.MolToSmiles(xyz_to_rdkit_molecule(molecules_file))
+        all_smiles.append(smiles)
+
+    return len(set(all_smiles)) / len(all_smiles)
+
+
+def compute_uniqueness_with_openbabel(molecules_dir: str) -> float:
+    """Computes the fraction of molecules in a directory that are unique using OpenBabel."""
+    all_smiles = []
+    for molecules_file in os.listdir(molecules_dir):
+        if not molecules_file.endswith(".xyz"):
+            continue
+
+        molecules_file = os.path.join(molecules_dir, molecules_file)
+
+        mol = pybel.readfile("xyz", molecules_file).next()
+        if not check_molecule_validity_with_openbabel(mol.OBMol()):
+            continue
+
+        smiles = mol.write("smi").strip()
+        all_smiles.append(smiles)
+
+    return len(set(all_smiles)) / len(all_smiles)
 
 
 def compute_bond_lengths(molecules_dir: str) -> Dict[Tuple[int, int, int], np.ndarray]:
@@ -171,10 +289,10 @@ def compute_bond_lengths(molecules_dir: str) -> Dict[Tuple[int, int, int], np.nd
             continue
 
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        if not check_molecule_validity(molecules_file):
-            continue
-
         mol = xyz_to_rdkit_molecule(molecules_file)
+        
+        if not check_molecule_validity(mol):
+            continue
 
         # This will work as the molecule is valid.
         rdDetermineBonds.DetermineBonds(mol, charge=0)
@@ -215,10 +333,10 @@ def compute_local_environments(
             continue
 
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        if not check_molecule_validity(molecules_file):
-            continue
-
         mol = xyz_to_rdkit_molecule(molecules_file)
+        
+        if not check_molecule_validity(mol):
+            continue
 
         # This will work as the molecule is valid.
         rdDetermineBonds.DetermineBonds(mol, charge=0)
@@ -279,10 +397,10 @@ def compute_bispectra_of_local_environments(
             continue
 
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        if not check_molecule_validity(molecules_file):
-            continue
-
         mol = xyz_to_rdkit_molecule(molecules_file)
+        
+        if not check_molecule_validity(mol):
+            continue
 
         # This will work as the molecule is valid.
         rdDetermineBonds.DetermineBonds(mol, charge=0)
@@ -334,36 +452,29 @@ def compute_bispectra_of_local_environments(
     }
 
 
-def compute_maximum_mean_discrepancies_for_bispectra(
-    source_bispectra: Dict[Tuple[str, str], jnp.ndarray],
-    target_bispectra: Dict[Tuple[str, str], jnp.ndarray],
+def compute_maximum_mean_discrepancies(
+    source_samples_dict: Dict[Any, jnp.ndarray],
+    target_samples_dict: Dict[Any, jnp.ndarray],
     rng: chex.PRNGKey,
     batch_size: int,
     num_batches: int,
-) -> Dict[Tuple[str, str], float]:
+) -> Dict[Any, float]:
     """
-    Compute the maximum mean discrepancy distance between the bispectra distributions of two sets of molecules.
+    Compute the maximum mean discrepancy distance for each key in the source and target dictionaries.
     """
     results = {}
-    for environment in source_bispectra:
-        if environment not in target_bispectra:
+    for key in source_samples_dict:
+        if key not in target_samples_dict:
             continue
 
         mmd_rng, rng = jax.random.split(rng)
-        mmd = compute_maximum_mean_discrepancy(
-            source_bispectra[environment],
-            target_bispectra[environment],
+        results[key] = compute_maximum_mean_discrepancy(
+            source_samples_dict[key],
+            target_samples_dict[key],
             mmd_rng,
             batch_size,
             num_batches,
         )
-
-        central_atom_type, neighbors = environment
-        print(
-            f"The MMD distance of bispectra for central atom {central_atom_type} and neighbors {neighbors} is {mmd:0.5f}"
-        )
-
-        results[environment] = mmd
 
     return results
 
@@ -381,10 +492,9 @@ def compute_bond_lengths(
             continue
 
         molecules_file = os.path.join(molecules_dir, molecules_file)
-        if not check_molecule_validity(molecules_file):
-            continue
-
         mol = xyz_to_rdkit_molecule(molecules_file)
+        if not check_molecule_validity(mol):
+            continue
 
         # This will work as the molecule is valid.
         rdDetermineBonds.DetermineBonds(mol, charge=0)
@@ -408,38 +518,6 @@ def compute_bond_lengths(
     }
 
 
-def compute_maximum_mean_discrepancies_for_bond_lengths(
-    source_bond_dists: Dict[Tuple[str, str, float], np.ndarray],
-    target_bond_dists: Dict[Tuple[str, str, float], np.ndarray],
-    rng: chex.PRNGKey,
-    batch_size: int,
-    num_batches: int,
-) -> Dict[Tuple[str, str, float], float]:
-    """
-    Compute the maximum mean discrepancy distance between the bond length distributions of two sets of molecules.
-    """
-    results = {}
-    for bond_key in sorted(source_bond_dists):
-        if bond_key not in target_bond_dists:
-            continue
-
-        mmd_rng, rng = jax.random.split(rng)
-        mmd = compute_maximum_mean_discrepancy(
-            source_bond_dists[bond_key],
-            target_bond_dists[bond_key],
-            mmd_rng,
-            batch_size,
-            num_batches,
-        )
-
-        atom_type_1, atom_type_2, bond_type = bond_key
-        print(
-            f"The MMD distance of {atom_type_1}-{atom_type_2} (bond type {bond_type}) bond length distributions is {mmd:0.5f}"
-        )
-
-        results[bond_key] = mmd
-
-    return results
 
 
 def _get_sdf_files(molecules_dir: str) -> List[str]:
