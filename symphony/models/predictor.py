@@ -225,7 +225,7 @@ class Predictor(hk.Module):
         )(radius_rngs)
         us_sampled = jax.vmap(lambda rng: jax.random.uniform(rng, minval=-0.5, maxval=0.5))(radius_subrngs)
         radii_sampled = jax.vmap(
-            lambda r_index: radii[r_index] + (radii[r_index + 1] - radii[r_index]) * us_sampled
+            lambda r_index, u: radii[r_index] + (radii[r_index + 1] - radii[r_index]) * u
         )(radius_indices, us_sampled)
 
         # Get the angular probabilities.
