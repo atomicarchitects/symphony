@@ -9,7 +9,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
-    config.fragment_logic = "nn_heavy_first"
+    config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
     config.train_molecules = (0, 100000)
@@ -32,7 +32,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 1_000_000
+    config.num_train_steps = 2_000_000
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
@@ -44,7 +44,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
-    config.loss_kwargs.radius_rbf_variance = 1e-2
+    config.loss_kwargs.radius_rbf_variance = 1e-3
     config.loss_kwargs.target_position_inverse_temperature = 20.0
     config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
@@ -66,9 +66,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
     config.target_position_predictor.num_channels = 5
-    config.target_position_predictor.min_radius = 1.0
+    config.target_position_predictor.min_radius = 0.9
     config.target_position_predictor.max_radius = 2.0
-    config.target_position_predictor.num_radii = 128
+    config.target_position_predictor.num_radii = 64
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
     config.target_position_predictor.radial_mlp_latent_size = 128
