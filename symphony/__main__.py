@@ -61,7 +61,7 @@ def main(argv):
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
-    if config.position_updater:
+    if config.get("position_updater"):
         train_position_updater.train_and_evaluate(config, FLAGS.workdir)
     else:
         train.train_and_evaluate(config, FLAGS.workdir)
