@@ -223,7 +223,7 @@ class Predictor(hk.Module):
         radius_subrngs, radius_rngs = jax.vmap(
             lambda key: jax.random.split(key)
         )(radius_rngs)
-        us_sampled = jax.vmap(jax.random.uniform)(radius_subrngs)
+        us_sampled = jax.vmap(lambda rng: jax.random.uniform(rng, minval=-0.5, maxval=0.5))(radius_subrngs)
         radii_sampled = jax.vmap(
             lambda r_index: radii[r_index] + (radii[r_index + 1] - radii[r_index]) * us_sampled
         )(radius_indices, us_sampled)
@@ -235,9 +235,9 @@ class Predictor(hk.Module):
             position_probs, radius_indices
         )  # [num_graphs, res_beta, res_alpha]
         angular_probs_upper = jax.vmap(
-            lambda p, r_index: p[r_index] / p[r_index].integrate()
+            lambda p, r_index: p[r_index + 1] / p[r_index + 1].integrate()
         )(
-            position_probs, radius_indices + 1
+            position_probs, radius_indices
         )  # [num_graphs, res_beta, res_alpha]
 
         # Linearly interpolate the angular probabilities.
