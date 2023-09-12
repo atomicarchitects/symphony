@@ -219,12 +219,31 @@ class Predictor(hk.Module):
             radius_rngs, radial_probs
         )  # [num_graphs]
 
+        # Linearly interpolate the radii.
+        radius_subrngs, radius_rngs = jax.vmap(
+            lambda key: jax.random.split(key)
+        )(radius_rngs)
+        us_sampled = jax.vmap(jax.random.uniform)(radius_subrngs)
+        radii_sampled = jax.vmap(
+            lambda r_index: radii[r_index] + (radii[r_index + 1] - radii[r_index]) * us_sampled
+        )(radius_indices, us_sampled)
+
         # Get the angular probabilities.
-        angular_probs = jax.vmap(
+        angular_probs_lower = jax.vmap(
             lambda p, r_index: p[r_index] / p[r_index].integrate()
         )(
             position_probs, radius_indices
         )  # [num_graphs, res_beta, res_alpha]
+        angular_probs_upper = jax.vmap(
+            lambda p, r_index: p[r_index] / p[r_index].integrate()
+        )(
+            position_probs, radius_indices + 1
+        )  # [num_graphs, res_beta, res_alpha]
+
+        # Linearly interpolate the angular probabilities.
+        angular_probs = jax.vmap(
+            lambda p_lower, p_upper, u: p_lower + (p_upper - p_lower) * u
+        )(angular_probs_lower, angular_probs_upper, us_sampled)
 
         # Sample angles.
         rng, angular_rng = jax.random.split(rng)
@@ -235,8 +254,8 @@ class Predictor(hk.Module):
 
         # Combine the radius and angles to get the position vectors.
         position_vectors = jax.vmap(
-            lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
-        )(radius_indices, beta_indices, alpha_indices)
+            lambda r, b, a: r * angular_probs.grid_vectors[b, a]
+        )(radii_sampled, beta_indices, alpha_indices)
 
         # Predict position updates.
         if self.position_updater is None:
