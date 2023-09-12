@@ -408,9 +408,8 @@ def create_model(
 ) -> hk.Transformed:
     """Create a model as specified by the config."""
 
-    # if config.get("position_updater"):
-        # raise ValueError("Position updater is not supported.")
-        # return create_position_updater(config)
+    if config.get("position_updater"):
+        return create_position_updater(config)
     
     def model_fn(
         graphs: datatypes.Fragments,

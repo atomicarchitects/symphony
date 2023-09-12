@@ -159,7 +159,7 @@ def evaluate_step(
         focus_and_atom_type_loss,
         position_loss,
     ) = loss.generation_loss(
-        preds=preds, graphs=graphs, position_noise=None, **loss_kwargs
+        preds=preds, graphs=graphs, **loss_kwargs
     )
 
     # Consider only valid graphs.
