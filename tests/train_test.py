@@ -11,12 +11,13 @@ import jax.profiler
 import ml_collections
 import logging
 
-from symphony import models, train
+from symphony import models, train, train_position_updater
 from . import loss_test
 
-from configs.qm9 import mace, e3schnet, nequip, marionette
+from configs.qm9 import mace, e3schnet, nequip, marionette, position_updater
 from configs.tetris import nequip as tetris_nequip
 from configs.platonic_solids import nequip as platonic_solids_nequip
+from configs.platonic_solids import e3schnet_and_nequip as platonic_solids_e3schnet_and_nequip
 from configs import root_dirs
 
 # Important to see the logging messages!
@@ -28,9 +29,11 @@ _ALL_CONFIGS = {
         "mace": mace.get_config(),
         "nequip": nequip.get_config(),
         "marionette": marionette.get_config(),
+        "position_updater": position_updater.get_config(),
     },
     "tetris": {"nequip": tetris_nequip.get_config()},
-    "platonic_solids": {"nequip": platonic_solids_nequip.get_config()},
+    "platonic_solids": {"nequip": platonic_solids_nequip.get_config(),
+                        "e3schnet_and_nequip": platonic_solids_e3schnet_and_nequip.get_config()},
 }
 
 
@@ -92,6 +95,41 @@ class TrainTest(parameterized.TestCase):
 
         # Training should proceed without any errors.
         train.train_and_evaluate(config, workdir)
+
+        # Save device memory profile.
+        # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
+
+
+    @parameterized.product(
+        config_name=["position_updater"],
+        train_on_split_smaller_than_chunk=[True],
+        position_loss_type=["kl_divergence"],
+        dataset=["qm9"],
+    )
+    def test_train_and_evaluate_position_updater(
+        self,
+        config_name: str,
+        train_on_split_smaller_than_chunk: bool,
+        position_loss_type: str,
+        dataset: str,
+    ):
+        """Tests that training and evaluation runs without errors."""
+        # Ensure NaNs and Infs are detected.
+        jax.config.update("jax_debug_nans", True)
+        jax.config.update("jax_debug_infs", True)
+
+        # Load config for dummy dataset.
+        config = _ALL_CONFIGS[dataset][config_name]
+        config = update_dummy_config(
+            config, train_on_split_smaller_than_chunk, position_loss_type, dataset
+        )
+        config = ml_collections.FrozenConfigDict(config)
+
+        # Create a temporary directory where metrics are written.
+        workdir = tempfile.mkdtemp()
+
+        # Training should proceed without any errors.
+        train_position_updater.train_and_evaluate(config, workdir)
 
         # Save device memory profile.
         # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
