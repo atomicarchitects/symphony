@@ -44,6 +44,7 @@ def main(argv):
     # We only support single-host training on a single device.
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging.info("JAX local devices: %r", jax.local_devices())
+    logging.info("CUDA_VISIBLE_DEVICES: %r", os.environ.get("CUDA_VISIBLE_DEVICES"))
 
     # Add a note so that we can tell which task is which JAX host.
     # (Depending on the platform task 0 is not guaranteed to be host 0)
