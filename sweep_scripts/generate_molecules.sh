@@ -1,10 +1,10 @@
 #!/bin/sh
 
-workdir="qm9_bessel_embedding"
+workdir="qm9_bessel_embedding_attempt2"
 
-for model in "nequip"
+for model in "e3schnet_and_nequip"
 do
-for l in 1 2 3
+for l in 5
 do
   for i in 3
   do
@@ -12,9 +12,9 @@ do
     do
       for pc in 2
       do
-        for step in best
+        for step in 1000000
         do
-            CUDA_VISIBLE_DEVICES="$((l))" python -m analyses.generate_molecules  --workdir=workdirs/"$workdir"/"$model"/interactions="$i"/l="$l"/position_channels="$pc"/channels="$c"/global_embed=False  --fait=1 --pit=1 --init=C  --step="$step"  --max_num_atoms=30 --num_seeds=10000 --num_seeds_per_chunk=25 > "$workdir"_generate_l="$l".txt  2>&1  &
+            CUDA_VISIBLE_DEVICES="$((2))" python -m analyses.generate_molecules  --workdir=workdirs/"$workdir"/"$model"/interactions="$i"/l="$l"/position_channels="$pc"/channels="$c"/  --fait=1 --pit=1 --init=H  --step="$step"  --max_num_atoms=35 --num_seeds=10000 --num_seeds_per_chunk=25 > "$workdir"_generate_l="$l".txt  2>&1  &
         done
       done
     done
