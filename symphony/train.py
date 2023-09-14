@@ -66,12 +66,35 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         learning_rate_or_schedule = config.learning_rate
 
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=learning_rate_or_schedule)
+        tx = optax.adam(learning_rate=learning_rate_or_schedule)
 
     if config.optimizer == "sgd":
-        return optax.sgd(
+        tx = return optax.sgd(
             learning_rate=learning_rate_or_schedule, momentum=config.momentum
         )
+
+    if not config.get("freeze_node_embedders"):
+        return tx
+
+    # Freeze parameters of the node embedders, if required.
+    def flattened_traversal(fn):
+        """Returns function that is called with `(path, param)` instead of pytree."""
+        def mask(tree):
+            flat = flax.traverse_util.flatten_dict(tree)
+            return flax.traverse_util.unflatten_dict(
+                {k: fn(k, v) for k, v in flat.items()})
+        return mask
+
+    # Freezes all but the last layer.
+    def label_fn(path, param):
+        del param
+        if path[0].startswith("node_embedder"):
+            return "yes"
+        return "no"
+
+    return optax.multi_transform(
+        {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn))
+
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
