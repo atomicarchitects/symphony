@@ -135,8 +135,8 @@ def load_weighted_average_model_at_steps(
     )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
-    params = jax.tree_map(jnp.asarray, params)
-    return model, params, config
+    params_swa = jax.tree_map(jnp.asarray, params_swa)
+    return model, params_swa, config
 
 
 
