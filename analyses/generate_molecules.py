@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence, Tuple, Callable
+from typing import Sequence, Tuple, Callable, Optional
 
 import os
 import sys
@@ -134,6 +134,7 @@ def generate_molecules(
     init_molecule: str,
     max_num_atoms: int,
     visualize: bool,
+    steps_for_averaging_params: Optional[Sequence[int]]
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Check that we can divide the seeds into chunks properly.
@@ -150,9 +151,14 @@ def generate_molecules(
 
     # Load model.
     name = analysis.name_from_workdir(workdir)
-    model, params, config = analysis.load_model_at_step(
-        workdir, step, run_in_evaluation_mode=True
-    )
+    if steps_for_averaging_params is not None:
+        model, params, config = analysis.load_weighted_average_model_at_steps(
+            workdir, steps_for_averaging_params, run_in_evaluation_mode=True
+        )
+    else:
+        model, params, config = analysis.load_model_at_step(
+            workdir, step, run_in_evaluation_mode=True
+        )
     config = config.unlock()
     if "position_updater" in config:
         del config["position_updater"]
@@ -344,6 +350,7 @@ def main(unused_argv: Sequence[str]) -> None:
     init = FLAGS.init
     max_num_atoms = FLAGS.max_num_atoms
     visualize = FLAGS.visualize
+    steps_for_averaging_params = FLAGS.steps_for_averaging_params
 
     generate_molecules(
         workdir,
@@ -356,6 +363,7 @@ def main(unused_argv: Sequence[str]) -> None:
         init,
         max_num_atoms,
         visualize,
+        steps_for_averaging_params
     )
 
 
@@ -407,6 +415,11 @@ if __name__ == "__main__":
         "visualize",
         False,
         "Whether to visualize the generation process step-by-step.",
+    )
+    flags.DEFINE_list(
+        "steps_for_averaging_params",
+        None,
+        "Steps to average parameters over. If None, the model at the given step is used.",
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)
