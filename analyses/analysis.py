@@ -111,6 +111,33 @@ def load_model_at_step(
     return model, params, config
 
 
+def load_weighted_average_model_at_steps(
+    workdir: str, steps: Sequence[str], run_in_evaluation_mode: bool
+) -> Tuple[hk.Transformed, optax.Params, ml_collections.ConfigDict]:
+    """Loads the model at given steps, and takes an equal average of the parameters."""
+    for index, step in enumerate(steps):
+        params_file = os.path.join(workdir, f"checkpoints/params_{step}.pkl")
+        with open(params_file, "rb") as f:
+            params = pickle.load(f)
+        
+        if index == 0:
+            params_swa = params
+        else:
+            params_swa = jax.tree_map(lambda x, y: x + y, params_swa, params)
+    params_swa = jax.tree_map(lambda x: x / len(steps), params_swa)
+
+    with open(workdir + "/config.yml", "rt") as config_file:
+        config = yaml.unsafe_load(config_file)
+    assert config is not None
+    config = ml_collections.ConfigDict(config)
+    config.root_dir = root_dirs.get_root_dir(
+        config.dataset, config.get("fragment_logic", "nn")
+    )
+
+    model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
+    params = jax.tree_map(jnp.asarray, params)
+    return model, params, config
+
 
 
 def get_results_as_dataframe(basedir: str) -> pd.DataFrame:
