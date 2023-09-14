@@ -121,10 +121,10 @@ def load_weighted_average_model_at_steps(
             params = pickle.load(f)
         
         if index == 0:
-            params_swa = params
+            params_avg = params
         else:
-            params_swa = jax.tree_map(lambda x, y: x + y, params_swa, params)
-    params_swa = jax.tree_map(lambda x: x / len(steps), params_swa)
+            params_avg = jax.tree_map(lambda x, y: x + y, params_avg, params)
+    params_avg = jax.tree_map(lambda x: x / len(steps), params_avg)
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
@@ -135,8 +135,8 @@ def load_weighted_average_model_at_steps(
     )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
-    params_swa = jax.tree_map(jnp.asarray, params_swa)
-    return model, params_swa, config
+    params_avg = jax.tree_map(jnp.asarray, params_avg)
+    return model, params_avg, config
 
 
 
