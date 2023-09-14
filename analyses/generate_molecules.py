@@ -152,6 +152,7 @@ def generate_molecules(
     # Load model.
     name = analysis.name_from_workdir(workdir)
     if steps_for_weight_averaging is not None:
+        logging.info("Loading model averaged from steps %s", steps_for_weight_averaging)
         model, params, config = analysis.load_weighted_average_model_at_steps(
             workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
         )
