@@ -115,6 +115,7 @@ class E3SchNet(hk.Module):
         cutoff: float,
         max_ell: int,
         num_species: int,
+        name: Optional[str] = None,
     ):
         """
         Args:
@@ -127,7 +128,7 @@ class E3SchNet(hk.Module):
             max_ell: maximal ell for spherical harmonics
             num_species: number of species
         """
-        super().__init__()
+        super().__init__(name=name)
         self.init_embedding_dim = init_embedding_dim
         self.num_interactions = num_interactions
         self.activation = activation
