@@ -69,7 +69,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         tx = optax.adam(learning_rate=learning_rate_or_schedule)
 
     if config.optimizer == "sgd":
-        tx = return optax.sgd(
+        tx = optax.sgd(
             learning_rate=learning_rate_or_schedule, momentum=config.momentum
         )
 
