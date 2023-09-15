@@ -15,6 +15,13 @@ import optax
 import yaml
 from absl import logging
 import matplotlib.pyplot as plt
+# from graphviz import Source
+# from PIL import Image
+# from jaxlib import xla_client
+
+# def todotgraph(x):
+#     return xla_client._xla.hlo_module_to_dot_graph(xla_client._xla.hlo_module_from_text(x))
+
 
 from clu import (
     checkpoint,
@@ -85,12 +92,12 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
                 {k: fn(k, v) for k, v in flat.items()})
         return mask
 
-    # Freezes all but the last layer.
+    # Freezes the node embedders.
     def label_fn(path, param):
         del param
         if path[0].startswith("node_embedder"):
-            return "yes"
-        return "no"
+            return "no"
+        return "yes"
 
     return optax.multi_transform(
         {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn))
@@ -156,7 +163,7 @@ def train_step(
     state = state.apply_gradients(grads=grads)
 
     # Log norms of gradients.
-    grad_norms = jax.tree_map(jnp.linalg.norm, grads)
+    # grad_norms = jax.tree_map(jnp.linalg.norm, grads)
     # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -165,7 +172,7 @@ def train_step(
         position_loss=position_loss,
         mask=mask,
     )
-    return state, batch_metrics, grad_norms
+    return state, batch_metrics, None
 
 
 @functools.partial(jax.jit, static_argnames=["loss_kwargs"])
@@ -389,6 +396,7 @@ def train_and_evaluate(
     all_num_nodes = []
     all_num_edges = []
 
+    
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
@@ -402,7 +410,6 @@ def train_and_evaluate(
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
             eval_state = eval_state.replace(params=state.params)
-
             # Evaluate on validation and test splits.
             rng, eval_rng = jax.random.split(rng)
             eval_metrics = evaluate_model_helper(
@@ -458,6 +465,23 @@ def train_and_evaluate(
                 add_noise_to_positions=config.add_noise_to_positions,
                 noise_std=config.position_noise_std,
             )
+
+            # s = Source(jax.xla_computation(train_step, static_argnums=(2, 4))(
+            #     state, graphs, config.loss_kwargs, step_rng,
+            #     config.add_noise_to_positions,
+            #     config.position_noise_std,
+            # ).as_hlo_dot_graph())
+            # png_bytes = s.pipe(format='png')
+            # Image(png_bytes).save('train_step_nonjit.png')
+
+            # with open("train_step_jit.dot", "w") as f:
+            #     f.write(todotgraph(jax.jit(train_step, static_argnums=(2, 4)).lower(
+            #         state, graphs, config.loss_kwargs, step_rng,
+            #         config.add_noise_to_positions,
+            #         config.position_noise_std,
+            #     ).compile().as_text()))
+
+            # raise ValueError("Done")
 
             if LOG:
                 all_params.append(jax.tree_map(np.asarray, state.params))
