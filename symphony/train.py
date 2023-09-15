@@ -15,6 +15,7 @@ import optax
 import yaml
 from absl import logging
 import matplotlib.pyplot as plt
+
 # from graphviz import Source
 # from PIL import Image
 # from jaxlib import xla_client
@@ -86,10 +87,13 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     # Freeze parameters of the node embedders, if required.
     def flattened_traversal(fn):
         """Returns function that is called with `(path, param)` instead of pytree."""
+
         def mask(tree):
             flat = flax.traverse_util.flatten_dict(tree)
             return flax.traverse_util.unflatten_dict(
-                {k: fn(k, v) for k, v in flat.items()})
+                {k: fn(k, v) for k, v in flat.items()}
+            )
+
         return mask
 
     # Freezes the node embedders.
@@ -100,7 +104,8 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         return "yes"
 
     return optax.multi_transform(
-        {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn))
+        {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn)
+    )
 
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
@@ -188,9 +193,7 @@ def evaluate_step(
     total_loss, (
         focus_and_atom_type_loss,
         position_loss,
-    ) = loss.generation_loss(
-        preds=preds, graphs=graphs, **loss_kwargs
-    )
+    ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
 
     # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
@@ -396,7 +399,6 @@ def train_and_evaluate(
     all_num_nodes = []
     all_num_edges = []
 
-    
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
