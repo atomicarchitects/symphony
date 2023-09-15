@@ -44,13 +44,17 @@ def train_step(
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
-    def loss_fn(params: optax.Params, graphs: datatypes.Fragments, position_noise: Optional[jnp.ndarray]) -> float:
+    def loss_fn(
+        params: optax.Params,
+        graphs: datatypes.Fragments,
+        position_noise: Optional[jnp.ndarray],
+    ) -> float:
         curr_state = state.replace(params=params)
         preds = train.get_predictions(curr_state, graphs, rng=None)
-        total_loss, (
-           denoising_loss, _
-        ) = loss.denoising_loss(
-            preds=preds, graphs=graphs, position_noise=position_noise,
+        total_loss, (denoising_loss, _) = loss.denoising_loss(
+            preds=preds,
+            graphs=graphs,
+            position_noise=position_noise,
         )
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
@@ -107,9 +111,7 @@ def evaluate_step(
 
     # Compute predictions and resulting loss.
     preds = train.get_predictions(eval_state, graphs, rng)
-    total_loss, (
-        denoising_loss, _
-    ) = loss.denoising_loss(
+    total_loss, (denoising_loss, _) = loss.denoising_loss(
         preds=preds, graphs=graphs, position_noise=position_noise
     )
 
@@ -143,7 +145,9 @@ def evaluate_model(
 
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
-            batch_metrics = evaluate_step(eval_state, graphs, step_rng, add_noise_to_positions, noise_std)
+            batch_metrics = evaluate_step(
+                eval_state, graphs, step_rng, add_noise_to_positions, noise_std
+            )
 
             # Update metrics.
             if split_metrics is None:
@@ -198,7 +202,9 @@ def train_and_evaluate(
         # Compute and write metrics.
         for split in splits:
             eval_metrics[split] = eval_metrics[split].compute()
-            writer.write_scalars(step, train.add_prefix_to_keys(eval_metrics[split], split))
+            writer.write_scalars(
+                step, train.add_prefix_to_keys(eval_metrics[split], split)
+            )
         writer.flush()
 
         return eval_metrics

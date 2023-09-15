@@ -282,8 +282,9 @@ def get_num_species_for_dataset(dataset: str) -> int:
 
 
 def create_node_embedder(
-    config: ml_collections.ConfigDict, num_species: int, 
-    name_prefix: Optional[str] = None
+    config: ml_collections.ConfigDict,
+    num_species: int,
+    name_prefix: Optional[str] = None,
 ) -> hk.Module:
     if name_prefix is None:
         raise ValueError("name_prefix must be specified.")
@@ -404,13 +405,13 @@ def create_position_updater(
     def model_fn(graphs: datatypes.Fragments):
         return PositionUpdater(
             node_embedder=create_node_embedder(
-                config.position_updater.embedder_config, num_species,
-                name_prefix="position_updater"
+                config.position_updater.embedder_config,
+                num_species,
+                name_prefix="position_updater",
             )
         )(graphs)
 
     return hk.transform(model_fn)
-
 
 
 def create_model(
@@ -420,7 +421,7 @@ def create_model(
 
     if config.get("position_updater"):
         return create_position_updater(config)
-    
+
     def model_fn(
         graphs: datatypes.Fragments,
         focus_and_atom_type_inverse_temperature: float = 1.0,
@@ -442,8 +443,9 @@ def create_model(
 
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
             node_embedder=create_node_embedder(
-                config.focus_and_target_species_predictor.embedder_config, num_species,
-                name_prefix="focus_and_target_species_predictor"
+                config.focus_and_target_species_predictor.embedder_config,
+                num_species,
+                name_prefix="focus_and_target_species_predictor",
             ),
             global_embedder=global_embedder,
             latent_size=config.focus_and_target_species_predictor.latent_size,
@@ -456,8 +458,9 @@ def create_model(
         if config.target_position_predictor.get("factorized"):
             target_position_predictor = FactorizedTargetPositionPredictor(
                 node_embedder=create_node_embedder(
-                    config.target_position_predictor.embedder_config, num_species,
-                    name_prefix="target_position_predictor"
+                    config.target_position_predictor.embedder_config,
+                    num_species,
+                    name_prefix="target_position_predictor",
                 ),
                 position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
@@ -477,8 +480,9 @@ def create_model(
         else:
             target_position_predictor = TargetPositionPredictor(
                 node_embedder=create_node_embedder(
-                    config.target_position_predictor.embedder_config, num_species,
-                    name_prefix="target_position_predictor"
+                    config.target_position_predictor.embedder_config,
+                    num_species,
+                    name_prefix="target_position_predictor",
                 ),
                 position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
