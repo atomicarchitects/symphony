@@ -4,7 +4,6 @@ import functools
 import os
 import pickle
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
-import numpy as np
 import chex
 import flax
 import jax
@@ -15,13 +14,6 @@ import optax
 import yaml
 from absl import logging
 import matplotlib.pyplot as plt
-
-# from graphviz import Source
-# from PIL import Image
-# from jaxlib import xla_client
-
-# def todotgraph(x):
-#     return xla_client._xla.hlo_module_to_dot_graph(xla_client._xla.hlo_module_from_text(x))
 
 
 from clu import (
@@ -51,6 +43,24 @@ class Metrics(metrics.Collection):
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     """Adds a prefix to the keys of a dict, returning a new dict."""
     return {f"{prefix}/{key}": val for key, val in result.items()}
+
+
+def device_batch(
+    graph_iterator: Iterator[datatypes.Fragments],
+) -> Iterator[datatypes.Fragments]:
+    """Batches a set of graphs to the size of the number of devices."""
+    num_devices = jax.local_device_count()
+    batch = []
+    for idx, graph in enumerate(graph_iterator):
+        if idx % num_devices == num_devices - 1:
+            batch.append(graph)
+            batch = jax.tree_map(lambda *x: jnp.stack(x, axis=0), *batch)
+            batch = datatypes.Fragments.from_graphstuple(batch)
+            yield batch
+
+            batch = []
+        else:
+            batch.append(graph)
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
@@ -120,10 +130,10 @@ def get_predictions(
     return state.apply_fn(state.params, rng, graphs)
 
 
-@functools.partial(jax.jit, static_argnames=["loss_kwargs", "add_noise_to_positions"])
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[2, 4, 5])
 def train_step(
-    state: train_state.TrainState,
     graphs: datatypes.Fragments,
+    state: train_state.TrainState,
     loss_kwargs: Dict[str, Union[float, int]],
     rng: chex.PRNGKey,
     add_noise_to_positions: bool,
@@ -165,25 +175,25 @@ def train_step(
         _,
         (total_loss, focus_and_atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
+
+    # Average gradients across devices.
+    grads = jax.lax.pmean(grads, axis_name="device")
     state = state.apply_gradients(grads=grads)
 
-    # Log norms of gradients.
-    # grad_norms = jax.tree_map(jnp.linalg.norm, grads)
-    # jax.debug.print("grad_norms={grad_norms}", grad_norms=grad_norms)
-
-    batch_metrics = Metrics.single_from_model_output(
+    batch_metrics = Metrics.gather_from_model_output(
+        axis_name="device",
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
         mask=mask,
     )
-    return state, batch_metrics, None
+    return state, batch_metrics
 
 
-@functools.partial(jax.jit, static_argnames=["loss_kwargs"])
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3])
 def evaluate_step(
-    eval_state: train_state.TrainState,
     graphs: datatypes.Fragments,
+    eval_state: train_state.TrainState,
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
@@ -197,7 +207,8 @@ def evaluate_step(
 
     # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
-    return Metrics.single_from_model_output(
+    return Metrics.gather_from_model_output(
+        axis_name="device",
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
@@ -211,33 +222,23 @@ def evaluate_model(
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
-    mask_atom_types_in_fragments: bool,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
     # Loop over each split independently.
     eval_metrics = {}
     for split in splits:
-        split_metrics = None
+        split_metrics = flax.jax_utils.replicate(Metrics.empty())
 
         # Loop over graphs.
-        for graphs in datasets[split].as_numpy_iterator():
-            graphs = datatypes.Fragments.from_graphstuple(graphs)
-
-            if mask_atom_types_in_fragments:
-                graphs = mask_atom_types(graphs)
-
+        for graphs in device_batch(datasets[split].as_numpy_iterator()):
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
-            batch_metrics = evaluate_step(eval_state, graphs, step_rng, loss_kwargs)
+            step_rngs = jax.random.split(step_rng, jax.local_device_count())
+            batch_metrics = evaluate_step(graphs, eval_state, step_rngs, loss_kwargs)
+            split_metrics = split_metrics.merge(batch_metrics)
 
-            # Update metrics.
-            if split_metrics is None:
-                split_metrics = batch_metrics
-            else:
-                split_metrics = split_metrics.merge(batch_metrics)
-
-        eval_metrics[split] = split_metrics
+        eval_metrics[split] = split_metrics.unreplicate()
 
     return eval_metrics
 
@@ -308,7 +309,6 @@ def train_and_evaluate(
                 splits,
                 rng,
                 config.loss_kwargs,
-                config.mask_atom_types,
             )
 
         # Compute and write metrics.
@@ -322,6 +322,11 @@ def train_and_evaluate(
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
     writer.write_hparams(config.to_dict())
+
+    # Save the config for reproducibility.
+    config_path = os.path.join(workdir, "config.yml")
+    with open(config_path, "w") as f:
+        yaml.dump(config, f)
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -374,10 +379,9 @@ def train_and_evaluate(
         min_val_loss = metrics_for_best_state["val_eval"]["total_loss"]
     initial_step = int(state.step) + 1
 
-    # Save the config for reproducibility.
-    config_path = os.path.join(workdir, "config.yml")
-    with open(config_path, "w") as f:
-        yaml.dump(config, f)
+    # Replicate the training and evaluation state across devices.
+    state = flax.jax_utils.replicate(state)
+    eval_state = flax.jax_utils.replicate(eval_state)
 
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
@@ -391,7 +395,8 @@ def train_and_evaluate(
 
     # Begin training loop.
     logging.info("Starting training.")
-    train_metrics = None
+    train_metrics = flax.jax_utils.replicate(Metrics.empty())
+    train_metrics_empty = True
     all_grad_norms = []
     all_param_norms = []
     all_params = []
@@ -403,11 +408,13 @@ def train_and_evaluate(
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
         if step % config.log_every_steps == 0 or first_or_last_step:
-            if train_metrics is not None:
+            if not train_metrics_empty:
                 writer.write_scalars(
-                    step, add_prefix_to_keys(train_metrics.compute(), "train")
+                    step,
+                    add_prefix_to_keys(train_metrics.unreplicate().compute(), "train"),
                 )
-            train_metrics = None
+            train_metrics = flax.jax_utils.replicate(Metrics.empty())
+            train_metrics_empty = True
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
@@ -437,8 +444,8 @@ def train_and_evaluate(
                 pickle.dump(best_state.params, f)
             ckpt.save(
                 {
-                    "state": state,
-                    "best_state": best_state,
+                    "state": state.unreplicate(),
+                    "best_state": best_state.unreplicate(),
                     "step_for_best_state": step_for_best_state,
                     "metrics_for_best_state": metrics_for_best_state,
                 }
@@ -446,11 +453,7 @@ def train_and_evaluate(
 
         # Get a batch of graphs.
         try:
-            graphs = next(train_iter)
-            graphs = datatypes.Fragments.from_graphstuple(graphs)
-
-            if config.mask_atom_types:
-                graphs = mask_atom_types(graphs)
+            graphs = next(device_batch(train_iter))
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
@@ -459,69 +462,19 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             step_rng, rng = jax.random.split(rng)
-            state, batch_metrics, grad_norms = train_step(
-                state,
+            step_rngs = jax.random.split(step_rng, jax.local_device_count())
+            state, batch_metrics = train_step(
                 graphs,
-                loss_kwargs=config.loss_kwargs,
-                rng=step_rng,
-                add_noise_to_positions=config.add_noise_to_positions,
-                noise_std=config.position_noise_std,
+                state,
+                config.loss_kwargs,
+                step_rngs,
+                config.add_noise_to_positions,
+                config.position_noise_std,
             )
 
-            # s = Source(jax.xla_computation(train_step, static_argnums=(2, 4))(
-            #     state, graphs, config.loss_kwargs, step_rng,
-            #     config.add_noise_to_positions,
-            #     config.position_noise_std,
-            # ).as_hlo_dot_graph())
-            # png_bytes = s.pipe(format='png')
-            # Image(png_bytes).save('train_step_nonjit.png')
-
-            # with open("train_step_jit.dot", "w") as f:
-            #     f.write(todotgraph(jax.jit(train_step, static_argnums=(2, 4)).lower(
-            #         state, graphs, config.loss_kwargs, step_rng,
-            #         config.add_noise_to_positions,
-            #         config.position_noise_std,
-            #     ).compile().as_text()))
-
-            # raise ValueError("Done")
-
-            if LOG:
-                all_params.append(jax.tree_map(np.asarray, state.params))
-                all_params = all_params[-16:]
-                all_grad_norms.append(jax.tree_map(np.asarray, grad_norms))
-                all_param_norms.append(
-                    jax.tree_map(
-                        np.asarray, jax.tree_map(jnp.linalg.norm, state.params)
-                    )
-                )
-                focus_and_atom_type_loss = np.asarray(
-                    batch_metrics.compute()["focus_and_atom_type_loss"]
-                )
-                all_focus_and_atom_type_losses.append(focus_and_atom_type_loss)
-                unpadded = jraph.unpad_with_graphs(graphs)
-                all_num_nodes.append(np.asarray(unpadded.n_node))
-                all_num_edges.append(np.asarray(unpadded.n_edge))
-
-                if step % 1000 == 0:
-                    # Save arrays.
-                    with open(f"{LOGGING_DIR}/log_{step}.pkl", "wb") as f:
-                        pickle.dump(
-                            {
-                                "grad_norms": all_grad_norms,
-                                "param_norms": all_param_norms,
-                                "params": all_params,
-                                "focus_and_atom_type_losses": all_focus_and_atom_type_losses,
-                                "num_nodes": all_num_nodes,
-                                "num_edges": all_num_edges,
-                            },
-                            f,
-                        )
-
-        # Update metrics.
-        if train_metrics is None:
-            train_metrics = batch_metrics
-        else:
+            # Update metrics.
             train_metrics = train_metrics.merge(batch_metrics)
+            train_metrics_empty = False
 
         # Quick indication that training is happening.
         logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
@@ -551,8 +504,8 @@ def train_and_evaluate(
             pickle.dump(best_state.params, f)
         ckpt.save(
             {
-                "state": state,
-                "best_state": best_state,
+                "state": state.unreplicate(),
+                "best_state": best_state.unreplicate(),
                 "step_for_best_state": step_for_best_state,
                 "metrics_for_best_state": metrics_for_best_state,
             }
