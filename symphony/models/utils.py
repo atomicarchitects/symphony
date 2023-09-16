@@ -383,7 +383,7 @@ def create_model(
         else:
             raise ValueError(f"Unsupported model: {config.model}.")
 
-        if config.focus_and_target_species_predictor.compute_global_embedding:
+        if config.focus_and_target_species_predictor.get("compute_global_embedding"):
             global_embedder = GlobalEmbedder(
                 num_channels=config.focus_and_target_species_predictor.global_embedder.num_channels,
                 pooling=config.focus_and_target_species_predictor.global_embedder.pooling,
@@ -416,7 +416,7 @@ def create_model(
                 radial_mlp_activation=get_activation(
                     config.target_position_predictor.radial_mlp_activation
                 ),
-                apply_gate=config.target_position_predictor.apply_gate,
+                apply_gate=config.target_position_predictor.get("apply_gate"),
             )
         else:
             target_position_predictor = TargetPositionPredictor(
@@ -429,7 +429,7 @@ def create_model(
                 min_radius=config.target_position_predictor.min_radius,
                 max_radius=config.target_position_predictor.max_radius,
                 num_radii=config.target_position_predictor.num_radii,
-                apply_gate=config.target_position_predictor.apply_gate,
+                apply_gate=config.target_position_predictor.get("apply_gate"),
             )
 
         if config.get("position_updater") is None:
