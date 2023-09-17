@@ -238,7 +238,7 @@ def evaluate_model(
             batch_metrics = evaluate_step(graphs, eval_state, step_rngs, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
 
-        eval_metrics[split] = split_metrics.unreplicate()
+        eval_metrics[split] = flax.jax_utils.unreplicate(split_metrics)
 
     return eval_metrics
 
@@ -411,7 +411,7 @@ def train_and_evaluate(
             if not train_metrics_empty:
                 writer.write_scalars(
                     step,
-                    add_prefix_to_keys(train_metrics.unreplicate().compute(), "train"),
+                    add_prefix_to_keys(flax.jax_utils.unreplicate(train_metrics).compute(), "train"),
                 )
             train_metrics = flax.jax_utils.replicate(Metrics.empty())
             train_metrics_empty = True
@@ -444,8 +444,8 @@ def train_and_evaluate(
                 pickle.dump(best_state.params, f)
             ckpt.save(
                 {
-                    "state": state.unreplicate(),
-                    "best_state": best_state.unreplicate(),
+                    "state": flax.jax_utils.unreplicate(state),
+                    "best_state": flax.jax_utils.unreplicate(best_state),
                     "step_for_best_state": step_for_best_state,
                     "metrics_for_best_state": metrics_for_best_state,
                 }
@@ -504,8 +504,8 @@ def train_and_evaluate(
             pickle.dump(best_state.params, f)
         ckpt.save(
             {
-                "state": state.unreplicate(),
-                "best_state": best_state.unreplicate(),
+                "state": flax.jax_utils.unreplicate(state),
+                "best_state": flax.jax_utils.unreplicate(best_state),
                 "step_for_best_state": step_for_best_state,
                 "metrics_for_best_state": metrics_for_best_state,
             }

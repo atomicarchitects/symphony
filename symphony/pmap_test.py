@@ -6,4 +6,5 @@ import jax.numpy as jnp
 def normalize(x):
   return x / jax.lax.psum(x, 'i')
 
+print(jax.local_device_count())
 print(normalize(jnp.arange(4.)))
