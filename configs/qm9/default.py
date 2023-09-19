@@ -9,7 +9,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
-    config.fragment_logic = "nn"
+    config.fragment_logic = "nn_edm"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
     config.train_molecules = (0, 100000)
