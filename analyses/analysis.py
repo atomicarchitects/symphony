@@ -98,6 +98,9 @@ def load_model_at_step(
     with open(params_file, "rb") as f:
         params = pickle.load(f)
 
+    # Remove the batch dimension, if it exists.
+    params = jax.tree_map(lambda x: x[0], params)
+
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
     assert config is not None

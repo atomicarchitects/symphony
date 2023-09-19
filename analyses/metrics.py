@@ -136,10 +136,13 @@ def compute_maximum_mean_discrepancy(
 
     def mmd_rbf(X: chex.Array, Y: chex.Array, gammas: chex.Array) -> float:
         """MMD using RBF (Gaussian) kernel."""
-        XX = jax.vmap(lambda gamma: rbf_kernel(X, X, gamma))(gammas).sum(axis=0)
-        YY = jax.vmap(lambda gamma: rbf_kernel(Y, Y, gamma))(gammas).sum(axis=0)
-        XY = jax.vmap(lambda gamma: rbf_kernel(X, Y, gamma))(gammas).sum(axis=0)
-        return XX.mean() + YY.mean() - 2 * XY.mean()
+        def squared_mmd_rbf_kernel(gamma: float) -> float:
+            XX = rbf_kernel(X, X, gamma).mean()
+            YY = rbf_kernel(Y, Y, gamma).mean()
+            XY = rbf_kernel(X, Y, gamma).mean()
+            return jnp.abs(XX + YY - 2 * XY)
+
+        return jnp.sqrt(jax.vmap(squared_mmd_rbf_kernel)(gammas).sum())
 
     def mmd_rbf_batched(
         X: chex.Array, Y: chex.Array, gammas: chex.Array, rng: chex.PRNGKey
@@ -448,7 +451,7 @@ def get_posebusters_results(molecules: Sequence[Chem.Mol], full_report: bool = F
     return posebusters.PoseBusters(config="mol").bust(mol_pred=molecules, full_report=full_report)
 
 
-def get_edm_analyses_results(
+def get_all_edm_analyses_results(
     molecules_basedir: str, extract_hyperparams_from_path: bool, read_as_sdf: bool
 ) -> pd.DataFrame:
     """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
@@ -491,12 +494,7 @@ def get_edm_analyses_results(
     # Analyze each directory.
     results = pd.DataFrame()
     for molecules_dir in molecules_dirs:
-        metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
-            molecules_dir, read_as_sdf=read_as_sdf
-        )
-        metrics_df = pd.DataFrame().from_dict(
-            {"path": molecules_dir, **{key: [val] for key, val in metrics.items()}}
-        )
+        metrics_df = get_edm_analyses_results(molecules_dir, read_as_sdf)
         results = pd.concat([results, metrics_df], ignore_index=True)
 
     # Extract hyperparameters from path.
@@ -520,3 +518,15 @@ def get_edm_analyses_results(
         results["model"] = paths.apply(find_model_in_path)
 
     return results
+
+
+def get_edm_analyses_results(
+    molecules_dir: str, read_as_sdf: bool
+) -> pd.DataFrame:
+    """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
+    metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
+        molecules_dir, read_as_sdf=read_as_sdf
+    )
+    return pd.DataFrame().from_dict(
+        {"path": molecules_dir, **{key: [val] for key, val in metrics.items()}}
+    )
