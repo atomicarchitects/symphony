@@ -381,6 +381,7 @@ def train_and_evaluate(
 
     # Replicate the training and evaluation state across devices.
     state = flax.jax_utils.replicate(state)
+    best_state = flax.jax_utils.replicate(best_state)
     eval_state = flax.jax_utils.replicate(eval_state)
 
     # Hooks called periodically during training.
@@ -439,9 +440,9 @@ def train_and_evaluate(
 
             # Save the current state and best state seen so far.
             with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
-                pickle.dump(state.params, f)
+                pickle.dump(flax.jax_utils.unreplicate(state.params), f)
             with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-                pickle.dump(best_state.params, f)
+                pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
             ckpt.save(
                 {
                     "state": flax.jax_utils.unreplicate(state),
@@ -501,7 +502,7 @@ def train_and_evaluate(
     # Save pickled parameters for easy access during evaluation.
     with report_progress.timed("checkpoint"):
         with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-            pickle.dump(best_state.params, f)
+            pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
         ckpt.save(
             {
                 "state": flax.jax_utils.unreplicate(state),
