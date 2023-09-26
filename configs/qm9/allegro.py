@@ -5,9 +5,9 @@ import ml_collections
 from configs.qm9 import default
 
 
-def get_config() -> ml_collections.ConfigDict:
+def get_embedder_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the Allegro model."""
-    config = default.get_config()
+    config = ml_collections.ConfigDict()
 
     # NequIP hyperparameters.
     config.model = "Allegro"
@@ -22,4 +22,15 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_basis_fns = 8
     config.use_pseudoscalars_and_pseudovectors = False
 
+    return config
+
+
+def get_config() -> ml_collections.ConfigDict:
+    """Get the hyperparameter configuration for the NequIP model."""
+    config = default.get_config()
+
+    config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
+    config.target_position_predictor.embedder_config = get_embedder_config()
+
+    # NequIP hyperparameters.
     return config

@@ -25,5 +25,7 @@ class PositionUpdater(hk.Module):
     def __call__(self, graphs: datatypes.Fragments) -> jnp.ndarray:
         # Project each embedding to a vector, representing the update in input positions.
         node_embeddings = self.compute_node_embeddings(graphs)
-        position_update = e3nn.haiku.Linear("1o", force_irreps_out=True)(node_embeddings)
+        position_update = e3nn.haiku.Linear("1o", force_irreps_out=True)(
+            node_embeddings
+        )
         return position_update.array

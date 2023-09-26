@@ -3,6 +3,7 @@
 This file is intentionally kept short.
 The majority for logic is in libraries that can be easily tested.
 """
+import os
 
 from absl import app
 from absl import flags
@@ -14,7 +15,7 @@ from ml_collections import config_flags
 import tensorflow as tf
 
 
-from symphony import train
+from symphony import train, train_position_updater
 from configs import root_dirs
 
 
@@ -33,6 +34,9 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
+    # Make sure the dataloader is deterministic.
+    os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+
     # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
     # it unavailable to JAX.
     tf.config.experimental.set_visible_devices([], "GPU")
@@ -40,6 +44,7 @@ def main(argv):
     # We only support single-host training on a single device.
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging.info("JAX local devices: %r", jax.local_devices())
+    logging.info("CUDA_VISIBLE_DEVICES: %r", os.environ.get("CUDA_VISIBLE_DEVICES"))
 
     # Add a note so that we can tell which task is which JAX host.
     # (Depending on the platform task 0 is not guaranteed to be host 0)
@@ -57,7 +62,10 @@ def main(argv):
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
-    train.train_and_evaluate(config, FLAGS.workdir)
+    if config.get("position_updater"):
+        train_position_updater.train_and_evaluate(config, FLAGS.workdir)
+    else:
+        train.train_and_evaluate(config, FLAGS.workdir)
 
 
 if __name__ == "__main__":

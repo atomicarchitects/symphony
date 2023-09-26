@@ -98,6 +98,10 @@ def load_model_at_step(
     with open(params_file, "rb") as f:
         params = pickle.load(f)
 
+    # Remove the batch dimension, if it exists.
+    if "attempt6" in workdir and int(step) < 5000000:
+        params = jax.tree_map(lambda x: x[0], params)
+
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
     assert config is not None
@@ -110,6 +114,33 @@ def load_model_at_step(
     params = jax.tree_map(jnp.asarray, params)
     return model, params, config
 
+
+def load_weighted_average_model_at_steps(
+    workdir: str, steps: Sequence[str], run_in_evaluation_mode: bool
+) -> Tuple[hk.Transformed, optax.Params, ml_collections.ConfigDict]:
+    """Loads the model at given steps, and takes an equal average of the parameters."""
+    for index, step in enumerate(steps):
+        params_file = os.path.join(workdir, f"checkpoints/params_{step}.pkl")
+        with open(params_file, "rb") as f:
+            params = pickle.load(f)
+        
+        if index == 0:
+            params_avg = params
+        else:
+            params_avg = jax.tree_map(lambda x, y: x + y, params_avg, params)
+    params_avg = jax.tree_map(lambda x: x / len(steps), params_avg)
+
+    with open(workdir + "/config.yml", "rt") as config_file:
+        config = yaml.unsafe_load(config_file)
+    assert config is not None
+    config = ml_collections.ConfigDict(config)
+    config.root_dir = root_dirs.get_root_dir(
+        config.dataset, config.get("fragment_logic", "nn")
+    )
+
+    model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
+    params_avg = jax.tree_map(jnp.asarray, params_avg)
+    return model, params_avg, config
 
 
 

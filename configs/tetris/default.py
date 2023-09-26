@@ -56,7 +56,9 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    config.focus_and_target_species_predictor.global_embedder = ml_collections.ConfigDict()
+    config.focus_and_target_species_predictor.global_embedder = (
+        ml_collections.ConfigDict()
+    )
     config.focus_and_target_species_predictor.global_embedder.num_channels = 1
     config.focus_and_target_species_predictor.global_embedder.pooling = "attention"
     config.focus_and_target_species_predictor.global_embedder.num_attention_heads = 2

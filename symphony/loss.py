@@ -133,7 +133,6 @@ def earthmover_distance_for_radii(
 def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
-    position_noise: Optional[jnp.ndarray],
     radius_rbf_variance: float,
     target_position_inverse_temperature: float,
     target_position_lmax: Optional[int],
@@ -141,7 +140,7 @@ def generation_loss(
     position_loss_type: str,
     radial_loss_scaling_factor: Optional[float],
     mask_atom_types: bool,
-) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
+) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
         preds (datatypes.Predictions): the model predictions
@@ -281,7 +280,9 @@ def generation_loss(
             models.compute_coefficients_of_logits_of_joint_distribution
         )(true_radial_logits, log_true_angular_coeffs)
         # We only support num_channels = 1.
-        log_predicted_dist_coeffs = log_position_coeffs.reshape(log_true_dist_coeffs.shape)
+        log_predicted_dist_coeffs = log_position_coeffs.reshape(
+            log_true_dist_coeffs.shape
+        )
 
         assert target_positions.shape == (num_graphs, 3)
         assert log_true_dist_coeffs.shape == (
@@ -423,46 +424,13 @@ def generation_loss(
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
-    def denoising_loss() -> jnp.ndarray:
-        """Computes the loss for denoising atom positions."""
-        predicted_position_updates = preds.nodes.position_updates
-
-        if position_noise is None or predicted_position_updates is None:
-            return jnp.zeros((num_graphs,))
-
-        # Subtract out the mean position noise.
-        # This handles translation invariance.
-        # Maybe drop? Depending on the results.
-        # predicted_position_noise -= jraph.segment_mean(
-        #     predicted_position_noise, segment_ids, num_graphs
-        # )[segment_ids]
-        # position_noise -= jraph.segment_mean(
-        #     position_noise, segment_ids, num_graphs
-        # )[segment_ids]
-
-        # TODO: Handle rotation.
-
-        # Compute the L2 loss.
-        loss_denoising = jraph.segment_mean(
-            jnp.sum(
-                jnp.square(predicted_position_updates - position_noise), axis=-1
-            ),
-            segment_ids,
-            num_graphs,
-        )
-        assert loss_denoising.shape == (num_graphs,)
-        return loss_denoising
-
     # If we should predict a STOP for this fragment, we do not have to predict a position.
-    # We predict a denoising loss only for finished fragments.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
-    loss_denoising = (graphs.globals.stop) * denoising_loss()
 
     # COMMENT LATER.
     # loss_position = jnp.zeros_like(loss_position)
     # loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
-    # loss_denoising = jnp.zeros_like(loss_denoising)
 
     # Mask out the loss for atom types?
     if mask_atom_types:
@@ -473,8 +441,44 @@ def generation_loss(
     if ignore_position_loss_for_small_fragments:
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
-    total_loss = loss_focus_and_atom_type + loss_position + loss_denoising
-    return total_loss, (loss_focus_and_atom_type, loss_position, loss_denoising)
+    total_loss = loss_focus_and_atom_type + loss_position
+    return total_loss, (loss_focus_and_atom_type, loss_position)
+
+
+@jax.profiler.annotate_function
+def denoising_loss(
+    preds: jnp.ndarray,
+    graphs: datatypes.Fragments,
+    position_noise: jnp.ndarray,
+    center_at_zero: bool = True,
+) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray]]:
+    """Computes the loss for denoising atom positions."""
+    num_graphs = graphs.n_node.shape[0]
+    num_nodes = graphs.nodes.positions.shape[0]
+    segment_ids = models.get_segment_ids(graphs.n_node, num_nodes)
+
+    if position_noise is None or preds is None:
+        return jnp.zeros((num_graphs,))
+
+    # Subtract out the mean position noise.
+    # This handles translation invariance.
+    if center_at_zero:
+        preds -= jraph.segment_mean(preds, segment_ids, num_graphs)[segment_ids]
+        position_noise -= jraph.segment_mean(position_noise, segment_ids, num_graphs)[
+            segment_ids
+        ]
+
+    # Compute the L2 loss.
+    loss_denoising = jraph.segment_mean(
+        jnp.sum(jnp.square(preds - position_noise), axis=-1),
+        segment_ids,
+        num_graphs,
+    )
+    assert loss_denoising.shape == (num_graphs,)
+
+    # We predict a denoising loss only for finished fragments.
+    loss_denoising = (graphs.globals.stop) * loss_denoising
+    return loss_denoising, (loss_denoising, None)
 
 
 def clash_loss(
