@@ -134,7 +134,7 @@ def generate_molecules(
     init_molecule: str,
     max_num_atoms: int,
     visualize: bool,
-    steps_for_weight_averaging: Optional[Sequence[int]]
+    steps_for_weight_averaging: Optional[Sequence[int]] = None
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Check that we can divide the seeds into chunks properly.

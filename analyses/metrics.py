@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import os
 import tqdm
+from rdkit import RDLogger
 import rdkit.Chem as Chem
 from rdkit.Chem import rdDetermineBonds
 import e3nn_jax as e3nn
@@ -523,7 +524,12 @@ def get_all_edm_analyses_results(
 def get_edm_analyses_results(
     molecules_dir: str, read_as_sdf: bool
 ) -> pd.DataFrame:
-    """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
+    """Returns the EDM analyses results for the given directory as a pandas dataframe."""
+    # Disable RDKit logging.
+    RDLogger.DisableLog('rdApp.info')
+    logger = RDLogger.logger()
+    logger.setLevel(RDLogger.CRITICAL)
+
     metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
         molecules_dir, read_as_sdf=read_as_sdf
     )
