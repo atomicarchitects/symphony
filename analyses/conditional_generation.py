@@ -23,7 +23,7 @@ step = "4950000"
 num_seeds_per_chunk = 25
 max_num_atoms = 35
 visualize = False
-num_mols = 2
+num_mols = 5
 
 all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
 test_mols = all_mols[-num_mols:]
