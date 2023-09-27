@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence, Tuple, Callable, Optional
+from typing import Sequence, Tuple, Callable, Optional, Union
 
 import os
 import sys
@@ -131,10 +131,11 @@ def generate_molecules(
     step: str,
     num_seeds: int,
     num_seeds_per_chunk: int,
-    init_molecule: str,
+    init_molecule: Union[str, ase.Atoms],
     max_num_atoms: int,
     visualize: bool,
-    steps_for_weight_averaging: Optional[Sequence[int]]
+    steps_for_weight_averaging: Optional[Sequence[int]],
+    save: bool = True
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Check that we can divide the seeds into chunks properly.
@@ -144,10 +145,13 @@ def generate_molecules(
         )
 
     # Create initial molecule, if provided.
-    init_molecule, init_molecule_name = analysis.construct_molecule(init_molecule)
-    logging.info(
-        f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
-    )
+    if type(init_molecule) == str:
+        init_molecule, init_molecule_name = analysis.construct_molecule(init_molecule)
+        logging.info(
+            f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
+        )
+    else:
+        init_molecule_name = str(init_molecule.symbols)
 
     # Load model.
     name = analysis.name_from_workdir(workdir)
@@ -327,13 +331,16 @@ def generate_molecules(
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
 
-    # Save the generated molecules as an ASE database.
-    output_db = os.path.join(
-        molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
-    )
-    with connect(output_db) as conn:
-        for mol in molecule_list:
-            conn.write(mol)
+    if save:
+        # Save the generated molecules as an ASE database.
+        output_db = os.path.join(
+            molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
+        )
+        with connect(output_db) as conn:
+            for mol in molecule_list:
+                conn.write(mol)
+    else:
+        return molecule_list
 
 
 def main(unused_argv: Sequence[str]) -> None:
