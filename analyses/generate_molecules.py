@@ -206,6 +206,7 @@ def generate_molecules(
     ) for init_fragment in init_fragments]
     init_fragments = jax.tree_map(lambda *err: np.stack(err), *init_fragments)
     init_fragments = jax.vmap(lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment))(init_fragments)
+    print(jax.tree_map(jnp.shape, init_fragments))
 
     @jax.jit
     def chunk_and_apply(
