@@ -49,21 +49,21 @@ for i in range(num_mols):
             positions=np.vstack([mol.positions[:j], mol.positions[j + 1 :]]),
             numbers=np.concatenate([mol.numbers[:j], mol.numbers[j + 1 :]]),
         )
-        gen_mol_list = generate_molecules.generate_molecules(
-            workdir,
-            outputdir,
-            beta_species,
-            beta_position,
-            step,
-            num_seeds,
-            num_seeds_per_chunk,
-            mol_frag,
-            max_num_atoms,
-            visualize,
-            None,
-            save=False
-        )
-        mol_list.append(gen_mol_list)
+        mol_list.append(mol_frag)
+
+gen_mol_list = generate_molecules.generate_molecules(
+    workdir,
+    outputdir,
+    beta_species,
+    beta_position,
+    step,
+    len(mol_list),
+    num_seeds_per_chunk,
+    mol_list,
+    max_num_atoms,
+    visualize,
+    None
+)
 
 output_db = os.path.join(
     outputdir, f"generated_molecules_symphony.db"
