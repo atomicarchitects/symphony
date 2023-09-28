@@ -6,8 +6,11 @@ import ase.io
 import os
 import numpy as np
 import logging
+import sys
 
 logging.getLogger().setLevel(logging.INFO)
+
+sys.path.append("..")
 
 import analyses.generate_molecules as generate_molecules
 
