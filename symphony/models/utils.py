@@ -77,6 +77,58 @@ def get_segment_ids(
     )
 
 
+def sample_from_angular_distribution_with_radial_field(
+    angular_probs: e3nn.SphericalSignal,
+    radial_field: e3nn.SphericalSignal,
+    rng: chex.PRNGKey,
+):
+    """Sample a unit vector from an angular distribution."""
+    beta_index, alpha_index = angular_probs.sample(rng)
+    return (
+        radial_field.grid_values[beta_index, alpha_index]
+        * angular_probs.grid_vectors[beta_index, alpha_index]
+    )
+
+
+def sample_from_angular_distribution(
+    angular_probs: e3nn.SphericalSignal, rng: chex.PRNGKey
+):
+    """Sample a unit vector from an angular distribution."""
+    beta_index, alpha_index = angular_probs.sample(rng)
+    return angular_probs.grid_vectors[beta_index, alpha_index]
+
+
+def sample_from_position_distribution(
+    position_probs: e3nn.SphericalSignal, radii: jnp.ndarray, rng: chex.PRNGKey
+) -> jnp.ndarray:
+    """Samples a position vector from a distribution over all positions."""
+    num_radii = radii.shape[0]
+    assert radii.shape == (num_radii,)
+    assert position_probs.shape == (
+        num_radii,
+        position_probs.res_beta,
+        position_probs.res_alpha,
+    )
+
+    # Sample a radius.
+    radial_probs = position_distribution_to_radial_distribution(position_probs)
+    rng, radius_rng = jax.random.split(rng)
+    radius_index = jax.random.choice(radius_rng, num_radii, p=radial_probs)
+
+    # Get the angular probabilities.
+    angular_probs = (
+        position_probs[radius_index] / position_probs[radius_index].integrate()
+    )
+
+    # Sample angles.
+    rng, angular_rng = jax.random.split(rng)
+    unit_vector = sample_from_angular_distribution(angular_probs, angular_rng)
+
+    # Combine the radius and angles to get the position vectors.
+    position_vector = radii[radius_index] * unit_vector
+    return position_vector
+
+
 def segment_sample_2D(
     species_probabilities: jnp.ndarray,
     segment_ids: jnp.ndarray,
@@ -130,10 +182,11 @@ def segment_sample_2D(
 
 
 def log_coeffs_to_logits(
-    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int, num_radii: int
+    log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int
 ) -> e3nn.SphericalSignal:
     """Converts coefficients of the logits to a SphericalSignal representing the logits."""
     num_channels = log_coeffs.shape[0]
+    num_radii = log_coeffs.shape[1]
     assert log_coeffs.shape == (
         num_channels,
         num_radii,

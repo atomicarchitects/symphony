@@ -408,7 +408,9 @@ def train_and_evaluate(
             if not train_metrics_empty:
                 writer.write_scalars(
                     step,
-                    add_prefix_to_keys(flax.jax_utils.unreplicate(train_metrics).compute(), "train"),
+                    add_prefix_to_keys(
+                        flax.jax_utils.unreplicate(train_metrics).compute(), "train"
+                    ),
                 )
             train_metrics = flax.jax_utils.replicate(Metrics.empty())
             train_metrics_empty = True

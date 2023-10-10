@@ -194,37 +194,14 @@ class Predictor(hk.Module):
 
         # Sample the radius.
         radii = self.target_position_predictor.create_radii()
-        radial_bins = jnp.tile(radii, (num_graphs, 1))
-        radial_probs = jax.vmap(utils.position_distribution_to_radial_distribution)(
-            position_probs
-        )
-        num_radii = radii.shape[0]
-        rng, radius_rng = jax.random.split(rng)
-        radius_rngs = jax.random.split(radius_rng, num_graphs)
-        radius_indices = jax.vmap(
-            lambda key, p: jax.random.choice(key, num_radii, p=p)
-        )(
-            radius_rngs, radial_probs
-        )  # [num_graphs]
-
-        # Get the angular probabilities.
-        angular_probs = jax.vmap(
-            lambda p, r_index: p[r_index] / p[r_index].integrate()
-        )(
-            position_probs, radius_indices
-        )  # [num_graphs, res_beta, res_alpha]
-
-        # Sample angles.
-        rng, angular_rng = jax.random.split(rng)
-        angular_rngs = jax.random.split(angular_rng, num_graphs)
-        beta_indices, alpha_indices = jax.vmap(lambda key, p: p.sample(key))(
-            angular_rngs, angular_probs
-        )
-
-        # Combine the radius and angles to get the position vectors.
+        rng, position_rng = jax.random.split(rng)
+        position_rngs = jax.random.split(position_rng, num_graphs)
         position_vectors = jax.vmap(
-            lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
-        )(radius_indices, beta_indices, alpha_indices)
+            utils.sample_from_position_distribution, in_axes=(0, None, 0)
+        )(position_probs, radii, position_rngs)
+
+        # The radii bins used for the position prediction, repeated for each graph.
+        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_graphs))
 
         assert stop.shape == (num_graphs,)
         assert focus_indices.shape == (num_graphs,)

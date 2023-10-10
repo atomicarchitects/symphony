@@ -105,7 +105,9 @@ def molecule_sanity(mol: Chem.Mol) -> bool:
     return all(results.values())
 
 
-def load_qm9(root_dir: str, use_edm_splits: bool, check_molecule_sanity: bool) -> List[ase.Atoms]:
+def load_qm9(
+    root_dir: str, use_edm_splits: bool, check_molecule_sanity: bool
+) -> List[ase.Atoms]:
     """Load the QM9 dataset."""
     if use_edm_splits and check_molecule_sanity:
         raise ValueError(
@@ -155,6 +157,7 @@ def get_edm_splits(root_dir: str):
     """
     Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py.
     """
+
     def is_int(string):
         try:
             int(string)
@@ -163,36 +166,40 @@ def get_edm_splits(root_dir: str):
             return False
 
     logging.info("Using EDM splits. This drops some molecules.")
-    gdb9_url_excluded = 'https://springernature.figshare.com/ndownloader/files/3195404'
-    gdb9_txt_excluded = os.path.join(root_dir, 'uncharacterized.txt')
+    gdb9_url_excluded = "https://springernature.figshare.com/ndownloader/files/3195404"
+    gdb9_txt_excluded = os.path.join(root_dir, "uncharacterized.txt")
     urllib.request.urlretrieve(gdb9_url_excluded, filename=gdb9_txt_excluded)
 
     # First, get list of excluded indices.
     excluded_strings = []
     with open(gdb9_txt_excluded) as f:
         lines = f.readlines()
-        excluded_strings = [line.split()[0]
-                            for line in lines if len(line.split()) > 0]
+        excluded_strings = [line.split()[0] for line in lines if len(line.split()) > 0]
 
     excluded_idxs = [int(idx) - 1 for idx in excluded_strings if is_int(idx)]
 
-    assert len(excluded_idxs) == 3054, 'There should be exactly 3054 excluded atoms. Found {}'.format(
-        len(excluded_idxs))
+    assert (
+        len(excluded_idxs) == 3054
+    ), "There should be exactly 3054 excluded atoms. Found {}".format(
+        len(excluded_idxs)
+    )
 
     # Now, create a list of included indices.
     Ngdb9 = 133885
     Nexcluded = 3054
 
-    included_idxs = np.array(
-        sorted(list(set(range(Ngdb9)) - set(excluded_idxs))))
+    included_idxs = np.array(sorted(list(set(range(Ngdb9)) - set(excluded_idxs))))
 
     # Now, generate random permutations to assign molecules to training/validation/test sets.
     Nmols = Ngdb9 - Nexcluded
-    assert Nmols == len(included_idxs), 'Number of included molecules should be equal to Ngdb9 - Nexcluded. Found {} {}'.format(
-        Nmols, len(included_idxs))
+    assert Nmols == len(
+        included_idxs
+    ), "Number of included molecules should be equal to Ngdb9 - Nexcluded. Found {} {}".format(
+        Nmols, len(included_idxs)
+    )
 
     Ntrain = 100000
-    Ntest = int(0.1*Nmols)
+    Ntest = int(0.1 * Nmols)
     Nvalid = Nmols - (Ntrain + Ntest)
 
     # Generate random permutation.
@@ -200,18 +207,20 @@ def get_edm_splits(root_dir: str):
     data_permutation = np.random.permutation(Nmols)
 
     train, valid, test, extra = np.split(
-        data_permutation, [Ntrain, Ntrain+Nvalid, Ntrain+Nvalid+Ntest])
+        data_permutation, [Ntrain, Ntrain + Nvalid, Ntrain + Nvalid + Ntest]
+    )
 
-    assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
-        len(train), len(valid), len(test), len(extra))
+    assert len(extra) == 0, "Split was inexact {} {} {} {}".format(
+        len(train), len(valid), len(test), len(extra)
+    )
 
     train = included_idxs[train]
     valid = included_idxs[valid]
     test = included_idxs[test]
 
-    splits = {'train': train, 'valid': valid, 'test': test}
-    np.savez(os.path.join(root_dir, 'edm_splits.npz'), **splits)
-    print(os.path.join(root_dir, 'edm_splits.npz'))
+    splits = {"train": train, "valid": valid, "test": test}
+    np.savez(os.path.join(root_dir, "edm_splits.npz"), **splits)
+    print(os.path.join(root_dir, "edm_splits.npz"))
 
     # Cleanup file.
     try:

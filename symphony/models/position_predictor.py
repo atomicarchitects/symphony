@@ -107,7 +107,7 @@ class TargetPositionPredictor(hk.Module):
         # Convert the coefficients to a signal on the grid.
         position_logits = jax.vmap(
             lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, self.num_radii
+                coeffs, self.res_beta, self.res_alpha
             )
         )(log_position_coeffs)
         assert position_logits.shape == (
@@ -227,7 +227,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         angular_logits = jax.vmap(
             lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, 1
+                coeffs, self.res_beta, self.res_alpha
             )
         )(
             log_angular_coeffs[:, :, None, :]
@@ -254,7 +254,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         # Convert the coefficients to a signal on the grid.
         position_logits = jax.vmap(
             lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, self.num_radii
+                coeffs, self.res_beta, self.res_alpha
             )
         )(log_position_coeffs)
         assert position_logits.shape == (
