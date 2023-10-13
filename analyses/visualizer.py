@@ -287,7 +287,7 @@ def get_plotly_traces_for_predictions(
         )
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
-    position_coeffs = pred.globals.position_coeffs
+    position_coeffs = pred.globals.log_position_coeffs
     radii = pred.globals.radial_bins
     num_radii = radii.shape[0]
     position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99, num_radii)
@@ -466,7 +466,7 @@ def visualize_predictions(
         rows=1,
         cols=4,
         specs=[[{"type": "scene"}, {"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
-        column_widths=[0.4, 0.4, 0.1, 0.1],
+        column_widths=[0.3, 0.3, 0.2, 0.1],
         subplot_titles=("Input Fragment", "Predictions", "", ""),
     )
 

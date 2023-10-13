@@ -137,7 +137,7 @@ def main(unused_argv) -> None:
     logging.set_stderrthreshold(logging.INFO)
 
     # Create a list of arguments to pass to generate_all_fragments
-    molecules = qm9.load_qm9("qm9_data")
+    molecules = qm9.load_qm9("qm9_data", use_edm_splits=FLAGS.use_edm_splits, check_molecule_sanity=FLAGS.check_molecule_sanity)
     chunk_size = FLAGS.chunk
     args_list = [
         (
@@ -161,18 +161,20 @@ def main(unused_argv) -> None:
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
-    tqdm.contrib.concurrent.process_map(_generate_all_fragments_wrapper, args_list)
+    tqdm.contrib.concurrent.process_map(_generate_all_fragments_wrapper, args_list, chunksize=128)
 
 
 if __name__ == "__main__":
     flags.DEFINE_integer("start_seed", 0, "Start random seed.")
     flags.DEFINE_integer("end_seed", 8, "End random seed.")
-    flags.DEFINE_integer("chunk", 5000, "Number of molecules per fragment file.")
+    flags.DEFINE_integer("chunk", 1000, "Number of molecules per fragment file.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
-    flags.DEFINE_string("output_dir", "qm9_fixed", "Output directory.")
+    flags.DEFINE_bool("check_molecule_sanity", False, "Whether to check molecule sanity. Note that this is incompatible with use_edm_splits=True.")
+    flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
+    flags.DEFINE_string("output_dir", "qm9_fragments_fixed/nn_edm/", "Output directory.")
     flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
-    flags.DEFINE_bool("heavy_first", True, "Heavy atoms first.")
+    flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")

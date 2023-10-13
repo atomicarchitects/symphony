@@ -238,7 +238,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
                 coeffs, self.res_beta, self.res_alpha, 1
             )
         )(
-            log_angular_coeffs[:, None, :]
+            log_angular_coeffs[:, :, None, :]
         )  # only one radius
 
         # Mix the radial components with each channel of the angular components.

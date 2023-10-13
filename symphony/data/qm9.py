@@ -3,8 +3,7 @@ from typing import List
 import logging
 import os
 import zipfile
-from urllib.request import urlopen
-from urllib.error import URLError
+import urllib
 import numpy as np
 import ase
 import rdkit.Chem as Chem
@@ -31,8 +30,8 @@ def download_url(url: str, root: str) -> str:
         if os.path.exists(file_path):
             logging.info(f"Using downloaded file: {file_path}")
             return file_path
-        data = urlopen(url)
-    except URLError:
+        data = urllib.request.urlopen(url)
+    except urllib.error.URLError:
         # No internet connection
         if os.path.exists(file_path):
             logging.info(f"No internet connection! Using downloaded file: {file_path}")
@@ -86,7 +85,7 @@ def extract_zip(path: str, root: str):
             f.extract(name, root)
 
 
-def check_molecule_sanity(mol: Chem.Mol) -> bool:
+def molecule_sanity(mol: Chem.Mol) -> bool:
     """Check that the molecule passes some basic sanity checks from Posebusters.
     Source: https://github.com/maabuu/posebusters/blob/main/posebusters/modules/sanity.py
     """
@@ -106,8 +105,13 @@ def check_molecule_sanity(mol: Chem.Mol) -> bool:
     return all(results.values())
 
 
-def load_qm9(root_dir: str) -> List[ase.Atoms]:
+def load_qm9(root_dir: str, use_edm_splits: bool, check_molecule_sanity: bool) -> List[ase.Atoms]:
     """Load the QM9 dataset."""
+    if use_edm_splits and check_molecule_sanity:
+        raise ValueError(
+            "EDM splits are not compatible with sanity checks. Set check_molecule_sanity as False."
+        )
+
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
 
@@ -115,17 +119,18 @@ def load_qm9(root_dir: str) -> List[ase.Atoms]:
     extract_zip(path, root_dir)
 
     raw_mols_path = os.path.join(root_dir, "gdb9.sdf")
-    supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=True)
+    supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=False)
 
     mols_as_ase = []
     for mol in supplier:
         if mol is None:
             continue
 
-        # Check that the molecule passes some basic checks
-        sane = check_molecule_sanity(mol)
-        if not sane:
-            continue
+        # Check that the molecule passes some basic checks from Posebusters.
+        if check_molecule_sanity:
+            sane = molecule_sanity(mol)
+            if not sane:
+                continue
 
         # Convert to ASE.
         mol_as_ase = ase.Atoms(
@@ -134,4 +139,84 @@ def load_qm9(root_dir: str) -> List[ase.Atoms]:
         )
         mols_as_ase.append(mol_as_ase)
 
+    if use_edm_splits:
+        splits = get_edm_splits(root_dir)
+        mols_as_ase_train = [mols_as_ase[idx] for idx in splits["train"]]
+        mols_as_ase_valid = [mols_as_ase[idx] for idx in splits["valid"]]
+        mols_as_ase_test = [mols_as_ase[idx] for idx in splits["test"]]
+        # Combine splits in order.
+        mols_as_ase = [*mols_as_ase_train, *mols_as_ase_valid, *mols_as_ase_test]
+
+    logging.info(f"Loaded {len(mols_as_ase)} molecules.")
     return mols_as_ase
+
+
+def get_edm_splits(root_dir: str):
+    """
+    Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py.
+    """
+    def is_int(string):
+        try:
+            int(string)
+            return True
+        except:
+            return False
+
+    logging.info("Using EDM splits. This drops some molecules.")
+    gdb9_url_excluded = 'https://springernature.figshare.com/ndownloader/files/3195404'
+    gdb9_txt_excluded = os.path.join(root_dir, 'uncharacterized.txt')
+    urllib.request.urlretrieve(gdb9_url_excluded, filename=gdb9_txt_excluded)
+
+    # First, get list of excluded indices.
+    excluded_strings = []
+    with open(gdb9_txt_excluded) as f:
+        lines = f.readlines()
+        excluded_strings = [line.split()[0]
+                            for line in lines if len(line.split()) > 0]
+
+    excluded_idxs = [int(idx) - 1 for idx in excluded_strings if is_int(idx)]
+
+    assert len(excluded_idxs) == 3054, 'There should be exactly 3054 excluded atoms. Found {}'.format(
+        len(excluded_idxs))
+
+    # Now, create a list of included indices.
+    Ngdb9 = 133885
+    Nexcluded = 3054
+
+    included_idxs = np.array(
+        sorted(list(set(range(Ngdb9)) - set(excluded_idxs))))
+
+    # Now, generate random permutations to assign molecules to training/validation/test sets.
+    Nmols = Ngdb9 - Nexcluded
+    assert Nmols == len(included_idxs), 'Number of included molecules should be equal to Ngdb9 - Nexcluded. Found {} {}'.format(
+        Nmols, len(included_idxs))
+
+    Ntrain = 100000
+    Ntest = int(0.1*Nmols)
+    Nvalid = Nmols - (Ntrain + Ntest)
+
+    # Generate random permutation.
+    np.random.seed(0)
+    data_permutation = np.random.permutation(Nmols)
+
+    train, valid, test, extra = np.split(
+        data_permutation, [Ntrain, Ntrain+Nvalid, Ntrain+Nvalid+Ntest])
+
+    assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
+        len(train), len(valid), len(test), len(extra))
+
+    train = included_idxs[train]
+    valid = included_idxs[valid]
+    test = included_idxs[test]
+
+    splits = {'train': train, 'valid': valid, 'test': test}
+    np.savez(os.path.join(root_dir, 'edm_splits.npz'), **splits)
+    print(os.path.join(root_dir, 'edm_splits.npz'))
+
+    # Cleanup file.
+    try:
+        os.remove(gdb9_txt_excluded)
+    except OSError:
+        pass
+
+    return splits
