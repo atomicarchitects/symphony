@@ -79,6 +79,7 @@ def get_raw_datasets(
 def get_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
+    dataset: Optional[str] = "qm9",
 ) -> Dict[str, Iterator[datatypes.Fragments]]:
     """Dataloader for the generative model for each split.
     Args:
@@ -87,7 +88,7 @@ def get_datasets(
     Returns:
         An iterator of (batched and padded) fragments.
     """
-    rngs, atomic_numbers, molecules = get_raw_datasets(rng, config)
+    rngs, atomic_numbers, molecules = get_raw_datasets(rng, config, dataset=dataset)
     return {
         split: dataloader(
             rngs[split],
