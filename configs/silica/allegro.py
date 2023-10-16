@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.qm9 import default
+from configs.silica import default
 import numpy as np
 
 
