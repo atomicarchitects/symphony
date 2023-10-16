@@ -34,7 +34,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.embedder_config = get_embedder_config()
 
     config.atomic_numbers = np.array([8, 14])
-    config.matgen_query = {"elements": ["O", "Si"]}
+    config.matgen_query = {"elements": ["O", "Si"], "num_elements": (2, 2)}
 
     # NequIP hyperparameters.
     return config
