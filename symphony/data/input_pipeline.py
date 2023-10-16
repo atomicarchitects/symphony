@@ -9,18 +9,20 @@ import jraph
 import matscipy.neighbours
 import ml_collections
 import numpy as np
+import pymatgen
 import roundmantissa
 
 from symphony import datatypes
 from symphony.data import dynamic_batcher
 from symphony.data import fragments as fragments_lib
-from symphony.data import qm9
+from symphony.data import qm9, matgen
 
 
 def get_raw_datasets(
     rng: chex.PRNGKey,
     config: ml_collections.ConfigDict,
     root_dir: Optional[str] = None,
+    dataset: Optional[str] = "qm9",
 ) -> Tuple[Dict[str, chex.PRNGKey], jnp.ndarray, Dict[str, List[ase.Atoms]]]:
     """Constructs the splits for the QM9 dataset.
     Args:
@@ -32,10 +34,13 @@ def get_raw_datasets(
     # Load all molecules.
     if root_dir is None:
         root_dir = config.root_dir
-    all_molecules = qm9.load_qm9(root_dir)
+    if dataset == "qm9":
+        all_molecules = qm9.load_qm9(root_dir)
+    else:
+        all_molecules = matgen.get_materials(root_dir, save=False, **config.matgen_query)
 
     # Atomic numbers map to elements H, C, N, O, F.
-    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
+    atomic_numbers = config.atomic_numbers
 
     # Get different randomness for each split.
     rng, train_rng, val_rng, test_rng = jax.random.split(rng, 4)
@@ -124,10 +129,16 @@ def dataloader(
         An iterator of (batched and padded) fragments.
     """
 
-    graph_molecules = [
-        ase_atoms_to_jraph_graph(molecule, atomic_numbers, nn_cutoff)
-        for molecule in molecules
-    ]
+    if type(molecules[0]) == ase.Atoms:
+        graph_molecules = [
+            ase_atoms_to_jraph_graph(molecule, atomic_numbers, nn_cutoff)
+            for molecule in molecules
+        ]
+    else:
+        graph_molecules = [
+            material_to_jraph_graph(molecule.cart_coords, molecule.atomic_numbers, atomic_numbers, nn_cutoff)
+            for molecule in molecules
+        ]
     assert all([isinstance(graph, jraph.GraphsTuple) for graph in graph_molecules])
 
     for iteration, graphs in enumerate(
@@ -238,5 +249,27 @@ def ase_atoms_to_jraph_graph(
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([len(atoms)]),
+        n_edge=np.array([len(senders)]),
+    )
+
+
+def material_to_jraph_graph(
+    material_positions, material_species, atomic_numbers: jnp.ndarray, nn_cutoff: float, cell: np.ndarray = np.eye(3)
+) -> jraph.GraphsTuple:
+    # Create edges
+    receivers, senders = matscipy.neighbours.neighbour_list(
+        quantities="ij", positions=material_positions, cutoff=nn_cutoff, cell=cell
+    )
+
+    # Get the species indices
+    species = np.searchsorted(atomic_numbers, material_species)
+
+    return jraph.GraphsTuple(
+        nodes=datatypes.NodesInfo(np.asarray(material_positions), np.asarray(species)),
+        edges=np.ones(len(senders)),
+        globals=None,
+        senders=np.asarray(senders),
+        receivers=np.asarray(receivers),
+        n_node=np.array([len(material_species)]),
         n_edge=np.array([len(senders)]),
     )
