@@ -12,9 +12,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn_edm"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.train_molecules = (0, 5000)
-    config.val_molecules = (5000, 6125)
-    config.test_molecules = (6125, 7500)
+    config.train_molecules = (0, 200)
+    config.val_molecules = (200, 250)
+    config.test_molecules = (250, 300)
     config.shuffle_datasets = True
 
     # Optimizer.
