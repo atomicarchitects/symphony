@@ -68,10 +68,16 @@ def get_raw_datasets(
             config.test_molecules[0], min(config.test_molecules[1], len(all_molecules))
         ),
     }
-    molecules = {
-        split: [all_molecules[i] for i in indices[split]]
-        for split in ["train", "val", "test"]
-    }
+    if dataset == "qm9":
+        molecules = {
+            split: [all_molecules[i] for i in indices[split]]
+            for split in ["train", "val", "test"]
+        }
+    else:
+        molecules = {
+            split: [all_molecules[i].structure for i in indices[split]]
+            for split in ["train", "val", "test"]
+        }
 
     return rngs, atomic_numbers, molecules
 
