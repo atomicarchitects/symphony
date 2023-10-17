@@ -314,8 +314,8 @@ def graphs_to_unbatched_datasets(
             split_graphs = graphs
 
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, graph) for graph in split_graphs
-            for split_rng in jax.random.split(split_rng, num=config.num_generation_seeds)
+            generate_fragments_helper(seed_split_rng, graph) for graph in split_graphs
+            for seed_split_rng in jax.random.split(split_rng, num=config.num_generation_seeds)
         )
 
         def fragment_yielder():
