@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import os
 import tqdm
+from rdkit import RDLogger
 import rdkit.Chem as Chem
 from rdkit.Chem import rdDetermineBonds
 import e3nn_jax as e3nn
@@ -340,6 +341,7 @@ def compute_bispectra_of_local_environments(
     Returns a dictionary where the key is the central atom, and the value is a dictionary of bispectra of distinct local environments.
     """
     bispectra = collections.defaultdict(list)
+    relative_positions = collections.defaultdict(list)
 
     for mol_counter, mol in tqdm.tqdm(enumerate(molecules)):
         if mol_counter == max_num_molecules:
@@ -381,10 +383,16 @@ def compute_bispectra_of_local_environments(
             bispectra[(central_atom_type, neighbors_as_string)].append(
                 neighbor_bispectra[atom_index]
             )
+            relative_positions[(central_atom_type, neighbors_as_string)].append(
+                neighbor_positions[atom_index]
+            )
 
     return {
         environment: jnp.asarray(bispectra)
         for environment, bispectra in bispectra.items()
+    }, {
+        environment: jnp.asarray(relative_positions)
+        for environment, relative_positions in relative_positions.items()
     }
 
 
@@ -523,7 +531,12 @@ def get_all_edm_analyses_results(
 def get_edm_analyses_results(
     molecules_dir: str, read_as_sdf: bool
 ) -> pd.DataFrame:
-    """Returns the EDM analyses results for the given directories as a pandas dataframe, keyed by path."""
+    """Returns the EDM analyses results for the given directory as a pandas dataframe."""
+    # Disable RDKit logging.
+    RDLogger.DisableLog('rdApp.info')
+    logger = RDLogger.logger()
+    logger.setLevel(RDLogger.CRITICAL)
+
     metrics = edm_analyze.analyze_stability_for_molecules_in_dir(
         molecules_dir, read_as_sdf=read_as_sdf
     )

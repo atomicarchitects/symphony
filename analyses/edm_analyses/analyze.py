@@ -332,7 +332,7 @@ def main_analyze_qm9(remove_h: bool, dataset_name="qm9", n_atoms=None):
 
 ############################
 # Stability and bond analysis
-def check_stability(positions, atom_type, dataset_info, debug=True, bond_orders=None):
+def check_stability(positions, atom_type, dataset_info, debug=False, bond_orders=None):
     assert len(positions.shape) == 2
     assert positions.shape[1] == 3
     atom_decoder = dataset_info["atom_decoder"]
