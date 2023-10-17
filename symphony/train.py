@@ -32,7 +32,8 @@ from symphony.data import input_pipeline_tf
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
-    focus_and_atom_type_loss: metrics.Average.from_output("focus_and_atom_type_loss")
+    focus_loss: metrics.Average.from_output("focus_loss")
+    atom_type_loss: metrics.Average.from_output("atom_type_loss")
     position_loss: metrics.Average.from_output("position_loss")
 
 
@@ -141,14 +142,16 @@ def train_step(
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rng=None)
         total_loss, (
-            focus_and_atom_type_loss,
+            focus_loss,
+            atom_type_loss,
             position_loss,
         ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
         mask = jraph.get_graph_padding_mask(graphs)
         mean_loss = jnp.sum(jnp.where(mask, total_loss, 0.0)) / jnp.sum(mask)
         return mean_loss, (
             total_loss,
-            focus_and_atom_type_loss,
+            focus_loss,
+            atom_type_loss,
             position_loss,
             mask,
         )
@@ -169,7 +172,7 @@ def train_step(
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_and_atom_type_loss, position_loss, mask),
+        (total_loss, focus_loss, atom_type_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
 
     # Average gradients across devices.
@@ -179,7 +182,8 @@ def train_step(
     batch_metrics = Metrics.gather_from_model_output(
         axis_name="device",
         total_loss=total_loss,
-        focus_and_atom_type_loss=focus_and_atom_type_loss,
+        focus_loss=focus_loss,
+        atom_type_loss=atom_type_loss,
         position_loss=position_loss,
         mask=mask,
     )
@@ -197,7 +201,8 @@ def evaluate_step(
     # Compute predictions and resulting loss.
     preds = get_predictions(eval_state, graphs, rng)
     total_loss, (
-        focus_and_atom_type_loss,
+        focus_loss,
+        atom_type_loss,
         position_loss,
     ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
 
@@ -205,8 +210,9 @@ def evaluate_step(
     mask = jraph.get_graph_padding_mask(graphs)
     return Metrics.gather_from_model_output(
         axis_name="device",
-        total_loss=total_loss,
-        focus_and_atom_type_loss=focus_and_atom_type_loss,
+        total_loss=focus_loss,
+        focus_loss=total_loss,
+        atom_type_loss=atom_type_loss,
         position_loss=position_loss,
         mask=mask,
     )
@@ -397,7 +403,7 @@ def train_and_evaluate(
     all_grad_norms = []
     all_param_norms = []
     all_params = []
-    all_focus_and_atom_type_losses = []
+    all_atom_type_losses = []
     all_num_nodes = []
     all_num_edges = []
 

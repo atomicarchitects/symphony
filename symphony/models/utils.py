@@ -35,31 +35,37 @@ def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
 
 
 def segment_softmax_2D_with_stop(
-    species_logits: jnp.ndarray,
+    focus_and_target_species_logits: jnp.ndarray,
     stop_logits: jnp.ndarray,
     segment_ids: jnp.ndarray,
     num_segments: int,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Returns the species probabilities and stop probabilities with segment softmax over 2D arrays of species logits."""
+    """Returns the focus, target and stop probabilities with segment softmax over 2D arrays of species logits."""
     # Subtract the max to avoid numerical issues.
     logits_max = jraph.segment_max(
-        species_logits, segment_ids, num_segments=num_segments
+        focus_and_target_species_logits, segment_ids, num_segments=num_segments
     ).max(axis=-1)
     logits_max = jnp.maximum(logits_max, stop_logits)
     logits_max = jax.lax.stop_gradient(logits_max)
-    species_logits -= logits_max[segment_ids, None]
+    focus_and_target_species_logits -= logits_max[segment_ids, None]
     stop_logits -= logits_max
 
     # Normalize exp() by all nodes, all atom types, and the stop for each graph.
-    exp_species_logits = jnp.exp(species_logits)
-    exp_species_logits_summed = jnp.sum(exp_species_logits, axis=-1)
+    exp_focus_and_target_species_logits = jnp.exp(focus_and_target_species_logits)
+    exp_focus_and_target_species_logits_summed = jnp.sum(
+        exp_focus_and_target_species_logits, axis=-1
+    )
     normalizing_factors = jraph.segment_sum(
-        exp_species_logits_summed, segment_ids, num_segments=num_segments
+        exp_focus_and_target_species_logits_summed,
+        segment_ids,
+        num_segments=num_segments,
     )
     exp_stop_logits = jnp.exp(stop_logits)
 
     normalizing_factors += exp_stop_logits
-    species_probs = exp_species_logits / normalizing_factors[segment_ids, None]
+    species_probs = (
+        exp_focus_and_target_species_logits / normalizing_factors[segment_ids, None]
+    )
     stop_probs = exp_stop_logits / normalizing_factors
 
     return species_probs, stop_probs
@@ -337,11 +343,7 @@ def get_num_species_for_dataset(dataset: str) -> int:
 def create_node_embedder(
     config: ml_collections.ConfigDict,
     num_species: int,
-    name_prefix: Optional[str] = None,
 ) -> hk.Module:
-    if name_prefix is None:
-        raise ValueError("name_prefix must be specified.")
-
     if config.model == "MACE":
         output_irreps = _irreps_from_lmax(
             config.max_ell,
@@ -359,7 +361,6 @@ def create_node_embedder(
             max_ell=config.max_ell,
             num_basis_fns=config.num_basis_fns,
             soft_normalization=config.get("soft_normalization"),
-            name=f"node_embedder_{name_prefix}_mace",
         )
 
     if config.model == "NequIP":
@@ -383,7 +384,6 @@ def create_node_embedder(
             mlp_n_layers=config.mlp_n_layers,
             n_radial_basis=config.num_basis_fns,
             skip_connection=config.skip_connection,
-            name=f"node_embedder_{name_prefix}_nequip",
         )
 
     if config.model == "MarioNette":
@@ -409,7 +409,6 @@ def create_node_embedder(
             use_bessel=config.use_bessel,
             alpha=config.alpha,
             alphal=config.alphal,
-            name=f"node_embedder_{name_prefix}_marionette",
         )
 
     if config.model == "E3SchNet":
@@ -422,7 +421,6 @@ def create_node_embedder(
             cutoff=config.cutoff,
             max_ell=config.max_ell,
             num_species=num_species,
-            name=f"node_embedder_{name_prefix}_e3schnet",
         )
 
     if config.model == "Allegro":
@@ -442,7 +440,6 @@ def create_node_embedder(
             mlp_n_hidden=config.num_channels,
             mlp_n_layers=config.mlp_n_layers,
             n_radial_basis=config.num_basis_fns,
-            name=f"node_embedder_{name_prefix}_allegro",
         )
 
     raise ValueError(f"Unsupported model: {config.model}.")
@@ -457,10 +454,9 @@ def create_position_updater(
 
     def model_fn(graphs: datatypes.Fragments):
         return PositionUpdater(
-            node_embedder=create_node_embedder(
+            node_embedder_fn=lambda: create_node_embedder(
                 config.position_updater.embedder_config,
                 num_species,
-                name_prefix="position_updater",
             )
         )(graphs)
 
@@ -486,21 +482,20 @@ def create_model(
         num_species = get_num_species_for_dataset(dataset)
 
         if config.focus_and_target_species_predictor.compute_global_embedding:
-            global_embedder = GlobalEmbedder(
+            global_embedder_fn = lambda: GlobalEmbedder(
                 num_channels=config.focus_and_target_species_predictor.global_embedder.num_channels,
                 pooling=config.focus_and_target_species_predictor.global_embedder.pooling,
                 num_attention_heads=config.focus_and_target_species_predictor.global_embedder.num_attention_heads,
             )
         else:
-            global_embedder = None
+            global_embedder_fn = lambda: None
 
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
-            node_embedder=create_node_embedder(
+            node_embedder_fn=lambda: create_node_embedder(
                 config.focus_and_target_species_predictor.embedder_config,
                 num_species,
-                name_prefix="focus_and_target_species_predictor",
             ),
-            global_embedder=global_embedder,
+            global_embedder_fn=global_embedder_fn,
             latent_size=config.focus_and_target_species_predictor.latent_size,
             num_layers=config.focus_and_target_species_predictor.num_layers,
             activation=get_activation(
@@ -510,10 +505,9 @@ def create_model(
         )
         if config.target_position_predictor.get("factorized"):
             target_position_predictor = FactorizedTargetPositionPredictor(
-                node_embedder=create_node_embedder(
+                node_embedder_fn=lambda: create_node_embedder(
                     config.target_position_predictor.embedder_config,
                     num_species,
-                    name_prefix="target_position_predictor",
                 ),
                 position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
@@ -532,10 +526,9 @@ def create_model(
             )
         else:
             target_position_predictor = TargetPositionPredictor(
-                node_embedder=create_node_embedder(
+                node_embedder_fn=lambda: create_node_embedder(
                     config.target_position_predictor.embedder_config,
                     num_species,
-                    name_prefix="target_position_predictor",
                 ),
                 position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,

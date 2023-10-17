@@ -17,6 +17,7 @@ import ase
 
 from symphony.data import input_pipeline, fragments
 from symphony import datatypes
+from symphony.data import qm9
 
 
 def get_datasets(
@@ -27,8 +28,7 @@ def get_datasets(
 
     # Get the raw datasets.
     if config.dataset == "qm9":
-        del rng
-        datasets = get_unbatched_qm9_datasets(config)
+        datasets = get_unbatched_qm9_datasets(rng, config)
     elif config.dataset == "tetris":
         datasets = get_unbatched_tetris_datasets(rng, config)
     elif config.dataset == "platonic_solids":
@@ -163,14 +163,6 @@ def get_pieces_for_tetris() -> List[List[Tuple[int, int, int]]]:
     ]
 
 
-def get_unbatched_tetris_datasets(
-    rng: chex.PRNGKey, config: ml_collections.ConfigDict
-) -> Dict[str, tf.data.Dataset]:
-    """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
-    pieces = get_pieces_for_tetris()
-    return pieces_to_unbatched_datasets(pieces, rng, config)
-
-
 def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     """Returns the pieces for the Platonic solids."""
     # Taken from Wikipedia.
@@ -236,17 +228,25 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
     pieces_as_arrays = [np.asarray(piece) for piece in pieces]
 
-    def compute_first_node_distance(piece):
+    def first_node_distance(piece: np.ndarray) -> float:
         return np.min(np.linalg.norm(piece[0] - piece[1:], axis=-1))
 
     piece_factors = [
-        1 / np.min(compute_first_node_distance(piece)) for piece in pieces_as_arrays
+        1 / np.min(first_node_distance(piece)) for piece in pieces_as_arrays
     ]
     pieces = [
         [tuple(np.asarray(v) * factor) for v in piece]
         for factor, piece in zip(piece_factors, pieces)
     ]
     return pieces
+
+
+def get_unbatched_tetris_datasets(
+    rng: chex.PRNGKey, config: ml_collections.ConfigDict
+) -> Dict[str, tf.data.Dataset]:
+    """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
+    pieces = get_pieces_for_tetris()
+    return pieces_to_unbatched_datasets(pieces, rng, config)
 
 
 def get_unbatched_platonic_solids_datasets(
@@ -263,20 +263,6 @@ def pieces_to_unbatched_datasets(
     config: ml_collections.ConfigDict,
 ) -> Dict[str, tf.data.Dataset]:
     """Converts a sequence of pieces to a tf.data.Dataset for each split."""
-
-    def generate_fragments_helper(
-        rng: chex.PRNGKey, graph: jraph.GraphsTuple
-    ) -> Iterator[datatypes.Fragments]:
-        """Helper function to generate fragments from a graph."""
-        return fragments.generate_fragments(
-            rng,
-            graph,
-            n_species=1,
-            nn_tolerance=config.nn_tolerance,
-            max_radius=config.nn_cutoff,
-            mode=config.fragment_logic,
-        )
-
     # Convert to molecules, and then jraph.GraphsTuples.
     pieces_as_molecules = [
         ase.Atoms(numbers=np.asarray([1] * len(piece)), positions=np.asarray(piece))
@@ -284,17 +270,35 @@ def pieces_to_unbatched_datasets(
     ]
     pieces_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            molecule, [1], nn_cutoff=config.nn_cutoff
+            molecule, atomic_numbers=[1], nn_cutoff=config.nn_cutoff
         )
         for molecule in pieces_as_molecules
     ]
+    return graphs_to_unbatched_datasets(pieces_as_graphs, rng, config)
+
+
+def graphs_to_unbatched_datasets(
+    graphs: Sequence[jraph.GraphsTuple],
+    rng: chex.PRNGKey,
+    config: ml_collections.ConfigDict,
+) -> Dict[str, tf.data.Dataset]:
+    def generate_fragments_helper(
+        rng: chex.PRNGKey, graph: jraph.GraphsTuple
+    ) -> Iterator[datatypes.Fragments]:
+        """Helper function to generate fragments from a graph."""
+        return fragments.generate_fragments(
+            rng,
+            graph,
+            num_species=config.num_species,
+            nn_tolerance=config.nn_tolerance,
+            max_radius=config.nn_cutoff,
+            mode=config.fragment_logic,
+        )
 
     # Create an example graph to get the specs.
     # This is a bit ugly but I don't want to consume the generator.
     example_rng, rng = jax.random.split(rng)
-    example_graph = next(
-        iter(generate_fragments_helper(example_rng, pieces_as_graphs[0]))
-    )
+    example_graph = next(iter(generate_fragments_helper(example_rng, graphs[0])))
     element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
 
     # We will save our datasets to a temporary directory.
@@ -303,15 +307,14 @@ def pieces_to_unbatched_datasets(
     for split in ["train", "val", "test"]:
         split_rng, rng = jax.random.split(rng)
 
-        split_pieces = config.get(f"{split}_pieces")
-        if None not in [split_pieces, split_pieces[0], split_pieces[1]]:
-            split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
+        split_pieces = config.get(f"{split}_pieces", (None, None))
+        if None not in [split_pieces[0], split_pieces[1]]:
+            split_graphs = graphs[split_pieces[0] : split_pieces[1]]
         else:
-            split_pieces_as_graphs = pieces_as_graphs
+            split_graphs = graphs
 
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, graph)
-            for graph in split_pieces_as_graphs
+            generate_fragments_helper(split_rng, graph) for graph in split_graphs
         )
 
         def fragment_yielder():
@@ -333,45 +336,6 @@ def pieces_to_unbatched_datasets(
         if config.shuffle_datasets:
             datasets[split] = datasets[split].shuffle(1000, seed=0)
 
-    return datasets
-
-
-def _deprecated_get_unbatched_qm9_datasets(
-    rng: chex.PRNGKey,
-    root_dir: str,
-    num_train_files: int,
-    num_val_files: int,
-    num_test_files: int,
-) -> Dict[str, tf.data.Dataset]:
-    """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
-    # Root directory of the dataset.
-    filenames = os.listdir(root_dir)
-    filenames = [os.path.join(root_dir, f) for f in filenames if "dataset_tf" in f]
-
-    # Shuffle the filenames.
-    shuffled_indices = jax.random.permutation(rng, len(filenames))
-    shuffled_filenames = [filenames[i] for i in shuffled_indices]
-
-    # Partition the filenames into train, val, and test.
-    num_files_cumsum = np.cumsum([num_train_files, num_val_files, num_test_files])
-    files_by_split = {
-        "train": shuffled_filenames[: num_files_cumsum[0]],
-        "val": shuffled_filenames[num_files_cumsum[0] : num_files_cumsum[1]],
-        "test": shuffled_filenames[num_files_cumsum[1] : num_files_cumsum[2]],
-    }
-
-    element_spec = tf.data.Dataset.load(filenames[0]).element_spec
-    datasets = {}
-    for split, files_split in files_by_split.items():
-        dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
-        dataset_split = dataset_split.interleave(
-            lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
-            cycle_length=4,
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        )
-
-        datasets[split] = dataset_split
     return datasets
 
 
@@ -497,17 +461,12 @@ def _specs_from_graphs_tuple(
         nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
-            focus_and_target_species_probs=get_tensor_spec(
-                graph.nodes.focus_and_target_species_probs
-            ),
+            focus_mask=get_tensor_spec(graph.nodes.focus_mask),
+            target_species_probs=get_tensor_spec(graph.nodes.target_species_probs),
+            target_species=get_tensor_spec(graph.nodes.target_species),
+            target_positions=get_tensor_spec(graph.nodes.target_positions),
         ),
         globals=datatypes.FragmentsGlobals(
-            target_positions=get_tensor_spec(
-                graph.globals.target_positions, is_global=True
-            ),
-            target_species=get_tensor_spec(
-                graph.globals.target_species, is_global=True
-            ),
             stop=get_tensor_spec(graph.globals.stop, is_global=True),
         ),
         edges=get_tensor_spec(graph.edges),

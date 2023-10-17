@@ -15,6 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
+    config.num_species = 1
 
     # Optimizer.
     config.optimizer = "adam"
@@ -56,12 +57,6 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    config.focus_and_target_species_predictor.global_embedder = (
-        ml_collections.ConfigDict()
-    )
-    config.focus_and_target_species_predictor.global_embedder.num_channels = 1
-    config.focus_and_target_species_predictor.global_embedder.pooling = "attention"
-    config.focus_and_target_species_predictor.global_embedder.num_attention_heads = 2
     config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
     config.focus_and_target_species_predictor.activation = "softplus"

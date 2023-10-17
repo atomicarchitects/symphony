@@ -47,16 +47,7 @@ def get_raw_datasets(
 
     # Construct partitions of the dataset, to create each split.
     # Each partition is a list of indices into all_molecules.
-    # TODO is this what we're using?
-    # rng, rng_shuffle = jax.random.split(rng)
-    # indices = jax.random.permutation(rng_shuffle, len(all_molecules))
-    # graphs_cumsum = np.cumsum(
-    #     [config.num_train_graphs, config.num_val_graphs, config.num_test_graphs]
-    # )
     indices = {
-        # "train": indices[: graphs_cumsum[0]],
-        # "val": indices[graphs_cumsum[0] : graphs_cumsum[1]],
-        # "test": indices[graphs_cumsum[1] : graphs_cumsum[2]],
         "train": range(*config.train_molecules),
         "val": range(*config.val_molecules),
         "test": range(

@@ -37,7 +37,14 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
     )
     preds = datatypes.Predictions(
         nodes=datatypes.NodePredictions(
-            focus_and_target_species_logits=jnp.asarray(
+            embeddings_for_focus=None,
+            embeddings_for_positions=None,
+            focus_logits=jnp.asarray(
+                [jnp.log(2), jnp.log(2), jnp.log(2), jnp.log(1), jnp.log(3)]
+            ),
+            focus_probs=None,
+            focus_mask=None,
+            target_species_logits=jnp.asarray(
                 [
                     [jnp.log(2), jnp.log(2), jnp.log(1), jnp.log(3), jnp.log(2)],
                     [jnp.log(2), jnp.log(2), jnp.log(1), jnp.log(3), jnp.log(2)],
@@ -46,15 +53,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
                     [jnp.log(3), jnp.log(2), jnp.log(1), jnp.log(3), jnp.log(2)],
                 ]
             ),
-            focus_and_target_species_probs=None,
-            embeddings_for_focus=None,
-            embeddings_for_positions=None,
-        ),
-        globals=datatypes.GlobalPredictions(
-            stop_logits=jnp.asarray([0.0, 0.0]),
-            stop_probs=None,
-            stop=None,
-            focus_indices=None,
+            target_species_probs=None,
             target_species=None,
             log_position_coeffs=log_position_coeffs,
             position_logits=position_logits,
@@ -63,6 +62,9 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             radial_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1)),
             radial_logits=None,
             angular_logits=None,
+        ),
+        globals=datatypes.GlobalPredictions(
+            stop=None,
         ),
         edges=None,
         senders=None,
@@ -75,7 +77,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         nodes=datatypes.FragmentsNodes(
             positions=jax.random.normal(jax.random.PRNGKey(0), (num_nodes, 3)),
             species=jnp.zeros((num_nodes,), dtype=jnp.int32),
-            focus_and_target_species_probs=jnp.asarray(
+            target_species_probs=jnp.asarray(
                 [
                     [0.1, 0.0, 0.5, 0.0, 0.0],
                     [0.1, 0.1, 0.0, 0.2, 0.0],
@@ -84,11 +86,12 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
                     [0.0, 0.0, 0.0, 0.3, 0.0],
                 ]
             ),
+            target_positions=jnp.ones((num_nodes, 3)),
+            target_species=jnp.zeros((num_nodes,), dtype=jnp.int32),
+            focus_mask=jnp.ones((num_nodes,), dtype=bool),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
-            target_species=jnp.zeros((num_graphs,), dtype=jnp.int32),
-            target_positions=jnp.ones((num_graphs, 3)),
         ),
         edges=None,
         senders=jnp.asarray([0, 1, 2, 3, 2]),

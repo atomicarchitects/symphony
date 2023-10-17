@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 import e3nn_jax as e3nn
 import haiku as hk
@@ -12,11 +12,11 @@ class PositionUpdater(hk.Module):
 
     def __init__(
         self,
-        node_embedder: hk.Module,
+        node_embedder_fn: Callable[[], hk.Module],
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.node_embedder = node_embedder
+        self.node_embedder = node_embedder_fn()
 
     def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
         """Computes the node embeddings for the target positions."""

@@ -15,6 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
+    config.num_species = 1
 
     # Optimizer.
     config.optimizer = "adam"
@@ -56,26 +57,22 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    config.focus_and_target_species_predictor.global_embedder = (
-        ml_collections.ConfigDict()
-    )
-    config.focus_and_target_species_predictor.global_embedder.num_channels = 1
-    config.focus_and_target_species_predictor.global_embedder.pooling = "attention"
-    config.focus_and_target_species_predictor.global_embedder.num_attention_heads = 2
     config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
+    config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.res_beta = 180
-    config.target_position_predictor.res_alpha = 359
-    config.target_position_predictor.num_channels = 1
-    config.target_position_predictor.min_radius = 0.5
-    config.target_position_predictor.max_radius = 1.5
-    config.target_position_predictor.num_radii = 20
+    config.target_position_predictor.res_beta = 45
+    config.target_position_predictor.res_alpha = 89
+    config.target_position_predictor.num_channels = 5
+    config.target_position_predictor.min_radius = 0.9
+    config.target_position_predictor.max_radius = 2.0
+    config.target_position_predictor.num_radii = 64
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
     config.target_position_predictor.radial_mlp_latent_size = 128
     config.target_position_predictor.radial_mlp_num_layers = 2
     config.target_position_predictor.radial_mlp_activation = "swish"
+
 
     return config

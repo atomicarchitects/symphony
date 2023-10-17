@@ -14,7 +14,7 @@ class TargetPositionPredictor(hk.Module):
 
     def __init__(
         self,
-        node_embedder: hk.Module,
+        node_embedder_fn: Callable[[], hk.Module],
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
@@ -27,7 +27,7 @@ class TargetPositionPredictor(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.node_embedder = node_embedder
+        self.node_embedder = node_embedder_fn()
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
@@ -49,29 +49,29 @@ class TargetPositionPredictor(hk.Module):
     def __call__(
         self,
         graphs: datatypes.Fragments,
-        focus_indices: jnp.ndarray,
         target_species: jnp.ndarray,
         inverse_temperature: float = 1.0,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
-        num_graphs = graphs.n_node.shape[0]
+        num_nodes = graphs.nodes.positions.shape[0]
 
-        # Compute the focus node embeddings.
+        # Compute the node embeddings.
         node_embeddings = self.compute_node_embeddings(graphs)
-        focus_node_embeddings = node_embeddings[focus_indices]
 
-        assert focus_node_embeddings.shape == (
-            num_graphs,
-            focus_node_embeddings.irreps.dim,
-        )
-
+        # Compute the target species embeddings.
         target_species_embeddings = hk.Embed(
-            self.num_species, embed_dim=focus_node_embeddings.irreps.num_irreps
+            self.num_species, embed_dim=node_embeddings.irreps.num_irreps
         )(target_species)
 
-        assert target_species_embeddings.shape == (
-            num_graphs,
-            focus_node_embeddings.irreps.num_irreps,
+        # Check shapes.
+        assert node_embeddings.shape == (
+            num_nodes,
+            node_embeddings.irreps.dim,
         )
+        assert target_species.shape == (num_nodes,)
+        assert target_species_embeddings.shape == (
+            num_nodes,
+            node_embeddings.irreps.num_irreps,
+        ), (num_nodes, target_species_embeddings.shape)
 
         # Create the irreps for projecting onto the spherical harmonics.
         # Also, add a few scalars for the gate activation.
@@ -83,7 +83,7 @@ class TargetPositionPredictor(hk.Module):
 
         log_position_coeffs = e3nn.haiku.Linear(
             self.num_radii * self.num_channels * irreps, force_irreps_out=True
-        )(target_species_embeddings * focus_node_embeddings)
+        )(target_species_embeddings * node_embeddings)
         log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
         log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
 
@@ -92,7 +92,7 @@ class TargetPositionPredictor(hk.Module):
             log_position_coeffs = e3nn.gate(log_position_coeffs)
 
         assert log_position_coeffs.shape == (
-            num_graphs,
+            num_nodes,
             self.num_channels,
             self.num_radii,
             s2_irreps.dim,
@@ -111,7 +111,7 @@ class TargetPositionPredictor(hk.Module):
             )
         )(log_position_coeffs)
         assert position_logits.shape == (
-            num_graphs,
+            num_nodes,
             self.num_radii,
             self.res_beta,
             self.res_alpha,
@@ -125,7 +125,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
     def __init__(
         self,
-        node_embedder: hk.Module,
+        node_embedder_fn: Callable[[], hk.Module],
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
@@ -141,7 +141,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.node_embedder = node_embedder
+        self.node_embedder = node_embedder_fn()
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha

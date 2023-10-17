@@ -16,6 +16,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.val_molecules = (100000, 120000)
     config.test_molecules = (120000, 135000)
     config.shuffle_datasets = True
+    config.num_species = 5
+    config.use_edm_splits = True
+    config.check_molecule_sanity = False
 
     # Optimizer.
     config.optimizer = "adam"

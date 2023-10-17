@@ -17,7 +17,9 @@ from . import loss_test
 from configs.qm9 import mace, e3schnet, nequip, marionette, position_updater
 from configs.tetris import nequip as tetris_nequip
 from configs.platonic_solids import nequip as platonic_solids_nequip
-from configs.platonic_solids import e3schnet_and_nequip as platonic_solids_e3schnet_and_nequip
+from configs.platonic_solids import (
+    e3schnet_and_nequip as platonic_solids_e3schnet_and_nequip,
+)
 from configs import root_dirs
 
 # Important to see the logging messages!
@@ -32,8 +34,10 @@ _ALL_CONFIGS = {
         "position_updater": position_updater.get_config(),
     },
     "tetris": {"nequip": tetris_nequip.get_config()},
-    "platonic_solids": {"nequip": platonic_solids_nequip.get_config(),
-                        "e3schnet_and_nequip": platonic_solids_e3schnet_and_nequip.get_config()},
+    "platonic_solids": {
+        "nequip": platonic_solids_nequip.get_config(),
+        "e3schnet_and_nequip": platonic_solids_e3schnet_and_nequip.get_config(),
+    },
 }
 
 
@@ -81,8 +85,8 @@ class TrainTest(parameterized.TestCase):
     ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
-        #jax.config.update("jax_debug_nans", True)
-        #jax.config.update("jax_debug_infs", True)
+        # jax.config.update("jax_debug_nans", True)
+        # jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[dataset][config_name]
@@ -99,7 +103,6 @@ class TrainTest(parameterized.TestCase):
 
         # Save device memory profile.
         # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
-
 
     @parameterized.product(
         config_name=["position_updater"],

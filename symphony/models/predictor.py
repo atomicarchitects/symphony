@@ -3,6 +3,7 @@ from typing import Union, Optional
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import jraph
 
 from symphony import datatypes
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
@@ -40,18 +41,13 @@ class Predictor(hk.Module):
 
         # Get the species and stop logits.
         (
-            focus_and_target_species_logits,
-            stop_logits,
+            focus_logits,
+            target_species_logits,
         ) = self.focus_and_target_species_predictor(graphs)
 
         # Get the species and stop probabilities.
-        focus_and_target_species_probs, stop_probs = utils.segment_softmax_2D_with_stop(
-            focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
-        )
-
-        # Get the embeddings of the focus nodes.
-        # These are the first nodes in each graph during training.
-        focus_node_indices = utils.get_first_node_indices(graphs)
+        focus_probs = jraph.segment_softmax(focus_logits, segment_ids, num_graphs)
+        target_species_probs = jax.vmap(jax.nn.softmax)(target_species_logits)
 
         # Get the coefficients for the target positions.
         (
@@ -61,8 +57,7 @@ class Predictor(hk.Module):
             radial_logits,
         ) = self.target_position_predictor(
             graphs,
-            focus_node_indices,
-            graphs.globals.target_species,
+            graphs.nodes.target_species,
             inverse_temperature=1.0,
         )
 
@@ -73,25 +68,22 @@ class Predictor(hk.Module):
 
         # The radii bins used for the position prediction, repeated for each graph.
         radii = self.target_position_predictor.create_radii()
-        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_graphs))
+        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_nodes))
 
         # Check the shapes.
-        assert focus_and_target_species_logits.shape == (
-            num_nodes,
-            num_species,
-        )
-        assert focus_and_target_species_probs.shape == (
+        assert focus_logits.shape == (num_nodes,)
+        assert target_species_logits.shape == (
             num_nodes,
             num_species,
         )
         assert log_position_coeffs.shape == (
-            num_graphs,
+            num_nodes,
             self.target_position_predictor.num_channels,
             self.target_position_predictor.num_radii,
             log_position_coeffs.shape[-1],
         )
         assert position_logits.shape == (
-            num_graphs,
+            num_nodes,
             self.target_position_predictor.num_radii,
             self.target_position_predictor.res_beta,
             self.target_position_predictor.res_alpha,
@@ -99,21 +91,17 @@ class Predictor(hk.Module):
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
-                focus_and_target_species_logits=focus_and_target_species_logits,
-                focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(
                     graphs
                 ),
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-            ),
-            edges=None,
-            globals=datatypes.GlobalPredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
-                stop=None,
-                focus_indices=focus_node_indices,
+                focus_logits=focus_logits,
+                focus_probs=focus_probs,
+                focus_mask=None,
+                target_species_logits=target_species_logits,
+                target_species_probs=target_species_probs,
                 target_species=None,
                 log_position_coeffs=log_position_coeffs,
                 position_logits=position_logits,
@@ -122,6 +110,10 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                stop=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -144,33 +136,26 @@ class Predictor(hk.Module):
 
         # Get the species and stop logits.
         (
-            focus_and_target_species_logits,
-            stop_logits,
+            focus_logits,
+            target_species_logits,
         ) = self.focus_and_target_species_predictor(
             graphs, inverse_temperature=focus_and_atom_type_inverse_temperature
         )
 
         # Get the softmaxed probabilities.
-        focus_and_target_species_probs, stop_probs = utils.segment_softmax_2D_with_stop(
-            focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
-        )
+        focus_probs = jraph.segment_softmax(focus_logits, segment_ids, num_graphs)
+        target_species_probs = jax.vmap(jax.nn.softmax)(target_species_logits)
 
         # Get the PRNG key for sampling.
         rng = hk.next_rng_key()
 
-        # We stop a graph, if we sample a stop.
-        rng, stop_rng = jax.random.split(rng)
-        stop = jax.random.bernoulli(stop_rng, stop_probs)
-
-        # Renormalize the focus and target species probabilities, if we have not stopped.
-        focus_and_target_species_probs = focus_and_target_species_probs / (
-            (1 - stop_probs)[segment_ids, None]
-        )
-
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
-        focus_indices, target_species = utils.segment_sample_2D(
-            focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
+        focus_mask = jax.random.bernoulli(focus_rng, focus_probs)
+        rng, target_species_rng = jax.random.split(rng)
+        target_species_rngs = jax.random.split(target_species_rng, num_nodes)
+        target_species = jax.vmap(jax.random.categorical)(
+            target_species_rngs, target_species_logits
         )
 
         # Compute the position coefficients.
@@ -181,7 +166,6 @@ class Predictor(hk.Module):
             radial_logits,
         ) = self.target_position_predictor(
             graphs,
-            focus_indices,
             target_species,
             inverse_temperature=position_inverse_temperature,
         )
@@ -195,55 +179,50 @@ class Predictor(hk.Module):
         # Sample the radius.
         radii = self.target_position_predictor.create_radii()
         rng, position_rng = jax.random.split(rng)
-        position_rngs = jax.random.split(position_rng, num_graphs)
+        position_rngs = jax.random.split(position_rng, num_nodes)
         position_vectors = jax.vmap(
             utils.sample_from_position_distribution, in_axes=(0, None, 0)
         )(position_probs, radii, position_rngs)
 
-        # The radii bins used for the position prediction, repeated for each graph.
-        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_graphs))
+        # The radii bins used for the position prediction, repeated for each node.
+        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_nodes))
+
+        # We stop a graph, if none of the nodes were selected as the focus.
+        stop = jraph.segment_sum(focus_mask, segment_ids, num_graphs) == 0
 
         assert stop.shape == (num_graphs,)
-        assert focus_indices.shape == (num_graphs,)
-        assert focus_and_target_species_logits.shape == (
-            num_nodes,
-            num_species,
-        )
-        assert focus_and_target_species_probs.shape == (
+        assert focus_logits.shape == (num_nodes,)
+        assert target_species_logits.shape == (
             num_nodes,
             num_species,
         )
         assert log_position_coeffs.shape == (
-            num_graphs,
+            num_nodes,
             self.target_position_predictor.num_channels,
             self.target_position_predictor.num_radii,
             log_position_coeffs.shape[-1],
         )
         assert position_logits.shape == (
-            num_graphs,
+            num_nodes,
             self.target_position_predictor.num_radii,
             self.target_position_predictor.res_beta,
             self.target_position_predictor.res_alpha,
         )
-        assert position_vectors.shape == (num_graphs, 3)
+        assert position_vectors.shape == (num_nodes, 3)
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
-                focus_and_target_species_logits=focus_and_target_species_logits,
-                focus_and_target_species_probs=focus_and_target_species_probs,
                 embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(
                     graphs
                 ),
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-            ),
-            edges=None,
-            globals=datatypes.GlobalPredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
-                stop=stop,
-                focus_indices=focus_indices,
+                focus_logits=focus_logits,
+                focus_probs=focus_probs,
+                target_species_logits=target_species_logits,
+                target_species_probs=target_species_probs,
+                focus_mask=focus_mask,
                 target_species=target_species,
                 log_position_coeffs=log_position_coeffs,
                 position_logits=position_logits,
@@ -252,6 +231,10 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                stop=stop,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

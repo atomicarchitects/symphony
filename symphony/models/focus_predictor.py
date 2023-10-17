@@ -13,17 +13,17 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
 
     def __init__(
         self,
-        node_embedder: hk.Module,
+        node_embedder_fn: Callable[[], hk.Module],
         latent_size: int,
         num_layers: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         num_species: int,
-        global_embedder: Optional[hk.Module] = None,
+        global_embedder_fn: Callable[[], Optional[hk.Module]],
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.node_embedder = node_embedder
-        self.global_embedder = global_embedder
+        self.node_embedder = node_embedder_fn()
+        self.global_embedder = global_embedder_fn()
         self.latent_size = latent_size
         self.num_layers = num_layers
         self.activation = activation
@@ -53,19 +53,24 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
 
         num_nodes, _ = node_embeddings.shape
         node_embeddings = node_embeddings.filter(keep="0e")
-        focus_and_target_species_logits = e3nn.haiku.MultiLayerPerceptron(
+        focus_logits = e3nn.haiku.MultiLayerPerceptron(
+            list_neurons=[self.latent_size] * (self.num_layers - 1) + [1],
+            act=self.activation,
+            output_activation=False,
+        )(node_embeddings).array
+        focus_logits = focus_logits.reshape((num_nodes,))
+        target_species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1)
             + [self.num_species],
             act=self.activation,
             output_activation=False,
         )(node_embeddings).array
-        stop_logits = jnp.zeros((num_graphs,))
 
-        assert focus_and_target_species_logits.shape == (num_nodes, self.num_species)
-        assert stop_logits.shape == (num_graphs,)
+        assert focus_logits.shape == (num_nodes,)
+        assert target_species_logits.shape == (num_nodes, self.num_species)
 
         # Scale the logits by the inverse temperature.
-        focus_and_target_species_logits *= inverse_temperature
-        stop_logits *= inverse_temperature
+        focus_logits *= inverse_temperature
+        target_species_logits *= inverse_temperature
 
-        return focus_and_target_species_logits, stop_logits
+        return focus_logits, target_species_logits
