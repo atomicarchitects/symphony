@@ -210,8 +210,8 @@ def evaluate_step(
     mask = jraph.get_graph_padding_mask(graphs)
     return Metrics.gather_from_model_output(
         axis_name="device",
-        total_loss=focus_loss,
-        focus_loss=total_loss,
+        total_loss=total_loss,
+        focus_loss=focus_loss,
         atom_type_loss=atom_type_loss,
         position_loss=position_loss,
         mask=mask,
