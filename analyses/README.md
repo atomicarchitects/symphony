@@ -67,7 +67,7 @@ python -m analyses.analyze_generated ${MOL_PATH} --model_path="${MODEL_PATH}" --
 ```
 
 Selected flags:
- * `mol_path` Path to the generated molecules, stored in .mol_dict format (see analyses/utility_classes.py for the Molecule class).
+ * `mol_path` Path to the generated molecules, stored in .db format.
  * `--data_path` Path to a database containing the training/validation/test data.
  * `--model_path` Path to the model used to generate the molecules.
  * `--init` The initial molecule fragment used to generate the molecules.

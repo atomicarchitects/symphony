@@ -3,7 +3,6 @@
 from typing import Sequence, Tuple, Callable, Optional, Union
 
 import os
-import sys
 
 from absl import flags
 from absl import app
@@ -21,8 +20,6 @@ import tqdm
 import chex
 import optax
 import time
-
-sys.path.append("..")
 
 import analyses.analysis as analysis
 from symphony import datatypes
@@ -92,7 +89,6 @@ def generate_one_step(
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-
     next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
