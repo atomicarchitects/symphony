@@ -5,9 +5,9 @@ import ase.db
 import ase.io
 import os
 import numpy as np
+import sys
 
 import analyses.generate_molecules as generate_molecules
-
 from symphony.data import qm9
 
 
