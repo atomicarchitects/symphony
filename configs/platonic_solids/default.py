@@ -52,7 +52,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.radial_loss_scaling_factor = 1.0
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
-    config.add_noise_to_positions = False
+    config.add_noise_to_positions = True
     config.position_noise_std = 0.0
 
     # Prediction heads.

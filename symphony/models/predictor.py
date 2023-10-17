@@ -46,7 +46,7 @@ class Predictor(hk.Module):
         ) = self.focus_and_target_species_predictor(graphs)
 
         # Get the species and stop probabilities.
-        focus_probs = jraph.segment_softmax(focus_logits, segment_ids, num_graphs)
+        focus_probs = jax.nn.sigmoid(focus_logits)
         target_species_probs = jax.vmap(jax.nn.softmax)(target_species_logits)
 
         # Get the coefficients for the target positions.
@@ -143,7 +143,7 @@ class Predictor(hk.Module):
         )
 
         # Get the softmaxed probabilities.
-        focus_probs = jraph.segment_softmax(focus_logits, segment_ids, num_graphs)
+        focus_probs = jax.nn.sigmoid(focus_logits)
         target_species_probs = jax.vmap(jax.nn.softmax)(target_species_logits)
 
         # Get the PRNG key for sampling.
@@ -188,7 +188,7 @@ class Predictor(hk.Module):
         radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_nodes))
 
         # We stop a graph, if none of the nodes were selected as the focus.
-        stop = jraph.segment_sum(focus_mask, segment_ids, num_graphs) == 0
+        stop = jraph.segment_sum(focus_mask.astype(jnp.float32), segment_ids, num_graphs) == 0
 
         assert stop.shape == (num_graphs,)
         assert focus_logits.shape == (num_nodes,)
