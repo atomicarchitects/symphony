@@ -16,6 +16,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
     config.num_species = 1
+    config.num_generation_seeds = 10
 
     # Optimizer.
     config.optimizer = "adam"
