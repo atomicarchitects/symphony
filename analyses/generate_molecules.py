@@ -3,7 +3,6 @@
 from typing import Sequence, Tuple, Callable, Optional, Union
 
 import os
-import sys
 
 from absl import flags
 from absl import app
@@ -21,8 +20,6 @@ import tqdm
 import chex
 import optax
 import time
-
-sys.path.append("..")
 
 import analyses.analysis as analysis
 from symphony import datatypes
@@ -92,7 +89,6 @@ def generate_one_step(
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-
     next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
@@ -260,7 +256,10 @@ def generate_molecules(
         final_padded_fragments, stops = chunk_and_apply(params, init_fragments, rngs)
 
     molecule_list = []
-    for init_molecule_name, init_fragment, seed in tqdm.tqdm(zip(init_molecule_names, init_fragments, seeds), desc="Visualizing molecules"):
+    for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
+        init_fragment = jax.tree_map(lambda x: x[seed], init_fragments)
+        init_molecule_name = init_molecule_names[seed]
+
         if visualize:
             # Get the padded fragment and predictions for this seed.
             padded_fragments_for_seed = jax.tree_map(

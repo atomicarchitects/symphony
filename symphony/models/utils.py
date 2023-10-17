@@ -1,4 +1,4 @@
-"""Definition of the generative models."""
+"""Helpers for the generative models."""
 
 from typing import Callable, Optional, Tuple, Union
 
@@ -522,7 +522,7 @@ def create_model(
                 radial_mlp_activation=get_activation(
                     config.target_position_predictor.radial_mlp_activation
                 ),
-                apply_gate=config.target_position_predictor.apply_gate,
+                apply_gate=config.target_position_predictor.get("apply_gate"),
             )
         else:
             target_position_predictor = TargetPositionPredictor(
@@ -538,7 +538,7 @@ def create_model(
                 min_radius=config.target_position_predictor.min_radius,
                 max_radius=config.target_position_predictor.max_radius,
                 num_radii=config.target_position_predictor.num_radii,
-                apply_gate=config.target_position_predictor.apply_gate,
+                apply_gate=config.target_position_predictor.get("apply_gate"),
             )
 
         predictor = Predictor(
