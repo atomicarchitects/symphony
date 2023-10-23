@@ -41,8 +41,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
-    config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
-    config.max_n_edges = 90 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
+    config.max_n_edges = 480 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5
     config.loss_kwargs.target_position_inverse_temperature = 20.0

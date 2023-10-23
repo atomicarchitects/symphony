@@ -26,7 +26,7 @@ from clu import (
 from flax.training import train_state
 
 from symphony import datatypes, models, loss
-from symphony.data import input_pipeline
+from symphony.data import input_pipeline_tf
 
 LOG = False
 LOGGING_DIR = "logging_outputs"
@@ -332,7 +332,7 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-    datasets = input_pipeline.get_datasets(dataset_rng, config, dataset=dataset)
+    datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")

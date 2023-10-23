@@ -33,6 +33,8 @@ def get_datasets(
         datasets = get_unbatched_tetris_datasets(rng, config)
     elif config.dataset == "platonic_solids":
         datasets = get_unbatched_platonic_solids_datasets(rng, config)
+    elif config.dataset == "silica":
+        datasets = get_unbatched_silica_datasets(config)
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:
@@ -464,6 +466,41 @@ def get_unbatched_qm9_datasets(
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
+
+        # Shuffle the dataset.
+        if config.shuffle_datasets:
+            dataset_split = dataset_split.shuffle(1000, seed=seed)
+
+        # Convert to jraph.GraphsTuple.
+        dataset_split = dataset_split.map(
+            _convert_to_graphstuple,
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
+
+        datasets[split] = dataset_split
+    return datasets
+
+
+def get_unbatched_silica_datasets(
+    config: ml_collections.ConfigDict,
+    seed: int = 0,
+) -> Dict[str, tf.data.Dataset]:
+    """Loads the raw silica dataset as tf.data.Datasets for each split."""
+    # Set the seed for reproducibility.
+    tf.random.set_seed(seed)
+
+    # Get the data
+    dataset_generators = input_pipeline.get_datasets(jax.random.PRNGKey(seed), config, "silica")
+    
+    datasets = {}
+    for split, generator in dataset_generators.items():
+        dataset_split = tf.data.Dataset.from_generator(list(generator))
+        dataset_split = dataset_split.interleave(
+            lambda x: tf.data.Dataset.load(x, element_spec=dataset_split.element_spec),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
 
         # Shuffle the dataset.
         if config.shuffle_datasets:
