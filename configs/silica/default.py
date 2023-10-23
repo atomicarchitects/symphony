@@ -38,11 +38,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.log_every_steps = 1000
     config.eval_every_steps = 30000
     config.nn_tolerance = 0.5
-    config.nn_cutoff = 5.0
+    config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
-    config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
-    config.max_n_edges = 480 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 30 * 16 * config.get_ref("max_n_graphs")  # how slow will this be
+    config.max_n_edges = 180 * 16 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5
     config.loss_kwargs.target_position_inverse_temperature = 20.0
