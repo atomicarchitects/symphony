@@ -9,12 +9,15 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "silica"
-    config.fragment_logic = "nn_edm"
+    config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.train_molecules = (0, 200)
-    config.val_molecules = (200, 250)
-    config.test_molecules = (250, 300)
+    # config.train_molecules = (0, 200)
+    # config.val_molecules = (200, 250)
+    # config.test_molecules = (250, 300)
+    config.train_molecules = (0, 32)
+    config.val_molecules = (32, 48)
+    config.test_molecules = (48, 64)
     config.shuffle_datasets = True
 
     # Optimizer.
@@ -39,10 +42,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.eval_every_steps = 30000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 3.0
-    config.compute_padding_dynamically = False
+    config.compute_padding_dynamically = True
     config.max_n_graphs = 16
-    config.max_n_nodes = 30 * 16 * config.get_ref("max_n_graphs")  # how slow will this be
-    config.max_n_edges = 180 * 16 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 30 * config.get_ref("max_n_graphs")  # how slow will this be
+    config.max_n_edges = 180 * config.get_ref("max_n_graphs")
+    config.frag_pool_size = 1024
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5
     config.loss_kwargs.target_position_inverse_temperature = 20.0

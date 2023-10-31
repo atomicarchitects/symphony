@@ -1,7 +1,7 @@
 """Input pipeline for the datasets with the tf.data API."""
 
 import functools
-from typing import Dict, List, Sequence, Tuple, Iterator
+from typing import Dict, List, Optional, Sequence, Tuple, Iterator
 import re
 import itertools
 import os
@@ -10,12 +10,13 @@ from absl import logging
 import tensorflow as tf
 import chex
 import jax
+import jax.numpy as jnp
 import numpy as np
 import jraph
 import ml_collections
 import ase
 
-from symphony.data import input_pipeline, fragments
+from symphony.data import input_pipeline, fragments, matproj
 from symphony import datatypes
 
 
@@ -489,32 +490,86 @@ def get_unbatched_silica_datasets(
     """Loads the raw silica dataset as tf.data.Datasets for each split."""
     # Set the seed for reproducibility.
     tf.random.set_seed(seed)
+    rng = jax.random.PRNGKey(seed)
 
-    # Get the data
-    dataset_generators = input_pipeline.get_datasets(jax.random.PRNGKey(seed), config, "silica")
-    
-    datasets = {}
-    for split, generator in dataset_generators.items():
-        dataset_split = tf.data.Dataset.from_generator(list(generator))
-        dataset_split = dataset_split.interleave(
-            lambda x: tf.data.Dataset.load(x, element_spec=dataset_split.element_spec),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
+    def generate_fragments_helper(gen_rng, mol):
+        graph = input_pipeline.ase_atoms_to_jraph_graph(
+            ase.Atoms(positions=mol.cart_coords, numbers=mol.atomic_numbers),
+            config.atomic_numbers,
+            config.nn_cutoff
+        )
+        return fragments.generate_fragments(
+            gen_rng,
+            graph,
+            n_species=len(set(config.atomic_numbers)),
+            nn_tolerance=config.nn_tolerance,
+            max_radius=config.nn_cutoff,
+            mode=config.fragment_logic,
         )
 
-        # Shuffle the dataset.
+    datasets_raw = get_raw_silica_datasets(config)
+
+    example_rng, rng = jax.random.split(rng)
+    example_graph = next(
+        iter(generate_fragments_helper(example_rng, datasets_raw["train"][0]))
+    )
+    element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
+
+    datasets = {}
+    for split, dataset_raw in datasets_raw.items():
+        split_rng, rng = jax.random.split(rng)
+        fragments_for_pieces = itertools.chain.from_iterable(
+            generate_fragments_helper(split_rng, struct)
+            for struct in dataset_raw
+        )
+        def fragment_yielder():
+            yield from fragments_for_pieces
+
+        dataset_split = tf.data.Dataset.from_generator(
+            fragment_yielder, output_signature=element_spec
+        )
         if config.shuffle_datasets:
             dataset_split = dataset_split.shuffle(1000, seed=seed)
-
-        # Convert to jraph.GraphsTuple.
-        dataset_split = dataset_split.map(
-            _convert_to_graphstuple,
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        )
-
         datasets[split] = dataset_split
+
+        if not os.path.exists(f"{config.root_dir}/{os.getpid()}"):
+            os.makedirs(f"{config.root_dir}/{os.getpid()}")
+        dataset_path = f"{config.root_dir}/{os.getpid()}/{split}.tfrecord"
+        datasets[split].save(dataset_path)
+        datasets[split] = tf.data.Dataset.load(dataset_path, element_spec=element_spec)
     return datasets
+
+
+def get_raw_silica_datasets(
+    config: ml_collections.ConfigDict,
+    root_dir: Optional[str] = None,
+) -> Dict[str, List[ase.Atoms]]:
+    """Constructs the splits for silica dataset.
+    Args:
+        rng: The random number seed.
+        config: The configuration.
+    Returns:
+        An iterator of (batched and padded) fragments.
+    """
+    # Load all molecules.
+    if root_dir is None:
+        root_dir = config.root_dir
+    all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
+
+    # Construct partitions of the dataset, to create each split.
+    indices = {
+        "train": range(*config.train_molecules),
+        "val": range(*config.val_molecules),
+        "test": range(
+            config.test_molecules[0], min(config.test_molecules[1], len(all_molecules))
+        ),
+    }
+    molecules = {
+        split: [all_molecules[i].structure for i in indices[split]]
+        for split in ["train", "val", "test"]
+    }
+
+    return molecules
 
 
 def _specs_from_graphs_tuple(

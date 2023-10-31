@@ -13,9 +13,9 @@ import pymatgen
 import roundmantissa
 
 from symphony import datatypes
-from symphony.data import dynamic_batcher
+from symphony.data import dynamic_batcher, matproj
 from symphony.data import fragments as fragments_lib
-from symphony.data import qm9, matgen
+from symphony.data import qm9
 
 
 def get_raw_datasets(
@@ -37,7 +37,7 @@ def get_raw_datasets(
     if dataset == "qm9":
         all_molecules = qm9.load_qm9(root_dir)
     else:
-        all_molecules = matgen.get_materials(root_dir, save=False, **config.matgen_query)
+        all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
 
     # Atomic numbers map to elements H, C, N, O, F.
     atomic_numbers = config.atomic_numbers
@@ -106,6 +106,7 @@ def get_datasets(
             config.max_n_edges,
             config.max_n_graphs,
             max_iterations=10 if split in ["val", "test"] else None,
+            frag_pool_size=config.frag_pool_size
         )
         for split in ["train", "val", "test"]
     }
@@ -121,6 +122,7 @@ def dataloader(
     max_n_edges: int,
     max_n_graphs: int,
     max_iterations: Optional[int] = None,
+    frag_pool_size: int = 1024
 ) -> Iterator[datatypes.Fragments]:
     """Dataloader for the generative model.
     Args:
@@ -151,7 +153,7 @@ def dataloader(
     for iteration, graphs in enumerate(
         dynamic_batcher.dynamically_batch(
             fragments_pool_iterator(
-                rng, graph_molecules, len(atomic_numbers), nn_tolerance
+                rng, graph_molecules, len(atomic_numbers), nn_tolerance, frag_pool_size
             ),
             max_n_nodes,
             max_n_edges,
@@ -176,14 +178,13 @@ def fragments_pool_iterator(
     graph_molecules: Sequence[jraph.GraphsTuple],
     n_species: int,
     nn_tolerance: float,
+    pool_size: int = 1024
 ) -> Iterator[datatypes.Fragments]:
     """A pool of fragments that are generated on the fly."""
-    # TODO: Make this configurable.
-    SAMPLES_POOL_SIZE = 1024
 
     fragments = []
     while True:
-        while len(fragments) < SAMPLES_POOL_SIZE:
+        while len(fragments) < pool_size:
             rng, index_rng, fragment_rng = jax.random.split(rng, num=3)
             indices = jax.random.randint(index_rng, (), 0, len(graph_molecules))
             fragments += list(

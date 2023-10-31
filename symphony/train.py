@@ -28,7 +28,7 @@ from flax.training import train_state
 from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
 
-LOG = False
+LOG = True
 LOGGING_DIR = "logging_outputs"
 os.makedirs(LOGGING_DIR, exist_ok=True)
 
@@ -274,7 +274,7 @@ def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
 
 
 def train_and_evaluate(
-    config: ml_collections.FrozenConfigDict, workdir: str, dataset: Optional[str] = "qm9"
+    config: ml_collections.FrozenConfigDict, workdir: str
 ) -> train_state.TrainState:
     """Execute model training and evaluation loop.
 
@@ -333,10 +333,9 @@ def train_and_evaluate(
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
     datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
-
     # Create and initialize the network.
     logging.info("Initializing network.")
-    train_iter = datasets["train"]#.as_numpy_iterator()
+    train_iter = datasets["train"].as_numpy_iterator()
     init_graphs = next(train_iter)
     net = models.create_model(config, run_in_evaluation_mode=False)
 

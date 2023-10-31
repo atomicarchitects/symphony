@@ -22,7 +22,6 @@ from configs import root_dirs
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Directory to store model data.")
-flags.DEFINE_string("dataset", "qm9", "Dataset to train on.")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -66,7 +65,7 @@ def main(argv):
     if config.get("position_updater"):
         train_position_updater.train_and_evaluate(config, FLAGS.workdir)
     else:
-        train.train_and_evaluate(config, FLAGS.workdir, dataset=FLAGS.dataset)
+        train.train_and_evaluate(config, FLAGS.workdir)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 from typing import Callable, Optional
 import jax
 import jax.numpy as jnp
-import allegro_jax
 import haiku as hk
 import e3nn_jax as e3nn
 
 from symphony import datatypes
+from symphony.models.embedders import allegro_haiku as allegro_jax
 
 
 class Allegro(hk.Module):
@@ -63,7 +63,12 @@ class Allegro(hk.Module):
         )(node_feats, relative_positions, graphs.senders, graphs.receivers)
 
         # Aggregate edge features to nodes
-        node_feats = jax.ops.segment_sum(
-            edge_feats, graphs.receivers
-        ) + jax.ops.segment_sum(edge_feats, graphs.senders)
+        total_num_nodes = graphs.nodes.positions.shape[0]
+        node_feats = e3nn.scatter_sum(
+            edge_feats,
+            dst=graphs.receivers,
+            output_size=total_num_nodes,
+        ) + e3nn.scatter_sum(
+            edge_feats, dst=graphs.senders, output_size=total_num_nodes
+        )
         return node_feats
