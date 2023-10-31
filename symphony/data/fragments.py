@@ -9,6 +9,7 @@ from symphony import datatypes
 
 
 def debug_print(*args):
+    return
     print(*args)
 
 
@@ -21,7 +22,7 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
-    max_targets: int = 1,
+    num_nodes_lower_bound: int = 5,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -34,17 +35,13 @@ def generate_fragments(
         mode: How to generate the fragments. Either "nn" or "radius".
         heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
         beta_com: Inverse temperature value for the center of mass.
-        multiple_focus: If true, multiple focus nodes will be used.
-        max_targets: The maximum number of targets per focus in each fragment.
+        num_nodes_lower_bound: How many nodes must be in the graph before multiple focuses are allowed.
 
     Returns:
         A sequence of fragments.
     """
     if mode not in ["nn", "radius"]:
         raise ValueError(f"Invalid mode: {mode}")
-
-    if max_targets > 1:
-        raise NotImplementedError("Multiple targets not supported yet.")
 
     if not (len(graph.n_edge) == 1 and len(graph.n_node) == 1):
         raise ValueError("Only single graphs supported.")
@@ -84,6 +81,7 @@ def generate_fragments(
                 nn_tolerance,
                 max_radius,
                 mode,
+                num_nodes_lower_bound,
                 heavy_first,
             )
             yield frag
@@ -172,6 +170,7 @@ def _make_middle_fragment(
     nn_tolerance,
     max_radius,
     mode,
+    num_nodes_lower_bound: int,
     heavy_first=False,
 ):
     num_nodes = len(graph.nodes.positions)
@@ -211,7 +210,10 @@ def _make_middle_fragment(
     # pick a random focus node
     focus_probability = _normalized_bitcount(senders[mask], num_nodes)
     debug_print("focus_probability", focus_probability)
-    focus_nodes = np.where(focus_probability > 0)[0]
+    if num_nodes >= num_nodes_lower_bound:
+        focus_nodes = np.where(focus_probability > 0)[0]
+    else:
+        focus_nodes = np.argmax(focus_probability)
     debug_print("focus_nodes", focus_nodes)
 
     # pick a random target for each focus node
