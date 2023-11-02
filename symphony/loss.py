@@ -157,17 +157,24 @@ def generation_loss(
     def focus_loss() -> jnp.ndarray:
         """Computes the loss over focus probabilities for all nodes."""
         focus_logits = preds.nodes.focus_logits
-        focus_mask_true = graphs.nodes.focus_mask
+        focus_probs_true = graphs.nodes.focus_probs
 
         assert focus_logits.shape == (num_nodes,)
-        assert focus_mask_true.shape == (num_nodes,)
+        assert focus_probs_true.shape == (num_nodes,)
 
         # Compute the sigmoidal cross-entropy loss.
-        # The lower bound is 0, because the focus mask is 0-1.
         loss_focus = optax.sigmoid_binary_cross_entropy(
-            logits=focus_logits, labels=focus_mask_true.astype(jnp.float32)
+            logits=focus_logits, labels=focus_probs_true
         )
-        loss_focus = jraph.segment_sum(loss_focus, segment_ids, num_graphs)
+        lower_bounds = optax.sigmoid_binary_cross_entropy(
+            logits=models.safe_log(focus_probs_true), labels=focus_probs_true
+        )
+        lower_bounds = jax.lax.stop_gradient(lower_bounds)
+
+        # Subtract out lower bound.
+        loss_focus -= lower_bounds
+
+        loss_focus = jraph.segment_mean(loss_focus, segment_ids, num_graphs)
         assert loss_focus.shape == (num_graphs,)
 
         return loss_focus
@@ -204,7 +211,7 @@ def generation_loss(
         # Only compute the loss for the focus nodes.
         loss_atom_type *= graphs.nodes.focus_mask
 
-        loss_atom_type = jraph.segment_sum(loss_atom_type, segment_ids, num_graphs)
+        loss_atom_type = jraph.segment_mean(loss_atom_type, segment_ids, num_graphs)
         assert loss_atom_type.shape == (num_graphs,)
 
         return loss_atom_type

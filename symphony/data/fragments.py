@@ -151,6 +151,7 @@ def _make_first_fragment(
     sample = _into_fragment(
         graph,
         visited=np.asarray([first_node]),
+        focus_probs=(np.arange(num_nodes) == first_node).astype(np.float32),
         focus_mask=np.isin(np.arange(num_nodes), [first_node]),
         target_species_probability=target_species_probability,
         target_nodes=np.where(np.arange(num_nodes) == first_node, target, 0),
@@ -174,6 +175,7 @@ def _make_middle_fragment(
     heavy_first=False,
 ):
     num_nodes = len(graph.nodes.positions)
+    num_visited = len(visited)
     senders, receivers = graph.senders, graph.receivers
 
     mask = np.isin(senders, visited) & ~np.isin(receivers, visited)
@@ -210,10 +212,10 @@ def _make_middle_fragment(
     # pick a random focus node
     focus_probability = _normalized_bitcount(senders[mask], num_nodes)
     debug_print("focus_probability", focus_probability)
-    if num_nodes >= num_nodes_lower_bound:
+    if num_visited >= num_nodes_lower_bound:
         focus_nodes = np.where(focus_probability > 0)[0]
     else:
-        focus_nodes = np.argmax(focus_probability)
+        focus_nodes = [np.argmax(focus_probability)]
     debug_print("focus_nodes", focus_nodes)
 
     # pick a random target for each focus node
@@ -232,6 +234,7 @@ def _make_middle_fragment(
     sample = _into_fragment(
         graph,
         visited=visited,
+        focus_probs=focus_probability,
         focus_mask=focus_mask,
         target_species_probability=target_species_probability,
         target_nodes=target_nodes,
@@ -247,6 +250,7 @@ def _make_last_fragment(graph, num_species: int):
     return _into_fragment(
         graph,
         visited=np.arange(num_nodes),
+        focus_probs=np.zeros(num_nodes),
         focus_mask=np.zeros(num_nodes, dtype=bool),
         target_species_probability=np.zeros((num_nodes, num_species)),
         target_nodes=np.zeros(num_nodes, dtype=np.int32),
@@ -257,6 +261,7 @@ def _make_last_fragment(graph, num_species: int):
 def _into_fragment(
     graph,
     visited,
+    focus_probs,
     focus_mask,
     target_species_probability,
     target_nodes,
@@ -271,6 +276,7 @@ def _into_fragment(
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,
+        focus_probs=focus_probs,  # [num_nodes]
         focus_mask=focus_mask,  # [num_nodes]
         target_species_probs=target_species_probability,  # [num_nodes, num_species]
         target_species=graph.nodes.species[target_nodes],  # [num_nodes]

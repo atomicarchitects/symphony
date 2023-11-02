@@ -228,11 +228,11 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
     pieces_as_arrays = [np.asarray(piece) for piece in pieces]
 
-    def first_node_distance(piece: np.ndarray) -> float:
+    def smallest_node_distance(piece: np.ndarray) -> float:
         return np.min(np.linalg.norm(piece[0] - piece[1:], axis=-1))
 
     piece_factors = [
-        1 / np.min(first_node_distance(piece)) for piece in pieces_as_arrays
+        1 / smallest_node_distance(piece) for piece in pieces_as_arrays
     ]
     pieces = [
         [tuple(np.asarray(v) * factor) for v in piece]
@@ -462,6 +462,7 @@ def _specs_from_graphs_tuple(
         nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
+            focus_probs=get_tensor_spec(graph.nodes.focus_probs),
             focus_mask=get_tensor_spec(graph.nodes.focus_mask),
             target_species_probs=get_tensor_spec(graph.nodes.target_species_probs),
             target_species=get_tensor_spec(graph.nodes.target_species),
