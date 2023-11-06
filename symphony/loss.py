@@ -166,13 +166,6 @@ def generation_loss(
         loss_focus = optax.sigmoid_binary_cross_entropy(
             logits=focus_logits, labels=focus_probs_true
         )
-        lower_bounds = optax.sigmoid_binary_cross_entropy(
-            logits=models.safe_log(focus_probs_true), labels=focus_probs_true
-        )
-        lower_bounds = jax.lax.stop_gradient(lower_bounds)
-
-        # Subtract out lower bound.
-        loss_focus -= lower_bounds
 
         loss_focus = jraph.segment_mean(loss_focus, segment_ids, num_graphs)
         assert loss_focus.shape == (num_graphs,)
