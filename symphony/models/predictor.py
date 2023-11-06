@@ -126,6 +126,7 @@ class Predictor(hk.Module):
         graphs: datatypes.Fragments,
         focus_and_atom_type_inverse_temperature: float,
         position_inverse_temperature: float,
+        num_nodes_for_multifocus: int = 5,
     ) -> datatypes.Predictions:
         """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
         # Get the number of graphs and nodes.
@@ -149,9 +150,21 @@ class Predictor(hk.Module):
         # Get the PRNG key for sampling.
         rng = hk.next_rng_key()
 
+
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
         focus_mask = jax.random.bernoulli(focus_rng, focus_probs)
+
+        # If we have less than 'num_nodes_for_multifocus' nodes, we only choose one focus.
+        # We choose the focus with the highest probability.
+        def focus_mask_for_graph(index):
+            focus_probs_for_graph = jnp.where(segment_ids == index, focus_probs, 0.)
+            max_index = jnp.argmax(focus_probs_for_graph)
+            has_enough_nodes = (graphs.n_node[index] >= num_nodes_for_multifocus)
+            focus_mask_for_graph = jnp.where(segment_ids == index, jnp.logical_or(jnp.arange(num_nodes) == max_index, has_enough_nodes), 1.)
+            return focus_mask_for_graph
+        focus_mask *= jnp.all(jax.vmap(focus_mask_for_graph)(jnp.arange(num_graphs)), axis=0)
+
         rng, target_species_rng = jax.random.split(rng)
         target_species_rngs = jax.random.split(target_species_rng, num_nodes)
         target_species = jax.vmap(jax.random.categorical)(

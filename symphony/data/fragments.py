@@ -22,7 +22,7 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
-    num_nodes_lower_bound: int = 5,
+    num_nodes_for_multifocus: int = 5,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -35,7 +35,7 @@ def generate_fragments(
         mode: How to generate the fragments. Either "nn" or "radius".
         heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
         beta_com: Inverse temperature value for the center of mass.
-        num_nodes_lower_bound: How many nodes must be in the graph before multiple focuses are allowed.
+        num_nodes_for_multifocus: How many nodes must be in the graph before multiple focuses are allowed.
 
     Returns:
         A sequence of fragments.
@@ -81,7 +81,7 @@ def generate_fragments(
                 nn_tolerance,
                 max_radius,
                 mode,
-                num_nodes_lower_bound,
+                num_nodes_for_multifocus,
                 heavy_first,
             )
             yield frag
@@ -171,7 +171,7 @@ def _make_middle_fragment(
     nn_tolerance,
     max_radius,
     mode,
-    num_nodes_lower_bound: int,
+    num_nodes_for_multifocus: int,
     heavy_first=False,
 ):
     num_nodes = len(graph.nodes.positions)
@@ -214,7 +214,7 @@ def _make_middle_fragment(
     node_degrees = _normalized_bitcount(senders[mask], num_nodes)
     focus_probability = (node_degrees > 0).astype(np.float32)
     debug_print("focus_probability", focus_probability)
-    if num_visited >= num_nodes_lower_bound:
+    if num_visited >= num_nodes_for_multifocus:
         focus_nodes = np.where(node_degrees > 0)[0]
     else:
         focus_nodes = [np.argmax(node_degrees)]

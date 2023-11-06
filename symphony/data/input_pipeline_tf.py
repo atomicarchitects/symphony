@@ -305,13 +305,17 @@ def graphs_to_unbatched_datasets(
     datasets = {}
 
     for split in ["train", "val", "test"]:
-        split_rng, rng = jax.random.split(rng)
 
         split_pieces = config.get(f"{split}_pieces", (None, None))
         if None not in [split_pieces[0], split_pieces[1]]:
             split_graphs = graphs[split_pieces[0] : split_pieces[1]]
         else:
             split_graphs = graphs
+
+        if config.use_same_seed_for_all_splits:
+            split_rng = rng
+        else:
+            split_rng, rng = jax.random.split(rng)
 
         fragments_for_pieces = itertools.chain.from_iterable(
             generate_fragments_helper(seed_split_rng, graph) for graph in split_graphs
