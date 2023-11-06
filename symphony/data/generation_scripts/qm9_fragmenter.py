@@ -14,7 +14,9 @@ import tqdm
 
 from symphony.data import fragments
 from symphony.data import input_pipeline
+from symphony.data import input_pipeline_tf
 from symphony.data import qm9
+from symphony import datatypes
 
 FLAGS = flags.FLAGS
 
@@ -52,24 +54,18 @@ def generate_all_fragments(
         for molecule in molecules
     ]
 
-    signature = {
-        # nodes
-        "positions": tf.TensorSpec(shape=(None, 3), dtype=tf.float32),
-        "species": tf.TensorSpec(shape=(None,), dtype=tf.int32),
-        "focus_and_target_species_probs": tf.TensorSpec(
-            shape=(None, len(atomic_numbers)), dtype=tf.float32
-        ),
-        # edges
-        "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
-        "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
-        # globals
-        "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
-        "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
-        "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
-        # n_node and n_edge
-        "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
-        "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
-    }
+    # Generate a dummy fragment to get the signature of the dataset.
+    frag = next(iter(fragments.generate_fragments(
+        seed,
+        molecules_as_graphs[0],
+        len(atomic_numbers),
+        nn_tolerance,
+        max_radius,
+        mode,
+        heavy_first,
+        beta_com,
+    )))
+    signature = input_pipeline_tf._specs_from_graphs_tuple(frag, unknown_first_dimension=True)
 
     def generator():
         for graph in tqdm.tqdm(molecules_as_graphs):
@@ -86,8 +82,10 @@ def generate_all_fragments(
             frags = list(frags)
 
             skip = False
-            for frag in frags:
-                d = np.linalg.norm(frag.globals.target_positions)
+            for frag in frags[:-1]:
+                target_positions = frag.nodes.target_positions
+                target_positions = target_positions[frag.nodes.focus_mask]
+                d = np.min(np.linalg.norm(target_positions, axis=-1))
                 if d > max_radius:
                     logging.info(
                         f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
@@ -102,22 +100,7 @@ def generate_all_fragments(
                 continue
 
             for frag in frags:
-                yield {
-                    "positions": frag.nodes.positions.astype(np.float32),
-                    "species": frag.nodes.species.astype(np.int32),
-                    "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
-                        np.float32
-                    ),
-                    "senders": frag.senders.astype(np.int32),
-                    "receivers": frag.receivers.astype(np.int32),
-                    "stop": frag.globals.stop.astype(np.bool_),
-                    "target_positions": frag.globals.target_positions.astype(
-                        np.float32
-                    ),
-                    "target_species": frag.globals.target_species.astype(np.int32),
-                    "n_node": frag.n_node.astype(np.int32),
-                    "n_edge": frag.n_edge.astype(np.int32),
-                }
+                yield frag
 
     dataset = tf.data.Dataset.from_generator(generator, output_signature=signature)
 
@@ -183,7 +166,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
     flags.DEFINE_string(
-        "output_dir", "qm9_fragments_fixed/nn_edm/", "Output directory."
+        "output_dir", "qm9_fragments_fixed/nn_edm_multifocus/", "Output directory."
     )
     flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")

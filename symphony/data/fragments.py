@@ -207,15 +207,17 @@ def _make_middle_fragment(
     if np.sum(counts) == 0:
         raise ValueError("No targets found.")
 
+    # This is the probability of each species conditioned on each focus node.
     target_species_probability = counts
 
     # pick a random focus node
-    focus_probability = _normalized_bitcount(senders[mask], num_nodes)
+    node_degrees = _normalized_bitcount(senders[mask], num_nodes)
+    focus_probability = (node_degrees > 0).astype(np.float32)
     debug_print("focus_probability", focus_probability)
     if num_visited >= num_nodes_lower_bound:
-        focus_nodes = np.where(focus_probability > 0)[0]
+        focus_nodes = np.where(node_degrees > 0)[0]
     else:
-        focus_nodes = [np.argmax(focus_probability)]
+        focus_nodes = [np.argmax(node_degrees)]
     debug_print("focus_nodes", focus_nodes)
 
     # pick a random target for each focus node
@@ -297,6 +299,7 @@ def _into_fragment(
 
 
 def _normalized_bitcount(xs, n: int):
+    """Return the bitcount of the integers in xs, normalized by the length of xs."""
     assert xs.ndim == 1
     return np.bincount(xs, minlength=n) / len(xs)
 
