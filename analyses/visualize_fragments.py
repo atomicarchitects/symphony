@@ -22,19 +22,12 @@ def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
     workdir = os.path.abspath(FLAGS.workdir)
-    outputdir = FLAGS.outputdir
-    focus_and_atom_type_inverse_temperature = (
-        FLAGS.focus_and_atom_type_inverse_temperature
-    )
-    position_inverse_temperature = FLAGS.position_inverse_temperature
-    step = FLAGS.step
-
     visualize_predictions_and_fragments(
         workdir,
-        outputdir,
-        focus_and_atom_type_inverse_temperature,
-        position_inverse_temperature,
-        step,
+        FLAGS.outputdir,
+        FLAGS.focus_and_atom_type_inverse_temperature,
+        FLAGS.position_inverse_temperature,
+        FLAGS.step,
     )
 
 

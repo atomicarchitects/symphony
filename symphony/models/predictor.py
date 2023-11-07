@@ -156,7 +156,7 @@ class Predictor(hk.Module):
         focus_mask = jax.random.bernoulli(focus_rng, focus_probs)
 
         # If we have less than 'num_nodes_for_multifocus' nodes, we only choose one focus.
-        # We choose the focus with the highest probability.
+        # In this case, we choose the focus node with the highest probability.
         def focus_mask_for_graph(index):
             focus_probs_for_graph = jnp.where(segment_ids == index, focus_probs, 0.)
             max_index = jnp.argmax(focus_probs_for_graph)

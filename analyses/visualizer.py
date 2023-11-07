@@ -227,8 +227,6 @@ def get_plotly_traces_for_predictions(
     focus_probs = pred.nodes.focus_probs
     focus_mask = pred.nodes.focus_mask
     target_species_probs = pred.nodes.target_species_probs
-    true_focus_probs = fragment.nodes.focus_probs
-    true_target_species_probs = fragment.nodes.target_species_probs
     num_nodes = len(focus_probs)
     num_elements = len(target_species_probs[0])
 
@@ -270,7 +268,7 @@ def get_plotly_traces_for_predictions(
     # Highlight predicted position, if not stopped.
     if not pred.globals.stop:
         predicted_target_positions = fragment.nodes.positions + pred.nodes.position_vectors
-        predicted_target_positions = predicted_target_positions[fragment.nodes.focus_mask]
+        predicted_target_positions = predicted_target_positions[pred.nodes.focus_mask]
         molecule_traces.append(
             go.Scatter3d(
                 x=predicted_target_positions[:, 0],
@@ -283,7 +281,7 @@ def get_plotly_traces_for_predictions(
                         * ATOMIC_SIZES[
                             models.ATOMIC_NUMBERS[species]
                         ]
-                        for species in fragment.nodes.target_species
+                        for species in pred.nodes.target_species
                     ],
                     color=["purple" for _ in range(len(predicted_target_positions))],
                 ),
@@ -372,6 +370,15 @@ def get_plotly_traces_for_predictions(
         return base_string
 
     stop_probability = (np.sum(focus_mask) == 0).astype(float)
+    if hasattr(fragment.nodes, "focus_probs"):
+        true_focus_probs = fragment.nodes.focus_probs
+        true_target_species_probs = fragment.nodes.target_species_probs
+        text = np.round(true_focus_probs[:, None] * true_target_species_probs, 3)
+        texttemplate="%{z:.3f} (expected %{text:.3f})"
+    else:
+        text = None
+        texttemplate="%{z:.3f}"
+
     focus_and_atom_type_traces = [
         go.Heatmap(
             x=[
@@ -380,8 +387,8 @@ def get_plotly_traces_for_predictions(
             ],
             y=[get_focus_string(i) for i in range(num_nodes)],
             z=np.round(focus_probs[:, None] * target_species_probs, 3),
-            text=np.round(true_focus_probs[:, None] * true_target_species_probs, 3),
-            texttemplate="%{z:.3f} (expected %{text:.3f})",
+            text=text,
+            texttemplate=texttemplate,
             showlegend=False,
             showscale=False,
             colorscale="Blues",

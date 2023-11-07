@@ -84,7 +84,7 @@ def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatype
     new_fragment = new_fragment._replace(
         globals=fragment.globals
     )
-    return new_fragment, stop
+    return stop, new_fragment
 
 
 def _make_queue_iterator(q: queue.SimpleQueue):
@@ -105,6 +105,7 @@ def generate_molecules(
     num_node_for_padding: int,
     num_edge_for_padding: int,
     num_graph_for_padding: int,
+    merge_cutoff: float,
     steps_for_weight_averaging: Optional[Sequence[int]] = None
 ):
     """Generates molecules from a trained model at the given workdir."""
@@ -165,15 +166,15 @@ def generate_molecules(
         n_graph=num_graph_for_padding
     )
 
-    generated_molecules = []
     rng = jax.random.PRNGKey(0)
+    generated_molecules = []
     while len(generated_molecules) < num_seeds and fragment_pool.qsize() > 0:
         fragments = next(jraph.dynamically_batch(_make_queue_iterator(fragment_pool),
                                                 **padding_budget))
 
         apply_rng, rng = jax.random.split(rng)
         preds = apply_fn(params, apply_rng, fragments, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
-        for new_fragment, stop in append_predictions(fragments, preds, merge_cutoff=0.5, nn_cutoff=config.nn_cutoff):
+        for stop, new_fragment in append_predictions(fragments, preds, merge_cutoff=merge_cutoff, nn_cutoff=config.nn_cutoff):
             if stop or new_fragment.nodes.species.shape[0] == max_num_atoms:
                 generated_molecules.append((stop, new_fragment))
             else:
@@ -216,33 +217,20 @@ def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
     workdir = os.path.abspath(FLAGS.workdir)
-    outputdir = FLAGS.outputdir
-    focus_and_atom_type_inverse_temperature = (
-        FLAGS.focus_and_atom_type_inverse_temperature
-    )
-    position_inverse_temperature = FLAGS.position_inverse_temperature
-    step = FLAGS.step
-    num_seeds = FLAGS.num_seeds
-    init_molecule = FLAGS.init
-    max_num_atoms = FLAGS.max_num_atoms
-    num_node_for_padding = FLAGS.num_node_for_padding
-    num_edge_for_padding = FLAGS.num_edge_for_padding
-    num_graph_for_padding = FLAGS.num_graph_for_padding
-    steps_for_weight_averaging = FLAGS.steps_for_weight_averaging
-
     generate_molecules(
         workdir,
-        outputdir,
-        focus_and_atom_type_inverse_temperature,
-        position_inverse_temperature,
-        step,
-        num_seeds,
-        init_molecule,
-        max_num_atoms,
-        num_node_for_padding,
-        num_edge_for_padding,
-        num_graph_for_padding,
-        steps_for_weight_averaging
+        FLAGS.outputdir,
+        FLAGS.focus_and_atom_type_inverse_temperature,
+        FLAGS.position_inverse_temperature,
+        FLAGS.step,
+        FLAGS.num_seeds,
+        FLAGS.init,
+        FLAGS.max_num_atoms,
+        FLAGS.num_node_for_padding,
+        FLAGS.num_edge_for_padding,
+        FLAGS.num_graph_for_padding,
+        FLAGS.merge_cutoff,
+        FLAGS.steps_for_weight_averaging,
     )
 
 
@@ -299,6 +287,11 @@ if __name__ == "__main__":
         "num_graph_for_padding",
         16,
         "Number of graphs to pad to.",
+    )
+    flags.DEFINE_float(
+        "merge_cutoff",
+        0.5,
+        "Cutoff for merging atoms.",
     )
     flags.DEFINE_list(
         "steps_for_weight_averaging",

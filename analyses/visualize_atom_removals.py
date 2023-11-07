@@ -25,32 +25,6 @@ from symphony import models
 FLAGS = flags.FLAGS
 
 
-def _remove_target_atoms(
-    molecule: ase.Atoms, cutoff: float
-) -> Tuple[List[ase.Atoms], List[jraph.GraphsTuple]]:
-    """Removes each atom in the molecule and returns the resulting fragments."""
-    molecules_with_target_removed = []
-    fragments = []
-    for target in range(len(molecule)):
-        molecule_with_target_removed = ase.Atoms(
-            positions=np.concatenate(
-                [molecule.positions[:target], molecule.positions[target + 1 :]]
-            ),
-            numbers=np.concatenate(
-                [molecule.numbers[:target], molecule.numbers[target + 1 :]]
-            ),
-        )
-        fragment = input_pipeline.ase_atoms_to_jraph_graph(
-            molecule_with_target_removed,
-            ATOMIC_NUMBERS,
-            cutoff,
-        )
-
-        molecules_with_target_removed.append(molecule_with_target_removed)
-        fragments.append(fragment)
-    return molecules_with_target_removed, fragments
-
-
 def visualize_atom_removals(
     workdir: str,
     outputdir: str,
@@ -160,23 +134,15 @@ def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
     workdir = os.path.abspath(FLAGS.workdir)
-    outputdir = FLAGS.outputdir
-    focus_and_atom_type_inverse_temperature = (
-        FLAGS.focus_and_atom_type_inverse_temperature
-    )
-    position_inverse_temperature = FLAGS.position_inverse_temperature
-    step = FLAGS.step
-    molecule_str = FLAGS.molecule
-    seed = FLAGS.seed
 
     visualize_atom_removals(
         workdir,
-        outputdir,
-        focus_and_atom_type_inverse_temperature,
-        position_inverse_temperature,
-        step,
-        molecule_str,
-        seed,
+        FLAGS.outputdir,
+        FLAGS.focus_and_atom_type_inverse_temperature,
+        FLAGS.position_inverse_temperature,
+        FLAGS.step,
+        FLAGS.molecule,
+        FLAGS.seed,
     )
 
 
