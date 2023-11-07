@@ -9,7 +9,6 @@ import jraph
 import matscipy.neighbours
 import ml_collections
 import numpy as np
-import pymatgen
 import roundmantissa
 
 from symphony import datatypes
@@ -240,11 +239,11 @@ def pad_graph_to_nearest_ceil_mantissa(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float, cell=np.eye(3)
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=np.eye(3)
+        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=cell
     )
 
     # Get the species indices

@@ -17,6 +17,7 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
+    periodic: bool = False
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 

@@ -494,9 +494,15 @@ def get_unbatched_silica_datasets(
 
     def generate_fragments_helper(gen_rng, mol):
         graph = input_pipeline.ase_atoms_to_jraph_graph(
-            ase.Atoms(positions=mol.cart_coords, numbers=mol.atomic_numbers),
+            ase.Atoms(
+                positions=mol.cart_coords,
+                numbers=mol.atomic_numbers,
+                cell=mol.lattice.matrix,
+                pbc=True
+            ),
             config.atomic_numbers,
-            config.nn_cutoff
+            config.nn_cutoff,
+            cell=mol.lattice.matrix,
         )
         return fragments.generate_fragments(
             gen_rng,
@@ -505,6 +511,7 @@ def get_unbatched_silica_datasets(
             nn_tolerance=config.nn_tolerance,
             max_radius=config.nn_cutoff,
             mode=config.fragment_logic,
+            periodic=True,
         )
 
     datasets_raw = get_raw_silica_datasets(config)
@@ -519,9 +526,9 @@ def get_unbatched_silica_datasets(
     for split, dataset_raw in datasets_raw.items():
         split_rng, rng = jax.random.split(rng)
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, struct)
-            for struct in dataset_raw
+            generate_fragments_helper(split_rng, struct) for struct in dataset_raw
         )
+
         def fragment_yielder():
             yield from fragments_for_pieces
 
