@@ -183,31 +183,33 @@ def get_plotly_traces_for_fragment(
 
     # Highlight the target atom.
     if fragment.globals is not None:
-        if fragment.globals.target_positions is not None and not fragment.globals.stop:
-            # The target position is relative to the fragment's focus node.
+        if fragment.nodes.target_positions is not None and not fragment.globals.stop:
+            # The target position is relative to the fragment's focus nodes.
             target_positions = (
-                fragment.globals.target_positions + fragment.nodes.positions[0]
+                fragment.nodes.target_positions + fragment.nodes.positions
             )
-            target_positions = target_positions.reshape(3)
+            target_positions = target_positions[fragment.nodes.focus_mask, :]
+            target_species = fragment.nodes.target_species[fragment.nodes.focus_mask]
             molecule_traces.append(
                 go.Scatter3d(
-                    x=[target_positions[0]],
-                    y=[target_positions[1]],
-                    z=[target_positions[2]],
+                    x=target_positions[:, 0],
+                    y=target_positions[:, 1],
+                    z=target_positions[:, 2],
                     mode="markers",
                     marker=dict(
                         size=[
                             1.05
                             * ATOMIC_SIZES[
                                 models.ATOMIC_NUMBERS[
-                                    fragment.globals.target_species.item()
+                                    species
                                 ]
                             ]
+                            for species in target_species
                         ],
-                        color=["green"],
+                        color=["green" for _ in target_species],
                     ),
                     opacity=0.5,
-                    name="Target Atom",
+                    name="Target Atoms",
                 )
             )
 
@@ -222,11 +224,13 @@ def get_plotly_traces_for_predictions(
     atomic_numbers = list(
         int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
     )
-    focus = pred.globals.focus_indices.item()
-    focus_position = fragment.nodes.positions[focus]
-    focus_and_target_species_probs = pred.nodes.focus_and_target_species_probs
-    focus_probs = focus_and_target_species_probs.sum(axis=-1)
-    num_nodes, num_elements = focus_and_target_species_probs.shape
+    focus_probs = pred.nodes.focus_probs
+    focus_mask = pred.nodes.focus_mask
+    target_species_probs = pred.nodes.target_species_probs
+    true_focus_probs = fragment.nodes.focus_probs
+    true_target_species_probs = fragment.nodes.target_species_probs
+    num_nodes = len(focus_probs)
+    num_elements = len(target_species_probs[0])
 
     # Highlight the focus probabilities, obtained by marginalization over all elements.
     def get_scaling_factor(focus_prob: float, num_nodes: int) -> float:
@@ -235,9 +239,9 @@ def get_plotly_traces_for_predictions(
             return 0.95
         return 1 + focus_prob**2
 
-    def chosen_focus_string(index: int, focus: int) -> str:
+    def chosen_focus_string(index: int, chosen: bool) -> str:
         """Returns a string indicating whether the atom was chosen as the focus."""
-        if index == focus:
+        if chosen:
             return f"Atom {index} (Chosen as Focus)"
         return f"Atom {index} (Not Chosen as Focus)"
 
@@ -256,8 +260,8 @@ def get_plotly_traces_for_predictions(
                 color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
             ),
             hovertext=[
-                f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
-                for i, focus_prob in enumerate(focus_probs)
+                f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, chosen)}"
+                for i, (focus_prob, chosen) in enumerate(zip(focus_probs, focus_mask))
             ],
             name="Focus Probabilities",
         )
@@ -265,119 +269,109 @@ def get_plotly_traces_for_predictions(
 
     # Highlight predicted position, if not stopped.
     if not pred.globals.stop:
-        predicted_target_position = focus_position + pred.globals.position_vectors
+        predicted_target_positions = fragment.nodes.positions + pred.nodes.position_vectors
+        predicted_target_positions = predicted_target_positions[fragment.nodes.focus_mask]
         molecule_traces.append(
             go.Scatter3d(
-                x=[predicted_target_position[0]],
-                y=[predicted_target_position[1]],
-                z=[predicted_target_position[2]],
+                x=predicted_target_positions[:, 0],
+                y=predicted_target_positions[:, 1],
+                z=predicted_target_positions[:, 2],
                 mode="markers",
                 marker=dict(
                     size=[
                         1.05
                         * ATOMIC_SIZES[
-                            models.ATOMIC_NUMBERS[pred.globals.target_species.item()]
+                            models.ATOMIC_NUMBERS[species]
                         ]
+                        for species in fragment.nodes.target_species
                     ],
-                    color=["purple"],
+                    color=["purple" for _ in range(len(predicted_target_positions))],
                 ),
                 opacity=0.5,
                 name="Predicted Atom",
             )
         )
 
-    # Since we downsample the position grid, we need to recompute the position probabilities.
-    position_coeffs = pred.globals.log_position_coeffs
-    radii = pred.globals.radial_bins
-    num_radii = radii.shape[0]
-    position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99, num_radii)
-    position_logits.grid_values -= np.max(position_logits.grid_values)
-    position_probs = position_logits.apply(np.exp)
 
-    count = 0
-    cmin = 0.0
-    cmax = position_probs.grid_values.max().item()
-    for i in range(len(radii)):
-        prob_r = position_probs[i]
-
-        # Skip if the probability is too small.
-        if prob_r.grid_values.max() < 1e-2 * cmax:
+    for focus_index, is_focus in enumerate(focus_mask):
+        if not is_focus:
             continue
 
-        count += 1
-        surface_r = go.Surface(
-            **prob_r.plotly_surface(radius=radii[i], translation=focus_position),
-            colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
-            showscale=False,
-            cmin=cmin,
-            cmax=cmax,
-            name="Position Probabilities",
-            legendgroup="Position Probabilities",
-            showlegend=(count == 1),
-            visible="legendonly",
-        )
-        molecule_traces.append(surface_r)
+        # Since we downsample the position grid, we need to recompute the position probabilities.
+        focus_position = fragment.nodes.positions[focus_index]
+        position_coeffs = pred.nodes.log_position_coeffs[focus_index]
+        radii = pred.nodes.radial_bins[0]
+        position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99)
+        position_logits.grid_values -= np.max(position_logits.grid_values)
+        position_probs = position_logits.apply(np.exp)
 
-    # Plot spherical harmonic projections of logits.
-    # Find closest index in RADII to the sampled positions.
-    radii = pred.globals.radial_bins
-    radius = np.linalg.norm(pred.globals.position_vectors, axis=-1)
-    most_likely_radius_index = np.abs(radii - radius).argmin()
-    most_likely_radius = radii[most_likely_radius_index]
-    all_sigs = e3nn.to_s2grid(
-        position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
-    )
-    cmin = all_sigs.grid_values.min().item()
-    cmax = all_sigs.grid_values.max().item()
-    for channel in range(position_coeffs.shape[0]):
-        most_likely_radius_coeffs = position_coeffs[channel, most_likely_radius_index]
-        most_likely_radius_sig = e3nn.to_s2grid(
-            most_likely_radius_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
-        )
-        spherical_harmonics = go.Surface(
-            most_likely_radius_sig.plotly_surface(
-                scale_radius_by_amplitude=True,
-                radius=most_likely_radius,
-                translation=focus_position,
-                normalize_radius_by_max_amplitude=True,
-            ),
-            cmin=cmin,
-            cmax=cmax,
-            name=f"Spherical Harmonics for Logits: Channel {channel}",
-            showlegend=True,
-            visible="legendonly",
-        )
-        molecule_traces.append(spherical_harmonics)
+        count = 0
+        cmin = 0.0
+        cmax = position_probs.grid_values.max().item()
 
-    # Plot target species probabilities.
-    stop_probability = pred.globals.stop_probs.item()
-    predicted_target_species = pred.globals.target_species.item()
-    if fragment.globals is not None and not fragment.globals.stop:
-        true_focus = 0  # This is a convention used in our training pipeline.
-        true_target_species = fragment.globals.target_species.item()
-    else:
-        true_focus = None
-        true_target_species = None
+        for i in range(len(radii)):
+            prob_r = position_probs[i]
+
+            # Skip if the probability is too small.
+            if prob_r.grid_values.max() < 1e-2 * cmax:
+                continue
+
+            count += 1
+            surface_r = go.Surface(
+                **prob_r.plotly_surface(radius=radii[i], translation=focus_position),
+                colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
+                showscale=False,
+                cmin=cmin,
+                cmax=cmax,
+                name="Position Probabilities: Atom {}".format(focus_index),
+                legendgroup="Position Probabilities: Atom {}".format(focus_index),
+                showlegend=(count == 1),
+                visible="legendonly",
+            )
+            molecule_traces.append(surface_r)
+
+        # Plot spherical harmonic projections of logits.
+        # Find closest index in RADII to the sampled positions.
+        radius = np.linalg.norm(pred.nodes.position_vectors[focus_index], axis=-1)
+        most_likely_radius_index = np.abs(radii - radius).argmin()
+        most_likely_radius = radii[most_likely_radius_index]
+        all_sigs = e3nn.to_s2grid(
+            position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+        )
+        cmin = all_sigs.grid_values.min().item()
+        cmax = all_sigs.grid_values.max().item()
+        for channel in range(position_coeffs.shape[0]):
+            most_likely_radius_coeffs = position_coeffs[channel, most_likely_radius_index]
+            most_likely_radius_sig = e3nn.to_s2grid(
+                most_likely_radius_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+            )
+            spherical_harmonics = go.Surface(
+                most_likely_radius_sig.plotly_surface(
+                    scale_radius_by_amplitude=True,
+                    radius=most_likely_radius,
+                    translation=focus_position,
+                    normalize_radius_by_max_amplitude=True,
+                ),
+                cmin=cmin,
+                cmax=cmax,
+                name=f"Spherical Harmonics for Logits: Channel {channel}",
+                showlegend=True,
+                visible="legendonly",
+            )
+            molecule_traces.append(spherical_harmonics)
 
     # We highlight the true target if provided.
     def get_focus_string(atom_index: int) -> str:
         """Get the string for the focus."""
         base_string = f"Atom {atom_index}"
-        if atom_index == focus:
-            base_string = f"{base_string}<br>Predicted Focus"
-        if atom_index == true_focus:
-            base_string = f"{base_string}<br>True Focus"
         return base_string
 
     def get_atom_type_string(element_index: int, element: str) -> str:
         """Get the string for the atom type."""
         base_string = f"{element}"
-        if element_index == predicted_target_species:
-            base_string = f"{base_string}<br>Predicted Species"
-        if element_index == true_target_species:
-            base_string = f"{base_string}<br>True Species"
         return base_string
 
+    stop_probability = (np.sum(focus_mask) == 0).astype(float)
     focus_and_atom_type_traces = [
         go.Heatmap(
             x=[
@@ -385,8 +379,9 @@ def get_plotly_traces_for_predictions(
                 for index, elem in enumerate(ELEMENTS[:num_elements])
             ],
             y=[get_focus_string(i) for i in range(num_nodes)],
-            z=np.round(pred.nodes.focus_and_target_species_probs, 3),
-            texttemplate="%{z}",
+            z=np.round(focus_probs[:, None] * target_species_probs, 3),
+            text=np.round(true_focus_probs[:, None] * true_target_species_probs, 3),
+            texttemplate="%{z:.3f} (expected %{text:.3f})",
             showlegend=False,
             showscale=False,
             colorscale="Blues",
@@ -498,13 +493,7 @@ def visualize_predictions(
     centre_of_mass = np.mean(fragment.nodes.positions, axis=0)
     furthest_dist = np.max(
         np.linalg.norm(
-            fragment.nodes.positions + pred.globals.position_vectors - centre_of_mass,
-            axis=-1,
-        )
-    )
-    furthest_dist = np.max(
-        np.linalg.norm(
-            fragment.nodes.positions - pred.globals.position_vectors - centre_of_mass,
+            fragment.nodes.positions + pred.nodes.position_vectors - centre_of_mass,
             axis=-1,
         )
     )

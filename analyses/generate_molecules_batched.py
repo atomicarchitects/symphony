@@ -43,7 +43,6 @@ def append_predictions(
     num_valid_graphs = num_graphs - num_padding_graphs
     num_edges = padded_fragments.senders.shape[0]
 
-    #
     num_unstopped_graphs = (~stop).sum()
     dummy_nodes_indices = num_valid_nodes + jnp.arange(num_valid_graphs)
 

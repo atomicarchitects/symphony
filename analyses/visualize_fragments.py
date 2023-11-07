@@ -79,18 +79,11 @@ def visualize_predictions_and_fragments(
         zip(jraph.unbatch(fragments), jraph.unbatch(preds))
     ):
         # Remove batch dimension.
-        # Also, correct the focus indices.
         fragment = fragment._replace(
             globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), fragment.globals)
         )
         pred = pred._replace(
             globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
-        )
-        corrected_focus_indices = (
-            pred.globals.focus_indices - preds.n_node[:index].sum()
-        )
-        pred = pred._replace(
-            globals=pred.globals._replace(focus_indices=corrected_focus_indices)
         )
         figs.append(visualizer.visualize_predictions(pred, fragment))
 

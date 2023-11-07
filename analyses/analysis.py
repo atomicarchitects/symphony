@@ -143,7 +143,6 @@ def load_weighted_average_model_at_steps(
     return model, params_avg, config
 
 
-
 def get_results_as_dataframe(basedir: str) -> pd.DataFrame:
     """Returns the results for the given model as a pandas dataframe."""
 
