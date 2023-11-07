@@ -217,18 +217,27 @@ def _make_middle_fragment(
     if num_visited >= num_nodes_for_multifocus:
         focus_nodes = np.where(node_degrees > 0)[0]
     else:
-        focus_nodes = [np.argmax(node_degrees)]
+        focus_nodes = np.asarray([np.argmax(node_degrees)])
     debug_print("focus_nodes", focus_nodes)
 
     # pick a random target for each focus node
     def choose_target_node(focus_node, key):
         return jax.random.choice(key, receivers, p=((senders == focus_node) & mask))
 
-    rng, key = jax.random.split(rng)
-    keys = jax.random.split(key, num_nodes)
-    target_nodes = jax.vmap(choose_target_node)(np.arange(num_nodes), keys)
+    # Pick the target nodes that maximize the number of unique targets.
+    best_num_targets_so_far = 0
+    best_target_nodes_so_far = None
+    for _ in range(10):
+        rng, key = jax.random.split(rng)
+        keys = jax.random.split(key, num_nodes)
+        target_nodes = jax.vmap(choose_target_node)(np.arange(num_nodes), keys)
+        num_unique_targets = len(np.unique(target_nodes[focus_nodes]))
+        if num_unique_targets > best_num_targets_so_far:
+            best_num_targets_so_far = num_unique_targets
+            best_target_nodes_so_far = target_nodes
+
     focus_mask = np.isin(np.arange(num_nodes), focus_nodes)
-    true_target_nodes = target_nodes[focus_mask]
+    true_target_nodes = best_target_nodes_so_far[focus_mask]
     debug_print("target_nodes", true_target_nodes)
     new_visited = np.concatenate([visited, true_target_nodes])
     new_visited = np.unique(new_visited)
