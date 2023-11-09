@@ -11,7 +11,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "silica"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = None
+    config.root_dir = "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/silica-allegro"
     # config.train_molecules = (0, 200)
     # config.val_molecules = (200, 250)
     # config.test_molecules = (250, 300)
@@ -42,7 +42,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.eval_every_steps = 30000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 3.0
-    config.compute_padding_dynamically = True
+    config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")  # how slow will this be
     config.max_n_edges = 180 * config.get_ref("max_n_graphs")
@@ -68,8 +68,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.res_beta = 180
-    config.target_position_predictor.res_alpha = 359
+    # config.target_position_predictor.res_beta = 180
+    # config.target_position_predictor.res_alpha = 359
+    config.target_position_predictor.res_beta = 90
+    config.target_position_predictor.res_alpha = 179
     config.target_position_predictor.num_channels = 5
     config.target_position_predictor.min_radius = 0.9
     config.target_position_predictor.max_radius = 2.0
