@@ -15,6 +15,7 @@ import numpy as np
 import jraph
 import ml_collections
 import ase
+import pandas as pd
 
 from symphony.data import input_pipeline, fragments, matproj
 from symphony import datatypes
@@ -498,7 +499,7 @@ def get_unbatched_silica_datasets(
                 positions=mol.cart_coords,
                 numbers=mol.atomic_numbers,
                 cell=mol.lattice.matrix,
-                pbc=True
+                pbc=True,
             ),
             config.atomic_numbers,
             config.nn_cutoff,
@@ -577,6 +578,20 @@ def get_raw_silica_datasets(
     }
 
     return molecules
+
+
+def get_raw_silica_dataset_csv(config: ml_collections.ConfigDict, root_dir=None):
+    # Load all molecules.
+    if root_dir is None:
+        root_dir = config.root_dir
+    all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
+    df = pd.DataFrame(
+        {
+            "material_id": jax.vmap(lambda x: str(x.material_id))(all_molecules),
+            "cif": jax.vmap(lambda x: x.structure.to(fmt="cif"))(all_molecules),
+        }
+    )
+    df.to_csv(os.path.join(root_dir, "silica.csv"))
 
 
 def _specs_from_graphs_tuple(
