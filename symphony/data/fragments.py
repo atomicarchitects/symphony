@@ -189,10 +189,6 @@ def _make_middle_fragment(
                 & (graph.nodes.species[receivers] > 0)
             )
 
-    if mode == "nn":
-        min_dist = dist[mask].min()
-        mask = mask & (dist < min_dist + nn_tolerance)
-        del min_dist
     if mode == "radius":
         mask = mask & (dist < max_radius)
 
@@ -220,26 +216,30 @@ def _make_middle_fragment(
         focus_nodes = np.asarray([np.argmax(node_degrees)])
     debug_print("focus_nodes", focus_nodes)
 
-    # pick a random target for each focus node
     def choose_target_node(focus_node, key):
-        return jax.random.choice(key, receivers, p=((senders == focus_node) & mask))
+        """Picks a random target node for a given focus node."""
+        mask_for_focus_node = (senders == focus_node) & mask
+        if mode == "nn":
+            min_dist = dist[mask_for_focus_node].min()
+            mask_for_focus_node = mask_for_focus_node & (dist < min_dist + nn_tolerance)
+        return jax.random.choice(key, receivers, p=mask_for_focus_node)
 
     # Pick the target nodes that maximize the number of unique targets.
-    best_num_targets_so_far = 0
-    best_target_nodes_so_far = None
+    best_num_targets = 0
+    best_target_nodes = None
     for _ in range(10):
         rng, key = jax.random.split(rng)
         keys = jax.random.split(key, num_nodes)
         target_nodes = jax.vmap(choose_target_node)(np.arange(num_nodes), keys)
         num_unique_targets = len(np.unique(target_nodes[focus_nodes]))
-        if num_unique_targets > best_num_targets_so_far:
-            best_num_targets_so_far = num_unique_targets
-            best_target_nodes_so_far = target_nodes
+        if num_unique_targets > best_num_targets:
+            best_num_targets = num_unique_targets
+            best_target_nodes = target_nodes
 
     focus_mask = np.isin(np.arange(num_nodes), focus_nodes)
-    true_target_nodes = best_target_nodes_so_far[focus_mask]
-    debug_print("target_nodes", true_target_nodes)
-    new_visited = np.concatenate([visited, true_target_nodes])
+    target_nodes = best_target_nodes
+    debug_print("target_nodes", target_nodes[focus_mask])
+    new_visited = np.concatenate([visited, target_nodes[focus_mask]])
     new_visited = np.unique(new_visited)
 
     sample = _into_fragment(
