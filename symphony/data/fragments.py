@@ -3,6 +3,7 @@ from typing import Iterator
 import jax
 import jraph
 import numpy as np
+import jax.numpy as jnp
 import chex
 
 from symphony import datatypes
@@ -189,6 +190,14 @@ def _make_middle_fragment(
                 & (graph.nodes.species[receivers] > 0)
             )
 
+    if mode == "nn":
+        def compute_node_mask(focus_node):
+            mask_for_focus_node = (senders == focus_node) & mask
+            min_dist = jnp.where(mask_for_focus_node, dist, np.inf).min()
+            return mask_for_focus_node & (dist < min_dist + nn_tolerance)
+        mask = jnp.any(jax.vmap(compute_node_mask)(np.arange(num_nodes)), axis=0)
+        mask = np.asarray(mask)
+
     if mode == "radius":
         mask = mask & (dist < max_radius)
 
@@ -219,9 +228,6 @@ def _make_middle_fragment(
     def choose_target_node(focus_node, key):
         """Picks a random target node for a given focus node."""
         mask_for_focus_node = (senders == focus_node) & mask
-        if mode == "nn":
-            min_dist = dist[mask_for_focus_node].min()
-            mask_for_focus_node = mask_for_focus_node & (dist < min_dist + nn_tolerance)
         return jax.random.choice(key, receivers, p=mask_for_focus_node)
 
     # Pick the target nodes that maximize the number of unique targets.
