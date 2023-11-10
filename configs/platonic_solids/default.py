@@ -9,7 +9,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "platonic_solids"
-    config.fragment_logic = "radius"
+    config.fragment_logic = "nn"
     config.root_dir = None
     config.shuffle_datasets = True
     config.train_pieces = (None, None)
