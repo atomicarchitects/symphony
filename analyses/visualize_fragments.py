@@ -78,6 +78,12 @@ def visualize_predictions_and_fragments(
         pred = pred._replace(
             globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
         )
+
+        # Print the distance matrix.
+        print(f"Distance matrix for fragment {index}:")
+        print(jnp.linalg.norm(fragment.nodes.positions[:, None, :] - fragment.nodes.positions[None, :, :], axis=-1))
+
+        # Visualize the fragment and predictions.
         figs.append(visualizer.visualize_predictions(pred, fragment))
 
     # Save to files.

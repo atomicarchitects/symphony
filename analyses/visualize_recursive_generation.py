@@ -96,12 +96,19 @@ def visualize_predictions_and_fragments(
         all_preds.append(preds)
 
         # Update the fragment.
+        old_fragment = fragment
         stop, fragment = generate_molecules_multifocus.append_predictions_to_fragment(
             fragment, preds, merge_cutoff, config.nn_cutoff
         )
         if stop:
             break
 
+        # Print the distance matrix.
+        print(f"Distance matrix for fragment:")
+        print(jnp.linalg.norm(fragment.nodes.positions[:, None, :] - fragment.nodes.positions[None, :, :], axis=-1))
+
+        if np.all(fragment.n_node == old_fragment.n_node):
+            break
 
     # We create one figure per fragment.
     figs = []

@@ -35,11 +35,11 @@ import matplotlib.pyplot as plt
 import jraph
 import ase
 
-
 from analyses import analysis
 from symphony.data import input_pipeline
 from symphony import datatypes
 from symphony.models import utils
+
 
 def append_predictions(fragments: datatypes.Fragments, preds: datatypes.Predictions, merge_cutoff: float, nn_cutoff: float) -> Iterable[Tuple[int, datatypes.Fragments]]:
     """Appends the predictions to the fragments."""
@@ -51,7 +51,7 @@ def append_predictions(fragments: datatypes.Fragments, preds: datatypes.Predicti
     # Process each fragment.
     for valid, fragment, pred in zip(valids, jraph.unbatch(fragments), jraph.unbatch(preds)):
         if valid:
-            yield append_predictions_to_fragment(fragment, pred, merge_cutoff, nn_cutoff)
+            yield *append_predictions_to_fragment(fragment, pred, merge_cutoff, nn_cutoff), fragment, pred
 
 
 def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatypes.Predictions, merge_cutoff: float, nn_cutoff: float) -> Tuple[int, datatypes.Fragments]:
@@ -66,9 +66,11 @@ def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatype
     new_positions = fragment.nodes.positions
     new_species = fragment.nodes.species
     for extra_position, extra_specie in zip(extra_positions, extra_species):
-        if np.min(np.linalg.norm(new_positions - extra_position, axis=1)) < merge_cutoff:
+        distances = np.linalg.norm(new_positions - extra_position, axis=1)
+        if np.min(distances) < merge_cutoff:
+            closest_position = new_positions[np.argmin(distances)]
+            # print(f"Ignoring extra position {extra_position} because it is too close to another position {closest_position} with distance {np.min(distances)}")
             continue
-
         new_positions = np.concatenate([new_positions, [extra_position]], axis=0)
         new_species = np.concatenate([new_species, [extra_specie]], axis=0)
 
@@ -166,28 +168,41 @@ def generate_molecules(
         n_graph=num_graph_for_padding
     )
 
+    # Generate molecules.
     rng = jax.random.PRNGKey(0)
     generated_molecules = []
     while len(generated_molecules) < num_seeds and fragment_pool.qsize() > 0:
-        fragments = next(jraph.dynamically_batch(_make_queue_iterator(fragment_pool),
-                                                **padding_budget))
+        logging.info(f"Fragment pool has {fragment_pool.qsize()} remaining fragments. "
+                     f"Generated {len(generated_molecules)} molecules so far.")
 
-        apply_rng, rng = jax.random.split(rng)
-        preds = apply_fn(params, apply_rng, fragments, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
-        for stop, new_fragment in append_predictions(fragments, preds, merge_cutoff=merge_cutoff, nn_cutoff=config.nn_cutoff):
-            if stop or new_fragment.nodes.species.shape[0] == max_num_atoms:
-                generated_molecules.append((stop, new_fragment))
-            else:
-                fragment_pool.put(new_fragment)
+        for fragments in jraph.dynamically_batch(_make_queue_iterator(fragment_pool), 
+                                                 **padding_budget):
+            # Compute predictions.
+            apply_rng, rng = jax.random.split(rng)
+            preds = apply_fn(params, apply_rng, fragments, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
+            
+            # Append predictions to fragments.
+            for stop, new_fragment, fragment, pred in append_predictions(fragments, preds, merge_cutoff=merge_cutoff, nn_cutoff=config.nn_cutoff):
+                num_atoms_in_fragment = len(new_fragment.nodes.species)
+                print(f"Fragment has {num_atoms_in_fragment} atoms, {stop}.")
+                if stop or num_atoms_in_fragment >= max_num_atoms:
+                    generated_molecules.append((stop, new_fragment))
+                else:
+                    fragment_pool.put(new_fragment)
+
 
     # Add the remaining fragments to the generated molecules.
     while fragment_pool.qsize() > 0:
+        print("Adding unfinished fragment to generated molecules.")
         unfinished_fragment = fragment_pool.get(block=False)
+        print(f"Seed {unfinished_fragment.globals.item()} unfinished.")
         generated_molecules.append((False, unfinished_fragment))
+
 
     generated_molecules_ase = []
     for stop, fragment in generated_molecules:
         seed = fragment.globals.item()
+        print(f"Seed {seed} produced {fragment.n_node} atoms.")
         init_molecule_name = init_molecule_names[seed]
         generated_molecule_ase = ase.Atoms(
             symbols=utils.get_atomic_numbers(fragment.nodes.species),
@@ -260,7 +275,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "num_seeds",
-        128,
+        1,
         "Seeds to attempt to generate molecules from.",
     )
     flags.DEFINE_string(
@@ -270,7 +285,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "max_num_atoms",
-        30,
+        20,
         "Maximum number of atoms to generate per molecule.",
     )
     flags.DEFINE_integer(
