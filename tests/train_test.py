@@ -74,7 +74,7 @@ class TrainTest(parameterized.TestCase):
         config_name=["nequip"],
         train_on_split_smaller_than_chunk=[True],
         position_loss_type=["kl_divergence"],
-        dataset=["qm9"],
+        dataset=["platonic_solids"],
     )
     def test_train_and_evaluate(
         self,
