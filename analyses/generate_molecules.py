@@ -166,18 +166,13 @@ def generate_molecules(
         )
     else:
         model, params, config = analysis.load_model_at_step(
-            workdir, step, run_in_evaluation_mode=True
+            workdir, step, run_in_evaluation_mode=True,
+            res_alpha=res_alpha,
+            res_beta=res_beta,
         )
     config = config.unlock()
     logging.info(config.to_dict())
 
-
-    if res_alpha is not None:
-        logging.info("Setting res_alpha to %d", res_alpha)
-        config.target_position_predictor.res_alpha = res_alpha
-    if res_beta is not None:
-        logging.info("Setting res_beta to %d", res_beta)
-        config.target_position_predictor.res_beta = res_beta
 
     # Create output directories.
     molecules_outputdir = os.path.join(
