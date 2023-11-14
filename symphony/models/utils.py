@@ -138,7 +138,7 @@ def log_coeffs_to_logits(
         num_channels,
         num_radii,
         log_coeffs.irreps.dim,
-    )
+    ), f"{log_coeffs.shape}"
 
     log_dist = e3nn.to_s2grid(
         log_coeffs, res_beta, res_alpha, quadrature="gausslegendre", p_val=1, p_arg=-1
