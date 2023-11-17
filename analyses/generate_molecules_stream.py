@@ -42,7 +42,9 @@ from symphony import datatypes
 from symphony.models import utils
 
 
-def append_predictions(fragments: datatypes.Fragments, preds: datatypes.Predictions, nn_cutoff: float) -> Iterable[Tuple[int, datatypes.Fragments]]:
+def append_predictions(
+    fragments: datatypes.Fragments, preds: datatypes.Predictions, nn_cutoff: float
+) -> Iterable[Tuple[int, datatypes.Fragments]]:
     """Appends the predictions to the fragments."""
     # Bring back to CPU.
     fragments = jax.tree_map(np.asarray, fragments)
@@ -50,12 +52,18 @@ def append_predictions(fragments: datatypes.Fragments, preds: datatypes.Predicti
     valids = jraph.get_graph_padding_mask(fragments)
 
     # Process each fragment.
-    for valid, fragment, pred in zip(valids, jraph.unbatch(fragments), jraph.unbatch(preds)):
+    for valid, fragment, pred in zip(
+        valids, jraph.unbatch(fragments), jraph.unbatch(preds)
+    ):
         if valid:
-            yield *append_predictions_to_fragment(fragment, pred, nn_cutoff), fragment, pred
+            yield *append_predictions_to_fragment(
+                fragment, pred, nn_cutoff
+            ), fragment, pred
 
 
-def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatypes.Predictions, nn_cutoff: float) -> Tuple[int, datatypes.Fragments]:
+def append_predictions_to_fragment(
+    fragment: datatypes.Fragments, pred: datatypes.Predictions, nn_cutoff: float
+) -> Tuple[int, datatypes.Fragments]:
     """Appends the predictions to a single fragment."""
     target_relative_positions = pred.globals.position_vectors[0]
     focus_index = pred.globals.focus_indices[0]
@@ -69,16 +77,11 @@ def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatype
 
     atomic_numbers = np.asarray([1, 6, 7, 8, 9])
     new_fragment = input_pipeline.ase_atoms_to_jraph_graph(
-        atoms=ase.Atoms(
-            numbers=atomic_numbers[new_species],
-            positions=new_positions
-        ),
+        atoms=ase.Atoms(numbers=atomic_numbers[new_species], positions=new_positions),
         atomic_numbers=atomic_numbers,
-        nn_cutoff=nn_cutoff
+        nn_cutoff=nn_cutoff,
     )
-    new_fragment = new_fragment._replace(
-        globals=fragment.globals
-    )
+    new_fragment = new_fragment._replace(globals=fragment.globals)
     return stop, new_fragment
 
 
@@ -100,7 +103,7 @@ def generate_molecules(
     num_node_for_padding: int,
     num_edge_for_padding: int,
     num_graph_for_padding: int,
-    steps_for_weight_averaging: Optional[Sequence[int]] = None
+    steps_for_weight_averaging: Optional[Sequence[int]] = None,
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Create initial molecule, if provided.
@@ -113,7 +116,9 @@ def generate_molecules(
         init_molecule_names = [init_molecule_name] * num_seeds
     else:
         assert len(init_molecules) == num_seeds
-        init_molecule_names = [init_molecule.get_chemical_formula() for init_molecule in init_molecules]
+        init_molecule_names = [
+            init_molecule.get_chemical_formula() for init_molecule in init_molecules
+        ]
 
     # Load model.
     name = analysis.name_from_workdir(workdir)
@@ -146,7 +151,9 @@ def generate_molecules(
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
             init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
-        ) for init_molecule in init_molecules]
+        )
+        for init_molecule in init_molecules
+    ]
 
     fragment_pool = queue.SimpleQueue()
     for seed, init_fragment in enumerate(init_fragments):
@@ -158,7 +165,7 @@ def generate_molecules(
     padding_budget = dict(
         n_node=num_node_for_padding,
         n_edge=num_edge_for_padding,
-        n_graph=num_graph_for_padding
+        n_graph=num_graph_for_padding,
     )
 
     # Generate molecules.
@@ -168,24 +175,39 @@ def generate_molecules(
     rng = jax.random.PRNGKey(0)
     generated_molecules = []
     while len(generated_molecules) < num_seeds and fragment_pool.qsize() > 0:
-        logging.info(f"Fragment pool has {fragment_pool.qsize()} remaining fragments. "
-                     f"Generated {len(generated_molecules)} molecules so far.")
+        logging.info(
+            f"Fragment pool has {fragment_pool.qsize()} remaining fragments. "
+            f"Generated {len(generated_molecules)} molecules so far."
+        )
 
-        for fragments in jraph.dynamically_batch(_make_queue_iterator(fragment_pool), 
-                                                 **padding_budget):
+        temp_outputs = []
+        for fragments in jraph.dynamically_batch(
+            _make_queue_iterator(fragment_pool), **padding_budget
+        ):
             # Compute predictions.
             apply_rng, rng = jax.random.split(rng)
-            preds = apply_fn(params, apply_rng, fragments, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
-            print("Computed predictions.")
+            preds = apply_fn(
+                params,
+                apply_rng,
+                fragments,
+                focus_and_atom_type_inverse_temperature,
+                position_inverse_temperature,
+            )
+
+            temp_outputs.append((fragments, preds))
+
+        print("Computed all predictions.")
+        for fragments, preds in temp_outputs:
             # Append predictions to fragments.
-            for stop, new_fragment, fragment, pred in append_predictions(fragments, preds, nn_cutoff=config.nn_cutoff):
+            for stop, new_fragment, fragment, pred in append_predictions(
+                fragments, preds, nn_cutoff=config.nn_cutoff
+            ):
                 num_atoms_in_fragment = len(new_fragment.nodes.species)
                 print(f"Fragment has {num_atoms_in_fragment} atoms.")
                 if stop or num_atoms_in_fragment >= max_num_atoms:
                     generated_molecules.append((stop, new_fragment))
                 else:
                     fragment_pool.put(new_fragment)
-
 
     # Add the remaining fragments to the generated molecules.
     while fragment_pool.qsize() > 0:
@@ -198,8 +220,12 @@ def generate_molecules(
     elapsed_time = time.time() - start_time
 
     # Log generation time.
-    logging.info(f"Generated {len(generated_molecules)} molecules in {elapsed_time} seconds.")
-    logging.info(f"Average time per molecule: {elapsed_time / len(generated_molecules)} seconds.")
+    logging.info(
+        f"Generated {len(generated_molecules)} molecules in {elapsed_time} seconds."
+    )
+    logging.info(
+        f"Average time per molecule: {elapsed_time / len(generated_molecules)} seconds."
+    )
     return
 
     generated_molecules_ase = []
@@ -209,7 +235,7 @@ def generate_molecules(
         init_molecule_name = init_molecule_names[seed]
         generated_molecule_ase = ase.Atoms(
             symbols=utils.get_atomic_numbers(fragment.nodes.species),
-            positions=fragment.nodes.positions
+            positions=fragment.nodes.positions,
         )
 
         if stop:
