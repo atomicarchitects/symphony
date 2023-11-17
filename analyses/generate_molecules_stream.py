@@ -175,10 +175,11 @@ def generate_molecules(
             # Compute predictions.
             apply_rng, rng = jax.random.split(rng)
             preds = apply_fn(params, apply_rng, fragments, focus_and_atom_type_inverse_temperature, position_inverse_temperature)
-            
+            print("Computed predictions.")
             # Append predictions to fragments.
             for stop, new_fragment, fragment, pred in append_predictions(fragments, preds, nn_cutoff=config.nn_cutoff):
                 num_atoms_in_fragment = len(new_fragment.nodes.species)
+                print(f"Fragment has {num_atoms_in_fragment} atoms.")
                 if stop or num_atoms_in_fragment >= max_num_atoms:
                     generated_molecules.append((stop, new_fragment))
                 else:
@@ -198,6 +199,7 @@ def generate_molecules(
     # Log generation time.
     logging.info(f"Generated {len(generated_molecules)} molecules in {elapsed_time} seconds.")
     logging.info(f"Average time per molecule: {elapsed_time / len(generated_molecules)} seconds.")
+    return
 
     generated_molecules_ase = []
     for stop, fragment in generated_molecules:
