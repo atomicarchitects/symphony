@@ -127,6 +127,7 @@ def generate_molecules(
             workdir, step, run_in_evaluation_mode=True
         )
     apply_fn = jax.jit(model.apply)
+    params = jax.device_put(params)
 
     # Log config.
     logging.info(config.to_dict())
