@@ -56,7 +56,6 @@ def append_predictions(
         valids, jraph.unbatch(fragments), jraph.unbatch(preds)
     ):
         if valid:
-            yield False, fragment, fragment, pred
             yield *append_predictions_to_fragment(
                 fragment, pred, nn_cutoff
             ), fragment, pred
@@ -185,7 +184,6 @@ def generate_molecules(
             f"Generated {len(generated_molecules)} molecules so far."
         )
 
-        temp_outputs = []
         for fragments in jraph.dynamically_batch(
             _make_queue_iterator(fragment_pool), **padding_budget
         ):
@@ -200,9 +198,6 @@ def generate_molecules(
             )
             print("Computed all predictions.")
 
-            temp_outputs.append((fragments, preds))
-
-        for fragments, preds in temp_outputs:
             for stop, new_fragment, fragment, pred in append_predictions(
                 fragments, preds, nn_cutoff=config.nn_cutoff
             ):
@@ -212,9 +207,7 @@ def generate_molecules(
                 else:
                     fragment_pool.put(new_fragment)
             print("Appended all predictions.")
-            # Delete the fragments and predictions to free up memory.
-            del fragments
-            del preds
+
 
 
     # Add the remaining fragments to the generated molecules.
