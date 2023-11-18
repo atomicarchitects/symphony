@@ -56,6 +56,7 @@ def append_predictions(
         valids, jraph.unbatch(fragments), jraph.unbatch(preds)
     ):
         if valid:
+            yield False, fragment, fragment, pred
             yield *append_predictions_to_fragment(
                 fragment, pred, nn_cutoff
             ), fragment, pred
