@@ -319,17 +319,17 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "num_node_for_padding",
-        320,
+        240,
         "Number of nodes to pad to.",
     )
     flags.DEFINE_integer(
         "num_edge_for_padding",
-        640,
+        900,
         "Number of edges to pad to.",
     )
     flags.DEFINE_integer(
         "num_graph_for_padding",
-        16,
+        8,
         "Number of graphs to pad to.",
     )
     flags.DEFINE_list(
