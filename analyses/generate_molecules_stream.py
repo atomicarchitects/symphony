@@ -198,16 +198,15 @@ def generate_molecules(
             )
             print("Computed all predictions.")
 
-            for stop, new_fragment, fragment, pred in append_predictions(
-                fragments, preds, nn_cutoff=config.nn_cutoff
-            ):
-                num_atoms_in_fragment = len(new_fragment.nodes.species)
-                print(f"Fragment has {num_atoms_in_fragment} atoms.")
-                if stop or num_atoms_in_fragment >= max_num_atoms:
-                    generated_molecules.append((stop, new_fragment))
-                else:
-                    fragment_pool.put(new_fragment)
-            print("Appended all predictions.")
+            # for stop, new_fragment, fragment, pred in append_predictions(
+            #     fragments, preds, nn_cutoff=config.nn_cutoff
+            # ):
+            #     num_atoms_in_fragment = len(new_fragment.nodes.species)
+            #     if stop or num_atoms_in_fragment >= max_num_atoms:
+            #         generated_molecules.append((stop, new_fragment))
+            #     else:
+            #         fragment_pool.put(new_fragment)
+            # print("Appended all predictions.")
 
 
     # Add the remaining fragments to the generated molecules.
