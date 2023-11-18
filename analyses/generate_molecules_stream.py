@@ -106,6 +106,10 @@ def generate_molecules(
     steps_for_weight_averaging: Optional[Sequence[int]] = None,
 ):
     """Generates molecules from a trained model at the given workdir."""
+    logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
+    logging.info("JAX local devices: %r", jax.local_devices())
+    logging.info("CUDA_VISIBLE_DEVICES: %r", os.environ.get("CUDA_VISIBLE_DEVICES"))
+
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
         init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
@@ -180,7 +184,6 @@ def generate_molecules(
             f"Generated {len(generated_molecules)} molecules so far."
         )
 
-        temp_outputs = []
         for fragments in jraph.dynamically_batch(
             _make_queue_iterator(fragment_pool), **padding_budget
         ):
@@ -193,12 +196,8 @@ def generate_molecules(
                 focus_and_atom_type_inverse_temperature,
                 position_inverse_temperature,
             )
+            print("Computed all predictions.")
 
-            temp_outputs.append((fragments, preds))
-
-        print("Computed all predictions.")
-        for fragments, preds in temp_outputs:
-            # Append predictions to fragments.
             for stop, new_fragment, fragment, pred in append_predictions(
                 fragments, preds, nn_cutoff=config.nn_cutoff
             ):
@@ -208,6 +207,8 @@ def generate_molecules(
                     generated_molecules.append((stop, new_fragment))
                 else:
                     fragment_pool.put(new_fragment)
+            print("Appended all predictions.")
+
 
     # Add the remaining fragments to the generated molecules.
     while fragment_pool.qsize() > 0:
