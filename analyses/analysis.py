@@ -99,9 +99,9 @@ def load_model_at_step(
     with open(params_file, "rb") as f:
         params = pickle.load(f)
 
-    # Remove the batch dimension, if it exists.
-    if "attempt6" in workdir and int(step) < 5000000:
-        params = jax.tree_map(lambda x: x[0], params)
+    # # Remove the batch dimension, if it exists.
+    # if "attempt6" in workdir and int(step) < 5000000:
+    #     params = jax.tree_map(lambda x: x[0], params)
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
