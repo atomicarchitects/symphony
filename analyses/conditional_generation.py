@@ -7,13 +7,21 @@ import os
 import numpy as np
 import sys
 
+from absl import flags
 import analyses.generate_molecules as generate_molecules
 from symphony.data import qm9
 
 
-
-workdir = "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64"
-outputdir = "conditional_generation"
+flags.DEFINE_string(
+    "workdir",
+    "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64",
+    "Workdir for model."
+)
+flags.DEFINE_string(
+    "outputdir",
+    os.path.join(os.getcwd(), "conditional_generation", "analysed_workdirs"),
+    "Directory where molecules should be saved.",
+)
 beta_species = 1.0
 beta_position = 1.0
 step = "4950000"

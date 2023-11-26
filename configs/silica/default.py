@@ -12,12 +12,15 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/silica-allegro"
-    # config.train_molecules = (0, 200)
-    # config.val_molecules = (200, 250)
-    # config.test_molecules = (250, 300)
-    config.train_molecules = (0, 32)
-    config.val_molecules = (32, 48)
-    config.test_molecules = (48, 64)
+    config.train_molecules = (0, 200)
+    config.val_molecules = (200, 250)
+    config.test_molecules = (250, 300)
+    # config.train_molecules = (0, 64)
+    # config.val_molecules = (64, 96)
+    # config.test_molecules = (96, 128)
+    # config.train_molecules = (0, 32)
+    # config.val_molecules = (32, 48)
+    # config.test_molecules = (48, 64)
     config.shuffle_datasets = True
 
     # Optimizer.
@@ -35,7 +38,8 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 2_000_000
+    config.num_train_steps = 500_000
+    # config.num_train_steps = 2_000_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
@@ -44,8 +48,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
-    config.max_n_nodes = 30 * config.get_ref("max_n_graphs")  # how slow will this be
-    config.max_n_edges = 90 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
+    config.max_n_edges = 180 * config.get_ref("max_n_graphs")
     config.frag_pool_size = 1024
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5
