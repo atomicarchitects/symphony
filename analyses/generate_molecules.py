@@ -92,7 +92,6 @@ def generate_one_step(
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-
     next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
