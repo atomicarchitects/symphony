@@ -14,7 +14,7 @@ do
       do
         for step in 9930000
         do
-            CUDA_VISIBLE_DEVICES="$((2))" python -m analyses.generate_molecules  --workdir=workdirs/"$workdir"/"$model"/interactions="$i"/l="$l"/position_channels="$pc"/channels="$c"/  --fait=1 --pit=1 --init=H  --step="$step"  --max_num_atoms=35 --num_seeds=10000 --num_seeds_per_chunk=25   > "$workdir"_generate_l="$l"_step="$step".txt  2>&1
+            CUDA_VISIBLE_DEVICES="$((2))" python -m analyses.generate_molecules --workdir=workdirs/"$workdir"/"$model"/interactions="$i"/l="$l"/position_channels="$pc"/channels="$c"/ --fait=1 --pit=1 --init=H --step="$step" --max_num_atoms=35 --num_seeds=10000 --num_seeds_per_chunk=25 > "$workdir"_generate_l="$l"_step="$step".txt 2>&1
         done
       done
     done
