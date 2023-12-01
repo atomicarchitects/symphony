@@ -21,14 +21,10 @@ def target_position_to_radius_weights(
     target_position: jnp.ndarray, radius_rbf_variance: float, radii: jnp.ndarray
 ) -> jnp.ndarray:
     """Returns the radial distribution for a target position."""
-    radius_weights = jax.vmap(
-        lambda radius: jnp.exp(
-            -((radius - jnp.linalg.norm(target_position)) ** 2)
-            / (2 * radius_rbf_variance)
-        )
-    )(radii)
-    radius_weights += 1e-10
-    return radius_weights / jnp.sum(radius_weights)
+    radial_logits = -((radii - jnp.linalg.norm(target_position)) ** 2)
+    radial_logits /= 2 * radius_rbf_variance
+    radial_weights = jax.nn.softmax(radial_logits, axis=-1)
+    return radial_weights
 
 
 def target_position_to_log_angular_coeffs(

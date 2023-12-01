@@ -130,7 +130,9 @@ def generate_molecules(
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
     visualize: bool,
-    steps_for_weight_averaging: Optional[Sequence[int]] = None
+    steps_for_weight_averaging: Optional[Sequence[int]] = None,
+    res_alpha: Optional[int] = None,
+    res_beta: Optional[int] = None,
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Check that we can divide the seeds into chunks properly.
@@ -160,12 +162,13 @@ def generate_molecules(
         )
     else:
         model, params, config = analysis.load_model_at_step(
-            workdir, step, run_in_evaluation_mode=True
+            workdir, step, run_in_evaluation_mode=True,
+            res_alpha=res_alpha,
+            res_beta=res_beta,
         )
     config = config.unlock()
-    if "position_updater" in config:
-        del config["position_updater"]
     logging.info(config.to_dict())
+
 
     # Create output directories.
     molecules_outputdir = os.path.join(
@@ -174,9 +177,14 @@ def generate_molecules(
         f"fait={focus_and_atom_type_inverse_temperature}",
         f"pit={position_inverse_temperature}",
         f"step={step}",
-        "molecules",
     )
+    if res_alpha is not None:
+        molecules_outputdir += f"_res_alpha={res_alpha}"
+    if res_beta is not None:
+        molecules_outputdir += f"_res_beta={res_beta}"
+    molecules_outputdir += "/molecules"
     os.makedirs(molecules_outputdir, exist_ok=True)
+
     if visualize:
         visualizations_dir = os.path.join(
             outputdir,
@@ -376,7 +384,9 @@ def main(unused_argv: Sequence[str]) -> None:
         init_molecule,
         max_num_atoms,
         visualize,
-        steps_for_weight_averaging
+        steps_for_weight_averaging,
+        res_alpha=FLAGS.res_alpha,
+        res_beta=FLAGS.res_beta,
     )
 
 
@@ -403,6 +413,16 @@ if __name__ == "__main__":
         "step",
         "best",
         "Step number to load model from. The default corresponds to the best model.",
+    )
+    flags.DEFINE_integer(
+        "res_alpha",
+        None,
+        "Angular resolution of alpha.",
+    )   
+    flags.DEFINE_integer(
+        "res_beta",
+        None,
+        "Angular resolution of beta.",
     )
     flags.DEFINE_integer(
         "num_seeds",
