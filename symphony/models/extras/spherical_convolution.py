@@ -70,7 +70,15 @@ class SphericalConvolution(hk.Module):
         Returns:
             IrrepsArray of features after interaction, shape [..., channels_out, (lmax + 1)**2]
         """
-        x_prime = s2_activation(x, self.res_beta, self.res_alpha, self.max_ell, self.activation, self.p_val, self.p_arg)
+        x_prime = s2_activation(
+            x,
+            self.res_beta,
+            self.res_alpha,
+            self.max_ell,
+            self.activation,
+            self.p_val,
+            self.p_arg,
+        )
 
         h = hk.get_parameter(
             "h",

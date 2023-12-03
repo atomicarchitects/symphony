@@ -31,7 +31,8 @@ class Predictor(hk.Module):
     def get_training_predictions(
         self, graphs: datatypes.Fragments
     ) -> datatypes.Predictions:
-        """Returns the predictions on these graphs during training, when we have access to the true focus and target species."""
+        """Returns the predictions on graphs during training, when we have access to the true focus and target species."""
+
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
@@ -63,13 +64,19 @@ class Predictor(hk.Module):
             graphs,
             focus_node_indices,
             graphs.globals.target_species,
+            true_radii=jnp.linalg.norm(
+                graphs.globals.target_positions, axis=-1, keepdims=True
+            ),
             inverse_temperature=1.0,
         )
 
         # Get the position probabilities.
-        position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
-            position_logits
-        )
+        if position_logits is not None:
+            position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
+                position_logits
+            )
+        else:
+            position_probs = None
 
         # The radii bins used for the position prediction, repeated for each graph.
         radii = self.target_position_predictor.create_radii()
@@ -84,18 +91,18 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert log_position_coeffs.shape == (
-            num_graphs,
-            self.target_position_predictor.num_channels,
-            self.target_position_predictor.num_radii,
-            log_position_coeffs.shape[-1],
-        )
-        assert position_logits.shape == (
-            num_graphs,
-            self.target_position_predictor.num_radii,
-            self.target_position_predictor.res_beta,
-            self.target_position_predictor.res_alpha,
-        )
+        # assert log_position_coeffs.shape == (
+        #     num_graphs,
+        #     self.target_position_predictor.num_channels,
+        #     self.target_position_predictor.num_radii,
+        #     log_position_coeffs.shape[-1],
+        # )
+        # assert position_logits.shape == (
+        #     num_graphs,
+        #     self.target_position_predictor.num_radii,
+        #     self.target_position_predictor.res_beta,
+        #     self.target_position_predictor.res_alpha,
+        # )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -135,7 +142,8 @@ class Predictor(hk.Module):
         focus_and_atom_type_inverse_temperature: float,
         position_inverse_temperature: float,
     ) -> datatypes.Predictions:
-        """Returns the predictions on a single padded graph during evaluation, when we do not have access to the true focus and target species."""
+        """Returns the predictions on graphs during evaluation, when we do not have access to the true focus and target species."""
+
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]

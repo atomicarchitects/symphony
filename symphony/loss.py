@@ -134,8 +134,6 @@ def generation_loss(
     target_position_lmax: Optional[int],
     ignore_position_loss_for_small_fragments: bool,
     position_loss_type: str,
-    radial_loss_scaling_factor: Optional[float],
-    mask_atom_types: bool,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -305,93 +303,33 @@ def generation_loss(
 
         return loss_position
 
-    def factorized_position_loss(position_loss_type: str) -> jnp.ndarray:
+    def factorized_position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
+        # Radial loss is simply the negative log-likelihood loss.
+        loss_radial = -preds.globals.radial_logits.sum(axis=-1)
 
-        position_logits = preds.globals.position_logits
-        res_beta, res_alpha, quadrature = (
-            position_logits.res_beta,
-            position_logits.res_alpha,
-            position_logits.quadrature,
+        # The angular loss is the KL divergence between the predicted and the true angular distributions.
+        predicted_angular_logits = preds.globals.angular_logits
+        res_beta, res_alpha = (
+            predicted_angular_logits.res_beta,
+            predicted_angular_logits.res_alpha,
         )
 
         target_positions = graphs.globals.target_positions
-        true_radial_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radial_bins
-            )
-        )(target_positions)
         log_true_angular_coeffs = jax.vmap(
             lambda pos: target_position_to_log_angular_coeffs(
                 pos, target_position_inverse_temperature, lmax
             )
         )(target_positions)
-        compute_joint_distribution_fn = functools.partial(
+        compute_grid_of_joint_distribution_fn = functools.partial(
             models.compute_grid_of_joint_distribution,
             res_beta=res_beta,
             res_alpha=res_alpha,
-            quadrature=quadrature,
+            quadrature=predicted_angular_logits.quadrature,
         )
         true_angular_dist = jax.vmap(
-            compute_joint_distribution_fn,
-        )(
-            jnp.ones(
-                (num_graphs, 1),
-            ),
-            log_true_angular_coeffs,
-        )
-
-        assert true_radial_weights.shape == (
-            num_graphs,
-            num_radii,
-        ), true_radial_weights.shape
-        assert log_true_angular_coeffs.shape == (
-            num_graphs,
-            log_true_angular_coeffs.irreps.dim,
-        )
-
-        predicted_radial_logits = preds.globals.radial_logits
-        if predicted_radial_logits is None:
-            position_logits = preds.globals.position_logits
-            position_probs = jax.vmap(models.position_logits_to_position_distribution)(
-                position_logits
-            )
-
-            predicted_radial_dist = jax.vmap(
-                models.position_distribution_to_radial_distribution,
-            )(position_probs)
-            predicted_radial_logits = models.safe_log(predicted_radial_dist)
-
-        assert predicted_radial_logits.shape == (
-            num_graphs,
-            num_radii,
-        )
-
-        if position_loss_type == "factorized_kl_divergence":
-            loss_radial = jax.vmap(kl_divergence_for_radii)(
-                true_radial_weights,
-                predicted_radial_logits,
-            )
-        elif position_loss_type == "factorized_earth_mover":
-            loss_radial = jax.vmap(earthmover_distance_for_radii, in_axes=(0, 0, None))(
-                true_radial_weights, predicted_radial_logits, radial_bins
-            )
-        loss_radial = radial_loss_scaling_factor * loss_radial
-
-        predicted_angular_logits = preds.globals.angular_logits
-        if predicted_angular_logits is None:
-            position_probs = jax.vmap(models.position_logits_to_position_distribution)(
-                position_logits
-            )
-            predicted_angular_dist = jax.vmap(
-                models.position_distribution_to_angular_distribution,
-            )(position_probs)
-            predicted_angular_logits = predicted_angular_dist.apply(models.safe_log)
-
-            # Add a dummy dimension for the radial bins.
-            predicted_angular_logits.grid_values = predicted_angular_logits.grid_values[
-                :, None, :, :
-            ]
+            compute_grid_of_joint_distribution_fn,
+        )(jnp.ones((num_graphs, 1)), log_true_angular_coeffs)
 
         assert predicted_angular_logits.shape == (
             num_graphs,
@@ -404,7 +342,7 @@ def generation_loss(
             true_angular_dist, predicted_angular_logits
         )
 
-        loss_position = loss_angular + loss_radial
+        loss_position = loss_radial + loss_angular
         assert loss_position.shape == (num_graphs,)
 
         return loss_position
@@ -416,21 +354,13 @@ def generation_loss(
         elif position_loss_type == "l2":
             return position_loss_with_l2()
         elif position_loss_type.startswith("factorized"):
-            return factorized_position_loss(position_loss_type)
+            return factorized_position_loss()
         else:
             raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     loss_position = (1 - graphs.globals.stop) * position_loss()
-
-    # COMMENT LATER.
-    # loss_position = jnp.zeros_like(loss_position)
-    # loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
-
-    # Mask out the loss for atom types?
-    if mask_atom_types:
-        loss_focus_and_atom_type = jnp.zeros_like(loss_focus_and_atom_type)
 
     # Ignore position loss for graphs with less than, or equal to 3 atoms?
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
@@ -475,52 +405,3 @@ def denoising_loss(
     # We predict a denoising loss only for finished fragments.
     loss_denoising = (graphs.globals.stop) * loss_denoising
     return loss_denoising, (loss_denoising, None)
-
-
-def clash_loss(
-    graphs: datatypes.Fragments,
-    atomic_numbers: jnp.ndarray,  # typically [1, 6, 7, 8, 9]
-    atol: float = 0.0,
-    rtol: float = 0.1,
-) -> jnp.ndarray:
-    """Hinge loss that penalizes clashes between atoms depending on their atomic numbers."""
-    assert 0.0 <= rtol < 1.0
-    assert 0.0 <= atol
-
-    clash_dist = {
-        (8, 1): 0.96,
-        (1, 7): 1.00,
-        (1, 6): 1.06,
-        (7, 7): 1.10,
-        (8, 6): 1.13,
-        (6, 7): 1.15,
-        (8, 7): 1.17,
-        (6, 6): 1.20,
-        (9, 6): 1.30,
-        (1, 1): 1.51,
-        (9, 1): 2.06,
-        (8, 9): 2.14,
-        (8, 8): 2.15,
-        (9, 9): 2.15,
-        (9, 7): 2.18,
-    }
-    clash = np.zeros((len(atomic_numbers), len(atomic_numbers)))
-    for (zi, zj), dist in clash_dist.items():
-        if np.isin(zi, atomic_numbers) and np.isin(zj, atomic_numbers):
-            si = np.searchsorted(atomic_numbers, zi)
-            sj = np.searchsorted(atomic_numbers, zj)
-            clash[si, sj] = dist
-            clash[sj, si] = dist
-
-    i = graphs.senders
-    j = graphs.receivers
-    si = graphs.nodes.species[i]
-    sj = graphs.nodes.species[j]
-    ri = graphs.nodes.positions[i]
-    rj = graphs.nodes.positions[j]
-    rij = safe_norm(ri - rj, axis=-1)
-
-    def hinge_loss(x):
-        return jnp.maximum(0.0, x)
-
-    return hinge_loss(clash[si, sj] * (1.0 - rtol) - atol - rij)

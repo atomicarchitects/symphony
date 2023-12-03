@@ -40,7 +40,6 @@ _ALL_CONFIGS = {
 def update_dummy_config(
     config: ml_collections.ConfigDict,
     train_on_split_smaller_than_chunk: bool,
-    position_loss_type: str,
     dataset: str,
 ) -> ml_collections.FrozenConfigDict:
     """Updates the dummy config."""
@@ -48,17 +47,12 @@ def update_dummy_config(
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 500
-    config.focus_and_target_species_predictor.max_ell = 5
-    config.loss_kwargs.position_loss_type = position_loss_type
     config.dataset = dataset
     config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
     if dataset == "qm9":
         config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
         if train_on_split_smaller_than_chunk:
             config.train_molecules = (0, 10)
-    config.use_pseudoscalars_and_pseudovectors = True
-    config.add_noise_to_positions = True
-    config.position_noise_std = 0.1
     return ml_collections.FrozenConfigDict(config)
 
 
@@ -69,14 +63,12 @@ class TrainTest(parameterized.TestCase):
     @parameterized.product(
         config_name=["e3schnet_and_nequip"],
         train_on_split_smaller_than_chunk=[True],
-        position_loss_type=["kl_divergence"],
         dataset=["platonic_solids"],
     )
     def test_train_and_evaluate(
         self,
         config_name: str,
         train_on_split_smaller_than_chunk: bool,
-        position_loss_type: str,
         dataset: str,
     ):
         """Tests that training and evaluation runs without errors."""
@@ -87,7 +79,7 @@ class TrainTest(parameterized.TestCase):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[dataset][config_name]
         config = update_dummy_config(
-            config, train_on_split_smaller_than_chunk, position_loss_type, dataset
+            config, train_on_split_smaller_than_chunk, dataset
         )
         config = ml_collections.FrozenConfigDict(config)
 
@@ -104,14 +96,12 @@ class TrainTest(parameterized.TestCase):
     @parameterized.product(
         config_name=["position_updater"],
         train_on_split_smaller_than_chunk=[True],
-        position_loss_type=["kl_divergence"],
         dataset=["qm9"],
     )
     def test_train_and_evaluate_position_updater(
         self,
         config_name: str,
         train_on_split_smaller_than_chunk: bool,
-        position_loss_type: str,
         dataset: str,
     ):
         """Tests that training and evaluation runs without errors."""
@@ -123,7 +113,7 @@ class TrainTest(parameterized.TestCase):
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[dataset][config_name]
         config = update_dummy_config(
-            config, train_on_split_smaller_than_chunk, position_loss_type, dataset
+            config, train_on_split_smaller_than_chunk, dataset
         )
         config = ml_collections.FrozenConfigDict(config)
 

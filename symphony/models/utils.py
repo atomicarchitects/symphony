@@ -12,6 +12,7 @@ import ml_collections
 
 from symphony import datatypes
 from symphony.models.predictor import Predictor
+from symphony.models.flows import rational_quadratic_spline
 from symphony.models.embedders.global_embedder import GlobalEmbedder
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.position_predictor import (
@@ -281,6 +282,21 @@ def get_num_species_for_dataset(dataset: str) -> int:
     raise ValueError(f"Unsupported dataset: {dataset}.")
 
 
+def create_radial_flow(
+    num_radii: int,
+    min_radius: float,
+    max_radius: float,
+    num_layers: int,
+):
+    """Create a radial flow as specified by the config."""
+    return rational_quadratic_spline.RationalQuadraticSpline(
+        num_bins=num_radii,
+        range_min=min_radius,
+        range_max=max_radius,
+        num_layers=num_layers,
+    )
+
+
 def create_node_embedder(
     config: ml_collections.ConfigDict,
     num_species: int,
@@ -456,26 +472,38 @@ def create_model(
             num_species=num_species,
         )
         if config.target_position_predictor.get("factorized"):
+            """
+            node_embedder: hk.Module,
+            radial_flow: hk.Module,
+            position_coeffs_lmax: int,
+            res_beta: int,
+            res_alpha: int,
+            num_channels: int,
+            num_species: int,
+            num_radial_basis_fns: int,
+            apply_gate_on_logits: bool,
+            square_logits: bool,
+            """
             target_position_predictor = FactorizedTargetPositionPredictor(
                 node_embedder=create_node_embedder(
                     config.target_position_predictor.embedder_config,
                     num_species,
                     name_prefix="target_position_predictor",
                 ),
+                radial_flow=create_radial_flow(
+                    num_radii=config.target_position_predictor.num_radii,
+                    min_radius=config.target_position_predictor.min_radius,
+                    max_radius=config.target_position_predictor.max_radius,
+                    num_layers=config.target_position_predictor.num_radial_flow_layers,
+                ),
                 position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
                 res_beta=config.target_position_predictor.res_beta,
                 res_alpha=config.target_position_predictor.res_alpha,
                 num_channels=config.target_position_predictor.num_channels,
                 num_species=num_species,
-                min_radius=config.target_position_predictor.min_radius,
-                max_radius=config.target_position_predictor.max_radius,
-                num_radii=config.target_position_predictor.num_radii,
-                radial_mlp_latent_size=config.target_position_predictor.radial_mlp_latent_size,
-                radial_mlp_num_layers=config.target_position_predictor.radial_mlp_num_layers,
-                radial_mlp_activation=get_activation(
-                    config.target_position_predictor.radial_mlp_activation
-                ),
-                apply_gate=config.target_position_predictor.get("apply_gate"),
+                num_radial_basis_fns=config.target_position_predictor.num_radial_basis_fns,
+                apply_gate_on_logits=config.target_position_predictor.apply_gate_on_logits,
+                square_logits=config.target_position_predictor.square_logits,
             )
         else:
             target_position_predictor = TargetPositionPredictor(
@@ -492,7 +520,8 @@ def create_model(
                 min_radius=config.target_position_predictor.min_radius,
                 max_radius=config.target_position_predictor.max_radius,
                 num_radii=config.target_position_predictor.num_radii,
-                apply_gate=config.target_position_predictor.get("apply_gate"),
+                apply_gate_on_logits=config.target_position_predictor.apply_gate_on_logits,
+                square_logits=config.target_position_predictor.square_logits,
             )
 
         predictor = Predictor(
