@@ -120,7 +120,6 @@ def load_model_at_step(
         logging.info(f"Setting res_beta to {res_beta}")
         config.target_position_predictor.res_beta = res_beta
 
-
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_map(jnp.asarray, params)
     return model, params, config

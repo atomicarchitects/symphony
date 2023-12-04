@@ -286,63 +286,40 @@ def get_plotly_traces_for_predictions(
             )
         )
 
-    # Since we downsample the position grid, we need to recompute the position probabilities.
-    position_coeffs = pred.globals.log_position_coeffs
-    radii = pred.globals.radial_bins
-    num_radii = radii.shape[0]
-    position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99, num_radii)
-    position_logits.grid_values -= np.max(position_logits.grid_values)
-    position_probs = position_logits.apply(np.exp)
-
-    count = 0
-    cmin = 0.0
-    cmax = position_probs.grid_values.max().item()
-    for i in range(len(radii)):
-        prob_r = position_probs[i]
-
-        # Skip if the probability is too small.
-        if prob_r.grid_values.max() < 1e-2 * cmax:
-            continue
-
-        count += 1
-        surface_r = go.Surface(
-            **prob_r.plotly_surface(radius=radii[i], translation=focus_position),
-            colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
-            showscale=False,
-            cmin=cmin,
-            cmax=cmax,
-            name="Position Probabilities",
-            legendgroup="Position Probabilities",
-            showlegend=(count == 1),
-            visible="legendonly",
-        )
-        molecule_traces.append(surface_r)
+    # Show angular probabilities.
+    angular_probs = pred.globals.angular_probs
+    radii = pred.globals.radii
+    print(radii)
+    surface_r = go.Surface(
+        **angular_probs.plotly_surface(radius=radii, translation=focus_position),
+        colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
+        showscale=False,
+        cmin=0.0,
+        cmax=angular_probs.grid_values.max().item(),
+        name="Position Probabilities",
+        legendgroup="Position Probabilities",
+        showlegend=True,
+        visible="legendonly",
+    )
+    molecule_traces.append(surface_r)
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
-    radii = pred.globals.radial_bins
-    radius = np.linalg.norm(pred.globals.position_vectors, axis=-1)
-    most_likely_radius_index = np.abs(radii - radius).argmin()
-    most_likely_radius = radii[most_likely_radius_index]
-    all_sigs = e3nn.to_s2grid(
-        position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
-    )
-    cmin = all_sigs.grid_values.min().item()
-    cmax = all_sigs.grid_values.max().item()
-    for channel in range(position_coeffs.shape[0]):
-        most_likely_radius_coeffs = position_coeffs[channel, most_likely_radius_index]
-        most_likely_radius_sig = e3nn.to_s2grid(
-            most_likely_radius_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+    log_angular_coeffs = pred.globals.log_angular_coeffs
+    for channel in range(log_angular_coeffs.shape[-2]):
+        channel_coeffs = log_angular_coeffs[channel]
+        channel_sig = e3nn.to_s2grid(
+            channel_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
         )
         spherical_harmonics = go.Surface(
-            most_likely_radius_sig.plotly_surface(
+            channel_sig.plotly_surface(
                 scale_radius_by_amplitude=True,
-                radius=most_likely_radius,
+                radius=radii,
                 translation=focus_position,
                 normalize_radius_by_max_amplitude=True,
             ),
-            cmin=cmin,
-            cmax=cmax,
+            cmin=log_angular_coeffs.array.min().item(),
+            cmax=log_angular_coeffs.array.max().item(),
             name=f"Spherical Harmonics for Logits: Channel {channel}",
             showlegend=True,
             visible="legendonly",
