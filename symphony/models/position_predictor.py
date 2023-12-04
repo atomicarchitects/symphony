@@ -233,6 +233,27 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )
         return log_angular_coeffs
 
+    def angular_coeffs_to_logits(
+        self, log_angular_coeffs: jnp.ndarray, inverse_temperature: float
+    ) -> jnp.ndarray:
+        """Converts the angular coefficients to logits."""
+
+        # Project onto a spherical grid.
+        angular_logits = jax.vmap(
+            lambda coeffs: utils.log_coeffs_to_logits(
+                coeffs, self.res_beta, self.res_alpha, 1
+            )
+        )(
+            log_angular_coeffs[:, :, None, :]
+        )  # only one radius
+
+        if self.square_logits:
+            angular_logits = angular_logits.apply(jnp.square)
+
+        # Scale the logits by the inverse temperature.
+        angular_logits = angular_logits.apply(lambda val: val * inverse_temperature)
+        return angular_logits
+
     def predict_logits(
         self,
         graphs: datatypes.Fragments,
@@ -272,19 +293,9 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )
 
         # Project onto a spherical grid.
-        angular_logits = jax.vmap(
-            lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, 1
-            )
-        )(
-            log_angular_coeffs[:, :, None, :]
-        )  # only one radius
-
-        if self.square_logits:
-            angular_logits = angular_logits.apply(jnp.square)
-
-        # Scale the logits by the inverse temperature.
-        angular_logits = angular_logits.apply(lambda val: val * inverse_temperature)
+        angular_logits = self.angular_coeffs_to_logits(
+            log_angular_coeffs, inverse_temperature
+        )
 
         return angular_logits, radial_logits
 
@@ -320,33 +331,17 @@ class FactorizedTargetPositionPredictor(hk.Module):
         encoded_sampled_radii = self.encode_radii(
             radii, output_dims=focus_node_embeddings.irreps.num_irreps
         )
+        conditioning *= encoded_sampled_radii
 
-        # Predict the angular coefficients for the position signal.
-        # These are actually describing the logits of the angular distribution.
-        s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        if self.apply_gate_on_logits:
-            irreps = e3nn.Irreps(f"{self.position_coeffs_lmax}x0e") + s2_irreps
-        else:
-            irreps = s2_irreps
-
-        # Compute the angular coefficients, conditioned on the target species,
-        # focus node embeddings, and radii.
-        log_angular_coeffs = self.predict_angular_coeffs()
+        # Predict the coefficients for the angular distribution.
+        log_angular_coeffs = self.predict_coeffs_for_angular_logits(
+            conditioning=conditioning
+        )
 
         # Project onto a spherical grid.
-        angular_logits = jax.vmap(
-            lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, 1
-            )
-        )(
-            log_angular_coeffs[:, :, None, :]
-        )  # only one radius
-
-        if self.square_logits:
-            angular_logits = angular_logits.apply(jnp.square)
-
-        # Scale the logits by the inverse temperature.
-        angular_logits = angular_logits.apply(lambda val: val * inverse_temperature)
+        angular_logits = self.angular_coeffs_to_logits(
+            log_angular_coeffs, inverse_temperature
+        )
 
         # Convert to a distribution.
         angular_probs = jax.vmap(
