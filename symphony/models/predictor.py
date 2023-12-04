@@ -56,11 +56,11 @@ class Predictor(hk.Module):
 
         # Get the coefficients for the target positions.
         (
-            log_position_coeffs,
-            position_logits,
+            _,
+            _,
             angular_logits,
             radial_logits,
-        ) = self.target_position_predictor(
+        ) = self.target_position_predictor.predict_logits(
             graphs,
             focus_node_indices,
             graphs.globals.target_species,
@@ -69,14 +69,6 @@ class Predictor(hk.Module):
             ),
             inverse_temperature=1.0,
         )
-
-        # Get the position probabilities.
-        if position_logits is not None:
-            position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
-                position_logits
-            )
-        else:
-            position_probs = None
 
         # The radii bins used for the position prediction, repeated for each graph.
         radii = self.target_position_predictor.create_radii()
@@ -122,9 +114,9 @@ class Predictor(hk.Module):
                 stop=None,
                 focus_indices=focus_node_indices,
                 target_species=None,
-                log_position_coeffs=log_position_coeffs,
-                position_logits=position_logits,
-                position_probs=position_probs,
+                log_position_coeffs=None,
+                position_logits=None,
+                position_probs=None,
                 position_vectors=None,
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
@@ -181,6 +173,7 @@ class Predictor(hk.Module):
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
         )
 
+        # Sample the relative position vectors.
         position_vectors = self.target_position_predictor.sample(
             graphs,
             focus_indices,
