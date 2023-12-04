@@ -12,7 +12,7 @@ do
   do
     for c in 64
     do
-      for pc in 2
+      for pc in 4
       do
         for step in best
         do
