@@ -135,7 +135,7 @@ def sample_from_angular_distribution(
 ):
     """Sample a unit vector from an angular distribution."""
     beta_index, alpha_index = angular_probs.sample(rng)
-    return angular_probs.grid_vectors[beta_index, alpha_index]
+    return angular_probs.grid_vectors[beta_index, alpha_index, :].reshape(-1)
 
 
 def log_coeffs_to_logits(

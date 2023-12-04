@@ -140,8 +140,6 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
-    radial_bins = preds.globals.radial_bins[0]  # Assume all radii are the same.
-    num_radii = radial_bins.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
     n_node = graphs.n_node
@@ -200,109 +198,6 @@ def generation_loss(
 
         return loss_focus_and_atom_type
 
-    def position_loss_with_kl_divergence() -> jnp.ndarray:
-        """Computes the loss over position probabilities using the KL divergence."""
-
-        position_logits = preds.globals.position_logits
-        res_beta, res_alpha, quadrature = (
-            position_logits.res_beta,
-            position_logits.res_alpha,
-            position_logits.quadrature,
-        )
-
-        target_positions = graphs.globals.target_positions
-        true_radial_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radial_bins
-            )
-        )(target_positions)
-        log_true_angular_coeffs = jax.vmap(
-            lambda pos: target_position_to_log_angular_coeffs(
-                pos, target_position_inverse_temperature, lmax
-            )
-        )(target_positions)
-        compute_joint_distribution_fn = functools.partial(
-            models.compute_grid_of_joint_distribution,
-            res_beta=res_beta,
-            res_alpha=res_alpha,
-            quadrature=quadrature,
-        )
-        true_dist = jax.vmap(compute_joint_distribution_fn)(
-            true_radial_weights, log_true_angular_coeffs
-        )
-        log_predicted_dist = position_logits
-
-        assert true_radial_weights.shape == (
-            num_graphs,
-            num_radii,
-        ), true_radial_weights.shape
-        assert log_true_angular_coeffs.shape == (
-            num_graphs,
-            log_true_angular_coeffs.irreps.dim,
-        )
-        assert log_predicted_dist.grid_values.shape == (
-            num_graphs,
-            num_radii,
-            res_beta,
-            res_alpha,
-        )
-
-        loss_position = jax.vmap(kl_divergence_on_spheres)(
-            true_dist, log_predicted_dist
-        )
-        assert loss_position.shape == (num_graphs,)
-
-        return loss_position
-
-    def position_loss_with_l2() -> jnp.ndarray:
-        """Computes the loss over position probabilities using the L2 loss on the logits."""
-
-        log_position_coeffs = preds.globals.log_position_coeffs
-        target_positions = graphs.globals.target_positions
-        true_radial_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radial_bins
-            )
-        )(target_positions)
-        log_true_angular_coeffs = jax.vmap(
-            lambda pos: target_position_to_log_angular_coeffs(
-                pos, target_position_inverse_temperature, lmax
-            )
-        )(target_positions)
-        true_radial_logits = models.safe_log(true_radial_weights)
-        log_true_dist_coeffs = jax.vmap(
-            models.compute_coefficients_of_logits_of_joint_distribution
-        )(true_radial_logits, log_true_angular_coeffs)
-        # We only support num_channels = 1.
-        log_predicted_dist_coeffs = log_position_coeffs.reshape(
-            log_true_dist_coeffs.shape
-        )
-
-        assert target_positions.shape == (num_graphs, 3)
-        assert log_true_dist_coeffs.shape == (
-            num_graphs,
-            num_radii,
-            log_true_dist_coeffs.irreps.dim,
-        ), (
-            log_true_dist_coeffs.shape,
-            (num_graphs, num_radii, log_predicted_dist_coeffs.irreps.dim),
-        )
-        assert log_predicted_dist_coeffs.shape == (
-            num_graphs,
-            num_radii,
-            log_predicted_dist_coeffs.irreps.dim,
-        ), (
-            log_predicted_dist_coeffs.shape,
-            (num_graphs, num_radii, log_predicted_dist_coeffs.irreps.dim),
-        )
-
-        loss_position = jax.vmap(l2_loss_on_spheres)(
-            log_true_dist_coeffs, log_predicted_dist_coeffs
-        )
-        assert loss_position.shape == (num_graphs,)
-
-        return loss_position
-
     def factorized_position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
         # Radial loss is simply the negative log-likelihood loss.
@@ -349,14 +244,10 @@ def generation_loss(
 
     def position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities."""
-        if position_loss_type == "kl_divergence":
-            return position_loss_with_kl_divergence()
-        elif position_loss_type == "l2":
-            return position_loss_with_l2()
-        elif position_loss_type.startswith("factorized"):
+        if position_loss_type.startswith("factorized"):
             return factorized_position_loss()
-        else:
-            raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
+
+        raise ValueError(f"Unsupported position loss type: {position_loss_type}.")
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()

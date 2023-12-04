@@ -19,9 +19,12 @@ class RationalQuadraticSpline(hk.Module):
         """Creates a flow with the given conditioning."""
         layers = []
         for _ in range(self.num_layers):
-            params = hk.nets.MLP([8, self.num_bins * 3 + 1], activate_final=False)(
-                conditioning
-            )
+            params = hk.nets.MLP(
+                [self.num_bins * 3 + 1],
+                activate_final=False,
+                w_init=jnp.zeros,
+                b_init=jnp.zeros,
+            )(conditioning)
             layer = distrax.RationalQuadraticSpline(
                 params, self.range_min, self.range_max
             )
@@ -36,7 +39,6 @@ class RationalQuadraticSpline(hk.Module):
         base_distribution = distrax.Independent(
             distrax.Uniform(self.range_min, self.range_max), reinterpreted_batch_ndims=0
         )
-
         dist = distrax.Transformed(base_distribution, flow)
         return dist
 

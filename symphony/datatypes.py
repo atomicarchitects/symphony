@@ -56,13 +56,13 @@ class GlobalPredictions(NamedTuple):
     stop: jnp.ndarray  # [n_graph] bool array
     focus_indices: jnp.ndarray  # [n_graph] int array
     target_species: jnp.ndarray  # [n_graph,] int array
-    log_position_coeffs: e3nn.IrrepsArray  # [n_graph, n_radii, ...] float array
-    position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
-    position_probs: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
+    radial_logits: jnp.ndarray  # [n_graph, ] float array
+    radii: jnp.ndarray  # [n_graph, ] float array
+    radii_pdf: jnp.ndarray  # [n_graph, 1000] float array
+    log_angular_coeffs: e3nn.IrrepsArray  # [n_graph, n_channels, ...] float array
+    angular_logits: e3nn.SphericalSignal  # [n_graph, res_beta, res_alpha] float array
+    angular_probs: e3nn.SphericalSignal  # [n_graph, res_beta, res_alpha] float array
     position_vectors: jnp.ndarray  # [n_graph, 3] float array
-    radial_bins: jnp.ndarray  # [n_graph, n_radii] float array
-    radial_logits: jnp.ndarray  # [n_graph, n_radii] float array
-    angular_logits: e3nn.SphericalSignal  # [n_graph, n_radii, n_angular] float array
 
 
 class Predictions(jraph.GraphsTuple):

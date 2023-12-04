@@ -244,8 +244,11 @@ class FactorizedTargetPositionPredictor(hk.Module):
                 coeffs, self.res_beta, self.res_alpha, 1
             )
         )(
-            log_angular_coeffs[:, :, None, :]
-        )  # only one radius
+            log_angular_coeffs[:, :, None, :]  # only one radius
+        )
+
+        # Remove the radial component.
+        angular_logits = angular_logits[:, 0, :, :]
 
         if self.square_logits:
             angular_logits = angular_logits.apply(jnp.square)
@@ -253,6 +256,16 @@ class FactorizedTargetPositionPredictor(hk.Module):
         # Scale the logits by the inverse temperature.
         angular_logits = angular_logits.apply(lambda val: val * inverse_temperature)
         return angular_logits
+
+    def compute_radii_pdf(self, conditioning: jnp.ndarray) -> jnp.ndarray:
+        all_radii = jnp.linspace(
+            self.radial_flow.range_min, self.radial_flow.range_max, 1000
+        )
+        log_probs = hk.vmap(
+            lambda radius: self.radial_flow.log_prob(radius, conditioning),
+            split_rng=False,
+        )(all_radii)
+        return jax.nn.softmax(log_probs, axis=-1)
 
     def predict_logits(
         self,
@@ -281,6 +294,9 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )
         assert radial_logits.shape == (num_graphs,), radial_logits.shape
 
+        # Compute the PDF of the radii.
+        radii_pdf = hk.vmap(self.compute_radii_pdf, split_rng=False)(conditioning.array)
+
         # Encode the true radii, to condition the angular distribution on them.
         encoded_true_radii = self.encode_radii(
             true_radii, output_dims=conditioning.irreps.num_irreps
@@ -297,7 +313,18 @@ class FactorizedTargetPositionPredictor(hk.Module):
             log_angular_coeffs, inverse_temperature
         )
 
-        return angular_logits, radial_logits
+        # Convert to a distribution.
+        angular_probs = jax.vmap(
+            utils.position_logits_to_position_distribution,
+        )(angular_logits)
+
+        return (
+            radial_logits,
+            log_angular_coeffs,
+            angular_logits,
+            angular_probs,
+            radii_pdf,
+        )
 
     def sample(
         self,
@@ -317,7 +344,8 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         num_graphs = graphs.n_node.shape[0]
 
-        # Predict the log-probs of the radii.
+        # Sample the radii.
+        # Also measure the log-probs of the sampled radii.
         conditioning = target_species_embeddings * focus_node_embeddings
         radii = hk.vmap(
             lambda condition: self.radial_flow.sample(condition),
@@ -325,9 +353,15 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(
             conditioning.array,
         )
+        radial_logits = hk.vmap(self.radial_flow.log_prob, split_rng=False)(
+            radii, conditioning.array
+        )
         assert radii.shape == (num_graphs,), radii.shape
 
-        # Encode the true radii, to condition the angular distribution on them.
+        # Compute the PDF of the radii.
+        radii_pdf = hk.vmap(self.compute_radii_pdf, split_rng=False)(conditioning.array)
+
+        # Encode the sampled radii, to condition the angular distribution on them.
         encoded_sampled_radii = self.encode_radii(
             radii, output_dims=focus_node_embeddings.irreps.num_irreps
         )
@@ -349,11 +383,21 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(angular_logits)
 
         # Sample from angular distribution.
+        rng = hk.next_rng_key()
+        rngs = jax.random.split(rng, num_graphs)
         angular_samples = jax.vmap(
-            lambda probs: utils.sample_from_angular_distribution(probs)
-        )(angular_probs)
+            lambda probs, rng: utils.sample_from_angular_distribution(probs, rng)
+        )(angular_probs, rngs)
 
         # Scale by the radii.
-        position_vectors = radii * angular_samples
+        position_vectors = radii[:, None] * angular_samples
 
-        return position_vectors
+        return (
+            position_vectors,
+            radial_logits,
+            radii,
+            log_angular_coeffs,
+            angular_logits,
+            angular_probs,
+            radii_pdf,
+        )

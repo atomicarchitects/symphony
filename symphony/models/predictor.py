@@ -54,24 +54,26 @@ class Predictor(hk.Module):
         # These are the first nodes in each graph during training.
         focus_node_indices = utils.get_first_node_indices(graphs)
 
+        # Get the true radii.
+        true_radii = jnp.linalg.norm(
+            graphs.globals.target_positions,
+            axis=-1,
+        )
+
         # Get the coefficients for the target positions.
         (
-            angular_logits,
             radial_logits,
+            log_angular_coeffs,
+            angular_logits,
+            angular_probs,
+            radii_pdf,
         ) = self.target_position_predictor.predict_logits(
             graphs,
             focus_node_indices,
             graphs.globals.target_species,
-            true_radii=jnp.linalg.norm(
-                graphs.globals.target_positions,
-                axis=-1,
-            ),
+            true_radii=true_radii,
             inverse_temperature=1.0,
         )
-
-        # The radii bins used for the position prediction, repeated for each graph.
-        radii = self.target_position_predictor.create_radii()
-        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_graphs))
 
         # Check the shapes.
         assert focus_and_target_species_logits.shape == (
@@ -82,18 +84,16 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        # assert log_position_coeffs.shape == (
-        #     num_graphs,
-        #     self.target_position_predictor.num_channels,
-        #     self.target_position_predictor.num_radii,
-        #     log_position_coeffs.shape[-1],
-        # )
-        # assert position_logits.shape == (
-        #     num_graphs,
-        #     self.target_position_predictor.num_radii,
-        #     self.target_position_predictor.res_beta,
-        #     self.target_position_predictor.res_alpha,
-        # )
+        assert log_angular_coeffs.shape == (
+            num_graphs,
+            self.target_position_predictor.num_channels,
+            log_angular_coeffs.shape[-1],
+        )
+        assert angular_logits.shape == (
+            num_graphs,
+            self.target_position_predictor.res_beta,
+            self.target_position_predictor.res_alpha,
+        ), angular_logits.shape
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -113,13 +113,13 @@ class Predictor(hk.Module):
                 stop=None,
                 focus_indices=focus_node_indices,
                 target_species=None,
-                log_position_coeffs=None,
-                position_logits=None,
-                position_probs=None,
-                position_vectors=None,
-                radial_bins=radial_bins,
                 radial_logits=radial_logits,
+                radii=None,
+                radii_pdf=radii_pdf,
+                log_angular_coeffs=log_angular_coeffs,
                 angular_logits=angular_logits,
+                angular_probs=angular_probs,
+                position_vectors=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -173,7 +173,15 @@ class Predictor(hk.Module):
         )
 
         # Sample the relative position vectors.
-        position_vectors = self.target_position_predictor.sample(
+        (
+            position_vectors,
+            radial_logits,
+            radii,
+            log_angular_coeffs,
+            angular_logits,
+            angular_probs,
+            radii_pdf,
+        ) = self.target_position_predictor.sample(
             graphs,
             focus_indices,
             target_species,
@@ -210,13 +218,13 @@ class Predictor(hk.Module):
                 stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
-                log_position_coeffs=None,
-                position_logits=None,
-                position_probs=None,
+                radial_logits=radial_logits,
+                radii=radii,
+                radii_pdf=radii_pdf,
+                log_angular_coeffs=log_angular_coeffs,
+                angular_logits=angular_logits,
+                angular_probs=angular_probs,
                 position_vectors=position_vectors,
-                radial_bins=None,
-                radial_logits=None,
-                angular_logits=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
