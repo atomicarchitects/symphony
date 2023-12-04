@@ -66,12 +66,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
     config.target_position_predictor.num_channels = 1
-    config.target_position_predictor.min_radius = 0.5
-    config.target_position_predictor.max_radius = 1.5
-    config.target_position_predictor.num_radii = 20
-    config.target_position_predictor.apply_gate_on_logits = False
-    config.target_position_predictor.square_logits = False
-    config.target_position_predictor.factorized = False
+    config.target_position_predictor.min_radius = 0.0
+    config.target_position_predictor.max_radius = 5.0
+    config.target_position_predictor.num_radii = 128
+    config.target_position_predictor.apply_gate_on_logits = True
+    config.target_position_predictor.square_logits = True
+    config.target_position_predictor.factorized = True
     config.target_position_predictor.num_radial_flow_layers = 2
     config.target_position_predictor.num_radial_basis_fns = 8
     return config
