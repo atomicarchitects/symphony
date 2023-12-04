@@ -220,7 +220,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         log_angular_coeffs = e3nn.haiku.Linear(
             self.num_channels * irreps, force_irreps_out=True
-        )(*conditioning)
+        )(conditioning)
         log_angular_coeffs = log_angular_coeffs.mul_to_axis(factor=self.num_channels)
 
         if self.apply_gate_on_logits:
