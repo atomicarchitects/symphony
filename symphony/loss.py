@@ -228,13 +228,12 @@ def generation_loss(
 
         assert predicted_angular_logits.shape == (
             num_graphs,
-            1,
             res_beta,
             res_alpha,
-        ), predicted_angular_logits.shape
+        ), (predicted_angular_logits.shape, true_angular_dist.shape)
 
         loss_angular = jax.vmap(kl_divergence_on_spheres)(
-            true_angular_dist, predicted_angular_logits
+            true_angular_dist[:, 0, :, :], predicted_angular_logits
         )
 
         loss_position = loss_radial + loss_angular

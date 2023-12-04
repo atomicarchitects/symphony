@@ -196,21 +196,61 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         return focus_node_embeddings, target_species_embeddings
 
-    def encode_radii(self, radii: jnp.ndarray, output_dims: int) -> jnp.ndarray:
-        """Encodes the radii."""
+    def compute_radial_conditioning(
+        self,
+        focus_node_embeddings: e3nn.IrrepsArray,
+        target_species_embeddings: e3nn.IrrepsArray,
+    ) -> jnp.ndarray:
+        """Computes the radial conditioning."""
+        # Apply linear projections to the original embeddings.
+        focus_node_embeddings = e3nn.haiku.Linear(
+            irreps_out=focus_node_embeddings.irreps,
+        )(focus_node_embeddings)
+        target_species_embeddings = e3nn.haiku.Linear(
+            irreps_out=target_species_embeddings.irreps,
+        )(target_species_embeddings)
+
+        # Extract the scalars.
+        target_species_embeddings_scalars = target_species_embeddings.filter(keep="0e")
+        focus_node_embeddings_scalars = focus_node_embeddings.filter(keep="0e")
+        all_scalars = jnp.concatenate(
+            [
+                target_species_embeddings_scalars.array,
+                focus_node_embeddings_scalars.array,
+            ],
+            axis=-1,
+        )
+        return all_scalars
+
+    def compute_angular_conditioning(
+        self,
+        focus_node_embeddings: e3nn.IrrepsArray,
+        target_species_embeddings: e3nn.IrrepsArray,
+        radii: jnp.ndarray,
+    ) -> e3nn.IrrepsArray:
+        """Computes the angular conditioning."""
+        # Apply linear projections to the original embeddings.
+        focus_node_embeddings = e3nn.haiku.Linear(
+            irreps_out=focus_node_embeddings.irreps,
+        )(focus_node_embeddings)
+        target_species_embeddings = e3nn.haiku.Linear(
+            irreps_out=target_species_embeddings.irreps,
+        )(target_species_embeddings)
+
+        # Combine with the radii.
         encoded_radii = e3nn.bessel(
             radii, n=self.num_radial_basis_fns, x_max=self.radial_flow.range_max
         )
         encoded_radii = e3nn.haiku.Linear(
-            irreps_out=f"{output_dims}x0e",
+            irreps_out=f"{focus_node_embeddings.irreps.num_irreps}x0e",
         )(encoded_radii)
-        return encoded_radii
+        return encoded_radii * target_species_embeddings * focus_node_embeddings
 
     def predict_coeffs_for_angular_logits(
-        self, conditioning: jnp.ndarray
+        self, angular_conditioning: e3nn.IrrepsArray
     ) -> e3nn.IrrepsArray:
         """Predicts the coefficients for the angular distribution."""
-        num_graphs = conditioning.shape[0]
+        num_graphs = angular_conditioning.shape[0]
 
         s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         if self.apply_gate_on_logits:
@@ -220,7 +260,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         log_angular_coeffs = e3nn.haiku.Linear(
             self.num_channels * irreps, force_irreps_out=True
-        )(conditioning)
+        )(angular_conditioning)
         log_angular_coeffs = log_angular_coeffs.mul_to_axis(factor=self.num_channels)
 
         if self.apply_gate_on_logits:
@@ -258,6 +298,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         return angular_logits
 
     def compute_radii_pdf(self, conditioning: jnp.ndarray) -> jnp.ndarray:
+        """Computes the probability density function of the radii."""
         all_radii = jnp.linspace(
             self.radial_flow.range_min, self.radial_flow.range_max, 1000
         )
@@ -288,24 +329,27 @@ class FactorizedTargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Predict the log-probs of the radii.
-        conditioning = target_species_embeddings * focus_node_embeddings
+        radial_conditioning = self.compute_radial_conditioning(
+            focus_node_embeddings, target_species_embeddings
+        )
         radial_logits = hk.vmap(self.radial_flow.log_prob, split_rng=False)(
-            true_radii, conditioning.array
+            true_radii, radial_conditioning
         )
         assert radial_logits.shape == (num_graphs,), radial_logits.shape
 
         # Compute the PDF of the radii.
-        radii_pdf = hk.vmap(self.compute_radii_pdf, split_rng=False)(conditioning.array)
+        radii_pdf = hk.vmap(self.compute_radii_pdf, split_rng=False)(
+            radial_conditioning
+        )
 
         # Encode the true radii, to condition the angular distribution on them.
-        encoded_true_radii = self.encode_radii(
-            true_radii, output_dims=conditioning.irreps.num_irreps
+        angular_conditioning = self.compute_angular_conditioning(
+            focus_node_embeddings, target_species_embeddings, true_radii
         )
-        conditioning *= encoded_true_radii
 
         # Predict the coefficients for the angular distribution.
         log_angular_coeffs = self.predict_coeffs_for_angular_logits(
-            conditioning=conditioning
+            angular_conditioning
         )
 
         # Project onto a spherical grid.
@@ -346,30 +390,33 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         # Sample the radii.
         # Also measure the log-probs of the sampled radii.
-        conditioning = target_species_embeddings * focus_node_embeddings
-        radii = hk.vmap(
+        radial_conditioning = self.compute_radial_conditioning(
+            focus_node_embeddings, target_species_embeddings
+        )
+        sampled_radii = hk.vmap(
             lambda condition: self.radial_flow.sample(condition),
             split_rng=True,
         )(
-            conditioning.array,
+            radial_conditioning,
         )
         radial_logits = hk.vmap(self.radial_flow.log_prob, split_rng=False)(
-            radii, conditioning.array
+            sampled_radii, radial_conditioning
         )
-        assert radii.shape == (num_graphs,), radii.shape
+        assert sampled_radii.shape == (num_graphs,), sampled_radii.shape
 
         # Compute the PDF of the radii.
-        radii_pdf = hk.vmap(self.compute_radii_pdf, split_rng=False)(conditioning.array)
+        radii_pdf = hk.vmap(self.compute_radii_pdf, split_rng=False)(
+            radial_conditioning
+        )
 
         # Encode the sampled radii, to condition the angular distribution on them.
-        encoded_sampled_radii = self.encode_radii(
-            radii, output_dims=focus_node_embeddings.irreps.num_irreps
+        angular_conditioning = self.compute_angular_conditioning(
+            focus_node_embeddings, target_species_embeddings, sampled_radii
         )
-        conditioning *= encoded_sampled_radii
 
         # Predict the coefficients for the angular distribution.
         log_angular_coeffs = self.predict_coeffs_for_angular_logits(
-            conditioning=conditioning
+            angular_conditioning
         )
 
         # Project onto a spherical grid.
@@ -390,12 +437,12 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(angular_probs, rngs)
 
         # Scale by the radii.
-        position_vectors = radii[:, None] * angular_samples
+        position_vectors = sampled_radii[:, None] * angular_samples
 
         return (
             position_vectors,
             radial_logits,
-            radii,
+            sampled_radii,
             log_angular_coeffs,
             angular_logits,
             angular_probs,
