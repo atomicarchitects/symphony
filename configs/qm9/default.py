@@ -16,7 +16,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.val_molecules = (100000, 120000)
     config.test_molecules = (120000, 135000)
     config.shuffle_datasets = True
-    config.use_same_seed_for_all_splits = True
 
     # Optimizer.
     config.optimizer = "adam"

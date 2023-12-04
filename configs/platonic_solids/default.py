@@ -15,6 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
+    config.use_same_seed_for_all_splits = True
 
     # Optimizer.
     config.optimizer = "adam"
