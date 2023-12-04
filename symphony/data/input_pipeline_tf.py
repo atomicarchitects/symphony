@@ -309,6 +309,11 @@ def pieces_to_unbatched_datasets(
         else:
             split_pieces_as_graphs = pieces_as_graphs
 
+        if config.use_same_seed_for_all_splits:
+            split_rng = rng
+        else:
+            split_rng, rng = jax.random.split(rng)
+
         fragments_for_pieces = itertools.chain.from_iterable(
             generate_fragments_helper(split_rng, graph)
             for graph in split_pieces_as_graphs
