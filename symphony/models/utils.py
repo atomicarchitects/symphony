@@ -130,6 +130,14 @@ def segment_sample_2D(
     return node_indices, species_indices
 
 
+def sample_from_angular_distribution(
+    angular_probs: e3nn.SphericalSignal, rng: chex.PRNGKey
+):
+    """Sample a unit vector from an angular distribution."""
+    beta_index, alpha_index = angular_probs.sample(rng)
+    return angular_probs.grid_vectors[beta_index, alpha_index]
+
+
 def log_coeffs_to_logits(
     log_coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int, num_radii: int
 ) -> e3nn.SphericalSignal:
@@ -162,13 +170,12 @@ def position_logits_to_position_distribution(
     position_logits: e3nn.SphericalSignal,
 ) -> e3nn.SphericalSignal:
     """Converts logits to a SphericalSignal representing the position distribution."""
-
-    assert len(position_logits.shape) == 3  # [num_radii, res_beta, res_alpha]
+    # Take the exponential.
     max_logit = jnp.max(position_logits.grid_values)
     max_logit = jax.lax.stop_gradient(max_logit)
-
     position_probs = position_logits.apply(lambda logit: jnp.exp(logit - max_logit))
 
+    # Normalize.
     position_probs.grid_values /= position_probs.integrate().array.sum()
     return position_probs
 

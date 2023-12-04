@@ -61,7 +61,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 90
     config.target_position_predictor.res_alpha = 179
-    config.target_position_predictor.num_channels = 1
+    config.target_position_predictor.num_channels = 2
     config.target_position_predictor.min_radius = 0.0
     config.target_position_predictor.max_radius = 3.0
     config.target_position_predictor.num_radii = 128
