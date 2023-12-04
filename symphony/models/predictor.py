@@ -63,7 +63,8 @@ class Predictor(hk.Module):
             focus_node_indices,
             graphs.globals.target_species,
             true_radii=jnp.linalg.norm(
-                graphs.globals.target_positions, axis=-1,
+                graphs.globals.target_positions,
+                axis=-1,
             ),
             inverse_temperature=1.0,
         )
