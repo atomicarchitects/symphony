@@ -56,8 +56,6 @@ class Predictor(hk.Module):
 
         # Get the coefficients for the target positions.
         (
-            _,
-            _,
             angular_logits,
             radial_logits,
         ) = self.target_position_predictor.predict_logits(
@@ -65,7 +63,7 @@ class Predictor(hk.Module):
             focus_node_indices,
             graphs.globals.target_species,
             true_radii=jnp.linalg.norm(
-                graphs.globals.target_positions, axis=-1, keepdims=True
+                graphs.globals.target_positions, axis=-1,
             ),
             inverse_temperature=1.0,
         )

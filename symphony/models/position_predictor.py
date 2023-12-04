@@ -163,7 +163,11 @@ class FactorizedTargetPositionPredictor(hk.Module):
             self.radial_flow.num_bins,
         )
 
-    def compute_embeddings(
+    def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
+        """Computes the node embeddings for the target positions."""
+        return self.node_embedder(graphs)
+
+    def compute_focus_node_and_target_species_embeddings(
         self,
         graphs: datatypes.Fragments,
         focus_indices: jnp.ndarray,
@@ -173,7 +177,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the focus node embeddings.
-        node_embeddings = self.node_embedder(graphs)
+        node_embeddings = self.compute_node_embeddings(graphs)
         focus_node_embeddings = node_embeddings[focus_indices]
 
         assert focus_node_embeddings.shape == (
@@ -210,8 +214,10 @@ class FactorizedTargetPositionPredictor(hk.Module):
         true_radii: jnp.ndarray,
         inverse_temperature: float = 1.0,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+        """Predicts the angular and radial logits for the target positions."""
+
         # Compute the focus node embeddings and target species embeddings.
-        focus_node_embeddings, target_species_embeddings = self.compute_embeddings(
+        focus_node_embeddings, target_species_embeddings = self.compute_focus_node_and_target_species_embeddings(
             graphs, focus_indices, target_species
         )
 
@@ -222,11 +228,11 @@ class FactorizedTargetPositionPredictor(hk.Module):
         radial_logits = hk.vmap(self.radial_flow.log_prob, split_rng=False)(
             true_radii, conditioning.array
         )
-        assert radial_logits.shape == (num_graphs, 1), radial_logits.shape
+        assert radial_logits.shape == (num_graphs,), radial_logits.shape
 
         # Encode the true radii, to condition the angular distribution on them.
         encoded_true_radii = self.encode_radii(
-            true_radii, output_dims=focus_node_embeddings.irreps.num_irreps
+            true_radii, output_dims=conditioning.irreps.num_irreps
         )
 
         # Predict the angular coefficients for the position signal.
@@ -251,7 +257,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
             num_graphs,
             self.num_channels,
             s2_irreps.dim,
-        )
+        ), log_angular_coeffs.shape
 
         # Project onto a spherical grid.
         angular_logits = jax.vmap(
@@ -277,8 +283,9 @@ class FactorizedTargetPositionPredictor(hk.Module):
         target_species: jnp.ndarray,
         inverse_temperature: float = 1.0,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+        """Samples the target positions."""
         # Compute the focus node embeddings and target species embeddings.
-        focus_node_embeddings, target_species_embeddings = self.compute_embeddings(
+        focus_node_embeddings, target_species_embeddings = self.compute_focus_node_and_target_species_embeddings(
             graphs, focus_indices, target_species
         )
 
