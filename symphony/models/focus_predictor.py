@@ -51,8 +51,10 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         # Get the node embeddings.
         node_embeddings = self.compute_node_embeddings(graphs)
 
-        num_nodes, _ = node_embeddings.shape
+        # Extract scalars.
         node_embeddings = node_embeddings.filter(keep="0e")
+
+        # Get the logits.
         focus_and_target_species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1)
             + [self.num_species],
@@ -61,6 +63,7 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         )(node_embeddings).array
         stop_logits = jnp.zeros((num_graphs,))
 
+        num_nodes, _ = node_embeddings.shape
         assert focus_and_target_species_logits.shape == (num_nodes, self.num_species)
         assert stop_logits.shape == (num_graphs,)
 
