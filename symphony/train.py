@@ -159,11 +159,13 @@ def train_step(
         position_noise = (
             jax.random.normal(noise_rng, graphs.nodes.positions.shape) * noise_std
         )
-    else:
-        position_noise = jnp.zeros_like(graphs.nodes.positions)
+        noisy_positions = graphs.nodes.positions + position_noise
+        graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
-    noisy_positions = graphs.nodes.positions + position_noise
-    graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
+    # Add some small amount of noise to the target positions.
+    noise_rng, rng = jax.random.split(rng)
+    noisy_target_positions = graphs.globals.target_positions + jax.random.normal(noise_rng, graphs.globals.target_positions.shape) * 0.01
+    graphs = graphs._replace(nodes=graphs.globals._replace(target_positions=noisy_target_positions))
 
     # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
