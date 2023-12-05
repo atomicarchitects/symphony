@@ -25,13 +25,15 @@ class RationalQuadraticSpline(hk.Module):
         layers = []
         for _ in range(self.num_layers):
             params = hk.nets.MLP(
-                [self.num_bins * 3 + 1],
+                [8, self.num_bins * 3 + 1],
                 activate_final=False,
-                w_init=jnp.zeros,
-                b_init=jnp.zeros,
+                w_init=hk.initializers.RandomNormal(1e-4),
+                b_init=hk.initializers.RandomNormal(1e-4),
             )(conditioning)
             layer = distrax.RationalQuadraticSpline(
-                params, self.range_min, self.range_max
+                params, self.range_min, self.range_max,
+                boundary_slopes="identity",
+                min_bin_size=1e-2
             )
             layers.append(layer)
 
