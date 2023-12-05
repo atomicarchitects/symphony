@@ -25,26 +25,35 @@ class RationalQuadraticSpline(hk.Module):
         layers = []
         for _ in range(self.num_layers):
             params = hk.nets.MLP(
-                [8, self.num_bins * 3 + 1],
+                [self.num_bins * 3 + 1, self.num_bins * 3 + 1],
                 activate_final=False,
                 w_init=hk.initializers.RandomNormal(1e-4),
                 b_init=hk.initializers.RandomNormal(1e-4),
             )(conditioning)
             layer = distrax.RationalQuadraticSpline(
-                params, self.range_min, self.range_max,
+                params,
+                self.range_min,
+                self.range_max,
                 boundary_slopes="identity",
-                min_bin_size=1e-2
+                min_bin_size=1e-2,
             )
             layers.append(layer)
 
         flow = distrax.Inverse(distrax.Chain(layers))
         return flow
 
-    def create_distribution(self, conditioning: e3nn.IrrepsArray) -> distrax.Distribution:
+    def create_distribution(
+        self, conditioning: e3nn.IrrepsArray
+    ) -> distrax.Distribution:
         """Creates a distribution by composing a base distribution with a flow."""
         flow = self.create_flow(conditioning)
+        mean = (self.range_min + self.range_max) / 2
+        std = (self.range_max - self.range_min) / 20
         base_distribution = distrax.Independent(
-            distrax.Uniform(self.range_min, self.range_max), reinterpreted_batch_ndims=0
+            distrax.ClippedNormal(
+                mean, std, minimum=self.range_min, maximum=self.range_max
+            ),
+            reinterpreted_batch_ndims=0,
         )
         dist = distrax.Transformed(base_distribution, flow)
         return dist
@@ -56,7 +65,9 @@ class RationalQuadraticSpline(hk.Module):
         flow = self.create_flow(conditioning)
         return flow.forward(base_samples)
 
-    def log_prob(self, samples: jnp.ndarray, conditioning: e3nn.IrrepsArray) -> jnp.ndarray:
+    def log_prob(
+        self, samples: jnp.ndarray, conditioning: e3nn.IrrepsArray
+    ) -> jnp.ndarray:
         """Computes the log probability of the given samples."""
         assert conditioning.shape[:-1] == samples.shape[:-1], (
             conditioning.shape,

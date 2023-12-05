@@ -411,7 +411,6 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )
 
         # Encode the sampled radii, to condition the angular distribution on them.
-        # sampled_radii = jnp.ones_like(sampled_radii)
         angular_conditioning = self.compute_angular_conditioning(
             focus_node_embeddings, target_species_embeddings, sampled_radii
         )
