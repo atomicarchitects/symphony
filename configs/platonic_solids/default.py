@@ -34,8 +34,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_train_steps = 10000
     config.num_eval_steps = 100
     config.num_eval_steps_at_end_of_training = 100
-    config.log_every_steps = 1000
-    config.eval_every_steps = 2000
+    config.log_every_steps = 500
+    config.eval_every_steps = 500
     config.nn_tolerance = 0.1
     config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
