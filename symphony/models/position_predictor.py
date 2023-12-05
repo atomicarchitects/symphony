@@ -172,7 +172,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         graphs: datatypes.Fragments,
         focus_indices: jnp.ndarray,
         target_species: jnp.ndarray,
-    ) -> e3nn.IrrepsArray:
+    ) -> Tuple[e3nn.IrrepsArray, e3nn.IrrepsArray]:
         """Computes the node embeddings for the target positions."""
         num_graphs = graphs.n_node.shape[0]
 
@@ -185,9 +185,14 @@ class FactorizedTargetPositionPredictor(hk.Module):
             focus_node_embeddings.irreps.dim,
         )
 
+        # Compute the target species embeddings.
         target_species_embeddings = hk.Embed(
             self.num_species, embed_dim=focus_node_embeddings.irreps.num_irreps
         )(target_species)
+        target_species_embeddings = e3nn.IrrepsArray(
+            irreps=f"{focus_node_embeddings.irreps.num_irreps}x0e",
+            array=target_species_embeddings,
+        )
 
         assert target_species_embeddings.shape == (
             num_graphs,
@@ -200,7 +205,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         self,
         focus_node_embeddings: e3nn.IrrepsArray,
         target_species_embeddings: e3nn.IrrepsArray,
-    ) -> jnp.ndarray:
+    ) -> e3nn.IrrepsArray:
         """Computes the radial conditioning."""
         # Apply linear projections to the original embeddings.
         focus_node_embeddings = e3nn.haiku.Linear(
@@ -213,12 +218,8 @@ class FactorizedTargetPositionPredictor(hk.Module):
         # Extract the scalars.
         target_species_embeddings_scalars = target_species_embeddings.filter(keep="0e")
         focus_node_embeddings_scalars = focus_node_embeddings.filter(keep="0e")
-        all_scalars = jnp.concatenate(
-            [
-                target_species_embeddings_scalars.array,
-                focus_node_embeddings_scalars.array,
-            ],
-            axis=-1,
+        all_scalars = e3nn.concatenate(
+            [target_species_embeddings_scalars, focus_node_embeddings_scalars], axis=-1
         )
         return all_scalars
 

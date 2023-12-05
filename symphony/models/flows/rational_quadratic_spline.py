@@ -1,6 +1,7 @@
 import haiku as hk
 import jax.numpy as jnp
 import distrax
+import e3nn_jax as e3nn
 
 
 class RationalQuadraticSpline(hk.Module):
@@ -15,8 +16,12 @@ class RationalQuadraticSpline(hk.Module):
         self.range_max = range_max
         self.num_layers = num_layers
 
-    def create_flow(self, conditioning: jnp.ndarray) -> distrax.Bijector:
+    def create_flow(self, conditioning: e3nn.IrrepsArray) -> distrax.Bijector:
         """Creates a flow with the given conditioning."""
+        if not conditioning.irreps.is_scalar():
+            raise ValueError("Conditioning for flow must be scalars only.")
+        conditioning = conditioning.array
+
         layers = []
         for _ in range(self.num_layers):
             params = hk.nets.MLP(
@@ -33,7 +38,7 @@ class RationalQuadraticSpline(hk.Module):
         flow = distrax.Inverse(distrax.Chain(layers))
         return flow
 
-    def create_distribution(self, conditioning: jnp.ndarray) -> distrax.Distribution:
+    def create_distribution(self, conditioning: e3nn.IrrepsArray) -> distrax.Distribution:
         """Creates a distribution by composing a base distribution with a flow."""
         flow = self.create_flow(conditioning)
         base_distribution = distrax.Independent(
@@ -43,13 +48,13 @@ class RationalQuadraticSpline(hk.Module):
         return dist
 
     def forward(
-        self, base_samples: jnp.ndarray, conditioning: jnp.ndarray
+        self, base_samples: jnp.ndarray, conditioning: e3nn.IrrepsArray
     ) -> jnp.ndarray:
         """Applies the flow to the given samples from the base distribution."""
         flow = self.create_flow(conditioning)
         return flow.forward(base_samples)
 
-    def log_prob(self, samples: jnp.ndarray, conditioning: jnp.ndarray) -> jnp.ndarray:
+    def log_prob(self, samples: jnp.ndarray, conditioning: e3nn.IrrepsArray) -> jnp.ndarray:
         """Computes the log probability of the given samples."""
         assert conditioning.shape[:-1] == samples.shape[:-1], (
             conditioning.shape,
@@ -58,7 +63,7 @@ class RationalQuadraticSpline(hk.Module):
         dist = self.create_distribution(conditioning)
         return dist.log_prob(samples)
 
-    def sample(self, conditioning: jnp.ndarray) -> jnp.ndarray:
+    def sample(self, conditioning: e3nn.IrrepsArray) -> jnp.ndarray:
         """Samples from the learned distribution."""
         dist = self.create_distribution(conditioning)
         rng = hk.next_rng_key()
