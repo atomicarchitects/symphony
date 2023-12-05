@@ -164,8 +164,13 @@ def train_step(
 
     # Add some small amount of noise to the target positions.
     noise_rng, rng = jax.random.split(rng)
-    noisy_target_positions = graphs.globals.target_positions + jax.random.normal(noise_rng, graphs.globals.target_positions.shape) * 0.01
-    graphs = graphs._replace(nodes=graphs.globals._replace(target_positions=noisy_target_positions))
+    noisy_target_positions = (
+        graphs.globals.target_positions
+        + jax.random.normal(noise_rng, graphs.globals.target_positions.shape) * 0.01
+    )
+    graphs = graphs._replace(
+        globals=graphs.globals._replace(target_positions=noisy_target_positions)
+    )
 
     # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
