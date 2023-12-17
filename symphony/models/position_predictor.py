@@ -132,7 +132,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
     def __init__(
         self,
         node_embedder: hk.Module,
-        radial_flow: hk.Module,
+        radius_predictor: hk.Module,
         position_coeffs_lmax: int,
         res_beta: int,
         res_alpha: int,
@@ -145,7 +145,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
     ):
         super().__init__(name)
         self.node_embedder = node_embedder
-        self.radial_flow = radial_flow
+        self.radius_predictor = radius_predictor
         self.position_coeffs_lmax = position_coeffs_lmax
         self.res_beta = res_beta
         self.res_alpha = res_alpha
@@ -158,9 +158,9 @@ class FactorizedTargetPositionPredictor(hk.Module):
     def create_radii(self) -> jnp.ndarray:
         """Creates the binned radii for the target positions."""
         return jnp.linspace(
-            self.radial_flow.range_min,
-            self.radial_flow.range_max,
-            self.radial_flow.num_bins,
+            self.radius_predictor.range_min,
+            self.radius_predictor.range_max,
+            self.radius_predictor.num_bins,
         )
 
     def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
@@ -240,7 +240,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         # Combine with the radii.
         encoded_radii = e3nn.bessel(
-            radii, n=self.num_radial_basis_fns, x_max=self.radial_flow.range_max
+            radii, n=self.num_radial_basis_fns, x_max=self.radius_predictor.range_max
         )
         encoded_radii = e3nn.haiku.Linear(
             irreps_out=f"{focus_node_embeddings.irreps.num_irreps}x0e",
@@ -301,10 +301,10 @@ class FactorizedTargetPositionPredictor(hk.Module):
     def compute_radii_pdf(self, conditioning: jnp.ndarray) -> jnp.ndarray:
         """Computes the probability density function of the radii."""
         all_radii = jnp.linspace(
-            self.radial_flow.range_min, self.radial_flow.range_max, 1000
+            self.radius_predictor.range_min, self.radius_predictor.range_max, 100
         )
         log_probs = hk.vmap(
-            lambda radius: self.radial_flow.log_prob(radius, conditioning),
+            lambda radius: self.radius_predictor.log_prob(radius, conditioning),
             split_rng=False,
         )(all_radii)
         return jax.nn.softmax(log_probs, axis=-1)
@@ -333,7 +333,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         radial_conditioning = self.compute_radial_conditioning(
             focus_node_embeddings, target_species_embeddings
         )
-        radial_logits = hk.vmap(self.radial_flow.log_prob, split_rng=False)(
+        radial_logits = hk.vmap(self.radius_predictor.log_prob, split_rng=False)(
             true_radii, radial_conditioning
         )
         assert radial_logits.shape == (num_graphs,), radial_logits.shape
@@ -395,12 +395,12 @@ class FactorizedTargetPositionPredictor(hk.Module):
             focus_node_embeddings, target_species_embeddings
         )
         sampled_radii = hk.vmap(
-            lambda condition: self.radial_flow.sample(condition),
+            lambda condition: self.radius_predictor.sample(condition),
             split_rng=True,
         )(
             radial_conditioning,
         )
-        radial_logits = hk.vmap(self.radial_flow.log_prob, split_rng=False)(
+        radial_logits = hk.vmap(self.radius_predictor.log_prob, split_rng=False)(
             sampled_radii, radial_conditioning
         )
         assert sampled_radii.shape == (num_graphs,), sampled_radii.shape

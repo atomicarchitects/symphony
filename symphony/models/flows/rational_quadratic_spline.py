@@ -8,13 +8,15 @@ class RationalQuadraticSpline(hk.Module):
     """A rational quadratic spline flow."""
 
     def __init__(
-        self, num_bins: int, range_min: float, range_max: float, num_layers: int
+        self, num_bins: int, range_min: float, range_max: float, num_layers: int, num_param_mlp_layers: int
     ):
         super().__init__()
         self.num_bins = num_bins
         self.range_min = range_min
         self.range_max = range_max
         self.num_layers = num_layers
+        self.num_param_mlp_layers = num_param_mlp_layers
+
 
     def create_flow(self, conditioning: e3nn.IrrepsArray) -> distrax.Bijector:
         """Creates a flow with the given conditioning."""
@@ -24,8 +26,9 @@ class RationalQuadraticSpline(hk.Module):
 
         layers = []
         for _ in range(self.num_layers):
+            param_dims = self.num_bins * 3 + 1
             params = hk.nets.MLP(
-                [self.num_bins * 3 + 1, self.num_bins * 3 + 1],
+                [param_dims] * self.num_param_mlp_layers,
                 activate_final=False,
                 w_init=hk.initializers.RandomNormal(1e-4),
                 b_init=hk.initializers.RandomNormal(1e-4),
@@ -34,7 +37,7 @@ class RationalQuadraticSpline(hk.Module):
                 params,
                 self.range_min,
                 self.range_max,
-                boundary_slopes="identity",
+                boundary_slopes="unconstrained",
                 min_bin_size=1e-2,
             )
             layers.append(layer)

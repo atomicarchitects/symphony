@@ -26,7 +26,6 @@ def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatype
     """Appends the predictions to a single fragment."""
     focus_index = pred.globals.focus_indices.item()
     target_relative_positions = pred.globals.position_vectors
-    target_relative_positions /= jnp.linalg.norm(target_relative_positions)
     next_positions = target_relative_positions + fragment.nodes.positions[focus_index]
     next_species = pred.globals.target_species.reshape((1,))
     stop = pred.globals.stop
@@ -142,9 +141,10 @@ def visualize_predictions_and_fragments(
         if stop:
             break
 
+        print(fragment.nodes.positions, preds.globals.radii)
         # Print the distance matrix.
-        print(f"Distance matrix for fragment:")
-        print(jnp.linalg.norm(fragment.nodes.positions[:, None, :] - fragment.nodes.positions[None, :, :], axis=-1))
+        # print(f"Distance matrix for fragment:")
+        # print(jnp.linalg.norm(fragment.nodes.positions[:, None, :] - fragment.nodes.positions[None, :, :], axis=-1))
 
         if np.all(fragment.n_node == old_fragment.n_node):
             break

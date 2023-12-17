@@ -289,7 +289,6 @@ def get_plotly_traces_for_predictions(
     # Show angular probabilities.
     angular_probs = pred.globals.angular_probs
     radii = pred.globals.radii
-    print(radii)
     surface_r = go.Surface(
         **angular_probs.plotly_surface(radius=radii, translation=focus_position),
         colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],

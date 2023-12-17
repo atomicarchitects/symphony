@@ -163,14 +163,14 @@ def train_step(
         graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
     # Add some small amount of noise to the target positions.
-    noise_rng, rng = jax.random.split(rng)
-    noisy_target_positions = (
-        graphs.globals.target_positions
-        + jax.random.normal(noise_rng, graphs.globals.target_positions.shape) * 0.01
-    )
-    graphs = graphs._replace(
-        globals=graphs.globals._replace(target_positions=noisy_target_positions)
-    )
+    # noise_rng, rng = jax.random.split(rng)
+    # noisy_target_positions = (
+    #     graphs.globals.target_positions
+    #     + jax.random.normal(noise_rng, graphs.globals.target_positions.shape) * 0.01
+    # )
+    # graphs = graphs._replace(
+    #     globals=graphs.globals._replace(target_positions=noisy_target_positions)
+    # )
 
     # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -424,38 +424,39 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
-            eval_state = eval_state.replace(params=state.params)
-            # Evaluate on validation and test splits.
-            rng, eval_rng = jax.random.split(rng)
-            eval_metrics = evaluate_model_helper(
-                eval_state,
-                step,
-                eval_rng,
-                is_final_eval=False,
-            )
+            pass
+            # eval_state = eval_state.replace(params=state.params)
+            # # Evaluate on validation and test splits.
+            # rng, eval_rng = jax.random.split(rng)
+            # eval_metrics = evaluate_model_helper(
+            #     eval_state,
+            #     step,
+            #     eval_rng,
+            #     is_final_eval=False,
+            # )
 
-            # Note best state seen so far.
-            # Best state is defined as the state with the lowest validation loss.
-            if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
-                min_val_loss = eval_metrics["val_eval"]["total_loss"]
-                metrics_for_best_state = eval_metrics
-                best_state = state
-                step_for_best_state = step
-                logging.info("New best state found at step %d.", step)
+            # # Note best state seen so far.
+            # # Best state is defined as the state with the lowest validation loss.
+            # if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+            #     min_val_loss = eval_metrics["val_eval"]["total_loss"]
+            #     metrics_for_best_state = eval_metrics
+            #     best_state = state
+            #     step_for_best_state = step
+            #     logging.info("New best state found at step %d.", step)
 
-            # Save the current state and best state seen so far.
-            with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
-                pickle.dump(flax.jax_utils.unreplicate(state.params), f)
-            with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-                pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
-            ckpt.save(
-                {
-                    "state": flax.jax_utils.unreplicate(state),
-                    "best_state": flax.jax_utils.unreplicate(best_state),
-                    "step_for_best_state": step_for_best_state,
-                    "metrics_for_best_state": metrics_for_best_state,
-                }
-            )
+            # # Save the current state and best state seen so far.
+            # with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
+            #     pickle.dump(flax.jax_utils.unreplicate(state.params), f)
+            # with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
+            #     pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
+            # ckpt.save(
+            #     {
+            #         "state": flax.jax_utils.unreplicate(state),
+            #         "best_state": flax.jax_utils.unreplicate(best_state),
+            #         "step_for_best_state": step_for_best_state,
+            #         "metrics_for_best_state": metrics_for_best_state,
+            #     }
+            # )
 
         # Get a batch of graphs.
         try:
