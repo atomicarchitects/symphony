@@ -141,8 +141,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         num_radial_basis_fns: int,
         apply_gate_on_logits: bool,
         square_logits: bool,
-        radius_embedding_dim: int,
-        target_species_embeddings_dim: int,
+        target_species_embedding_dim: int,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -156,8 +155,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         self.num_radial_basis_fns = num_radial_basis_fns
         self.apply_gate_on_logits = apply_gate_on_logits
         self.square_logits = square_logits
-        self.radius_embedding_dim = radius_embedding_dim
-        self.target_species_embeddings_dim = target_species_embeddings_dim
+        self.target_species_embedding_dim = target_species_embedding_dim
 
     def create_radii(self) -> jnp.ndarray:
         """Creates the binned radii for the target positions."""
@@ -191,16 +189,16 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         # Compute the target species embeddings.
         target_species_embeddings = hk.Embed(
-            self.num_species, embed_dim=self.target_species_embeddings_dim,
+            self.num_species, embed_dim=self.target_species_embedding_dim,
         )(target_species)
         target_species_embeddings = e3nn.IrrepsArray(
-            irreps=f"{self.target_species_embeddings_dim}x0e",
+            irreps=f"{self.target_species_embedding_dim}x0e",
             array=target_species_embeddings,
         )
 
         assert target_species_embeddings.shape == (
             num_graphs,
-            self.target_species_embeddings_dim,
+            self.target_species_embedding_dim,
         )
 
         return focus_node_embeddings, target_species_embeddings
@@ -244,7 +242,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
             radii, n=self.num_radial_basis_fns, x_max=self.radius_predictor.range_max
         )
         encoded_radii = e3nn.haiku.Linear(
-            irreps_out=f"{self.radii_embedding_dim}x0e",
+            irreps_out=f"{self.num_radial_basis_fns}x0e",
         )(encoded_radii)
         return e3nn.concatenate([focus_node_embeddings, target_species_embeddings, encoded_radii], axis=-1)
 
