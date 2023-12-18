@@ -67,6 +67,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.num_radii = 10
     config.target_position_predictor.apply_gate_on_logits = True
     config.target_position_predictor.square_logits = True
+    config.target_position_predictor.radius_embedding_dim = 32
+    config.target_position_predictor.target_species_embedding_dim = 32
     config.target_position_predictor.factorized = True
     config.target_position_predictor.num_radial_basis_fns = 8
     config.target_position_predictor.radius_predictor_config = ml_collections.ConfigDict()

@@ -506,6 +506,8 @@ def create_model(
                 num_radial_basis_fns=config.target_position_predictor.num_radial_basis_fns,
                 apply_gate_on_logits=config.target_position_predictor.apply_gate_on_logits,
                 square_logits=config.target_position_predictor.square_logits,
+                radius_embedding_dim=config.target_position_predictor.radius_embedding_dim,
+                target_species_embeddings_dim=config.target_position_predictor.target_species_embeddings_dim,
             )
         else:
             target_position_predictor = TargetPositionPredictor(
