@@ -230,15 +230,17 @@ class FactorizedTargetPositionPredictor(hk.Module):
         radii: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
         """Computes the angular conditioning."""
-        # Apply linear projections to the original embeddings.
+        # Apply linear projection to the focus embedding.
         focus_node_embeddings = e3nn.haiku.Linear(
             irreps_out=focus_node_embeddings.irreps,
         )(focus_node_embeddings)
+
+        # Apply linear projection to the target species embedding.
         target_species_embeddings = e3nn.haiku.Linear(
             irreps_out=target_species_embeddings.irreps,
         )(target_species_embeddings)
 
-        # Combine with the radii.
+        # Concatenate with the radii.
         encoded_radii = e3nn.bessel(
             radii, n=self.num_radial_basis_fns, x_max=self.radius_predictor.range_max
         )
@@ -255,7 +257,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         if self.apply_gate_on_logits:
-            irreps = s2_irreps + e3nn.Irreps(f"{1 + self.position_coeffs_lmax}x0e")
+            irreps = s2_irreps + e3nn.Irreps(f"{self.position_coeffs_lmax}x0e")
         else:
             irreps = s2_irreps
 
@@ -264,7 +266,6 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(angular_conditioning)
         log_angular_coeffs = log_angular_coeffs.mul_to_axis(factor=self.num_channels)
 
-        print(angular_conditioning.shape)
         # jax.debug.print("angular-conditioning={x}", x=angular_conditioning[1])
         # jax.debug.print("pre-gate={x}", x=log_angular_coeffs[1])
         if self.apply_gate_on_logits:
@@ -276,6 +277,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
             self.num_channels,
             s2_irreps.dim,
         )
+
         return log_angular_coeffs
 
     def angular_coeffs_to_logits(
