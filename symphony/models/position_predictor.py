@@ -245,7 +245,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         encoded_radii = e3nn.haiku.Linear(
             irreps_out=f"{focus_node_embeddings.irreps.num_irreps}x0e",
         )(encoded_radii)
-        return encoded_radii * target_species_embeddings * focus_node_embeddings
+        return e3nn.concatenate([focus_node_embeddings, target_species_embeddings, encoded_radii], axis=-1)
 
     def predict_coeffs_for_angular_logits(
         self, angular_conditioning: e3nn.IrrepsArray
@@ -255,7 +255,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
 
         s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
         if self.apply_gate_on_logits:
-            irreps = e3nn.Irreps(f"{self.position_coeffs_lmax}x0e") + s2_irreps
+            irreps = s2_irreps + e3nn.Irreps(f"{1 + self.position_coeffs_lmax}x0e")
         else:
             irreps = s2_irreps
 
@@ -264,8 +264,12 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(angular_conditioning)
         log_angular_coeffs = log_angular_coeffs.mul_to_axis(factor=self.num_channels)
 
+        print(angular_conditioning.shape)
+        # jax.debug.print("angular-conditioning={x}", x=angular_conditioning[1])
+        # jax.debug.print("pre-gate={x}", x=log_angular_coeffs[1])
         if self.apply_gate_on_logits:
             log_angular_coeffs = e3nn.gate(log_angular_coeffs)
+        # jax.debug.print("post-gate={x}", x=log_angular_coeffs[1])
 
         assert log_angular_coeffs.shape == (
             num_graphs,
