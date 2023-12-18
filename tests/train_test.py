@@ -12,12 +12,13 @@ import ml_collections
 import logging
 
 from symphony import models, train, train_position_updater
-from . import loss_test
 
 from configs.qm9 import mace, e3schnet, nequip, marionette, position_updater
 from configs.tetris import nequip as tetris_nequip
 from configs.platonic_solids import nequip as platonic_solids_nequip
 from configs.platonic_solids import e3schnet_and_nequip as platonic_solids_e3schnet_and_nequip
+from configs.platonic_solids import e3schnet_and_mace as platonic_solids_e3schnet_and_mace
+
 from configs import root_dirs
 
 # Important to see the logging messages!
@@ -32,8 +33,11 @@ _ALL_CONFIGS = {
         "position_updater": position_updater.get_config(),
     },
     "tetris": {"nequip": tetris_nequip.get_config()},
-    "platonic_solids": {"nequip": platonic_solids_nequip.get_config(),
-                        "e3schnet_and_nequip": platonic_solids_e3schnet_and_nequip.get_config()},
+    "platonic_solids": {
+        "nequip": platonic_solids_nequip.get_config(),
+        "e3schnet_and_nequip": platonic_solids_e3schnet_and_nequip.get_config(),
+        "e3schnet_and_mace": platonic_solids_e3schnet_and_mace.get_config()
+    },
 }
 
 
@@ -45,6 +49,7 @@ def update_dummy_config(
     """Updates the dummy config."""
     config.num_train_steps = 1000
     config.num_eval_steps = 10
+    config.log_every_steps = 100
     config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 500
     config.dataset = dataset
@@ -57,11 +62,9 @@ def update_dummy_config(
 
 
 class TrainTest(parameterized.TestCase):
-    def setUp(self):
-        self.preds, self.graphs = loss_test.create_dummy_data()
-
+    """Tests for the training loop."""
     @parameterized.product(
-        config_name=["e3schnet_and_nequip"],
+        config_name=["e3schnet_and_mace"],
         train_on_split_smaller_than_chunk=[True],
         dataset=["platonic_solids"],
     )
@@ -73,8 +76,8 @@ class TrainTest(parameterized.TestCase):
     ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
-        #jax.config.update("jax_debug_nans", True)
-        #jax.config.update("jax_debug_infs", True)
+        # jax.config.update("jax_debug_nans", True)
+        # jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[dataset][config_name]

@@ -1,4 +1,4 @@
-"""Defines the default hyperparameters and training configuration for the E3SchNet model."""
+"""Defines the default hyperparameters and training configuration for the MACE model."""
 
 import ml_collections
 
@@ -6,18 +6,20 @@ from configs.platonic_solids import default
 
 
 def get_embedder_config() -> ml_collections.ConfigDict:
-    """Get the hyperparameter configuration for the E3SchNet model."""
+    """Get the hyperparameter configuration for the MACE model."""
     config = ml_collections.ConfigDict()
-    # E3SchNet hyperparameters.
-    config.model = "E3SchNet"
-    config.cutoff = 3.0
-    config.num_interactions = 1
-    config.num_filters = 32
-    config.num_radial_basis_functions = 8
-    config.num_channels = 32
-    config.max_ell = 2
-    config.activation = "shifted_softplus"
 
+    # MACE hyperparameters.
+    config.model = "MACE"
+    config.num_channels = 64
+    config.r_max = 5
+    config.num_interactions = 1
+    config.avg_num_neighbors = 15.0
+    config.max_ell = 3
+    config.num_basis_fns = 8
+    config.activation = "softplus"
+    config.soft_normalization = 1e2
+    config.use_pseudoscalars_and_pseudovectors = False
     return config
 
 

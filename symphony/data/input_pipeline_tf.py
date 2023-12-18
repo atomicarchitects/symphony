@@ -301,7 +301,6 @@ def pieces_to_unbatched_datasets(
     datasets = {}
 
     for split in ["train", "val", "test"]:
-        split_rng, rng = jax.random.split(rng)
 
         split_pieces = config.get(f"{split}_pieces")
         if None not in [split_pieces, split_pieces[0], split_pieces[1]]:

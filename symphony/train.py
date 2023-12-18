@@ -322,6 +322,24 @@ def train_and_evaluate(
 
         return eval_metrics
 
+    # Helper for checkpointing.
+    def checkpoint_helper(state: train_state.TrainState,
+                          best_state: train_state.TrainState,
+                          checkpoint_dir: str, step: int,
+                          step_for_best_state: int, metrics_for_best_state: Dict[str, metrics.Collection]):
+        with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
+            pickle.dump(flax.jax_utils.unreplicate(state.params), f)
+        with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
+            pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
+        ckpt.save(
+            {
+                "state": flax.jax_utils.unreplicate(state),
+                "best_state": flax.jax_utils.unreplicate(best_state),
+                "step_for_best_state": step_for_best_state,
+                "metrics_for_best_state": metrics_for_best_state,
+            }
+        )
+
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
     writer.write_hparams(config.to_dict())
@@ -424,39 +442,28 @@ def train_and_evaluate(
 
         # Evaluate on validation and test splits, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
-            pass
-            # eval_state = eval_state.replace(params=state.params)
-            # # Evaluate on validation and test splits.
-            # rng, eval_rng = jax.random.split(rng)
-            # eval_metrics = evaluate_model_helper(
-            #     eval_state,
-            #     step,
-            #     eval_rng,
-            #     is_final_eval=False,
-            # )
+            eval_state = eval_state.replace(params=state.params)
 
-            # # Note best state seen so far.
-            # # Best state is defined as the state with the lowest validation loss.
-            # if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
-            #     min_val_loss = eval_metrics["val_eval"]["total_loss"]
-            #     metrics_for_best_state = eval_metrics
-            #     best_state = state
-            #     step_for_best_state = step
-            #     logging.info("New best state found at step %d.", step)
+            # Evaluate on validation and test splits.
+            rng, eval_rng = jax.random.split(rng)
+            eval_metrics = evaluate_model_helper(
+                eval_state,
+                step,
+                eval_rng,
+                is_final_eval=False,
+            )
 
-            # # Save the current state and best state seen so far.
-            # with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
-            #     pickle.dump(flax.jax_utils.unreplicate(state.params), f)
-            # with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-            #     pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
-            # ckpt.save(
-            #     {
-            #         "state": flax.jax_utils.unreplicate(state),
-            #         "best_state": flax.jax_utils.unreplicate(best_state),
-            #         "step_for_best_state": step_for_best_state,
-            #         "metrics_for_best_state": metrics_for_best_state,
-            #     }
-            # )
+            # Note best state seen so far.
+            # Best state is defined as the state with the lowest validation loss.
+            if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+                min_val_loss = eval_metrics["val_eval"]["total_loss"]
+                metrics_for_best_state = eval_metrics
+                best_state = state
+                step_for_best_state = step
+                logging.info("New best state found at step %d.", step)
+
+            # Save the current state and best state seen so far.
+            checkpoint_helper(state, best_state, checkpoint_dir, step, step_for_best_state, metrics_for_best_state)
 
         # Get a batch of graphs.
         try:
