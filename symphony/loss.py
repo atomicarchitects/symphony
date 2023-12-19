@@ -201,8 +201,8 @@ def generation_loss(
     def factorized_position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
         # Radial loss is simply the negative log-likelihood loss.
-        loss_radial = -preds.globals.radial_logits.sum(axis=-1)
-        # loss_radial = 0.
+        # loss_radial = -preds.globals.radial_logits.sum(axis=-1)
+        loss_radial = 0.
     
         # The angular loss is the KL divergence between the predicted and the true angular distributions.
         predicted_angular_logits = preds.globals.angular_logits

@@ -157,14 +157,6 @@ class FactorizedTargetPositionPredictor(hk.Module):
         self.square_logits = square_logits
         self.target_species_embedding_dim = target_species_embedding_dim
 
-    def create_radii(self) -> jnp.ndarray:
-        """Creates the binned radii for the target positions."""
-        return jnp.linspace(
-            self.radius_predictor.range_min,
-            self.radius_predictor.range_max,
-            self.radius_predictor.num_bins,
-        )
-
     def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
         """Computes the node embeddings for the target positions."""
         return self.node_embedder(graphs)
@@ -301,16 +293,11 @@ class FactorizedTargetPositionPredictor(hk.Module):
         angular_logits = angular_logits.apply(lambda val: val * inverse_temperature)
         return angular_logits
 
-    def compute_radii_pdf(self, conditioning: jnp.ndarray) -> jnp.ndarray:
+    def compute_radii_pdf(self, conditioning: jnp.ndarray, num_samples: int = 100) -> jnp.ndarray:
         """Computes the probability density function of the radii."""
-        all_radii = jnp.linspace(
-            self.radius_predictor.range_min, self.radius_predictor.range_max, 100
-        )
-        log_probs = hk.vmap(
-            lambda radius: self.radius_predictor.log_prob(radius, conditioning),
-            split_rng=False,
-        )(all_radii)
-        return jax.nn.softmax(log_probs, axis=-1)
+        # jax.debug.print("dist={x}", x=self.radius_predictor.create_distribution(conditioning).probs)
+        sampled_radii = hk.vmap(lambda _: self.radius_predictor.sample(conditioning), split_rng=True)(jnp.arange(num_samples))
+        return jnp.histogram(sampled_radii, bins=100)
 
     def predict_logits(
         self,

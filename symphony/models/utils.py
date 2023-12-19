@@ -12,7 +12,7 @@ import ml_collections
 
 from symphony import datatypes
 from symphony.models.predictor import Predictor
-from symphony.models.flows import rational_quadratic_spline, discretized_predictor
+from symphony.models.radius_predictors import discretized_predictor, rational_quadratic_spline_flow
 from symphony.models.embedders.global_embedder import GlobalEmbedder
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.position_predictor import (
@@ -296,7 +296,7 @@ def create_radius_predictor(
 ):
     """Create a radius predictor as specified by the config."""
     if config.radius_predictor == "rational_quadratic_spline":
-        return rational_quadratic_spline.RationalQuadraticSpline(
+        return rational_quadratic_spline_flow.RationalQuadraticSpline(
             num_bins=config.num_radii,
             range_min=config.min_radius,
             range_max=config.max_radius,
