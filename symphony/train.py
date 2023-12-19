@@ -139,7 +139,7 @@ def train_step(
 
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
-        preds = get_predictions(curr_state, graphs, rng=None)
+        preds = get_predictions(curr_state, graphs, rng=rng)
         total_loss, (
             focus_and_atom_type_loss,
             position_loss,
