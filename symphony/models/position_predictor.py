@@ -255,6 +255,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(angular_conditioning)
         log_angular_coeffs = log_angular_coeffs.mul_to_axis(factor=self.num_channels)
 
+        # jax.debug.print("embeddings_for_positions_nonscalars={x}", x=jnp.linalg.norm(preds.nodes.embeddings_for_positions[0].filter(drop="0e").array))
         # jax.debug.print("angular-conditioning={x}", x=angular_conditioning[1])
         # jax.debug.print("pre-gate={x}", x=log_angular_coeffs[1])
         if self.apply_gate_on_logits:

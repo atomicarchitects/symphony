@@ -140,6 +140,8 @@ def train_step(
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         curr_state = state.replace(params=params)
         preds = get_predictions(curr_state, graphs, rng=rng)
+        # jax.debug.print("embeddings_for_focus_nonscalars={x}", x=preds.nodes.embeddings_for_focus[0].filter(drop="0e"))
+        # jax.debug.print("embeddings_for_positions_nonscalars={x}", x=jnp.linalg.norm(preds.nodes.embeddings_for_positions[0].filter(drop="0e").array))
         total_loss, (
             focus_and_atom_type_loss,
             position_loss,
@@ -325,20 +327,23 @@ def train_and_evaluate(
     # Helper for checkpointing.
     def checkpoint_helper(state: train_state.TrainState,
                           best_state: train_state.TrainState,
-                          checkpoint_dir: str, step: int,
+                          checkpoint_dir: str, step: Union[int, str],
                           step_for_best_state: int, metrics_for_best_state: Dict[str, metrics.Collection]):
-        with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
-            pickle.dump(flax.jax_utils.unreplicate(state.params), f)
-        with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-            pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
-        ckpt.save(
-            {
-                "state": flax.jax_utils.unreplicate(state),
-                "best_state": flax.jax_utils.unreplicate(best_state),
-                "step_for_best_state": step_for_best_state,
-                "metrics_for_best_state": metrics_for_best_state,
-            }
-        )
+        with report_progress.timed("checkpoint"):
+            if step == "best":
+                with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
+                    pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
+            else:
+                with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
+                    pickle.dump(flax.jax_utils.unreplicate(state.params), f)
+            ckpt.save(
+                {
+                    "state": flax.jax_utils.unreplicate(state),
+                    "best_state": flax.jax_utils.unreplicate(best_state),
+                    "step_for_best_state": step_for_best_state,
+                    "metrics_for_best_state": metrics_for_best_state,
+                }
+            )
 
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
@@ -358,10 +363,10 @@ def train_and_evaluate(
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    train_iter = datasets["train"].as_numpy_iterator()
-    init_graphs = next(train_iter)
     net = models.create_model(config, run_in_evaluation_mode=False)
 
+    train_iter = datasets["train"].as_numpy_iterator()
+    init_graphs = next(train_iter)
     rng, init_rng = jax.random.split(rng)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
@@ -409,22 +414,16 @@ def train_and_evaluate(
     report_progress = periodic_actions.ReportProgress(
         num_train_steps=config.num_train_steps, writer=writer
     )
-    profile = periodic_actions.Profile(
-        logdir=workdir,
-        every_secs=10800,
-    )
-    hooks = [report_progress, profile]
+    # profile = periodic_actions.Profile(
+    #     logdir=workdir,
+    #     every_secs=10800,
+    # )
+    hooks = [report_progress]
 
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = flax.jax_utils.replicate(Metrics.empty())
     train_metrics_empty = True
-    all_grad_norms = []
-    all_param_norms = []
-    all_params = []
-    all_focus_and_atom_type_losses = []
-    all_num_nodes = []
-    all_num_edges = []
 
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
@@ -513,16 +512,6 @@ def train_and_evaluate(
 
     # Checkpoint the best state and corresponding metrics seen during training.
     # Save pickled parameters for easy access during evaluation.
-    with report_progress.timed("checkpoint"):
-        with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-            pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
-        ckpt.save(
-            {
-                "state": flax.jax_utils.unreplicate(state),
-                "best_state": flax.jax_utils.unreplicate(best_state),
-                "step_for_best_state": step_for_best_state,
-                "metrics_for_best_state": metrics_for_best_state,
-            }
-        )
+    checkpoint_helper(state, best_state, checkpoint_dir, "best", step_for_best_state, metrics_for_best_state)
 
     return best_state, final_metrics_for_best_state

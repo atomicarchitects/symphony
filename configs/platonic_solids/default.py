@@ -59,9 +59,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.res_beta = 90
-    config.target_position_predictor.res_alpha = 179
-    config.target_position_predictor.num_channels = 2
+    config.target_position_predictor.res_beta = 40
+    config.target_position_predictor.res_alpha = 39
+    config.target_position_predictor.num_channels = 1
     config.target_position_predictor.apply_gate_on_logits = True
     config.target_position_predictor.square_logits = True
     config.target_position_predictor.target_species_embedding_dim = 32

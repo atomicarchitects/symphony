@@ -90,6 +90,7 @@ def kl_divergence_on_spheres(
     self_entropy = (
         -(true_dist * true_dist.apply(models.safe_log)).integrate().array.sum()
     )
+    self_entropy = jax.lax.stop_gradient(self_entropy)
 
     # This should be non-negative, upto numerical precision.
     return cross_entropy + normalizing_factor - self_entropy
