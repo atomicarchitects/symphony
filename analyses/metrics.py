@@ -40,7 +40,7 @@ def xyz_to_rdkit_molecule(molecules_file: str) -> Chem.Mol:
 def get_all_molecules(molecules_dir: str) -> List[Chem.Mol]:
     """Returns all molecules in a directory."""
     molecules = []
-    for molecules_file in os.listdir(molecules_dir):
+    for molecules_file in tqdm.tqdm(os.listdir(molecules_dir)):
         if not molecules_file.endswith(".xyz"):
             continue
 
@@ -53,7 +53,12 @@ def get_all_molecules(molecules_dir: str) -> List[Chem.Mol]:
 
 def get_all_valid_molecules(molecules: Sequence[Chem.Mol]) -> List[Chem.Mol]:
     """Returns all valid molecules (with bonds inferred)."""
-    return [mol for mol in molecules if check_molecule_validity(mol)]
+    # return [mol for mol in molecules if check_molecule_validity(mol)]
+    out = []
+    for mol in tqdm.tqdm(molecules):
+        if check_molecule_validity(mol):
+            out.append(mol)
+    return out
 
 
 def get_all_valid_molecules_with_openbabel(molecules: Sequence[Tuple["openbabel.OBMol", "str"]]) -> List["openbabel.OBMol"]:

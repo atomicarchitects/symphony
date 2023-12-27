@@ -18,8 +18,9 @@ from symphony import models
 from symphony import datatypes
 
 ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
-ELEMENTS = ["H", "C", "N", "O", "F"]
-NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
+ELEMENTS = ["O", "Si"]
+NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F", 14: "Si"}
+# ELEMENTS = ["H", "C", "N", "O", "F"]
 
 # Colors and sizes for the atoms.
 ATOMIC_COLORS = {
@@ -28,6 +29,7 @@ ATOMIC_COLORS = {
     7: "rgb(0, 100, 255)",  # N
     8: "rgb(255, 0, 0)",  # O
     9: "rgb(255, 0, 255)",  # F
+    14: "rgb(180, 180, 180)",  # S
 }
 ATOMIC_SIZES = {
     1: 10,  # H
@@ -35,6 +37,7 @@ ATOMIC_SIZES = {
     7: 30,  # N
     8: 30,  # O
     9: 30,  # F
+    14: 30,  # Si
 }
 
 

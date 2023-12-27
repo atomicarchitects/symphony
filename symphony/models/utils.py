@@ -21,7 +21,8 @@ from symphony.models.position_predictor import (
 from symphony.models.position_updater import PositionUpdater
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
-ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
+ATOMIC_NUMBERS = [8, 14]
+# ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 
 
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:

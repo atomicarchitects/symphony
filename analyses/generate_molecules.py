@@ -416,7 +416,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_string(
         "init",
-        "C",
+        "O",
         "An initial molecular fragment to start the generation process from.",
     )
     flags.DEFINE_integer(
