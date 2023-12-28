@@ -484,7 +484,7 @@ def get_unbatched_qm9_datasets(
     return datasets
 
 
-def get_unbatched_silica_datasets(
+def create_unbatched_silica_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
 ) -> Dict[str, tf.data.Dataset]:
@@ -493,26 +493,29 @@ def get_unbatched_silica_datasets(
     tf.random.set_seed(seed)
     rng = jax.random.PRNGKey(seed)
 
-    def generate_fragments_helper(gen_rng, mol):
+    def generate_fragments_helper(gen_rng, mol, eps=1e-4):
+        cell = ase.Atoms(
+            positions=mol.cart_coords,
+            numbers=mol.atomic_numbers,
+            cell=mol.lattice.matrix,  # 3 unit cell vectors
+            pbc=True,
+        )
+        # if supercell needed
+        if len(mol.atomic_numbers) < 30:
+            P = 2 * np.eye(3)
+            cell = ase.build.make_supercell(cell, P)
         graph = input_pipeline.ase_atoms_to_jraph_graph(
-            ase.Atoms(
-                positions=mol.cart_coords,
-                numbers=mol.atomic_numbers,
-                cell=mol.lattice.matrix,
-                pbc=True,
-            ),
+            cell,
             config.atomic_numbers,
             config.nn_cutoff,
             cell=mol.lattice.matrix,
         )
-        return fragments.generate_fragments(
+
+        return fragments.generate_silica_fragments(
             gen_rng,
             graph,
-            n_species=len(set(config.atomic_numbers)),
-            nn_tolerance=config.nn_tolerance,
-            max_radius=config.nn_cutoff,
-            mode=config.fragment_logic,
-            periodic=True,
+            len(config.atomic_numbers),
+            eps
         )
 
     datasets_raw = get_raw_silica_datasets(config)
@@ -521,6 +524,7 @@ def get_unbatched_silica_datasets(
     example_graph = next(
         iter(generate_fragments_helper(example_rng, datasets_raw["train"][0]))
     )
+    # example_graph = next(generate_fragments_helper(example_rng, datasets_raw["train"][0]))
     element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
 
     datasets = {}

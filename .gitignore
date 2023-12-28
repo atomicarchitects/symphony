@@ -186,6 +186,7 @@ cached/
 *.txt
 *.xyz
 *.mol_dict
+*.cif
 
 analyses/molecules
 

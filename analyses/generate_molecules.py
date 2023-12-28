@@ -130,7 +130,8 @@ def generate_molecules(
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
     visualize: bool,
-    steps_for_weight_averaging: Optional[Sequence[int]] = None
+    steps_for_weight_averaging: Optional[Sequence[int]] = None,
+    filetype: str = 'xyz'
 ):
     """Generates molecules from a trained model at the given workdir."""
     # Check that we can divide the seeds into chunks properly.
@@ -331,10 +332,10 @@ def generate_molecules(
         )
         if stop:
             logging.info("Generated %s", generated_molecule.get_chemical_formula())
-            outputfile = f"{init_molecule_name}_seed={seed}.xyz"
+            outputfile = f"{init_molecule_name}_seed={seed}.{filetype}"
         else:
             logging.info("STOP was not produced. Discarding...")
-            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
+            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.{filetype}"
 
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
@@ -364,6 +365,7 @@ def main(unused_argv: Sequence[str]) -> None:
     max_num_atoms = FLAGS.max_num_atoms
     visualize = FLAGS.visualize
     steps_for_weight_averaging = FLAGS.steps_for_weight_averaging
+    filetype = FLAGS.filetype
 
     generate_molecules(
         workdir,
@@ -376,7 +378,8 @@ def main(unused_argv: Sequence[str]) -> None:
         init_molecule,
         max_num_atoms,
         visualize,
-        steps_for_weight_averaging
+        steps_for_weight_averaging,
+        filetype
     )
 
 
@@ -433,6 +436,11 @@ if __name__ == "__main__":
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_string(
+        "filetype",
+        "xyz",
+        "File extension to use (xyz or cif).",
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)
