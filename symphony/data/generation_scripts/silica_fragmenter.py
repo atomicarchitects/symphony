@@ -30,7 +30,7 @@ def generate_all_fragments(
     end: int,
     output_dir: str,
     nn_cutoff: float,
-    max_radius: float,
+    min_n_nodes: float,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
     logging.info(f"Saving to {output_dir}")
@@ -39,6 +39,24 @@ def generate_all_fragments(
 
     if start is not None and end is not None:
         molecules = molecules[start:end]
+
+    # make supercell if structure is too small
+    for i in range(len(molecules)):
+        num_atoms = molecules[i].numbers.shape[0]
+        if num_atoms < min_n_nodes:
+            if num_atoms >= min_n_nodes / 2:
+                P = np.eye(3)
+                p_seed, seed = jax.random.split(seed)
+                j = jax.random.choice(p_seed, 3)
+                P[j, j] = 2
+            elif num_atoms >= min_n_nodes / 4:
+                P = 2 * np.eye(3)
+                p_seed, seed = jax.random.split(seed)
+                j = jax.random.choice(p_seed, 3)
+                P[j, j] = 1
+            else:
+                P = 2 * np.eye(3)
+            molecules[i] = ase.build.make_supercell(molecules[i], P)
 
     atomic_numbers = np.array([8, 14])
     molecules_as_graphs = [
@@ -77,13 +95,13 @@ def generate_all_fragments(
             frags = list(frags)
 
             skip = False
-            for frag in frags:
-                d = np.linalg.norm(frag.globals.target_positions)
-                # if d > max_radius:
-                #     logging.info(
-                #         f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
-                #     )
-                #     skip = True
+            # for frag in frags:
+            #     d = np.linalg.norm(frag.globals.target_positions)
+            #     if d > max_radius:
+            #         logging.info(
+            #             f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
+            #         )
+            #         skip = True
 
             if len(frags) == 0 or not frags[-1].globals.stop:
                 logging.info("The last fragment is not a stop fragment.")
@@ -141,7 +159,7 @@ def main(unused_argv) -> None:
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
             FLAGS.nn_cutoff,
-            FLAGS.max_radius,
+            FLAGS.min_n_nodes,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
         for start in range(0, len(molecules), chunk_size)
@@ -159,6 +177,6 @@ if __name__ == "__main__":
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_string("output_dir", "silica_fragments", "Output directory.")
     flags.DEFINE_float("nn_cutoff", 3.0, "NN cutoff (in Angstrom).")
-    flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")
+    flags.DEFINE_float("min_n_nodes", 30, "Cutoff for creating supercells.")
 
     app.run(main)

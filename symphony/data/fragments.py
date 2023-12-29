@@ -132,7 +132,7 @@ def generate_silica_fragments(
                     np.asarray([0]),
                     stop=np.array([True])
                 )
-                counts = np.zeros((n_nodes, n_species))
+                counts = np.zeros((new_n_node[0], n_species))
             else:
                 target_node = ndx_exclude[i]
                 min_dist = min(np.sum(
@@ -160,8 +160,8 @@ def generate_silica_fragments(
                     graph.nodes.species[target_node][None],
                     stop=np.array([False])
                 )
-                counts = np.zeros((n_nodes, n_species))
-                for focus_node in range(n_nodes):
+                counts = np.zeros((new_n_node[0], n_species))
+                for focus_node in range(new_n_node[0]):
                     targets = receivers[senders == focus_node]
                     counts[focus_node] = np.bincount(
                         graph.nodes.species[targets], minlength=n_species

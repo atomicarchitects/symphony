@@ -460,26 +460,21 @@ def get_unbatched_qm9_datasets(
             #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
             #     print()
 
-            # Convert to jraph.GraphsTuple.
-            dataset_split = dataset_split.map(
-                _convert_to_graphstuple,
+        # This is usually the case, when the split is larger than a single chunk.
+        else:
+            dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
+            dataset_split = dataset_split.interleave(
+                lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
 
-        # This is usually the case, when the split is larger than a single chunk.
-        else:
-            dataset_l = (_convert_to_graphstuple(
-                next(tf.data.Dataset.load(f, element_spec=element_spec).as_numpy_iterator()))
-                for f in files_split)
-            dataset_split = tf.data.Dataset.from_tensor_slices(dataset_l)
-            # dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
-            # dataset_split = dataset_split.interleave(
-            #     lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
-            #     num_parallel_calls=tf.data.AUTOTUNE,
-            #     deterministic=True,
-            # )
-
+        # Convert to jraph.GraphsTuple.
+        dataset_split = dataset_split.map(
+            _convert_to_graphstuple,
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
 
         # Shuffle the dataset.
         if config.shuffle_datasets:
