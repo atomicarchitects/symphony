@@ -27,4 +27,7 @@ def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
             return f"/radish/platonic_solids/{fragment_logic}"
         if username == "ameyad":
             return f"/Users/ameyad/Documents/spherical-harmonic-net/temp/platonic_solids/{fragment_logic}"
+    if dataset == "silica":
+        if hostname == "potato.mit.edu":
+            return "/data/NFS/potato/silica_fragments"
     return None

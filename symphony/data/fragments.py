@@ -145,6 +145,12 @@ def generate_silica_fragments(
                     & ~np.isin(graph.senders, ndx_exclude[i:])
                 ]) == 0:
                     continue
+                # print(
+                #     np.sum((graph.nodes.positions[graph.senders[
+                #         graph.receivers == target_node
+                #         & ~np.isin(graph.senders, ndx_exclude[i:])
+                #     ]] - graph.nodes.positions[target_node])**2, axis=1)
+                # )
                 focus_node = jax.random.choice(k, graph.senders[
                     graph.receivers == target_node
                     & ~np.isin(graph.senders, ndx_exclude[i:])

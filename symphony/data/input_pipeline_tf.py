@@ -462,6 +462,11 @@ def get_unbatched_qm9_datasets(
 
         # This is usually the case, when the split is larger than a single chunk.
         else:
+            # spec = tf.data.Dataset.load(files_split[0], element_spec=element_spec).element_spec
+            # dataset_gen = (tf.data.Dataset.load(f, element_spec=element_spec) for f in files_split)
+            # def dataset_gen_wrapper():
+            #     yield from dataset_gen
+            # dataset_split = tf.data.Dataset.from_generator(dataset_gen_wrapper, output_signature=spec)
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
             dataset_split = dataset_split.interleave(
                 lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
@@ -484,102 +489,39 @@ def get_unbatched_qm9_datasets(
     return datasets
 
 
-def create_unbatched_silica_datasets(
-    config: ml_collections.ConfigDict,
+def get_unbatched_silica_datasets(
+    config,
     seed: int = 0,
-) -> Dict[str, tf.data.Dataset]:
+):
     """Loads the raw silica dataset as tf.data.Datasets for each split."""
-    # Set the seed for reproducibility.
-    tf.random.set_seed(seed)
-    rng = jax.random.PRNGKey(seed)
-
-    def generate_fragments_helper(gen_rng, mol, eps=1e-4):
-        cell = ase.Atoms(
-            positions=mol.cart_coords,
-            numbers=mol.atomic_numbers,
-            cell=mol.lattice.matrix,  # 3 unit cell vectors
-            pbc=True,
-        )
-        # if supercell needed
-        if len(mol.atomic_numbers) < 30:
-            P = 2 * np.eye(3)
-            cell = ase.build.make_supercell(cell, P)
-        graph = input_pipeline.ase_atoms_to_jraph_graph(
-            cell,
-            config.atomic_numbers,
-            config.nn_cutoff,
-            cell=mol.lattice.matrix,
-        )
-
-        return fragments.generate_silica_fragments(
-            gen_rng,
-            graph,
-            len(config.atomic_numbers),
-            eps
-        )
-
-    datasets_raw = get_raw_silica_datasets(config)
-
-    example_rng, rng = jax.random.split(rng)
-    example_graph = next(
-        iter(generate_fragments_helper(example_rng, datasets_raw["train"][0]))
-    )
-    # example_graph = next(generate_fragments_helper(example_rng, datasets_raw["train"][0]))
-    element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
-
-    datasets = {}
-    for split, dataset_raw in datasets_raw.items():
-        split_rng, rng = jax.random.split(rng)
-        fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, struct) for struct in dataset_raw
-        )
-
-        def fragment_yielder():
-            yield from fragments_for_pieces
-
-        dataset_split = tf.data.Dataset.from_generator(
-            fragment_yielder, output_signature=element_spec
-        )
-        if config.shuffle_datasets:
-            dataset_split = dataset_split.shuffle(1000, seed=seed)
-        datasets[split] = dataset_split
-
-        if not os.path.exists(f"{config.root_dir}/{os.getpid()}"):
-            os.makedirs(f"{config.root_dir}/{os.getpid()}")
-        dataset_path = f"{config.root_dir}/{os.getpid()}/{split}.tfrecord"
-        datasets[split].save(dataset_path)
-        datasets[split] = tf.data.Dataset.load(dataset_path, element_spec=element_spec)
-    return datasets
+    return get_unbatched_qm9_datasets(config, seed)
 
 
 def get_raw_silica_datasets(
     config: ml_collections.ConfigDict,
     root_dir: Optional[str] = None,
-) -> Dict[str, List[ase.Atoms]]:
-    """Constructs the splits for silica dataset.
+) -> List[ase.Atoms]:
+    """Retrieves raw molecule for silica dataset.
     Args:
-        rng: The random number seed.
         config: The configuration.
+        root_dir: root directory to save molecules at
     Returns:
-        An iterator of (batched and padded) fragments.
+        A list of ASE structures.
     """
     # Load all molecules.
     if root_dir is None:
         root_dir = config.root_dir
     all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
 
-    # Construct partitions of the dataset, to create each split.
-    indices = {
-        "train": range(*config.train_molecules),
-        "val": range(*config.val_molecules),
-        "test": range(
-            config.test_molecules[0], min(config.test_molecules[1], len(all_molecules))
-        ),
-    }
-    molecules = {
-        split: [all_molecules[i].structure for i in indices[split]]
-        for split in ["train", "val", "test"]
-    }
+    molecules = [
+        ase.Atoms(
+            positions=mol.structure.cart_coords,
+            numbers=mol.structure.atomic_numbers,
+            cell=mol.structure.lattice.matrix,  # 3 unit cell vectors
+            pbc=True,
+        )
+        for mol in all_molecules
+    ]
 
     return molecules
 

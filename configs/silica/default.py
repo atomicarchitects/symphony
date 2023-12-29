@@ -11,10 +11,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "silica"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/silica-allegro"
-    config.train_molecules = (0, 200)
-    config.val_molecules = (200, 250)
-    config.test_molecules = (250, 300)
+    config.root_dir = None
+    config.train_molecules = (0, 250)
+    config.val_molecules = (250, 300)
+    config.test_molecules = (300, 350)
     # config.train_molecules = (0, 64)
     # config.val_molecules = (64, 96)
     # config.test_molecules = (96, 128)
