@@ -11,16 +11,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "silica"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = None
+    config.root_dir = "/data/NFS/potato/silica_fragments/"
     config.train_molecules = (0, 250)
     config.val_molecules = (250, 300)
     config.test_molecules = (300, 350)
-    # config.train_molecules = (0, 64)
-    # config.val_molecules = (64, 96)
-    # config.test_molecules = (96, 128)
-    # config.train_molecules = (0, 32)
-    # config.val_molecules = (32, 48)
-    # config.test_molecules = (48, 64)
     config.shuffle_datasets = True
 
     # Optimizer.

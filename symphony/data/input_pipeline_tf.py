@@ -460,30 +460,30 @@ def get_unbatched_qm9_datasets(
             #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
             #     print()
 
-        # This is usually the case, when the split is larger than a single chunk.
-        else:
-            # spec = tf.data.Dataset.load(files_split[0], element_spec=element_spec).element_spec
-            # dataset_gen = (tf.data.Dataset.load(f, element_spec=element_spec) for f in files_split)
-            # def dataset_gen_wrapper():
-            #     yield from dataset_gen
-            # dataset_split = tf.data.Dataset.from_generator(dataset_gen_wrapper, output_signature=spec)
-            dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
-            dataset_split = dataset_split.interleave(
-                lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
+            # Convert to jraph.GraphsTuple.
+            dataset_split = dataset_split.map(
+                _convert_to_graphstuple,
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
 
+        # This is usually the case, when the split is larger than a single chunk.
+        else:
+            dataset_l = (_convert_to_graphstuple(
+                next(tf.data.Dataset.load(f, element_spec=element_spec).as_numpy_iterator()))
+                for f in files_split)
+            dataset_split = tf.data.Dataset.from_tensor_slices(dataset_l)
+            # dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
+            # dataset_split = dataset_split.interleave(
+            #     lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
+            #     num_parallel_calls=tf.data.AUTOTUNE,
+            #     deterministic=True,
+            # )
+
+
         # Shuffle the dataset.
         if config.shuffle_datasets:
             dataset_split = dataset_split.shuffle(1000, seed=seed)
-
-        # Convert to jraph.GraphsTuple.
-        dataset_split = dataset_split.map(
-            _convert_to_graphstuple,
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        )
 
         datasets[split] = dataset_split
     return datasets

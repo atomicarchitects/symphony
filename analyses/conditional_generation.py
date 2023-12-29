@@ -5,16 +5,20 @@ import ase.db
 import ase.io
 import os
 import numpy as np
+import re
 import sys
+import tensorflow as tf
+sys.path.append('../configs/silica/allegro.py')
 
 from absl import flags
 import analyses.generate_molecules as generate_molecules
-from symphony.data import qm9
+from symphony.data import input_pipeline_tf
 
+import configs.silica.allegro as allegro
 
 flags.DEFINE_string(
     "workdir",
-    "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64",
+    "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/silica-allegro-200k-steps-dec27",
     "Workdir for model."
 )
 flags.DEFINE_string(
@@ -26,60 +30,64 @@ beta_species = 1.0
 beta_position = 1.0
 step = "4950000"
 num_seeds_per_chunk = 25
-max_num_atoms = 35
+max_num_atoms = 200  # ?
 visualize = False
-num_mols = 1000
+num_mols = 50
+config = allegro.get_config()
 
-all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
-test_mols = all_mols[-num_mols:]
-train_mols = all_mols[:num_mols]
+molecules = input_pipeline_tf.get_raw_silica_datasets(config)
+mols_by_split = {"train": [], "test": []}
 
+# Root directory of the dataset.
+filenames = sorted(os.listdir(config.root_dir))
+filenames = [
+    os.path.join(config.root_dir, f)
+    for f in filenames
+    if f.startswith("fragments_")
+]
+if len(filenames) == 0:
+    raise ValueError(f"No files found in {config.root_dir}.")
 
-def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
-    fragments = []
-    for i in range(num_mols):
-        mol = mols[i]
-        num_atoms = len(mol)
-        for j in range(num_atoms):
-            fragment = ase.Atoms(
-                positions=np.vstack([mol.positions[:j], mol.positions[j + 1 :]]),
-                numbers=np.concatenate([mol.numbers[:j], mol.numbers[j + 1 :]]),
-            )
-            fragments.append(fragment)
-    return fragments
+# Partition the filenames into train, val, and test.
+def filter_by_molecule_number(
+    filenames: Sequence[str], start: int, end: int
+) -> List[str]:
+    def filter_file(filename: str, start: int, end: int) -> bool:
+        filename = os.path.basename(filename)
+        _, file_start, file_end = [int(val) for val in re.findall(r"\d+", filename)]
+        return start <= file_start and file_end <= end
 
-# Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
-mol_list = get_fragment_list(train_mols, num_mols)
-mol_list = mol_list[:num_seeds_per_chunk * (len(mol_list) // num_seeds_per_chunk)]
-print(f"Number of molecules: {len(mol_list)}")
+    return [f for f in filenames if filter_file(f, start, end)]
 
-gen_mol_list = generate_molecules.generate_molecules(
-    workdir,
-    os.path.join(outputdir, "train"),
-    beta_species,
-    beta_position,
-    step,
-    len(mol_list),
-    num_seeds_per_chunk,
-    mol_list,
-    max_num_atoms,
-    visualize,
-)
+# Number of molecules for training can be smaller than the chunk size.
+chunk_size = int(filenames[0].split("_")[-1])
+train_on_split_smaller_than_chunk = config.get("train_on_split_smaller_than_chunk")
+if train_on_split_smaller_than_chunk:
+    train_molecules = (0, chunk_size)
+else:
+    train_molecules = config.train_molecules
+files_by_split = {
+    "train": filter_by_molecule_number(filenames, *train_molecules),
+    "test": filter_by_molecule_number(filenames, *config.test_molecules),
+}
+for split, files in files_by_split.items():
+    for f in files:
+        mols_by_split[split].append(input_pipeline_tf._convert_to_graphstuple(tf.data.Dataset.load(f)))
 
-# Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
-mol_list = get_fragment_list(test_mols, num_mols)
-mol_list = mol_list[:num_seeds_per_chunk * (len(mol_list) // num_seeds_per_chunk)]
-print(f"Number of molecules: {len(mol_list)}")
+for split, split_mols in mols_by_split.items():
+    # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
+    mol_list = split_mols[:num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)]
+    print(f"Number of molecules: {len(mol_list)}")
 
-gen_mol_list = generate_molecules.generate_molecules(
-    workdir,
-    os.path.join(outputdir, "test"),
-    beta_species,
-    beta_position,
-    step,
-    len(mol_list),
-    num_seeds_per_chunk,
-    mol_list,
-    max_num_atoms,
-    visualize,
-)
+    gen_mol_list = generate_molecules.generate_molecules(
+        flags.workdir,
+        os.path.join(flags.outputdir, split),
+        beta_species,
+        beta_position,
+        step,
+        len(mol_list),
+        num_seeds_per_chunk,
+        mol_list,
+        max_num_atoms,
+        visualize,
+    )
