@@ -150,7 +150,7 @@ def generate_molecules(
         init_molecule_names = [init_molecule_name] * num_seeds
     else:
         assert len(init_molecules) == num_seeds
-        init_molecule_names = [init_molecule.get_chemical_formula() for init_molecule in init_molecules]
+        init_molecule_names = [f"mol_{i}_{init_molecule.get_chemical_formula()}" for i, init_molecule in enumerate(init_molecules)]
 
     # Load model.
     name = analysis.name_from_workdir(workdir)

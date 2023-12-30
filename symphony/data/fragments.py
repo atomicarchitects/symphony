@@ -17,7 +17,6 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
-    periodic: bool = False
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -85,103 +84,69 @@ def generate_fragments(
 
 
 def generate_silica_fragments(
-    gen_rng,
+    rng,
     graph,
-    n_species,
-    eps=1e-4
+    cell,
+    atomic_numbers,
+    nn_tolerance,
+    max_radius,
+    mode,
 ):
+    '''Removes a SiO4 tetrahedron from a silica-based structure and generates fragments from the result.'''
+    n_species = len(atomic_numbers)
     n_nodes = graph.n_node[0]
     for i in range(n_nodes):
         if graph.nodes.species[i] == 0:
             continue
         # find the closest O to this Si atom
-        min_dist = min(
-            np.sum(
-                (
-                    graph.nodes.positions[graph.nodes.species == 0]
-                    - graph.nodes.positions[i]
-                )
-                ** 2,
-                axis=-1,
-            )
-        )
+        min_dist = 3.0
         ndx_exclude = [i]
         for j in range(n_nodes):
             if graph.nodes.species[j] == 1:
                 continue
-            if abs(sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) - min_dist) < eps:
+            # if abs(sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) - min_dist) < eps:
+            if sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) < min_dist:
                 ndx_exclude.append(j)
+            for vec in cell:
+                if sum((graph.nodes.positions[j] - vec - graph.nodes.positions[i])**2) < min_dist or sum((graph.nodes.positions[j] + vec - graph.nodes.positions[i])**2) < min_dist:
+                    ndx_exclude.append(j)
         ndx_exclude = np.asarray(ndx_exclude)
-        rng, k = jax.random.split(gen_rng)
-        ndx_exclude = jax.random.permutation(k, ndx_exclude)
 
-        # remove one atom at a time
-        for i in range(len(ndx_exclude)+1):
-            mask = ~np.isin(graph.senders, ndx_exclude[i:]) & ~np.isin(graph.receivers, ndx_exclude[i:])
-            node_mask = ~np.isin(np.asarray(range(n_nodes)), ndx_exclude[i:])
-            senders = graph.senders[mask]
-            receivers = graph.receivers[mask]
-            edges = graph.edges[mask]
-            positions = graph.nodes.positions[node_mask]
-            species = graph.nodes.species[node_mask]
-            new_n_node = graph.n_node - len(ndx_exclude[i:])
+        # use middle- and last-fragment generators; everything not in ndx_exclude can be "visited"
+        visited_nodes = np.asarray(range(n_nodes))[~np.isin(np.asarray(range(n_nodes)), ndx_exclude)]
 
-            if i == len(ndx_exclude):
-                globals = datatypes.FragmentsGlobals(
-                    np.asarray([[0, 0, 0.]]),
-                    np.asarray([0]),
-                    stop=np.array([True])
-                )
-                counts = np.zeros((new_n_node[0], n_species))
-            else:
-                target_node = ndx_exclude[i]
-                min_dist = min(np.sum(
-                    (graph.nodes.positions[node_mask] - graph.nodes.positions[target_node]) ** 2,
-                    axis=-1,
+        # compute edge distances
+        dist = np.linalg.norm(
+            graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
+            axis=1,
+        )  # [n_edge]
+        for vec in cell:
+            for mul in [1, -1]:
+                dist = np.minimum(dist, np.linalg.norm(
+                    graph.nodes.positions[graph.receivers] - mul * vec - graph.nodes.positions[graph.senders],
+                    axis=1,
                 ))
-                rng, k = jax.random.split(rng)
-                if len(graph.senders[
-                    graph.receivers == target_node
-                    & ~np.isin(graph.senders, ndx_exclude[i:])
-                ]) == 0:
-                    continue
-                # print(
-                #     np.sum((graph.nodes.positions[graph.senders[
-                #         graph.receivers == target_node
-                #         & ~np.isin(graph.senders, ndx_exclude[i:])
-                #     ]] - graph.nodes.positions[target_node])**2, axis=1)
-                # )
-                focus_node = jax.random.choice(k, graph.senders[
-                    graph.receivers == target_node
-                    & ~np.isin(graph.senders, ndx_exclude[i:])
-                ])
-                globals = datatypes.FragmentsGlobals(
-                    graph.nodes.positions[target_node][None],
-                    graph.nodes.species[target_node][None],
-                    stop=np.array([False])
+
+        # make fragments
+        try:
+            for _ in range(len(ndx_exclude)):
+                rng, visited_nodes, frag = _make_middle_fragment(
+                    rng,
+                    visited_nodes,
+                    graph,
+                    dist,
+                    n_species,
+                    nn_tolerance,
+                    max_radius,
+                    mode,
                 )
-                counts = np.zeros((new_n_node[0], n_species))
-                for focus_node in range(new_n_node[0]):
-                    targets = receivers[senders == focus_node]
-                    counts[focus_node] = np.bincount(
-                        graph.nodes.species[targets], minlength=n_species
-                    )
+                yield frag
+        except ValueError:
+            pass
+        else:
+            assert len(visited_nodes) == n_nodes
 
-            new_frag = datatypes.Fragments(
-                senders=senders,
-                receivers=receivers,
-                edges=edges,
-                nodes=datatypes.FragmentsNodes(
-                    positions=positions,
-                    species=species,
-                    focus_and_target_species_probs=counts
-                ),
-                globals=globals,
-                n_node=new_n_node,
-                n_edge=np.asarray(edges.shape)
-            )
-
-            yield new_frag
+            yield _make_last_fragment(graph, n_species)
 
 
 def _make_first_fragment(

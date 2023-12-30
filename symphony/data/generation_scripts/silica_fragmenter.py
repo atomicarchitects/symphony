@@ -12,6 +12,7 @@ import numpy as np
 import tensorflow as tf
 import tqdm
 
+from symphony import datatypes
 from symphony.data import fragments
 from symphony.data import input_pipeline
 from symphony.data import input_pipeline_tf
@@ -59,12 +60,6 @@ def generate_all_fragments(
             molecules[i] = ase.build.make_supercell(molecules[i], P)
 
     atomic_numbers = np.array([8, 14])
-    molecules_as_graphs = [
-        input_pipeline.ase_atoms_to_jraph_graph(
-            molecule, atomic_numbers, nn_cutoff=nn_cutoff, cell=molecule.cell
-        )
-        for molecule in molecules
-    ]
 
     signature = {
         # nodes
@@ -86,11 +81,18 @@ def generate_all_fragments(
     }
 
     def generator():
-        for graph in tqdm.tqdm(molecules_as_graphs):
+        for mol in tqdm.tqdm(molecules):
+            graph = input_pipeline.ase_atoms_to_jraph_graph(
+                mol, atomic_numbers, nn_cutoff=nn_cutoff, cell=mol.cell
+            )
             frags = fragments.generate_silica_fragments(
                 seed,
                 graph,
-                len(atomic_numbers),
+                mol.cell,
+                atomic_numbers,
+                FLAGS.nn_tolerance,
+                FLAGS.max_radius,
+                "nn",
             )
             frags = list(frags)
 
@@ -178,5 +180,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("output_dir", "silica_fragments", "Output directory.")
     flags.DEFINE_float("nn_cutoff", 3.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("min_n_nodes", 30, "Cutoff for creating supercells.")
+    flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
+    flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")
 
     app.run(main)
