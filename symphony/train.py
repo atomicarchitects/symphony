@@ -336,7 +336,6 @@ def train_and_evaluate(
     # Create and initialize the network.
     logging.info("Initializing network.")
     train_iter = datasets["train"].as_numpy_iterator()
-    print("create iterator")
     init_graphs = next(train_iter)
     net = models.create_model(config, run_in_evaluation_mode=False)
 

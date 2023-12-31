@@ -17,8 +17,6 @@ from symphony.data import fragments
 from symphony.data import input_pipeline
 from symphony.data import input_pipeline_tf
 
-import sys
-sys.path.append('../../configs/silica/allegro.py')
 import configs.silica.allegro as allegro
 
 FLAGS = flags.FLAGS

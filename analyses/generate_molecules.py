@@ -127,7 +127,7 @@ def generate_molecules(
     step: str,
     num_seeds: int,
     num_seeds_per_chunk: int,
-    init_molecules: Sequence[Union[str, ase.Atoms]],
+    init_molecules: Sequence[Union[str, ase.Atoms, jraph.GraphsTuple, datatypes.Fragments]],
     max_num_atoms: int,
     visualize: bool,
     steps_for_weight_averaging: Optional[Sequence[int]] = None,
@@ -148,9 +148,18 @@ def generate_molecules(
         )
         init_molecules = [init_molecule] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
-    else:
+    elif isinstance(init_molecules[0], ase.Atoms):
         assert len(init_molecules) == num_seeds
         init_molecule_names = [f"mol_{i}_{init_molecule.get_chemical_formula()}" for i, init_molecule in enumerate(init_molecules)]
+        init_fragments = [
+            input_pipeline.ase_atoms_to_jraph_graph(
+                init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff, init_molecule.get_cell()
+            ) for init_molecule in init_molecules]
+    elif isinstance(init_molecules[0], jraph.GraphsTuple) or isinstance(init_molecules[0], datatypes.Fragments):
+        init_molecule_names = [f"mol_{i}" for i in range(len(init_molecules))]
+        init_fragments = init_molecules
+    else:
+        raise TypeError("input molecules must be a list of strings, ASE Atoms, or jraph.GraphsTuples")
 
     # Load model.
     name = analysis.name_from_workdir(workdir)
@@ -177,6 +186,7 @@ def generate_molecules(
         f"step={step}",
         "molecules",
     )
+    print(f"Creating output directory {molecules_outputdir}")
     os.makedirs(molecules_outputdir, exist_ok=True)
     if visualize:
         visualizations_dir = os.path.join(
@@ -191,10 +201,6 @@ def generate_molecules(
         os.makedirs(visualizations_dir, exist_ok=True)
 
     # Prepare initial fragments.
-    init_fragments = [
-        input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
-        ) for init_molecule in init_molecules]
     init_fragments = [jraph.pad_with_graphs(
         init_fragment,
         n_node=(max_num_atoms + 1),
@@ -332,9 +338,11 @@ def generate_molecules(
         )
         if stop:
             logging.info("Generated %s", generated_molecule.get_chemical_formula())
+            print("Generated %s", generated_molecule.get_chemical_formula())
             outputfile = f"{init_molecule_name}_seed={seed}.{filetype}"
         else:
             logging.info("STOP was not produced. Discarding...")
+            print("STOP was not produced. Discarding...")
             outputfile = f"{init_molecule_name}_seed={seed}_no_stop.{filetype}"
 
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
