@@ -506,7 +506,7 @@ def get_raw_silica_datasets(
     # Load all molecules.
     if root_dir is None:
         root_dir = config.root_dir
-    all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
+    all_molecules = matproj.get_materials(config.matgen_query)
 
     molecules = [
         ase.Atoms(
@@ -525,7 +525,7 @@ def get_raw_silica_dataset_csv(config: ml_collections.ConfigDict, root_dir=None)
     # Load all molecules.
     if root_dir is None:
         root_dir = config.root_dir
-    all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
+    all_molecules = matproj.get_materials(config.matgen_query)
     df = pd.DataFrame(
         {
             "material_id": jax.vmap(lambda x: str(x.material_id))(all_molecules),
@@ -564,6 +564,7 @@ def _specs_from_graphs_tuple(
                 graph.globals.target_species, is_global=True
             ),
             stop=get_tensor_spec(graph.globals.stop, is_global=True),
+            cell=get_tensor_spec(graph.globals.cell, is_global=True)
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -592,6 +593,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     edges = tf.ones((tf.shape(senders)[0], 1))
     target_positions = graph["target_positions"]
     target_species = graph["target_species"]
+    cell = graph["cell"]
 
     return jraph.GraphsTuple(
         nodes=datatypes.FragmentsNodes(
@@ -606,6 +608,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             target_positions=target_positions,
             target_species=target_species,
             stop=stop,
+            cell=cell,
         ),
         n_node=n_node,
         n_edge=n_edge,

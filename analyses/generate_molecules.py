@@ -335,6 +335,8 @@ def generate_molecules(
             numbers=models.get_atomic_numbers(
                 final_padded_fragment.nodes.species[:num_valid_nodes]
             ),
+            cell=final_padded_fragment.globals.cell[0],
+            pbc=True
         )
         if stop:
             logging.info("Generated %s", generated_molecule.get_chemical_formula())
@@ -348,13 +350,13 @@ def generate_molecules(
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
 
-    # Save the generated molecules as an ASE database.
-    output_db = os.path.join(
-        molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
-    )
-    with connect(output_db) as conn:
-        for mol in molecule_list:
-            conn.write(mol)
+        # Save the generated molecules as an ASE database.
+        output_db = os.path.join(
+            molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
+        )
+        with connect(output_db) as conn:
+            for mol in molecule_list:
+                conn.write(mol)
 
 
 def main(unused_argv: Sequence[str]) -> None:

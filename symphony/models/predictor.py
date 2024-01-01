@@ -122,6 +122,7 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+                cell=graphs.globals.cell,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -275,6 +276,7 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+                cell=graphs.globals.cell
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

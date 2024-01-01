@@ -222,7 +222,7 @@ def get_training_predictions(
         predictor.target_position_predictor.res_alpha,
     )
 
-    return datatypes.Predictions(
+    pred = datatypes.Predictions(
         nodes=datatypes.NodePredictions(
             focus_and_target_species_logits=focus_and_target_species_logits,
             focus_and_target_species_probs=focus_and_target_species_probs,
@@ -247,12 +247,14 @@ def get_training_predictions(
             radial_bins=radial_bins,
             radial_logits=radial_logits,
             angular_logits=angular_logits,
+            cell=graphs.globals.cell
         ),
         senders=graphs.senders,
         receivers=graphs.receivers,
         n_node=graphs.n_node,
         n_edge=graphs.n_edge,
     )
+    return pred
 
 
 # Make sure the dataloader is deterministic.

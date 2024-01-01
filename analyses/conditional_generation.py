@@ -26,7 +26,6 @@ def main(unused_argv: Sequence[str]):
     num_mols = 5
     config = allegro.get_config()
 
-    molecules = input_pipeline_tf.get_raw_silica_datasets(config)
     mols_by_split = {"train": [], "test": []}
 
     # Root directory of the dataset.

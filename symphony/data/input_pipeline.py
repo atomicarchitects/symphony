@@ -36,7 +36,7 @@ def get_raw_datasets(
     if dataset == "qm9":
         all_molecules = qm9.load_qm9(root_dir)
     else:
-        all_molecules = matproj.get_materials(root_dir, save=False, **config.matgen_query)
+        all_molecules = matproj.get_materials(config.matgen_query)
 
     # Atomic numbers map to elements H, C, N, O, F.
     atomic_numbers = config.atomic_numbers
@@ -252,7 +252,7 @@ def ase_atoms_to_jraph_graph(
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(np.asarray(atoms.positions), np.asarray(species)),
         edges=np.ones(len(senders)),
-        globals=None,
+        globals=datatypes.GlobalsInfo(np.asarray(cell)),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([len(atoms)]),
@@ -274,7 +274,7 @@ def material_to_jraph_graph(
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(np.asarray(material_positions), np.asarray(species)),
         edges=np.ones(len(senders)),
-        globals=None,
+        globals=datatypes.GlobalsInfo(np.asarray(cell)),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([len(material_species)]),

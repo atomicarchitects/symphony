@@ -10,10 +10,15 @@ class NodesInfo(NamedTuple):
     species: jnp.ndarray  # [n_node] int array
 
 
+class GlobalsInfo(NamedTuple):
+    cell: jnp.ndarray  # [3, 3] float array
+
+
 class FragmentsGlobals(NamedTuple):
     target_positions: jnp.ndarray  # [n_graph, 3] float array (only for training)
     target_species: jnp.ndarray  # [n_graph] int array (only for training)
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
+    cell: jnp.ndarray  # [n_graph, 3, 3] float array (only for reference)
 
 
 class FragmentsNodes(NamedTuple):
@@ -63,6 +68,7 @@ class GlobalPredictions(NamedTuple):
     radial_bins: jnp.ndarray  # [n_graph, n_radii] float array
     radial_logits: jnp.ndarray  # [n_graph, n_radii] float array
     angular_logits: e3nn.SphericalSignal  # [n_graph, n_radii, n_angular] float array
+    cell: jnp.ndarray  # [n_graph, 3, 3] float array (only for reference)
 
 
 class Predictions(jraph.GraphsTuple):

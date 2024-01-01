@@ -32,19 +32,18 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 200_000
-    # config.num_train_steps = 2_000_000
+    config.num_train_steps = 1_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
     config.eval_every_steps = 30000
     config.nn_tolerance = 0.5
-    config.nn_cutoff = 3.0
+    config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.min_n_nodes = 30
-    config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
-    config.max_n_edges = 180 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 80 * config.get_ref("max_n_graphs")
+    config.max_n_edges = 500 * config.get_ref("max_n_graphs")
     config.frag_pool_size = 1024
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5
@@ -73,8 +72,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.res_alpha = 179
     config.target_position_predictor.num_channels = 5
     config.target_position_predictor.min_radius = 0.9
-    config.target_position_predictor.max_radius = 2.0
-    config.target_position_predictor.num_radii = 64
+    config.target_position_predictor.max_radius = 2.0#3.0
+    config.target_position_predictor.num_radii = 64#128
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
     config.target_position_predictor.radial_mlp_latent_size = 128

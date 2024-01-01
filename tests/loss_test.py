@@ -63,6 +63,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             radial_bins=jnp.tile(jnp.arange(num_radii), (num_graphs, 1)),
             radial_logits=None,
             angular_logits=None,
+            cell=jnp.eye(3),
         ),
         edges=None,
         senders=None,
@@ -89,6 +90,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
             stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,), dtype=jnp.int32),
             target_positions=jnp.ones((num_graphs, 3)),
+            cell=jnp.eye(3)
         ),
         edges=None,
         senders=jnp.asarray([0, 1, 2, 3, 2]),

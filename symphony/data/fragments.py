@@ -86,7 +86,6 @@ def generate_fragments(
 def generate_silica_fragments(
     rng,
     graph,
-    cell,
     atomic_numbers,
     nn_tolerance,
     max_radius,
@@ -107,7 +106,7 @@ def generate_silica_fragments(
             # if abs(sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) - min_dist) < eps:
             if sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) < min_dist:
                 ndx_exclude.append(j)
-            for vec in cell:
+            for vec in graph.globals.cell:
                 if sum((graph.nodes.positions[j] - vec - graph.nodes.positions[i])**2) < min_dist or sum((graph.nodes.positions[j] + vec - graph.nodes.positions[i])**2) < min_dist:
                     ndx_exclude.append(j)
         ndx_exclude = np.asarray(ndx_exclude)
@@ -120,7 +119,7 @@ def generate_silica_fragments(
             graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
             axis=1,
         )  # [n_edge]
-        for vec in cell:
+        for vec in graph.globals.cell:
             for mul in [1, -1]:
                 dist = np.minimum(dist, np.linalg.norm(
                     graph.nodes.positions[graph.receivers] - mul * vec - graph.nodes.positions[graph.senders],
@@ -313,6 +312,7 @@ def _into_fragment(
         stop=np.array([stop], dtype=bool),  # [1]
         target_species=graph.nodes.species[target_node][None],  # [1]
         target_positions=(pos[target_node] - pos[focus_node])[None],  # [1, 3]
+        cell=graph.globals.cell
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 
