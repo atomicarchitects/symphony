@@ -202,7 +202,7 @@ if __name__ == "__main__":
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_string("output_dir", "silica_fragments", "Output directory.")
-    flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
+    flags.DEFINE_float("nn_cutoff", 3.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("min_n_nodes", 30, "Cutoff for creating supercells.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")

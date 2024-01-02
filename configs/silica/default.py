@@ -11,7 +11,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "silica"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = "/data/NFS/potato/silica_fragments/"
+    config.root_dir = "/data/NFS/potato/silica_fragments"
     config.train_molecules = (0, 250)
     config.val_molecules = (250, 300)
     config.test_molecules = (300, 350)
@@ -32,18 +32,18 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 1_000
+    config.num_train_steps = 10_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
     config.eval_every_steps = 30000
     config.nn_tolerance = 0.5
-    config.nn_cutoff = 5.0
+    config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.min_n_nodes = 30
-    config.max_n_nodes = 80 * config.get_ref("max_n_graphs")
-    config.max_n_edges = 500 * config.get_ref("max_n_graphs")
+    config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
+    config.max_n_edges = 180 * config.get_ref("max_n_graphs")
     config.frag_pool_size = 1024
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5

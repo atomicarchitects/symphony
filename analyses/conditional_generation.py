@@ -23,7 +23,7 @@ def main(unused_argv: Sequence[str]):
     num_seeds_per_chunk = 1
     max_num_atoms = 200  # ?
     visualize = False
-    num_mols = 5
+    num_mols = 20
     config = allegro.get_config()
 
     mols_by_split = {"train": [], "test": []}
@@ -78,6 +78,8 @@ def main(unused_argv: Sequence[str]):
 
     mols_by_split['train'] = mols_by_split['train'][:num_mols]
     mols_by_split['test'] = mols_by_split['test'][-num_mols:]
+    print([g.n_node for g in mols_by_split['train']])
+    print([g.n_node for g in mols_by_split['test']])
 
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.

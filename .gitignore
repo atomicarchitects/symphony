@@ -193,3 +193,5 @@ analyses/molecules
 
 # no idea why this folder is being generated, but it should not be committed
 None/
+potato
+data-workdirs

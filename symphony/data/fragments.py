@@ -138,6 +138,7 @@ def generate_silica_fragments(
                     nn_tolerance,
                     max_radius,
                     mode,
+                    periodic=True
                 )
                 yield frag
         except ValueError:
@@ -222,6 +223,7 @@ def _make_middle_fragment(
     max_radius,
     mode,
     heavy_first=False,
+    periodic=False
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
@@ -277,6 +279,7 @@ def _make_middle_fragment(
         target_species_probability,
         target_node,
         stop=False,
+        periodic=periodic
     )
 
     return rng, new_visited, sample
@@ -301,8 +304,16 @@ def _into_fragment(
     target_species_probability,
     target_node,
     stop,
+    periodic=False,
 ):
     pos = graph.nodes.positions
+    target_positions = pos[target_node] - pos[focus_node]
+    if periodic:
+        # for periodic structures, re-center the target positions if necessary
+        for vec in graph.globals.cell[0]:
+            for d in [-1, 1]:
+                if np.linalg.norm(pos[target_node] + vec * d - pos[focus_node]) < np.linalg.norm(target_positions):
+                    target_positions = pos[target_node] + vec * d - pos[focus_node]
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,
@@ -311,7 +322,7 @@ def _into_fragment(
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
         target_species=graph.nodes.species[target_node][None],  # [1]
-        target_positions=(pos[target_node] - pos[focus_node])[None],  # [1, 3]
+        target_positions=target_positions[None],  # [1, 3]
         cell=graph.globals.cell
     )
     graph = graph._replace(nodes=nodes, globals=globals)
