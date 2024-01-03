@@ -8,13 +8,13 @@ def get_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     # Dataset.
-    config.dataset = "silica"
+    config.dataset = "silica_mini"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = "/data/NFS/potato/songk/silica_fragments"
-    config.train_molecules = (0, 250)
-    config.val_molecules = (250, 300)
-    config.test_molecules = (300, 350)
+    config.root_dir = "/home/songk/spherical-harmonic-net/silica_fragments_mini"
+    config.train_molecules = (0, 56)
+    config.val_molecules = (56, 64)
+    config.test_molecules = (64, 72)
     config.shuffle_datasets = True
 
     # Optimizer.
@@ -65,7 +65,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    config.focus_and_target_species_predictor.latent_size = 256
+    config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
     config.focus_and_target_species_predictor.activation = "softplus"
 
@@ -86,6 +86,6 @@ def get_config() -> ml_collections.ConfigDict:
 
 
     config.atomic_numbers = [8, 14]
-    config.matgen_query = {"elements": ["O", "Si"], "num_elements": (2, 2)}
+    config.matgen_query = {"elements": ["O", "Si"], "num_elements": (2, 2), "num_sites": (0, 20)}
 
     return config

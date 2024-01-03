@@ -27,9 +27,13 @@ class FragmentsNodes(NamedTuple):
     focus_and_target_species_probs: jnp.ndarray  # [n_node, n_species] float array (only for training)
 
 
+class FragmentsEdges(NamedTuple):
+    relative_positions: jnp.ndarray  # [n_edge, 3] float array
+
+
 class Fragments(jraph.GraphsTuple):
     nodes: FragmentsNodes
-    edges: None
+    edges: FragmentsEdges
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
     globals: FragmentsGlobals

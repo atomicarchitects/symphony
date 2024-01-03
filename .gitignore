@@ -168,6 +168,7 @@ graphnet
 qm9_data
 qm9_data_tf
 silica_fragments
+silica_fragments_mini
 data_tf2
 *.pb
 *.metadata

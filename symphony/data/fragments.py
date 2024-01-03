@@ -94,6 +94,17 @@ def generate_silica_fragments(
     '''Removes a SiO4 tetrahedron from a silica-based structure and generates fragments from the result.'''
     n_species = len(atomic_numbers)
     n_nodes = graph.n_node[0]
+    # compute edge distances
+    dist = np.linalg.norm(
+        graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
+        axis=1,
+    )  # [n_edge]
+    for vec in graph.globals.cell:
+        for mul in [1, -1]:
+            dist = np.minimum(dist, np.linalg.norm(
+                graph.nodes.positions[graph.receivers] - mul * vec - graph.nodes.positions[graph.senders],
+                axis=1,
+            ))
     for i in range(n_nodes):
         if graph.nodes.species[i] == 0:
             continue
@@ -113,18 +124,6 @@ def generate_silica_fragments(
 
         # use middle- and last-fragment generators; everything not in ndx_exclude can be "visited"
         visited_nodes = np.asarray(range(n_nodes))[~np.isin(np.asarray(range(n_nodes)), ndx_exclude)]
-
-        # compute edge distances
-        dist = np.linalg.norm(
-            graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
-            axis=1,
-        )  # [n_edge]
-        for vec in graph.globals.cell:
-            for mul in [1, -1]:
-                dist = np.minimum(dist, np.linalg.norm(
-                    graph.nodes.positions[graph.receivers] - mul * vec - graph.nodes.positions[graph.senders],
-                    axis=1,
-                ))
 
         # make fragments
         try:
@@ -308,12 +307,18 @@ def _into_fragment(
 ):
     pos = graph.nodes.positions
     target_positions = pos[target_node] - pos[focus_node]
+    relative_positions = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders]
     if periodic:
-        # for periodic structures, re-center the target positions if necessary
+        # for periodic structures, re-center the target positions and recompute relative positions if necessary
         for vec in graph.globals.cell[0]:
             for d in [-1, 1]:
                 if np.linalg.norm(pos[target_node] + vec * d - pos[focus_node]) < np.linalg.norm(target_positions):
                     target_positions = pos[target_node] + vec * d - pos[focus_node]
+                shifted_rel_pos = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + vec * d
+                relative_positions = np.where(
+                    np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+                    shifted_rel_pos,
+                    relative_positions)
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,
@@ -325,7 +330,8 @@ def _into_fragment(
         target_positions=target_positions[None],  # [1, 3]
         cell=graph.globals.cell
     )
-    graph = graph._replace(nodes=nodes, globals=globals)
+    edges = datatypes.FragmentsEdges(relative_positions=relative_positions)
+    graph = graph._replace(nodes=nodes, edges=edges, globals=globals)
 
     if stop:
         assert len(visited) == len(pos)

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 import logging
 import os
@@ -8,17 +8,17 @@ from absl import app
 import tqdm.contrib.concurrent
 import ase
 import jax
-from mp_api.client import MPRester
+from ml_collections import config_flags
 import numpy as np
 import pickle
+from pymatgen.core.structure import Structure
 import tensorflow as tf
 import tqdm
 
-from symphony import datatypes
 from symphony.data import fragments
-from symphony.data import input_pipeline, input_pipeline_tf, matproj
+from symphony.data import input_pipeline, matproj
 
-import configs.silica.allegro as allegro
+import configs.silica.default as default
 
 FLAGS = flags.FLAGS
 
@@ -29,7 +29,7 @@ def generate_all_fragments(
     start: int,
     end: int,
     output_dir: str,
-    nn_cutoff: float,
+    cutoffs: Tuple[float],
     min_n_nodes: float,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
@@ -70,6 +70,7 @@ def generate_all_fragments(
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
+        "relative_positions": tf.TensorSpec(shape=(None, 3), dtype=tf.float32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
         "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
@@ -85,7 +86,7 @@ def generate_all_fragments(
     def generator():
         for mol_ndx, mol in tqdm.tqdm(enumerate(molecules)):
             graph = input_pipeline.ase_atoms_to_jraph_graph(
-                mol, atomic_numbers, nn_cutoff=nn_cutoff, cell=mol.cell
+                mol, atomic_numbers, cutoffs=cutoffs, periodic=True
             )
             frags = fragments.generate_silica_fragments(
                 rng,
@@ -108,6 +109,7 @@ def generate_all_fragments(
                     ),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
+                    "relative_positions": frag.edges.relative_positions.astype(np.float32),
                     "stop": frag.globals.stop.astype(np.bool_),
                     "target_positions": frag.globals.target_positions.astype(
                         np.float32
@@ -139,8 +141,7 @@ def main(unused_argv) -> None:
     logging.set_stderrthreshold(logging.INFO)
 
     # Create a list of arguments to pass to generate_all_fragments
-    config = allegro.get_config()
-    all_molecules = matproj.get_materials(config.matgen_query)
+    structures = matproj.get_materials(FLAGS.config.matgen_query)
     molecules = [
         ase.Atoms(
             positions=mol.structure.cart_coords,
@@ -148,7 +149,7 @@ def main(unused_argv) -> None:
             cell=mol.structure.lattice.matrix,  # 3 unit cell vectors
             pbc=True,
         )
-        for mol in all_molecules
+        for mol in structures
     ]
     chunk_size = FLAGS.chunk
     args_list = [
@@ -161,11 +162,11 @@ def main(unused_argv) -> None:
                 FLAGS.output_dir,
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
-            FLAGS.nn_cutoff,
+            (FLAGS.config.nn_cutoff_min, FLAGS.config.nn_cutoff_max),
             FLAGS.min_n_nodes,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
-        for start in range(0, len(molecules), chunk_size)
+        for start in range(0, len(structures), chunk_size)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
@@ -175,13 +176,13 @@ def main(unused_argv) -> None:
     mp_ids_per_frag = []
     struct_per_frag = []
     ase_per_frag = []
-    for start in range(0, len(molecules), chunk_size):
+    for start in range(0, len(structures), chunk_size):
         end = start + chunk_size
         with open(os.path.join(FLAGS.output_dir, f"mol_indices_{start:06d}_{end:06d}.pkl"), "rb") as f:
             indices = pickle.load(f)
         for i in indices:
-            mp_ids_per_frag.append(all_molecules[start + i].material_id)
-            struct_per_frag.append(all_molecules[start + i].structure)
+            mp_ids_per_frag.append(structures[start + i].material_id)
+            struct_per_frag.append(structures[start + i].structure)
             ase_per_frag.append(ase.Atoms(
                 positions = struct_per_frag[-1].cart_coords,
                 numbers = struct_per_frag[-1].atomic_numbers,
@@ -196,13 +197,18 @@ def main(unused_argv) -> None:
         pickle.dump(ase_per_frag, f)
 
 if __name__ == "__main__":
+    config_flags.DEFINE_config_file(
+        "config",
+        None,
+        "File path to the training hyperparameter configuration.",
+        lock_config=True,
+    )
     flags.DEFINE_integer("start_seed", 0, "Start random seed.")
     flags.DEFINE_integer("end_seed", 1, "End random seed.")
     flags.DEFINE_integer("chunk", 50, "Number of molecules per fragment file.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_string("output_dir", "silica_fragments", "Output directory.")
-    flags.DEFINE_float("nn_cutoff", 3.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("min_n_nodes", 30, "Cutoff for creating supercells.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")

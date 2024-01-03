@@ -35,7 +35,7 @@ def get_datasets(
         datasets = get_unbatched_tetris_datasets(rng, config)
     elif config.dataset == "platonic_solids":
         datasets = get_unbatched_platonic_solids_datasets(rng, config)
-    elif config.dataset == "silica":
+    elif config.dataset == "silica" or config.dataset == "silica_mini":
         datasets = get_unbatched_silica_datasets(config)
 
     # Estimate the padding budget.
@@ -566,7 +566,9 @@ def _specs_from_graphs_tuple(
             stop=get_tensor_spec(graph.globals.stop, is_global=True),
             cell=get_tensor_spec(graph.globals.cell, is_global=True)
         ),
-        edges=get_tensor_spec(graph.edges),
+        edges=datatypes.FragmentsEdges(
+            relative_positions=get_tensor_spec(graph.edges.relative_positions),
+        ),
         receivers=get_tensor_spec(graph.receivers),
         senders=get_tensor_spec(graph.senders),
         n_node=get_tensor_spec(graph.n_node),
@@ -590,7 +592,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     senders = graph["senders"]
     n_node = graph["n_node"]
     n_edge = graph["n_edge"]
-    edges = tf.ones((tf.shape(senders)[0], 1))
+    relative_positions = graph["relative_positions"]
     target_positions = graph["target_positions"]
     target_species = graph["target_species"]
     cell = graph["cell"]
@@ -601,7 +603,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             species=species,
             focus_and_target_species_probs=focus_and_target_species_probs,
         ),
-        edges=edges,
+        edges=datatypes.FragmentsEdges(relative_positions=relative_positions),
         receivers=receivers,
         senders=senders,
         globals=datatypes.FragmentsGlobals(

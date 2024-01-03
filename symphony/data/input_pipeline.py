@@ -9,6 +9,8 @@ import jraph
 import matscipy.neighbours
 import ml_collections
 import numpy as np
+from pymatgen.analysis.local_env import CrystalNN
+from pymatgen.core.structure import Structure
 import roundmantissa
 
 from symphony import datatypes
@@ -238,13 +240,29 @@ def pad_graph_to_nearest_ceil_mantissa(
     )
 
 
+def crystalnn(struct: Structure, cutoffs: float = (0.5, 1.0)):
+    nn = CrystalNN(distance_cutoffs = cutoffs)
+    senders = []
+    receivers = []
+    for i in range(len(struct)):
+        nn_info = nn.get_nn_info(struct, i)
+        for neighbor in nn_info:
+            senders.append(i)
+            receivers.append(neighbor["site_index"])
+    return np.asarray(receivers), np.asarray(senders)
+
+
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float, cell=np.eye(3)
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, cutoffs: float | Tuple[float], periodic=False
 ) -> jraph.GraphsTuple:
-    # Create edges
-    receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=cell
-    )
+    if periodic:
+        struct = Structure(atoms.cell, atoms.numbers, atoms.positions)
+        receivers, senders = crystalnn(struct, cutoffs=cutoffs)
+    else:
+        # Create edges
+        receivers, senders = matscipy.neighbours.neighbour_list(
+            quantities="ij", positions=atoms.positions, cutoff=cutoffs, cell=np.eye(3)
+        )
 
     # Get the species indices
     species = np.searchsorted(atomic_numbers, atoms.numbers)
@@ -252,7 +270,7 @@ def ase_atoms_to_jraph_graph(
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(np.asarray(atoms.positions), np.asarray(species)),
         edges=np.ones(len(senders)),
-        globals=datatypes.GlobalsInfo(np.asarray(cell)),
+        globals=datatypes.GlobalsInfo(np.asarray(atoms.cell)),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([len(atoms)]),
@@ -261,22 +279,20 @@ def ase_atoms_to_jraph_graph(
 
 
 def material_to_jraph_graph(
-    material_positions, material_species, atomic_numbers: jnp.ndarray, nn_cutoff: float, cell: np.ndarray = np.eye(3)
+   struct: Structure, atomic_numbers: jnp.ndarray, cutoffs: Tuple[float]
 ) -> jraph.GraphsTuple:
     # Create edges
-    receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=material_positions, cutoff=nn_cutoff, cell=cell
-    )
+    receivers, senders = crystalnn(struct, cutoffs=cutoffs)
 
     # Get the species indices
-    species = np.searchsorted(atomic_numbers, material_species)
+    species = np.searchsorted(atomic_numbers, struct.atomic_numbers)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(np.asarray(material_positions), np.asarray(species)),
+        nodes=datatypes.NodesInfo(np.asarray(struct.cart_coords), np.asarray(species)),
         edges=np.ones(len(senders)),
-        globals=datatypes.GlobalsInfo(np.asarray(cell)),
+        globals=datatypes.GlobalsInfo(np.asarray(struct.lattice.matrix)),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
-        n_node=np.array([len(material_species)]),
+        n_node=np.array([struct.num_sites]),
         n_edge=np.array([len(senders)]),
     )
