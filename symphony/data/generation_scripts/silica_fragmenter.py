@@ -125,7 +125,7 @@ def generate_all_fragments(
     os.makedirs(output_dir, exist_ok=True)
     dataset.save(output_dir)
     chunk_start, chunk_end = output_dir.split('/')[-1].split('_')[-2:]
-    with open(os.path.join(FLAGS.output_dir, f"mol_indices_{chunk_start}_{chunk_end}.pkl"), "wb") as f:
+    with open(os.path.join(FLAGS.config.root_dir, f"mol_indices_{chunk_start}_{chunk_end}.pkl"), "wb") as f:
         pickle.dump(mol_indices, f)
 
 
@@ -159,11 +159,12 @@ def main(unused_argv) -> None:
             start,
             start + chunk_size,
             os.path.join(
-                FLAGS.output_dir,
+                FLAGS.config.root_dir,
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
-            (FLAGS.config.nn_cutoff_min, FLAGS.config.nn_cutoff_max),
-            FLAGS.min_n_nodes,
+            None,
+            # (FLAGS.config.nn_cutoff_min, FLAGS.config.nn_cutoff_max),
+            FLAGS.config.min_n_nodes,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
         for start in range(0, len(structures), chunk_size)
@@ -176,9 +177,10 @@ def main(unused_argv) -> None:
     mp_ids_per_frag = []
     struct_per_frag = []
     ase_per_frag = []
+    output_dir = FLAGS.config.root_dir
     for start in range(0, len(structures), chunk_size):
         end = start + chunk_size
-        with open(os.path.join(FLAGS.output_dir, f"mol_indices_{start:06d}_{end:06d}.pkl"), "rb") as f:
+        with open(os.path.join(output_dir, f"mol_indices_{start:06d}_{end:06d}.pkl"), "rb") as f:
             indices = pickle.load(f)
         for i in indices:
             mp_ids_per_frag.append(structures[start + i].material_id)
@@ -189,11 +191,11 @@ def main(unused_argv) -> None:
                 cell = struct_per_frag[-1].lattice.matrix,
                 pbc = True
             ))
-    with open(os.path.join(FLAGS.output_dir, "mp_ids_per_frag.pkl"), "wb") as f:
+    with open(os.path.join(output_dir, "mp_ids_per_frag.pkl"), "wb") as f:
         pickle.dump(mp_ids_per_frag, f)
-    with open(os.path.join(FLAGS.output_dir, "structures_per_frag.pkl"), "wb") as f:
+    with open(os.path.join(output_dir, "structures_per_frag.pkl"), "wb") as f:
         pickle.dump(struct_per_frag, f)
-    with open(os.path.join(FLAGS.output_dir, "ase_atoms_per_frag.pkl"), "wb") as f:
+    with open(os.path.join(output_dir, "ase_atoms_per_frag.pkl"), "wb") as f:
         pickle.dump(ase_per_frag, f)
 
 if __name__ == "__main__":
@@ -208,8 +210,6 @@ if __name__ == "__main__":
     flags.DEFINE_integer("chunk", 50, "Number of molecules per fragment file.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
-    flags.DEFINE_string("output_dir", "silica_fragments", "Output directory.")
-    flags.DEFINE_float("min_n_nodes", 30, "Cutoff for creating supercells.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")
 

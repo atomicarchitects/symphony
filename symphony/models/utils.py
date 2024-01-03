@@ -279,7 +279,7 @@ def get_num_species_for_dataset(dataset: str) -> int:
         return len(ATOMIC_NUMBERS)
     if dataset in ["tetris", "platonic_solids"]:
         return 1
-    if dataset == "silica":
+    if dataset in ["silica", "silica_mini"]:
         return 2
     raise ValueError(f"Unsupported dataset: {dataset}.")
 

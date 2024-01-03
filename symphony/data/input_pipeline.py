@@ -242,13 +242,15 @@ def pad_graph_to_nearest_ceil_mantissa(
 
 def crystalnn(struct: Structure, cutoffs: float = (0.5, 1.0)):
     nn = CrystalNN(distance_cutoffs = cutoffs)
-    senders = []
-    receivers = []
+    edges = set()
     for i in range(len(struct)):
         nn_info = nn.get_nn_info(struct, i)
-        for neighbor in nn_info:
-            senders.append(i)
-            receivers.append(neighbor["site_index"])
+        for neighbor in set([n['site_index'] for n in nn_info]):
+            edges.add((i, neighbor))
+            edges.add((neighbor, i))
+    edges = list(edges)
+    senders = [e[0] for e in edges]
+    receivers = [e[1] for e in edges]
     return np.asarray(receivers), np.asarray(senders)
 
 
@@ -256,7 +258,7 @@ def ase_atoms_to_jraph_graph(
     atoms: ase.Atoms, atomic_numbers: jnp.ndarray, cutoffs: float | Tuple[float], periodic=False
 ) -> jraph.GraphsTuple:
     if periodic:
-        struct = Structure(atoms.cell, atoms.numbers, atoms.positions)
+        struct = Structure(atoms.cell, atoms.numbers, atoms.positions, coords_are_cartesian=True)
         receivers, senders = crystalnn(struct, cutoffs=cutoffs)
     else:
         # Create edges

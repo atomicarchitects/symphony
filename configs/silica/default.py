@@ -65,7 +65,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    config.focus_and_target_species_predictor.latent_size = 256
+    config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
     config.focus_and_target_species_predictor.activation = "softplus"
 

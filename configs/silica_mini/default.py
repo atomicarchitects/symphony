@@ -45,7 +45,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_cutoff_max = 1.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
-    config.min_n_nodes = 30
+    config.min_n_nodes = 0
     config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
     config.max_n_edges = 180 * config.get_ref("max_n_graphs")
     config.frag_pool_size = 1024
