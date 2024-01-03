@@ -22,6 +22,7 @@ import optax
 import time
 
 import analyses.analysis as analysis
+import analyses.visualizer as visualizer
 from symphony import datatypes
 from symphony.data import input_pipeline
 from symphony import models
@@ -51,6 +52,20 @@ def append_predictions(
     distance_matrix = jnp.linalg.norm(
         new_positions[None, :, :] - new_positions[:, None, :], axis=-1
     )
+    for vec in padded_fragment.globals.cell[0]:
+        distance_matrix = jnp.minimum(
+            distance_matrix,
+            jnp.linalg.norm(
+                new_positions[None, :, :] - (new_positions[:, None, :] + vec), axis=-1
+            ),
+        )
+        distance_matrix = jnp.minimum(
+            distance_matrix,
+            jnp.linalg.norm(
+                (new_positions[None, :, :] + vec) - new_positions[:, None, :], axis=-1
+            ),
+        )
+        
     node_indices = jnp.arange(num_nodes)
 
     # Avoid self-edges.
@@ -295,7 +310,7 @@ def generate_molecules(
                 pred = pred._replace(
                     globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
                 )
-                fig = analysis.visualize_predictions(pred, fragment)
+                fig = visualizer.visualize_predictions(pred, fragment)
                 figs.append(fig)
 
                 # This may be the final padded fragment.
@@ -309,7 +324,7 @@ def generate_molecules(
             # Save the visualizations of the generation process.
             for index, fig in enumerate(figs):
                 # Update the title.
-                model_name = analysis.get_title_for_name(name)
+                model_name = visualizer.get_title_for_name(name)
                 fig.update_layout(
                     title=f"{model_name}: Predictions for Seed {seed}",
                     title_x=0.5,

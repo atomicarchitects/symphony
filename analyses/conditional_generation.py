@@ -22,8 +22,7 @@ def main(unused_argv: Sequence[str]):
     step = "best"
     num_seeds_per_chunk = 1
     max_num_atoms = 200  # ?
-    visualize = False
-    num_mols = 20
+    num_mols = 1
     config = allegro.get_config()
 
     mols_by_split = {"train": [], "test": []}
@@ -96,7 +95,7 @@ def main(unused_argv: Sequence[str]):
             num_seeds_per_chunk,
             mol_list,
             max_num_atoms,
-            visualize,
+            flags.FLAGS.visualize,
             filetype="cif"
         )
 
@@ -110,5 +109,10 @@ if __name__ == "__main__":
         "outputdir",
         os.path.join(os.getcwd(), "conditional_generation", "analysed_workdirs"),
         "Directory where molecules should be saved.",
+    )
+    flags.DEFINE_bool(
+        "visualize",
+        False,
+        "Whether to visualize the generation process step-by-step.",
     )
     app.run(main)
