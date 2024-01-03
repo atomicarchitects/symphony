@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.qm9 import default
+from configs.silica_mini import default
 
 
 def get_embedder_config() -> ml_collections.ConfigDict:

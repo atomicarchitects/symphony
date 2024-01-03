@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.silica import default, nequip, e3schnet
+from configs.silica_mini import default, nequip, e3schnet
 
 
 def get_config() -> ml_collections.ConfigDict:

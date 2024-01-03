@@ -3,7 +3,7 @@
 import ml_collections
 import numpy as np
 
-from configs.silica import default
+from configs.silica_mini import default
 
 
 def get_embedder_config() -> ml_collections.ConfigDict:

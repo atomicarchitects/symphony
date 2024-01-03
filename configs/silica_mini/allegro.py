@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.silica import default
+from configs.silica_mini import default
 import numpy as np
 
 
