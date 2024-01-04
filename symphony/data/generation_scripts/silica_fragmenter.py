@@ -95,6 +95,7 @@ def generate_all_fragments(
                 FLAGS.nn_tolerance,
                 FLAGS.max_radius,
                 "nn",
+                heavy_first=FLAGS.config.heavy_first
             )
             frags = list(frags)
 

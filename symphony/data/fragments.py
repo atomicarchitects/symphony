@@ -90,6 +90,7 @@ def generate_silica_fragments(
     nn_tolerance,
     max_radius,
     mode,
+    heavy_first=False
 ):
     '''Removes a SiO4 tetrahedron from a silica-based structure and generates fragments from the result.'''
     n_species = len(atomic_numbers)
@@ -137,15 +138,17 @@ def generate_silica_fragments(
                     nn_tolerance,
                     max_radius,
                     mode,
-                    periodic=True
+                    periodic=True,
+                    heavy_first=heavy_first
                 )
                 yield frag
         except ValueError:
+            print("fragment could not be generated")
             pass
         else:
             assert len(visited_nodes) == n_nodes
 
-            yield _make_last_fragment(graph, n_species)
+        yield _make_last_fragment(graph, n_species)
 
 
 def _make_first_fragment(
@@ -230,13 +233,10 @@ def _make_middle_fragment(
     mask = np.isin(senders, visited) & ~np.isin(receivers, visited)
 
     if heavy_first:
-        heavy = graph.nodes.species > 0
-        if heavy.sum() > heavy[visited].sum():
-            mask = (
-                mask
-                & (graph.nodes.species[senders] > 0)
-                & (graph.nodes.species[receivers] > 0)
-            )
+        if np.sum(mask & graph.nodes.species[receivers] > 0) > 0:
+            mask = mask & (graph.nodes.species[receivers] > 0)
+        if np.sum(mask & (graph.nodes.species[senders] > 0)) > 0:
+            mask = mask & (graph.nodes.species[senders] > 0)
 
     if mode == "nn":
         min_dist = dist[mask].min()

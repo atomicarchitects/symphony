@@ -80,12 +80,22 @@ def append_predictions(
     )
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
+    
+    relative_positions = new_positions[receivers] - new_positions[senders]
+    for vec in pred.globals.cell[0]:
+        for d in [-1, 1]:
+            shifted_rel_pos = new_positions[receivers] - new_positions[senders] + vec * d
+            relative_positions = jnp.where(
+                jnp.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < jnp.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+                shifted_rel_pos,
+                relative_positions)
 
     return padded_fragment._replace(
         nodes=padded_fragment.nodes._replace(
             positions=new_positions,
             species=new_species,
         ),
+        edges=datatypes.FragmentsEdges(relative_positions=relative_positions),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
         n_edge=jnp.asarray([num_valid_edges, num_nodes * num_nodes - num_valid_edges]),
         senders=senders,

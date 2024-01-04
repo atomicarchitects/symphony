@@ -22,7 +22,7 @@ def main(unused_argv: Sequence[str]):
     step = "best"
     num_seeds_per_chunk = 1
     max_num_atoms = 200  # ?
-    num_mols = 1
+    num_mols = 20
     config = allegro.get_config()
 
     mols_by_split = {"train": [], "test": []}
@@ -102,7 +102,7 @@ def main(unused_argv: Sequence[str]):
 if __name__ == "__main__":
     flags.DEFINE_string(
         "workdir",
-        "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/silica-allegro-200k-train-steps-all-dec29",
+        "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/",
         "Workdir for model."
     )
     flags.DEFINE_string(
