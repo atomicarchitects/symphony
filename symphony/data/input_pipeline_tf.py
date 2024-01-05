@@ -28,6 +28,7 @@ def get_datasets(
     """Loads and preprocesses the dataset as tf.data.Datasets for each split."""
 
     # Get the raw datasets.
+    datasets = {}
     if config.dataset == "qm9":
         del rng
         datasets = get_unbatched_qm9_datasets(config)
@@ -37,6 +38,8 @@ def get_datasets(
         datasets = get_unbatched_platonic_solids_datasets(rng, config)
     elif config.dataset == "silica" or config.dataset == "silica_mini":
         datasets = get_unbatched_silica_datasets(config)
+    else:
+        raise ValueError(f"Unknown dataset {config.dataset}.")
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:

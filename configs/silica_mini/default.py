@@ -16,6 +16,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.val_molecules = (56, 64)
     config.test_molecules = (64, 72)
     config.shuffle_datasets = True
+    config.heavy_first = True
 
     # Optimizer.
     config.optimizer = "adam"

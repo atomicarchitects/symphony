@@ -1,4 +1,5 @@
 from typing import Callable, Optional
+import jax
 import jraph
 import jax.numpy as jnp
 import nequip_jax

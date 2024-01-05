@@ -9,11 +9,11 @@ from configs.silica import default
 def get_embedder_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
     config.model = "NequIP"
-    config.num_channels = 64
+    config.num_channels = 32
     config.r_max = 5
     config.avg_num_neighbors = 300.0  # NequIP is not properly normalized.
     config.num_interactions = 3
-    config.max_ell = 5
+    config.max_ell = 3
     config.even_activation = "swish"
     config.odd_activation = "tanh"
     config.mlp_activation = "swish"

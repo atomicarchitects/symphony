@@ -1,11 +1,15 @@
 from typing import Iterator
 
+import itertools
 import jax
 import jraph
 import numpy as np
 import chex
 
 from symphony import datatypes
+
+class FragmentError(Exception):
+    pass
 
 
 def generate_fragments(
@@ -77,6 +81,8 @@ def generate_fragments(
             yield frag
     except ValueError:
         pass
+    except FragmentError as e:
+        print("Fragment error", e)
     else:
         assert len(visited_nodes) == n
 
@@ -100,27 +106,29 @@ def generate_silica_fragments(
         graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
         axis=1,
     )  # [n_edge]
-    for vec in graph.globals.cell:
-        for mul in [1, -1]:
-            dist = np.minimum(dist, np.linalg.norm(
-                graph.nodes.positions[graph.receivers] - mul * vec - graph.nodes.positions[graph.senders],
-                axis=1,
-            ))
+    cell = graph.globals.cell[0]
+    for d in itertools.product(range(-1, 2), repeat=3):
+        dist = np.minimum(dist, np.linalg.norm(
+            graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + np.array(d) @ cell,
+            axis=1,
+        ))
+    assert dist.min() > 1e-5, FragmentError('self edges')
     for i in range(n_nodes):
         if graph.nodes.species[i] == 0:
             continue
         # find the closest O to this Si atom
-        min_dist = 3.0
+        min_dist = 2.0
         ndx_exclude = [i]
         for j in range(n_nodes):
             if graph.nodes.species[j] == 1:
                 continue
-            # if abs(sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) - min_dist) < eps:
-            if sum((graph.nodes.positions[j] - graph.nodes.positions[i])**2) < min_dist:
+            if np.linalg.norm(graph.nodes.positions[j] - graph.nodes.positions[i], axis=-1) < min_dist:
                 ndx_exclude.append(j)
-            for vec in graph.globals.cell:
-                if sum((graph.nodes.positions[j] - vec - graph.nodes.positions[i])**2) < min_dist or sum((graph.nodes.positions[j] + vec - graph.nodes.positions[i])**2) < min_dist:
+                continue
+            for d in itertools.product(range(-1, 2), repeat=3):
+                if np.linalg.norm(graph.nodes.positions[j] - graph.nodes.positions[i] + np.array(d) @ cell, axis=-1) < min_dist:
                     ndx_exclude.append(j)
+                    continue
         ndx_exclude = np.asarray(ndx_exclude)
 
         # use middle- and last-fragment generators; everything not in ndx_exclude can be "visited"
@@ -143,12 +151,14 @@ def generate_silica_fragments(
                 )
                 yield frag
         except ValueError:
-            print("fragment could not be generated")
+            pass
+        except FragmentError as e:
+            print("Fragment error", e)
             pass
         else:
             assert len(visited_nodes) == n_nodes
 
-        yield _make_last_fragment(graph, n_species)
+        yield _make_last_fragment(graph, n_species, periodic=True)
 
 
 def _make_first_fragment(
@@ -284,7 +294,7 @@ def _make_middle_fragment(
     return rng, new_visited, sample
 
 
-def _make_last_fragment(graph, n_species):
+def _make_last_fragment(graph, n_species, periodic=False):
     n_nodes = len(graph.nodes.positions)
     return _into_fragment(
         graph,
@@ -293,6 +303,7 @@ def _make_last_fragment(graph, n_species):
         target_species_probability=np.zeros((n_nodes, n_species)),
         target_node=0,
         stop=True,
+        periodic=periodic
     )
 
 
@@ -308,17 +319,19 @@ def _into_fragment(
     pos = graph.nodes.positions
     target_positions = pos[target_node] - pos[focus_node]
     relative_positions = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders]
+    cell = graph.globals.cell[0]
     if periodic:
         # for periodic structures, re-center the target positions and recompute relative positions if necessary
-        for vec in graph.globals.cell[0]:
-            for d in [-1, 1]:
-                if np.linalg.norm(pos[target_node] + vec * d - pos[focus_node]) < np.linalg.norm(target_positions):
-                    target_positions = pos[target_node] + vec * d - pos[focus_node]
-                shifted_rel_pos = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + vec * d
-                relative_positions = np.where(
-                    np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
-                    shifted_rel_pos,
-                    relative_positions)
+        for d in itertools.product(range(-1, 2), repeat=3):
+            shifted_target = pos[target_node] - pos[focus_node] + np.array(d) @ cell
+            if np.linalg.norm(shifted_target) < np.linalg.norm(target_positions):
+                target_positions = shifted_target
+            shifted_rel_pos = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + np.array(d) @ cell
+            relative_positions = np.where(
+                np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+                shifted_rel_pos,
+                relative_positions)
+    assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5, FragmentError('self edges')
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,

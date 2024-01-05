@@ -84,6 +84,8 @@ class TargetPositionPredictor(hk.Module):
         log_position_coeffs = e3nn.haiku.Linear(
             self.num_radii * self.num_channels * irreps, force_irreps_out=True
         )(target_species_embeddings * focus_node_embeddings)
+        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
+        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
         # log_position_coeffs = sphericalconv.SphericalConvolution(
         #     self.res_beta,
         #     self.res_alpha,
@@ -92,8 +94,6 @@ class TargetPositionPredictor(hk.Module):
         #     self.num_channels,
         #     jax.nn.softplus,
         # )(log_position_coeffs)
-        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
-        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
 
         # Apply the gate activation.
         if self.apply_gate:

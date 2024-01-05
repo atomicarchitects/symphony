@@ -12,6 +12,7 @@ import ase.data
 from ase.db import connect
 import ase.io
 import ase.visualize
+import itertools
 import jax
 import jax.numpy as jnp
 import jraph
@@ -52,17 +53,12 @@ def append_predictions(
     distance_matrix = jnp.linalg.norm(
         new_positions[None, :, :] - new_positions[:, None, :], axis=-1
     )
-    for vec in padded_fragment.globals.cell[0]:
+    cell = pred.globals.cell[0]
+    for d in itertools.product(range(-1, 2), repeat=3):
         distance_matrix = jnp.minimum(
             distance_matrix,
             jnp.linalg.norm(
-                new_positions[None, :, :] - (new_positions[:, None, :] + vec), axis=-1
-            ),
-        )
-        distance_matrix = jnp.minimum(
-            distance_matrix,
-            jnp.linalg.norm(
-                (new_positions[None, :, :] + vec) - new_positions[:, None, :], axis=-1
+                new_positions[None, :, :] - (new_positions[:, None, :] + np.array(d) @ cell), axis=-1
             ),
         )
         
@@ -82,13 +78,12 @@ def append_predictions(
     num_valid_nodes += 1
     
     relative_positions = new_positions[receivers] - new_positions[senders]
-    for vec in pred.globals.cell[0]:
-        for d in [-1, 1]:
-            shifted_rel_pos = new_positions[receivers] - new_positions[senders] + vec * d
-            relative_positions = jnp.where(
-                jnp.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < jnp.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
-                shifted_rel_pos,
-                relative_positions)
+    for d in itertools.product(range(-1, 2), repeat=3):
+        shifted_rel_pos = new_positions[receivers] - new_positions[senders] + np.array(d) @ cell
+        relative_positions = jnp.where(
+            jnp.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < jnp.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+            shifted_rel_pos,
+            relative_positions)
 
     return padded_fragment._replace(
         nodes=padded_fragment.nodes._replace(
@@ -360,7 +355,7 @@ def generate_molecules(
             numbers=models.get_atomic_numbers(
                 final_padded_fragment.nodes.species[:num_valid_nodes]
             ),
-            cell=final_padded_fragment.globals.cell[0],
+            cell=ase.cell.Cell(final_padded_fragment.globals.cell[0]).cellpar(),
             pbc=True
         )
         if stop:

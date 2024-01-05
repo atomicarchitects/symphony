@@ -11,17 +11,17 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "silica"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = "/data/NFS/potato/songk/silica_fragments_heavy_first"
+    config.root_dir = "/data/NFS/potato/songk/silica_fragments"
     config.train_molecules = (0, 250)
     config.val_molecules = (250, 300)
     config.test_molecules = (300, 350)
     config.shuffle_datasets = True
-    config.heavy_first=True
+    config.heavy_first=False
 
     # Optimizer.
     config.optimizer = "adam"
     config.momentum = None
-    config.learning_rate = 1e-3
+    config.learning_rate = 5e-4
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
     config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
@@ -66,8 +66,8 @@ def get_config() -> ml_collections.ConfigDict:
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
     config.focus_and_target_species_predictor.compute_global_embedding = False
-    config.focus_and_target_species_predictor.latent_size = 128
-    config.focus_and_target_species_predictor.num_layers = 3
+    config.focus_and_target_species_predictor.latent_size = 256
+    config.focus_and_target_species_predictor.num_layers = 5
     config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()

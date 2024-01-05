@@ -29,7 +29,7 @@ def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
             return f"/Users/ameyad/Documents/spherical-harmonic-net/temp/platonic_solids/{fragment_logic}"
     if dataset == "silica":
         if hostname == "potato.mit.edu":
-            return "/data/NFS/potato/songk/silica_fragments_heavy_first"
+            return "/data/NFS/potato/songk/silica_fragments"
     if dataset == "silica_mini":
         if hostname == "potato.mit.edu":
             return "/home/songk/spherical-harmonic-net/silica_fragments_mini"

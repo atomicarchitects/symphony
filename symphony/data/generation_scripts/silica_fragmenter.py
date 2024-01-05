@@ -75,7 +75,7 @@ def generate_all_fragments(
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
         "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
-        "cell": tf.TensorSpec(shape=(1, 3, 3), dtype=tf.int32),
+        "cell": tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -88,6 +88,7 @@ def generate_all_fragments(
             graph = input_pipeline.ase_atoms_to_jraph_graph(
                 mol, atomic_numbers, cutoffs=cutoffs, periodic=True
             )
+            assert np.equal(graph.senders, graph.receivers).sum() == 0, "self edges!"
             frags = fragments.generate_silica_fragments(
                 rng,
                 graph,
@@ -142,16 +143,32 @@ def main(unused_argv) -> None:
     logging.set_stderrthreshold(logging.INFO)
 
     # Create a list of arguments to pass to generate_all_fragments
-    structures = matproj.get_materials(FLAGS.config.matgen_query)
+    # structures = matproj.get_materials(FLAGS.config.matgen_query)
+    # molecules = [
+    #     ase.Atoms(
+    #         positions=mol.structure.cart_coords,
+    #         numbers=mol.structure.atomic_numbers,
+    #         cell=mol.structure.lattice.matrix,  # 3 unit cell vectors
+    #         pbc=True,
+    #     )
+    #     for mol in structures
+    # ]
+    # temporary fix for matproj api being down
+    structures_pkl = pickle.load(open(os.path.join(FLAGS.config.root_dir, "structures_per_frag.pkl"), "rb"))
+    structures = []
+    for s in range(1, len(structures_pkl)):
+        if structures_pkl[s] != structures_pkl[s-1]:
+            structures.append(structures_pkl[s])
     molecules = [
         ase.Atoms(
-            positions=mol.structure.cart_coords,
-            numbers=mol.structure.atomic_numbers,
-            cell=mol.structure.lattice.matrix,  # 3 unit cell vectors
+            positions=structure.cart_coords,
+            numbers=structure.atomic_numbers,
+            cell=structure.lattice.matrix,  # 3 unit cell vectors
             pbc=True,
         )
-        for mol in structures
+        for structure in structures
     ]
+
     chunk_size = FLAGS.chunk
     args_list = [
         (
@@ -174,30 +191,30 @@ def main(unused_argv) -> None:
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
     tqdm.contrib.concurrent.process_map(_generate_all_fragments_wrapper, args_list, chunksize=128)
 
-    # save structures and ase atoms of the structure that generated each fragment
-    mp_ids_per_frag = []
-    struct_per_frag = []
-    ase_per_frag = []
-    output_dir = FLAGS.config.root_dir
-    for start in range(0, len(structures), chunk_size):
-        end = start + chunk_size
-        with open(os.path.join(output_dir, f"mol_indices_{start:06d}_{end:06d}.pkl"), "rb") as f:
-            indices = pickle.load(f)
-        for i in indices:
-            mp_ids_per_frag.append(structures[start + i].material_id)
-            struct_per_frag.append(structures[start + i].structure)
-            ase_per_frag.append(ase.Atoms(
-                positions = struct_per_frag[-1].cart_coords,
-                numbers = struct_per_frag[-1].atomic_numbers,
-                cell = struct_per_frag[-1].lattice.matrix,
-                pbc = True
-            ))
-    with open(os.path.join(output_dir, "mp_ids_per_frag.pkl"), "wb") as f:
-        pickle.dump(mp_ids_per_frag, f)
-    with open(os.path.join(output_dir, "structures_per_frag.pkl"), "wb") as f:
-        pickle.dump(struct_per_frag, f)
-    with open(os.path.join(output_dir, "ase_atoms_per_frag.pkl"), "wb") as f:
-        pickle.dump(ase_per_frag, f)
+    # # save structures and ase atoms of the structure that generated each fragment
+    # mp_ids_per_frag = []
+    # struct_per_frag = []
+    # ase_per_frag = []
+    # output_dir = FLAGS.config.root_dir
+    # for start in range(0, len(structures), chunk_size):
+    #     end = start + chunk_size
+    #     with open(os.path.join(output_dir, f"mol_indices_{start:06d}_{end:06d}.pkl"), "rb") as f:
+    #         indices = pickle.load(f)
+    #     for i in indices:
+    #         mp_ids_per_frag.append(structures[start + i].material_id)
+    #         struct_per_frag.append(structures[start + i].structure)
+    #         ase_per_frag.append(ase.Atoms(
+    #             positions = struct_per_frag[-1].cart_coords,
+    #             numbers = struct_per_frag[-1].atomic_numbers,
+    #             cell = ase.cell.Cell(struct_per_frag[-1].lattice.matrix).cellpar(),
+    #             pbc = True
+    #         ))
+    # with open(os.path.join(output_dir, "mp_ids_per_frag.pkl"), "wb") as f:
+    #     pickle.dump(mp_ids_per_frag, f)
+    # with open(os.path.join(output_dir, "structures_per_frag.pkl"), "wb") as f:
+    #     pickle.dump(struct_per_frag, f)
+    # with open(os.path.join(output_dir, "ase_atoms_per_frag.pkl"), "wb") as f:
+    #     pickle.dump(ase_per_frag, f)
 
 if __name__ == "__main__":
     config_flags.DEFINE_config_file(
