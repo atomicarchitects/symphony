@@ -1,7 +1,7 @@
 from typing import Iterator
 
 import itertools
-import jax
+import jax.random
 import jraph
 import numpy as np
 import chex
@@ -21,6 +21,7 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
+    periodic: bool = False
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -50,6 +51,14 @@ def generate_fragments(
         graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
         axis=1,
     )  # [n_edge]
+    if periodic:
+        cell = graph.globals.cell[0]
+        for d in itertools.product(range(-1, 2), repeat=3):
+            dist = np.minimum(dist, np.linalg.norm(
+                graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + np.array(d) @ cell,
+                axis=1,
+            ))
+        assert dist.min() > 1e-5, FragmentError('self edges')
 
     # make fragments
     try:
@@ -63,6 +72,7 @@ def generate_fragments(
             mode,
             heavy_first,
             beta_com,
+            periodic=periodic
         )
         yield frag
 
@@ -77,6 +87,7 @@ def generate_fragments(
                 max_radius,
                 mode,
                 heavy_first,
+                periodic=periodic
             )
             yield frag
     except ValueError:
@@ -86,7 +97,7 @@ def generate_fragments(
     else:
         assert len(visited_nodes) == n
 
-        yield _make_last_fragment(graph, n_species)
+        yield _make_last_fragment(graph, n_species, periodic)
 
 
 def generate_silica_fragments(
@@ -96,7 +107,7 @@ def generate_silica_fragments(
     nn_tolerance,
     max_radius,
     mode,
-    heavy_first=False
+    heavy_first=False,
 ):
     '''Removes a SiO4 tetrahedron from a silica-based structure and generates fragments from the result.'''
     n_species = len(atomic_numbers)
@@ -113,52 +124,52 @@ def generate_silica_fragments(
             axis=1,
         ))
     assert dist.min() > 1e-5, FragmentError('self edges')
-    for i in range(n_nodes):
-        if graph.nodes.species[i] == 0:
+
+    si_rng, rng = jax.random.split(rng)
+    i = jax.random.choice(si_rng, np.argwhere(graph.nodes.species == 1).squeeze(-1))
+    # find the closest O to this Si atom
+    min_dist = 2.0
+    ndx_exclude = [i]
+    for j in range(n_nodes):
+        if graph.nodes.species[j] == 1:
             continue
-        # find the closest O to this Si atom
-        min_dist = 2.0
-        ndx_exclude = [i]
-        for j in range(n_nodes):
-            if graph.nodes.species[j] == 1:
-                continue
-            if np.linalg.norm(graph.nodes.positions[j] - graph.nodes.positions[i], axis=-1) < min_dist:
+        if np.linalg.norm(graph.nodes.positions[j] - graph.nodes.positions[i], axis=-1) < min_dist:
+            ndx_exclude.append(j)
+            continue
+        for d in itertools.product(range(-1, 2), repeat=3):
+            if np.linalg.norm(graph.nodes.positions[j] - graph.nodes.positions[i] + np.array(d) @ cell, axis=-1) < min_dist:
                 ndx_exclude.append(j)
                 continue
-            for d in itertools.product(range(-1, 2), repeat=3):
-                if np.linalg.norm(graph.nodes.positions[j] - graph.nodes.positions[i] + np.array(d) @ cell, axis=-1) < min_dist:
-                    ndx_exclude.append(j)
-                    continue
-        ndx_exclude = np.asarray(ndx_exclude)
+    ndx_exclude = np.asarray(ndx_exclude)
 
-        # use middle- and last-fragment generators; everything not in ndx_exclude can be "visited"
-        visited_nodes = np.asarray(range(n_nodes))[~np.isin(np.asarray(range(n_nodes)), ndx_exclude)]
+    # use middle- and last-fragment generators; everything not in ndx_exclude can be "visited"
+    visited_nodes = np.asarray(range(n_nodes))[~np.isin(np.asarray(range(n_nodes)), ndx_exclude)]
 
-        # make fragments
-        try:
-            for _ in range(len(ndx_exclude)):
-                rng, visited_nodes, frag = _make_middle_fragment(
-                    rng,
-                    visited_nodes,
-                    graph,
-                    dist,
-                    n_species,
-                    nn_tolerance,
-                    max_radius,
-                    mode,
-                    periodic=True,
-                    heavy_first=heavy_first
-                )
-                yield frag
-        except ValueError:
-            pass
-        except FragmentError as e:
-            print("Fragment error", e)
-            pass
-        else:
-            assert len(visited_nodes) == n_nodes
+    # make fragments
+    try:
+        for _ in range(len(ndx_exclude)):
+            rng, visited_nodes, frag = _make_middle_fragment(
+                rng,
+                visited_nodes,
+                graph,
+                dist,
+                n_species,
+                nn_tolerance,
+                max_radius,
+                mode,
+                periodic=True,
+                heavy_first=heavy_first
+            )
+            yield frag
+    except ValueError:
+        pass
+    except FragmentError as e:
+        print("Fragment error", e)
+        pass
+    else:
+        assert len(visited_nodes) == n_nodes
 
-        yield _make_last_fragment(graph, n_species, periodic=True)
+    yield _make_last_fragment(graph, n_species, periodic=True)
 
 
 def _make_first_fragment(
@@ -171,6 +182,7 @@ def _make_first_fragment(
     mode,
     heavy_first=False,
     beta_com=0.0,
+    periodic=False
 ):
     # get distances from (approximate) center of mass - assume all atoms have the same mass
     com = np.average(
@@ -179,6 +191,10 @@ def _make_first_fragment(
         weights=(graph.nodes.species > 0) if heavy_first else None,
     )
     distances_com = np.linalg.norm(graph.nodes.positions - com, axis=1)
+    if periodic:
+        cell = graph.globals.cell[0]
+        for d in itertools.product(range(-1, 2), repeat=3):
+            distances_com = np.minimum(distances_com, np.linalg.norm(graph.nodes.positions + np.array(d) @ cell - com, axis=1))
     probs_com = jax.nn.softmax(-beta_com * distances_com**2)
     rng, k = jax.random.split(rng)
     if heavy_first and (graph.nodes.species != 0).sum() > 0:
@@ -219,6 +235,7 @@ def _make_first_fragment(
         target_species_probability=species_probability,
         target_node=target,
         stop=False,
+        periodic=periodic
     )
 
     visited = np.array([first_node, target])
