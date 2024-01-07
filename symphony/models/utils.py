@@ -225,14 +225,14 @@ def compute_grid_of_joint_distribution(
 
     # Check that shapes are correct.
     num_radii = radial_weights.shape[0]
-    assert angular_dist.shape == (
+    assert angular_dist.shape[-2:] == (
         res_beta,
         res_alpha,
     )
 
     # Mix in the radius weights to get a distribution over all spheres.
     dist = radial_weights * angular_dist[None, :, :]
-    assert dist.shape == (num_radii, res_beta, res_alpha)
+    assert dist.shape[-3:] == (num_radii, res_beta, res_alpha)
     return dist
 
 

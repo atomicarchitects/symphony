@@ -167,6 +167,7 @@ graphmlp
 graphnet
 qm9_data
 qm9_data_tf
+qm9_fragments_fixed
 data_tf2
 *.pb
 *.metadata

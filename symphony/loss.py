@@ -232,6 +232,11 @@ def generation_loss(
         true_dist = jax.vmap(compute_joint_distribution_fn)(
             true_radial_weights, log_true_angular_coeffs
         )
+        true_dist.grid_values = true_dist.grid_values[:, 0, :, :]
+        mean_true_angular_dist = e3nn.SphericalSignal(
+            grid_values=true_dist.grid_values.mean(axis=[0, 1]),
+            quadrature=true_dist.quadrature
+        )
         log_predicted_dist = position_logits
 
         assert true_radial_weights.shape == (
@@ -250,7 +255,7 @@ def generation_loss(
         )
 
         loss_position = jax.vmap(kl_divergence_on_spheres)(
-            true_dist, log_predicted_dist
+            mean_true_angular_dist, log_predicted_dist
         )
         assert loss_position.shape == (num_graphs,)
 
@@ -275,6 +280,11 @@ def generation_loss(
         log_true_dist_coeffs = jax.vmap(
             models.compute_coefficients_of_logits_of_joint_distribution
         )(true_radial_logits, log_true_angular_coeffs)
+        log_true_dist_coeffs.grid_values = log_true_dist_coeffs.grid_values[:, 0, :, :]
+        mean_true_angular_coeffs = e3nn.SphericalSignal(
+            grid_values=log_true_dist_coeffs.grid_values.mean(axis=0),
+            quadrature=log_true_dist_coeffs.quadrature
+        )
         # We only support num_channels = 1.
         log_predicted_dist_coeffs = log_position_coeffs.reshape(
             log_true_dist_coeffs.shape
@@ -299,7 +309,7 @@ def generation_loss(
         )
 
         loss_position = jax.vmap(l2_loss_on_spheres)(
-            log_true_dist_coeffs, log_predicted_dist_coeffs
+            mean_true_angular_coeffs, log_predicted_dist_coeffs
         )
         assert loss_position.shape == (num_graphs,)
 
@@ -336,19 +346,28 @@ def generation_loss(
             compute_joint_distribution_fn,
         )(
             jnp.ones(
-                (num_graphs, 1),
+                (log_true_angular_coeffs.shape[0], log_true_angular_coeffs.shape[1], 1),
+                # (num_graphs, 1),
             ),
             log_true_angular_coeffs,
         )
+        true_angular_dist.grid_values = true_angular_dist.grid_values[:, 0, :, :]
+        mean_true_angular_dist = e3nn.SphericalSignal(
+            grid_values=true_angular_dist.grid_values.mean(axis=1),
+            quadrature=true_angular_dist.quadrature
+        )
+        mean_true_angular_dist.grid_values = mean_true_angular_dist.grid_values.reshape(num_graphs, -1, res_beta, res_alpha)
 
         assert true_radial_weights.shape == (
             num_graphs,
             num_radii,
         ), true_radial_weights.shape
-        assert log_true_angular_coeffs.shape == (
-            num_graphs,
-            log_true_angular_coeffs.irreps.dim,
-        )
+        # assert mean_true_angular_dist.shape == (
+        #     num_graphs,
+        #     1,
+        #     res_beta,
+        #     res_alpha,
+        # ), mean_true_angular_dist.shape
 
         predicted_radial_logits = preds.globals.radial_logits
         if predicted_radial_logits is None:
@@ -401,7 +420,7 @@ def generation_loss(
         ), predicted_angular_logits.shape
 
         loss_angular = jax.vmap(kl_divergence_on_spheres)(
-            true_angular_dist, predicted_angular_logits
+            mean_true_angular_dist, predicted_angular_logits
         )
 
         loss_position = loss_angular + loss_radial

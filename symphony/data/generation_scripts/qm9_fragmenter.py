@@ -64,7 +64,7 @@ def generate_all_fragments(
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
-        "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
+        "target_positions": tf.TensorSpec(shape=(1, FLAGS.max_n_neighbors, 3), dtype=tf.float32),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -82,13 +82,14 @@ def generate_all_fragments(
                 mode,
                 heavy_first,
                 beta_com,
+                max_n_neighbors=FLAGS.max_n_neighbors,
             )
             frags = list(frags)
 
             skip = False
             for frag in frags:
-                d = np.linalg.norm(frag.globals.target_positions)
-                if d > max_radius:
+                d = np.linalg.norm(frag.globals.target_positions, axis=-1)
+                if np.sum(d > max_radius) > 0:
                     logging.info(
                         f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
                     )
@@ -179,5 +180,6 @@ if __name__ == "__main__":
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
+    flags.DEFINE_integer("max_n_neighbors", 480, "Max num of neighbors per focus atom.")
 
     app.run(main)

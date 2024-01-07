@@ -15,6 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
+    config.max_n_neighbors = 8
 
     # Optimizer.
     config.optimizer = "adam"
