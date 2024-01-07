@@ -231,9 +231,10 @@ def compute_grid_of_joint_distribution(
     )
 
     # Mix in the radius weights to get a distribution over all spheres.
-    dist = radial_weights * angular_dist[None, :, :]
+    dist = angular_dist
+    dist.grid_values = jnp.einsum("r, ...ba -> ...rba", radial_weights, angular_dist.grid_values)
     assert dist.shape[-3:] == (num_radii, res_beta, res_alpha)
-    return dist
+    return dist  # [..., num_radii, res_beta, res_alpha]
 
 
 def compute_coefficients_of_logits_of_joint_distribution(

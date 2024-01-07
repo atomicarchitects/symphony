@@ -231,10 +231,10 @@ def generation_loss(
         )
         true_dist = jax.vmap(compute_joint_distribution_fn)(
             true_radial_weights, log_true_angular_coeffs
-        )
-        true_dist.grid_values = true_dist.grid_values[:, 0, :, :]
+        )  # (num_graphs, max_n_neighbors, num_radii, res_beta, res_alpha)
+        true_dist.grid_values = true_dist.grid_values[:, :, 0, :, :]
         mean_true_angular_dist = e3nn.SphericalSignal(
-            grid_values=true_dist.grid_values.mean(axis=[0, 1]),
+            grid_values=true_dist.grid_values.mean(axis=1),
             quadrature=true_dist.quadrature
         )
         log_predicted_dist = position_logits
@@ -346,12 +346,12 @@ def generation_loss(
             compute_joint_distribution_fn,
         )(
             jnp.ones(
-                (log_true_angular_coeffs.shape[0], log_true_angular_coeffs.shape[1], 1),
+                (log_true_angular_coeffs.shape[0], 1,),
                 # (num_graphs, 1),
             ),
             log_true_angular_coeffs,
-        )
-        true_angular_dist.grid_values = true_angular_dist.grid_values[:, 0, :, :]
+        )  # (num_graphs, max_n_neighbors, 1, res_beta, res_alpha)
+        true_angular_dist.grid_values = true_angular_dist.grid_values[:, :, 0, :, :]
         mean_true_angular_dist = e3nn.SphericalSignal(
             grid_values=true_angular_dist.grid_values.mean(axis=1),
             quadrature=true_angular_dist.quadrature
@@ -362,12 +362,6 @@ def generation_loss(
             num_graphs,
             num_radii,
         ), true_radial_weights.shape
-        # assert mean_true_angular_dist.shape == (
-        #     num_graphs,
-        #     1,
-        #     res_beta,
-        #     res_alpha,
-        # ), mean_true_angular_dist.shape
 
         predicted_radial_logits = preds.globals.radial_logits
         if predicted_radial_logits is None:
