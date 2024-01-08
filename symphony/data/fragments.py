@@ -263,7 +263,11 @@ def _into_fragment(
     # for batching purposes
     if max_n_neighbors is not None:
         target_positions_padded = np.zeros((max_n_neighbors, 3))
-        target_positions_padded[:len(target_positions)] = target_positions
+        target_positions_padded[:target_positions.shape[0]] = target_positions
+    else:
+        target_positions_padded = target_positions
+    target_position_mask = np.zeros((target_positions_padded.shape[0],), dtype=bool)
+    target_position_mask[:target_positions.shape[0]] = True
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,
@@ -273,6 +277,7 @@ def _into_fragment(
         stop=np.array([stop], dtype=bool),  # [1]
         target_species=graph.nodes.species[target_node][None],  # [1]
         target_positions=target_positions_padded[None],  # [max_n_neighbors, 3]
+        target_position_mask=target_position_mask[None],  # [max_n_neighbors]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 

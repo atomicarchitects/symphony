@@ -506,6 +506,9 @@ def _specs_from_graphs_tuple(
             target_positions=get_tensor_spec(
                 graph.globals.target_positions, is_global=True
             ),
+            target_position_mask=get_tensor_spec(
+                graph.globals.target_position_mask, is_global=True
+            ),
             target_species=get_tensor_spec(
                 graph.globals.target_species, is_global=True
             ),
@@ -537,6 +540,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     n_edge = graph["n_edge"]
     edges = tf.ones((tf.shape(senders)[0], 1))
     target_positions = graph["target_positions"]
+    target_position_mask = graph["target_position_mask"]
     target_species = graph["target_species"]
 
     return jraph.GraphsTuple(
@@ -550,6 +554,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         senders=senders,
         globals=datatypes.FragmentsGlobals(
             target_positions=target_positions,
+            target_position_mask=target_position_mask,
             target_species=target_species,
             stop=stop,
         ),

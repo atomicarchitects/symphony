@@ -153,6 +153,40 @@ def generation_loss(
     else:
         lmax = target_position_lmax
 
+    def target_position_to_joint_distribution(
+        target_positions,  # (max_n_neighbors, 3)
+        radius_rbf_variance,
+        target_position_inverse_temperature,
+        lmax,
+        res_beta,
+        res_alpha,
+        quadrature):
+        true_radial_weights = jax.vmap(
+            lambda pos: target_position_to_radius_weights(
+                pos, radius_rbf_variance, radial_bins
+            )
+        )(target_positions)
+        log_true_angular_coeffs = jax.vmap(
+            lambda pos: target_position_to_log_angular_coeffs(
+                pos, target_position_inverse_temperature, lmax
+            )
+        )(target_positions)
+
+        assert true_radial_weights.shape[-1] == num_radii, true_radial_weights.shape
+        assert log_true_angular_coeffs.shape[-1] == log_true_angular_coeffs.irreps.dim, log_true_angular_coeffs.shape
+        assert true_radial_weights.shape[0] == log_true_angular_coeffs.shape[0]
+
+        compute_joint_distribution_fn = functools.partial(
+            models.compute_grid_of_joint_distribution,
+            res_beta=res_beta,
+            res_alpha=res_alpha,
+            quadrature=quadrature,
+        )
+        joint_dist = jax.vmap(compute_joint_distribution_fn)(
+            true_radial_weights, log_true_angular_coeffs
+        )  # (max_n_neighbors, num_radii, res_beta, res_alpha)
+        return joint_dist
+
     def focus_and_atom_type_loss() -> jnp.ndarray:
         """Computes the loss over focus and atom types for all nodes."""
         species_logits = preds.nodes.focus_and_target_species_logits
@@ -213,40 +247,30 @@ def generation_loss(
         )
 
         target_positions = graphs.globals.target_positions
-        true_radial_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radial_bins
-            )
-        )(target_positions)
-        log_true_angular_coeffs = jax.vmap(
-            lambda pos: target_position_to_log_angular_coeffs(
-                pos, target_position_inverse_temperature, lmax
-            )
-        )(target_positions)
+        target_position_mask = graphs.globals.target_position_mask
         compute_joint_distribution_fn = functools.partial(
-            models.compute_grid_of_joint_distribution,
+            target_position_to_joint_distribution,
+            radius_rbf_variance=radius_rbf_variance,
+            target_position_inverse_temperature=target_position_inverse_temperature,
+            lmax=lmax,
             res_beta=res_beta,
             res_alpha=res_alpha,
             quadrature=quadrature,
         )
         true_dist = jax.vmap(compute_joint_distribution_fn)(
-            true_radial_weights, log_true_angular_coeffs
+            target_positions
         )  # (num_graphs, max_n_neighbors, num_radii, res_beta, res_alpha)
-        true_dist.grid_values = true_dist.grid_values[:, :, 0, :, :]
-        mean_true_angular_dist = e3nn.SphericalSignal(
-            grid_values=true_dist.grid_values.mean(axis=1),
+        true_dist /= true_dist.integrate()
+        num_target_positions = jnp.sum(target_position_mask, axis=1).reshape(-1, 1, 1, 1)
+        dist_sum = jnp.sum(true_dist.grid_values * target_position_mask.reshape(num_graphs, -1, 1, 1, 1), axis=1)
+        dist_mean = dist_sum / num_target_positions
+        mean_true_dist = e3nn.SphericalSignal(
+            grid_values=dist_mean,
             quadrature=true_dist.quadrature
         )
+
         log_predicted_dist = position_logits
 
-        assert true_radial_weights.shape == (
-            num_graphs,
-            num_radii,
-        ), true_radial_weights.shape
-        assert log_true_angular_coeffs.shape == (
-            num_graphs,
-            log_true_angular_coeffs.irreps.dim,
-        )
         assert log_predicted_dist.grid_values.shape == (
             num_graphs,
             num_radii,
@@ -255,8 +279,9 @@ def generation_loss(
         )
 
         loss_position = jax.vmap(kl_divergence_on_spheres)(
-            mean_true_angular_dist, log_predicted_dist
+            mean_true_dist, log_predicted_dist
         )
+        
         assert loss_position.shape == (num_graphs,)
 
         return loss_position
@@ -266,6 +291,7 @@ def generation_loss(
 
         log_position_coeffs = preds.globals.log_position_coeffs
         target_positions = graphs.globals.target_positions
+        target_position_mask = graphs.globals.target_position_mask
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -290,7 +316,7 @@ def generation_loss(
             log_true_dist_coeffs.shape
         )
 
-        assert target_positions.shape == (num_graphs, 3)
+        assert (target_positions.shape[0], target_positions.shape[-1]) == (num_graphs, 3)
         assert log_true_dist_coeffs.shape == (
             num_graphs,
             num_radii,
@@ -326,6 +352,7 @@ def generation_loss(
         )
 
         target_positions = graphs.globals.target_positions
+        target_position_mask = graphs.globals.target_position_mask
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -352,11 +379,14 @@ def generation_loss(
             log_true_angular_coeffs,
         )  # (num_graphs, max_n_neighbors, 1, res_beta, res_alpha)
         true_angular_dist.grid_values = true_angular_dist.grid_values[:, :, 0, :, :]
+        num_target_positions = jnp.sum(target_position_mask, axis=1).reshape(-1, 1, 1, 1)
+        num_target_positions = jnp.maximum(num_target_positions, 1)  # in case there are zeros (though there shouldn't be)
+        angular_dist_sum = jnp.sum(true_angular_dist.grid_values * target_position_mask.reshape(num_graphs, -1, 1, 1), axis=1)
+        angular_dist_mean = angular_dist_sum.reshape(num_graphs, 1, res_beta, res_alpha) / num_target_positions
         mean_true_angular_dist = e3nn.SphericalSignal(
-            grid_values=true_angular_dist.grid_values.mean(axis=1),
+            grid_values=angular_dist_mean,
             quadrature=true_angular_dist.quadrature
         )
-        mean_true_angular_dist.grid_values = mean_true_angular_dist.grid_values.reshape(num_graphs, -1, res_beta, res_alpha)
 
         assert true_radial_weights.shape == (
             num_graphs,

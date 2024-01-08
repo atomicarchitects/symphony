@@ -19,7 +19,8 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Optimizer.
     config.optimizer = "adam"
-    config.learning_rate = 1e-3
+    config.learning_rate = 1e-1
+    # config.learning_rate = 1e-3
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
     config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
@@ -47,6 +48,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.target_position_inverse_temperature = 20.0
     config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
+    # config.loss_kwargs.position_loss_type = "kl_divergence"
     config.loss_kwargs.position_loss_type = "factorized_kl_divergence"
     config.loss_kwargs.radial_loss_scaling_factor = 1.0
     config.loss_kwargs.mask_atom_types = False

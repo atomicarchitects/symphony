@@ -65,6 +65,7 @@ def generate_all_fragments(
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
         "target_positions": tf.TensorSpec(shape=(1, FLAGS.max_n_neighbors, 3), dtype=tf.float32),
+        "target_position_mask": tf.TensorSpec(shape=(1, FLAGS.max_n_neighbors), dtype=tf.bool),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -114,6 +115,9 @@ def generate_all_fragments(
                     "stop": frag.globals.stop.astype(np.bool_),
                     "target_positions": frag.globals.target_positions.astype(
                         np.float32
+                    ),
+                    "target_position_mask": frag.globals.target_position_mask.astype(
+                        np.bool
                     ),
                     "target_species": frag.globals.target_species.astype(np.int32),
                     "n_node": frag.n_node.astype(np.int32),
@@ -173,13 +177,13 @@ if __name__ == "__main__":
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_bool("check_molecule_sanity", False, "Whether to check molecule sanity. Note that this is incompatible with use_edm_splits=True.")
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
-    flags.DEFINE_string("output_dir", "qm9_fragments_fixed/nn_edm/", "Output directory.")
+    flags.DEFINE_string("output_dir", "/radish/qm9_fragments_fixed_mad/nn_edm/", "Output directory.")
     flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
-    flags.DEFINE_integer("max_n_neighbors", 480, "Max num of neighbors per focus atom.")
+    flags.DEFINE_integer("max_n_neighbors", 20, "Max num of neighbors per focus atom.")
 
     app.run(main)
