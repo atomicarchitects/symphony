@@ -260,7 +260,7 @@ def generation_loss(
         true_dist = jax.vmap(compute_joint_distribution_fn)(
             target_positions
         )  # (num_graphs, max_n_neighbors, num_radii, res_beta, res_alpha)
-        true_dist /= true_dist.integrate()
+        # true_dist /= true_dist.integrate().array.sum()
         num_target_positions = jnp.sum(target_position_mask, axis=1).reshape(-1, 1, 1, 1)
         dist_sum = jnp.sum(true_dist.grid_values * target_position_mask.reshape(num_graphs, -1, 1, 1, 1), axis=1)
         dist_mean = dist_sum / num_target_positions
