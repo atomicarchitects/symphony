@@ -65,7 +65,7 @@ def generate_all_fragments(
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
         "target_positions": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph, 3), dtype=tf.float32),
-        "target_position_mask": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph), dtype=tf.bool),
+        "target_position_mask": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph), dtype=tf.float32),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -117,7 +117,7 @@ def generate_all_fragments(
                         np.float32
                     ),
                     "target_position_mask": frag.globals.target_position_mask.astype(
-                        np.bool
+                        np.float32
                     ),
                     "target_species": frag.globals.target_species.astype(np.int32),
                     "n_node": frag.n_node.astype(np.int32),

@@ -21,7 +21,7 @@ def target_position_to_radius_weights(
     target_position: jnp.ndarray, radius_rbf_variance: float, radii: jnp.ndarray
 ) -> jnp.ndarray:
     """Returns the radial distribution for a target position."""
-    radial_logits = -((radii - jnp.linalg.norm(target_position)) ** 2)
+    radial_logits = -((radii.reshape(-1, 1) - jnp.tile(jnp.linalg.norm(target_position, axis=-1), [radii.shape[0], 1])) ** 2)
     radial_logits /= 2 * radius_rbf_variance
     radial_weights = jax.nn.softmax(radial_logits, axis=-1)
     return radial_weights
@@ -353,6 +353,7 @@ def generation_loss(
 
         target_positions = graphs.globals.target_positions
         target_position_mask = graphs.globals.target_position_mask
+        target_position_mask_reshaped = target_position_mask.reshape(num_graphs, -1, 1, 1)
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -373,25 +374,28 @@ def generation_loss(
             compute_joint_distribution_fn,
         )(
             jnp.ones(
-                (log_true_angular_coeffs.shape[0], 1,),
-                # (num_graphs, 1),
+                (num_graphs, 1,),
             ),
             log_true_angular_coeffs,
         )  # (num_graphs, max_targets_per_graph, 1, res_beta, res_alpha)
         true_angular_dist.grid_values = true_angular_dist.grid_values[:, :, 0, :, :]
-        num_target_positions = jnp.sum(target_position_mask, axis=1).reshape(-1, 1, 1, 1)
-        num_target_positions = jnp.maximum(num_target_positions, 1)  # in case there are zeros (though there shouldn't be)
-        angular_dist_sum = jnp.sum(true_angular_dist.grid_values * target_position_mask.reshape(num_graphs, -1, 1, 1), axis=1)
-        angular_dist_mean = angular_dist_sum.reshape(num_graphs, 1, res_beta, res_alpha) / num_target_positions
+        num_target_positions = jnp.sum(target_position_mask_reshaped, axis=1, keepdims=True)
+        num_target_positions = jnp.maximum(num_target_positions, 1.0)
+        angular_dist_sum = jnp.sum(true_angular_dist.grid_values * target_position_mask_reshaped, axis=1)[:, None, :, :]
+        angular_dist_mean = angular_dist_sum / num_target_positions
         mean_true_angular_dist = e3nn.SphericalSignal(
             grid_values=angular_dist_mean,
             quadrature=true_angular_dist.quadrature
         )
 
-        assert true_radial_weights.shape == (
+        sum_radial_weights = jnp.sum(true_radial_weights.reshape(num_graphs, -1, num_radii) * target_position_mask.reshape(num_graphs, -1, 1), axis=1)
+        mean_radial_weights = sum_radial_weights / num_target_positions.reshape(num_graphs, 1)
+        radial_normalization = mean_radial_weights.sum(axis=-1, keepdims=True)
+        mean_radial_weights /= jnp.where(radial_normalization < 1e-6, 1.0, radial_normalization)
+        assert mean_radial_weights.shape == (
             num_graphs,
             num_radii,
-        ), true_radial_weights.shape
+        ), mean_radial_weights.shape
 
         predicted_radial_logits = preds.globals.radial_logits
         if predicted_radial_logits is None:
@@ -405,19 +409,16 @@ def generation_loss(
             )(position_probs)
             predicted_radial_logits = models.safe_log(predicted_radial_dist)
 
-        assert predicted_radial_logits.shape == (
-            num_graphs,
-            num_radii,
-        )
+        assert predicted_radial_logits.shape == mean_radial_weights.shape, predicted_radial_logits.shape
 
         if position_loss_type == "factorized_kl_divergence":
             loss_radial = jax.vmap(kl_divergence_for_radii)(
-                true_radial_weights,
+                mean_radial_weights,
                 predicted_radial_logits,
             )
         elif position_loss_type == "factorized_earth_mover":
             loss_radial = jax.vmap(earthmover_distance_for_radii, in_axes=(0, 0, None))(
-                true_radial_weights, predicted_radial_logits, radial_bins
+                mean_radial_weights, predicted_radial_logits, radial_bins
             )
         loss_radial = radial_loss_scaling_factor * loss_radial
 

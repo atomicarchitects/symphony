@@ -264,10 +264,11 @@ def _into_fragment(
     max_targets_per_graph = 1
 ):
     pos = graph.nodes.positions
+    assert target_positions.shape[0] <= max_targets_per_graph
     # for batching purposes
     target_positions_padded = np.zeros((max_targets_per_graph, 3))
     target_positions_padded[:target_positions.shape[0]] = target_positions
-    target_position_mask = np.zeros((target_positions_padded.shape[0],), dtype=bool)
+    target_position_mask = np.zeros((target_positions_padded.shape[0],), dtype=np.float32)
     target_position_mask[:target_positions.shape[0]] = True
     nodes = datatypes.FragmentsNodes(
         positions=pos,
