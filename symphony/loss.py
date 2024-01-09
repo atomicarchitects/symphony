@@ -154,7 +154,7 @@ def generation_loss(
         lmax = target_position_lmax
 
     def target_position_to_joint_distribution(
-        target_positions,  # (max_n_neighbors, 3)
+        target_positions,  # (max_targets_per_graph, 3)
         radius_rbf_variance,
         target_position_inverse_temperature,
         lmax,
@@ -184,7 +184,7 @@ def generation_loss(
         )
         joint_dist = jax.vmap(compute_joint_distribution_fn)(
             true_radial_weights, log_true_angular_coeffs
-        )  # (max_n_neighbors, num_radii, res_beta, res_alpha)
+        )  # (max_targets_per_graph, num_radii, res_beta, res_alpha)
         return joint_dist
 
     def focus_and_atom_type_loss() -> jnp.ndarray:
@@ -259,7 +259,7 @@ def generation_loss(
         )
         true_dist = jax.vmap(compute_joint_distribution_fn)(
             target_positions
-        )  # (num_graphs, max_n_neighbors, num_radii, res_beta, res_alpha)
+        )  # (num_graphs, max_targets_per_graph, num_radii, res_beta, res_alpha)
         # true_dist /= true_dist.integrate().array.sum()
         num_target_positions = jnp.sum(target_position_mask, axis=1).reshape(-1, 1, 1, 1)
         dist_sum = jnp.sum(true_dist.grid_values * target_position_mask.reshape(num_graphs, -1, 1, 1, 1), axis=1)
@@ -377,7 +377,7 @@ def generation_loss(
                 # (num_graphs, 1),
             ),
             log_true_angular_coeffs,
-        )  # (num_graphs, max_n_neighbors, 1, res_beta, res_alpha)
+        )  # (num_graphs, max_targets_per_graph, 1, res_beta, res_alpha)
         true_angular_dist.grid_values = true_angular_dist.grid_values[:, :, 0, :, :]
         num_target_positions = jnp.sum(target_position_mask, axis=1).reshape(-1, 1, 1, 1)
         num_target_positions = jnp.maximum(num_target_positions, 1)  # in case there are zeros (though there shouldn't be)

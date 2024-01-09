@@ -15,11 +15,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
-    config.max_n_neighbors = 8
+    config.max_targets_per_graph = 2
 
     # Optimizer.
     config.optimizer = "adam"
-    config.learning_rate = 1e-1
+    config.learning_rate = 1e-2
     # config.learning_rate = 1e-3
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()

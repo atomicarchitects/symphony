@@ -64,8 +64,8 @@ def generate_all_fragments(
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
-        "target_positions": tf.TensorSpec(shape=(1, FLAGS.max_n_neighbors, 3), dtype=tf.float32),
-        "target_position_mask": tf.TensorSpec(shape=(1, FLAGS.max_n_neighbors), dtype=tf.bool),
+        "target_positions": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph, 3), dtype=tf.float32),
+        "target_position_mask": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph), dtype=tf.bool),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -83,7 +83,7 @@ def generate_all_fragments(
                 mode,
                 heavy_first,
                 beta_com,
-                max_n_neighbors=FLAGS.max_n_neighbors,
+                max_targets_per_graph=FLAGS.max_targets_per_graph,
             )
             frags = list(frags)
 
@@ -184,6 +184,6 @@ if __name__ == "__main__":
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
-    flags.DEFINE_integer("max_n_neighbors", 20, "Max num of neighbors per focus atom.")
+    flags.DEFINE_integer("max_targets_per_graph", 20, "Max num of targets per focus atom.")
 
     app.run(main)

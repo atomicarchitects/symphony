@@ -168,7 +168,8 @@ def position_logits_to_position_distribution(
 
     position_probs = position_logits.apply(lambda logit: jnp.exp(logit - max_logit))
 
-    position_probs.grid_values /= position_probs.integrate().array.sum()
+    normalizing_factor = position_probs.integrate().array.sum()
+    position_probs.grid_values /= normalizing_factor
     return position_probs
 
 

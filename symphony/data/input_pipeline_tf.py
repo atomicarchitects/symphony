@@ -275,7 +275,7 @@ def pieces_to_unbatched_datasets(
             nn_tolerance=config.nn_tolerance,
             max_radius=config.nn_cutoff,
             mode=config.fragment_logic,
-            max_n_neighbors=config.max_n_neighbors
+            max_targets_per_graph=config.max_targets_per_graph
         )
 
     # Convert to molecules, and then jraph.GraphsTuples.
