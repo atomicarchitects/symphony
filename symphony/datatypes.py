@@ -12,7 +12,7 @@ class NodesInfo(NamedTuple):
 
 class FragmentsGlobals(NamedTuple):
     target_positions: jnp.ndarray  # [n_graph, max_targets_per_graph, 3] float array (only for training)
-    target_position_mask: jnp.ndarray # [n_graph, max_targets_per_graph] bool array (only for training)
+    target_position_mask: jnp.ndarray  # [n_graph, max_targets_per_graph] bool array (only for training)
     target_species: jnp.ndarray  # [n_graph] int array (only for training)
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
 

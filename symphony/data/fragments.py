@@ -18,7 +18,7 @@ def generate_fragments(
     mode: str = "nn",
     heavy_first: bool = False,
     beta_com: float = 0.0,
-    max_targets_per_graph: int = 1
+    max_targets_per_graph: int = 1,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -97,7 +97,7 @@ def _make_first_fragment(
     mode,
     heavy_first=False,
     beta_com=0.0,
-    max_targets_per_graph: int = 1
+    max_targets_per_graph: int = 1,
 ):
     # get distances from (approximate) center of mass - assume all atoms have the same mass
     com = np.average(
@@ -136,14 +136,19 @@ def _make_first_fragment(
     )
 
     # pick a random target
-    rng, k = jax.random.split(rng)
-    target = jax.random.choice(k, targets)
+    rng, target_rng = jax.random.split(rng)
+    target = jax.random.choice(target_rng, targets)
     # get all potential positions for that target, based on species
     target_species = graph.nodes.species[target]
-    target_species_ndx = targets[graph.nodes.species[targets] == target_species]
-    target_positions = graph.nodes.positions[target_species_ndx] - graph.nodes.positions[first_node]
+    targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
+    target_positions = (
+        graph.nodes.positions[targets_of_same_species]
+        - graph.nodes.positions[first_node]
+    )
     rng, k = jax.random.split(rng)
-    target_positions = jax.random.permutation(k, target_positions)[:max_targets_per_graph]
+    target_positions = jax.random.permutation(k, target_positions)[
+        :max_targets_per_graph
+    ]
 
     sample = _into_fragment(
         graph,
@@ -153,7 +158,7 @@ def _make_first_fragment(
         target_node=target,
         target_positions=target_positions,
         stop=False,
-        max_targets_per_graph=max_targets_per_graph
+        max_targets_per_graph=max_targets_per_graph,
     )
 
     visited = np.array([first_node, target])
@@ -170,7 +175,7 @@ def _make_middle_fragment(
     max_radius,
     mode,
     heavy_first=False,
-    max_targets_per_graph: int = 1
+    max_targets_per_graph: int = 1,
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
@@ -218,10 +223,15 @@ def _make_middle_fragment(
     target_node = int(target_node)
     # get all potential positions for that target, based on species
     target_species = graph.nodes.species[target_node]
-    target_species_ndx = targets[graph.nodes.species[targets] == target_species]
-    target_positions = graph.nodes.positions[target_species_ndx] - graph.nodes.positions[focus_node]
+    targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
+    target_positions = (
+        graph.nodes.positions[targets_of_same_species]
+        - graph.nodes.positions[focus_node]
+    )
     rng, k = jax.random.split(rng)
-    target_positions = jax.random.permutation(k, target_positions)[:max_targets_per_graph]
+    target_positions = jax.random.permutation(k, target_positions)[
+        :max_targets_per_graph
+    ]
 
     new_visited = np.concatenate([visited, np.array([target_node])])
 
@@ -233,7 +243,7 @@ def _make_middle_fragment(
         target_node,
         target_positions,
         stop=False,
-        max_targets_per_graph=max_targets_per_graph
+        max_targets_per_graph=max_targets_per_graph,
     )
 
     return rng, new_visited, sample
@@ -249,7 +259,7 @@ def _make_last_fragment(graph, n_species, max_targets_per_graph: int = 1):
         target_node=0,
         target_positions=np.zeros((1, 3)),
         stop=True,
-        max_targets_per_graph=max_targets_per_graph
+        max_targets_per_graph=max_targets_per_graph,
     )
 
 
@@ -261,15 +271,17 @@ def _into_fragment(
     target_node,
     target_positions,
     stop,
-    max_targets_per_graph = 1
+    max_targets_per_graph,
 ):
     pos = graph.nodes.positions
     assert target_positions.shape[0] <= max_targets_per_graph
     # for batching purposes
     target_positions_padded = np.zeros((max_targets_per_graph, 3))
-    target_positions_padded[:target_positions.shape[0]] = target_positions
-    target_position_mask = np.zeros((target_positions_padded.shape[0],), dtype=np.float32)
-    target_position_mask[:target_positions.shape[0]] = True
+    target_positions_padded[: target_positions.shape[0]] = target_positions
+    target_position_mask = np.zeros(
+        (target_positions_padded.shape[0],), dtype=np.float32
+    )
+    target_position_mask[: target_positions.shape[0]] = True
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=graph.nodes.species,

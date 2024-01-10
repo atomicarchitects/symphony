@@ -31,6 +31,7 @@ def generate_all_fragments(
     nn_tolerance: float,
     nn_cutoff: float,
     max_radius: float,
+    max_targets_per_graph: int,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
     logging.info(f"Saving to {output_dir}")
@@ -64,8 +65,12 @@ def generate_all_fragments(
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
-        "target_positions": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph, 3), dtype=tf.float32),
-        "target_position_mask": tf.TensorSpec(shape=(1, FLAGS.max_targets_per_graph), dtype=tf.float32),
+        "target_positions": tf.TensorSpec(
+            shape=(1, max_targets_per_graph, 3), dtype=tf.float32
+        ),
+        "target_position_mask": tf.TensorSpec(
+            shape=(1, max_targets_per_graph), dtype=tf.float32
+        ),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -83,7 +88,7 @@ def generate_all_fragments(
                 mode,
                 heavy_first,
                 beta_com,
-                max_targets_per_graph=FLAGS.max_targets_per_graph,
+                max_targets_per_graph,
             )
             frags = list(frags)
 
@@ -142,7 +147,11 @@ def main(unused_argv) -> None:
     logging.set_stderrthreshold(logging.INFO)
 
     # Create a list of arguments to pass to generate_all_fragments
-    molecules = qm9.load_qm9("qm9_data", use_edm_splits=FLAGS.use_edm_splits, check_molecule_sanity=FLAGS.check_molecule_sanity)
+    molecules = qm9.load_qm9(
+        "qm9_data",
+        use_edm_splits=FLAGS.use_edm_splits,
+        check_molecule_sanity=FLAGS.check_molecule_sanity,
+    )
     chunk_size = FLAGS.chunk
     args_list = [
         (
@@ -160,13 +169,16 @@ def main(unused_argv) -> None:
             FLAGS.nn_tolerance,
             FLAGS.nn_cutoff,
             FLAGS.max_radius,
+            FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
         for start in range(0, len(molecules), chunk_size)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
-    tqdm.contrib.concurrent.process_map(_generate_all_fragments_wrapper, args_list, chunksize=128)
+    tqdm.contrib.concurrent.process_map(
+        _generate_all_fragments_wrapper, args_list, chunksize=128
+    )
 
 
 if __name__ == "__main__":
@@ -175,15 +187,23 @@ if __name__ == "__main__":
     flags.DEFINE_integer("chunk", 1000, "Number of molecules per fragment file.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
-    flags.DEFINE_bool("check_molecule_sanity", False, "Whether to check molecule sanity. Note that this is incompatible with use_edm_splits=True.")
+    flags.DEFINE_bool(
+        "check_molecule_sanity",
+        False,
+        "Whether to check molecule sanity. Note that this is incompatible with use_edm_splits=True.",
+    )
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
-    flags.DEFINE_string("output_dir", "/radish/qm9_fragments_fixed_mad/nn_edm/", "Output directory.")
+    flags.DEFINE_string(
+        "output_dir", "/radish/qm9_fragments_fixed_mad/nn_edm/", "Output directory."
+    )
     flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
-    flags.DEFINE_integer("max_targets_per_graph", 20, "Max num of targets per focus atom.")
+    flags.DEFINE_integer(
+        "max_targets_per_graph", 20, "Max num of targets per focus atom."
+    )
 
     app.run(main)

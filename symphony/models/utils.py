@@ -234,8 +234,10 @@ def compute_grid_of_joint_distribution(
 
     # Mix in the radius weights to get a distribution over all spheres.
     dist = e3nn.SphericalSignal(
-        grid_values = jnp.einsum("r, ba -> rba", radial_weights, angular_dist.grid_values),
-        quadrature = angular_dist.quadrature,
+        grid_values=jnp.einsum(
+            "r, ba -> rba", radial_weights, angular_dist.grid_values
+        ),
+        quadrature=angular_dist.quadrature,
     )
     assert dist.shape == (num_radii, res_beta, res_alpha)
     return dist  # [num_radii, res_beta, res_alpha]
