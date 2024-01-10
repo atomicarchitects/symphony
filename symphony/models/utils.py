@@ -202,7 +202,8 @@ def compute_grid_of_joint_distribution(
     res_alpha: int,
     quadrature: str,
 ) -> e3nn.SphericalSignal:
-    """Combines radial weights and angular coefficients to get a distribution on the spheres."""
+    """Combines radial weights and angular coefficients to get a distribution on the spheres.
+    Should theoretically only be used for distributions over a single position."""
     # Convert coefficients to a distribution on the sphere.
     log_angular_dist = e3nn.to_s2grid(
         log_angular_coeffs,
@@ -226,16 +227,18 @@ def compute_grid_of_joint_distribution(
 
     # Check that shapes are correct.
     num_radii = radial_weights.shape[0]
-    assert angular_dist.shape[-2:] == (
+    assert angular_dist.shape == (
         res_beta,
         res_alpha,
-    )
+    ), angular_dist.shape
 
     # Mix in the radius weights to get a distribution over all spheres.
-    dist = angular_dist
-    dist.grid_values = jnp.einsum("r, ...ba -> ...rba", radial_weights, angular_dist.grid_values)
-    assert dist.shape[-3:] == (num_radii, res_beta, res_alpha)
-    return dist  # [..., num_radii, res_beta, res_alpha]
+    dist = e3nn.SphericalSignal(
+        grid_values = jnp.einsum("r, ba -> rba", radial_weights, angular_dist.grid_values),
+        quadrature = angular_dist.quadrature,
+    )
+    assert dist.shape == (num_radii, res_beta, res_alpha)
+    return dist  # [num_radii, res_beta, res_alpha]
 
 
 def compute_coefficients_of_logits_of_joint_distribution(

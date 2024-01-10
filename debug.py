@@ -38,7 +38,7 @@ report_every = num_steps // 50
 rng = jax.random.PRNGKey(0)
 
 
-@jax.jit
+# @jax.jit
 def train_step(
     graphs,
     state,
@@ -80,7 +80,7 @@ def train_step(
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_and_atom_type_loss, position_loss, mask),
+        (total_loss, focus_and_atom_type_loss, position_loss, _),
     ), grads = grad_fn(state.params, graphs)
 
     # Average gradients across devices.
