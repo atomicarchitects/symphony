@@ -2,20 +2,20 @@
 
 # Set experiment name
 dataset="platonic_solids"
-expname="$dataset"_pc_ablation
+expname="$dataset"_radial
 
 # Loop over hyperparameters
-for model in "e3schnet_and_nequip"
+for model in "e3schnet_and_mace"
 do
   for lfocus in 2
   do
-  for l in 1 2 3 4 5
+  for l in 1 2 3
   do
-    for pc in 1 2 3 4 5
+    for pc in 1
     do
       for c in 64
       do
-        for i in 3
+        for i in 1
 	do
            CUDA_VISIBLE_DEVICES=4 python -m symphony \
            --config=configs/"$dataset"/"$model".py --config.dataset="$dataset" \
