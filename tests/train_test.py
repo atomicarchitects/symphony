@@ -75,6 +75,7 @@ class TrainTest(parameterized.TestCase):
         dataset: str,
     ):
         """Tests that training and evaluation runs without errors."""
+        # self.skipTest("This test is too slow.")
         # Ensure NaNs and Infs are detected.
         # jax.config.update("jax_debug_nans", True)
         # jax.config.update("jax_debug_infs", True)
@@ -97,47 +98,14 @@ class TrainTest(parameterized.TestCase):
 
 
     @parameterized.product(
-        config_name=["position_updater"],
-        train_on_split_smaller_than_chunk=[True],
-        dataset=["qm9"],
-    )
-    def test_train_and_evaluate_position_updater(
-        self,
-        config_name: str,
-        train_on_split_smaller_than_chunk: bool,
-        dataset: str,
-    ):
-        """Tests that training and evaluation runs without errors."""
-        self.skipTest("Takes too long to run.")
-        # Ensure NaNs and Infs are detected.
-        jax.config.update("jax_debug_nans", True)
-        jax.config.update("jax_debug_infs", True)
-
-        # Load config for dummy dataset.
-        config = _ALL_CONFIGS[dataset][config_name]
-        config = update_dummy_config(
-            config, train_on_split_smaller_than_chunk, dataset
-        )
-        config = ml_collections.FrozenConfigDict(config)
-
-        # Create a temporary directory where metrics are written.
-        workdir = tempfile.mkdtemp()
-
-        # Training should proceed without any errors.
-        train_position_updater.train_and_evaluate(config, workdir)
-
-        # Save device memory profile.
-        # jax.profiler.save_device_memory_profile(f"profiles/{config_name}.prof")
-
-    @parameterized.product(
-        config_name=["nequip"],
+        config_name=["e3schnet_and_mace"],
         rng=[0, 1],
     )
     def test_equivariance(self, config_name: str, rng: int):
         """Tests that models are equivariant."""
-        self.skipTest("Takes too long to run.")
+        self.skipTest("This test is too slow.")
         rng = jax.random.PRNGKey(rng)
-        config = _ALL_CONFIGS["qm9"][config_name]
+        config = _ALL_CONFIGS["platonic_solids"][config_name]
         model = models.create_model(config, run_in_evaluation_mode=False)
         params = model.init(rng, self.graphs)
 
