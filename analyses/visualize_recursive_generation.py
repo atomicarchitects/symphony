@@ -26,6 +26,7 @@ def append_predictions_to_fragment(fragment: datatypes.Fragments, pred: datatype
     """Appends the predictions to a single fragment."""
     focus_index = pred.globals.focus_indices.item()
     target_relative_positions = pred.globals.position_vectors
+    target_relative_positions /= np.linalg.norm(target_relative_positions, axis=-1, keepdims=True)
     next_positions = target_relative_positions + fragment.nodes.positions[focus_index]
     next_species = pred.globals.target_species.reshape((1,))
     stop = pred.globals.stop
