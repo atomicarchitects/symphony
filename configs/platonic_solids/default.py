@@ -44,7 +44,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 45 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-3
-    config.loss_kwargs.target_position_inverse_temperature = 20.0
+    config.loss_kwargs.target_position_inverse_temperature = 200.0
     config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.position_loss_type = "kl_divergence"
