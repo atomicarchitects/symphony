@@ -8,10 +8,10 @@ from configs.platonic_solids import default
 def get_embedder_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
     config.model = "NequIP"
-    config.num_channels = 64
+    config.num_channels = 32
     config.r_max = 3.0
     config.avg_num_neighbors = 400.0  # NequIP is not properly normalized.
-    config.num_interactions = 4
+    config.num_interactions = 2
     config.max_ell = 1
     config.even_activation = "swish"
     config.odd_activation = "tanh"
