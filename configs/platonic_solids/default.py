@@ -12,14 +12,13 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.root_dir = None
     config.shuffle_datasets = True
-    config.train_pieces = (0, 1)
-    config.val_pieces = (0, 1)
-    config.test_pieces = (0, 1)
-    config.max_targets_per_graph = 3
+    config.train_pieces = (None, None)
+    config.val_pieces = (None, None)
+    config.test_pieces = (None, None)
+    config.max_targets_per_graph = 1
 
     # Optimizer.
     config.optimizer = "adam"
-    config.momentum = None
     config.learning_rate = 1e-3
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
@@ -44,8 +43,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_nodes = 15 * config.get_ref("max_n_graphs")
     config.max_n_edges = 45 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
-    config.loss_kwargs.radius_rbf_variance = 1e-5
-    config.loss_kwargs.target_position_inverse_temperature = 20.0
+    config.loss_kwargs.radius_rbf_variance = 1e-3
+    config.loss_kwargs.target_position_inverse_temperature = 200.0
     config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.position_loss_type = "kl_divergence"
@@ -72,8 +71,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.num_radii = 20
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
-    config.target_position_predictor.radial_mlp_latent_size = 128
-    config.target_position_predictor.radial_mlp_num_layers = 2
-    config.target_position_predictor.radial_mlp_activation = "swish"
-
     return config
