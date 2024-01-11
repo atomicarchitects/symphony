@@ -194,9 +194,9 @@ if __name__ == "__main__":
     )
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
     flags.DEFINE_string(
-        "output_dir", "/radish/qm9_fragments_fixed_mad/nn_edm/", "Output directory."
+        "output_dir", "/radish/qm9_fragments_fixed_mad/radius/", "Output directory."
     )
-    flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
+    flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
