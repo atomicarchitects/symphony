@@ -14,7 +14,7 @@ from absl import flags, app
 import analyses.generate_molecules as generate_molecules
 from symphony.data import input_pipeline_tf
 
-import configs.silica.allegro as allegro
+import configs.silica.e3schnet_and_nequip as config_src
 
 def main(unused_argv: Sequence[str]):
     beta_species = 1.0
@@ -23,19 +23,23 @@ def main(unused_argv: Sequence[str]):
     num_seeds_per_chunk = 1
     max_num_atoms = 200  # ?
     num_mols = 20
-    config = allegro.get_config()
+    config = config_src.get_config()
 
     mols_by_split = {"train": [], "test": []}
 
     # Root directory of the dataset.
-    filenames = sorted(os.listdir(config.root_dir))
+    file_dir = "/data/NFS/potato/songk/silica_fragments_single_tetrahedron"
+    filenames = sorted(os.listdir(file_dir))
+    # filenames = sorted(os.listdir(config.root_dir))
     filenames = [
-        os.path.join(config.root_dir, f)
+        os.path.join(file_dir, f)
+        # os.path.join(config.root_dir, f)
         for f in filenames
         if f.startswith("fragments_")
     ]
     if len(filenames) == 0:
-        raise ValueError(f"No files found in {config.root_dir}.")
+        raise ValueError(f"No files found in {file_dir}.")
+        # raise ValueError(f"No files found in {config.root_dir}.")
 
     # Partition the filenames into train, val, and test.
     def filter_by_molecule_number(

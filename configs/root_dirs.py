@@ -30,6 +30,7 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int) 
     if dataset == "silica":
         if hostname == "potato.mit.edu":
             return "/data/NFS/potato/songk/silica_fragments"
+            # return "/data/NFS/potato/songk/silica_fragments_heavy_first"
     if dataset == "silica_mini":
         if hostname == "potato.mit.edu":
             return "/home/songk/spherical-harmonic-net/silica_fragments_mini"
