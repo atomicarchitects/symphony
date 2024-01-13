@@ -237,10 +237,9 @@ def _make_first_fragment(
     # get all potential positions for that target, based on species
     target_species = graph.nodes.species[target]
     targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
-    target_positions = (
-        graph.nodes.positions[targets_of_same_species]
-        - graph.nodes.positions[first_node]
-    )
+    sender_cond = graph.senders == first_node
+    receiver_cond = np.isin(graph.receivers, targets_of_same_species)
+    target_positions = graph.edges.relative_positions[sender_cond & receiver_cond]
     rng, k = jax.random.split(rng)
     target_positions = jax.random.permutation(k, target_positions)[
         :max_targets_per_graph
@@ -318,6 +317,9 @@ def _make_middle_fragment(
     # get all potential positions for that target, based on species
     target_species = graph.nodes.species[target_node]
     targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
+    sender_cond = graph.senders == target_node
+    receiver_cond = np.isin(graph.receivers, targets_of_same_species)
+    target_positions = graph.edges.relative_positions[sender_cond & receiver_cond]
     rng, k = jax.random.split(rng)
     target_positions = jax.random.permutation(k, target_positions)[
         :max_targets_per_graph
@@ -369,7 +371,6 @@ def _into_fragment(
         target_positions = np.zeros((max_targets_per_graph, 3))
     else:
         target_positions = pos[target_nodes] - pos[focus_node]
-    relative_positions = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders]
     cell = graph.globals.cell[0]
     if periodic:
         # for periodic structures, re-center the target positions and recompute relative positions if necessary
@@ -377,12 +378,6 @@ def _into_fragment(
             shifted_target = pos[target_nodes] - pos[focus_node] + np.array(d) @ cell
             if np.linalg.norm(shifted_target) < np.linalg.norm(target_positions):
                 target_positions = shifted_target
-            shifted_rel_pos = graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + np.array(d) @ cell
-            relative_positions = np.where(
-                np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
-                shifted_rel_pos,
-                relative_positions)
-    assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5, FragmentError('self edges')
     # for batching purposes
     target_positions_padded = np.zeros((max_targets_per_graph, 3))
     target_positions_padded[:, target_positions.shape[0]] = target_positions
@@ -402,7 +397,7 @@ def _into_fragment(
         target_position_mask=target_position_mask[None],  # [max_targets_per_graph]
         cell=graph.globals.cell
     )
-    edges = datatypes.FragmentsEdges(relative_positions=relative_positions)
+    edges = datatypes.FragmentsEdges(relative_positions=graph.edges.relative_positions)
     graph = graph._replace(nodes=nodes, edges=edges, globals=globals)
 
     if stop:

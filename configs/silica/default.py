@@ -11,14 +11,13 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "silica"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
-    config.root_dir = "/data/NFS/potato/songk/silica_fragments"
-    # config.root_dir = "/data/NFS/potato/songk/silica_fragments_heavy_first"
+    config.root_dir = None
     config.train_molecules = (0, 250)
     config.val_molecules = (250, 300)
     config.test_molecules = (300, 350)
     config.shuffle_datasets = True
     config.heavy_first=False
-    # config.heavy_first=True
+    config.max_targets_per_graph = 8
 
     # Optimizer.
     config.optimizer = "adam"

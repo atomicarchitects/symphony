@@ -19,6 +19,7 @@ from symphony.data import fragments
 from symphony.data import input_pipeline, matproj
 
 import configs.silica.default as default
+from configs import root_dirs
 
 FLAGS = flags.FLAGS
 
@@ -31,6 +32,7 @@ def generate_all_fragments(
     output_dir: str,
     cutoffs: Tuple[float],
     min_n_nodes: float,
+    max_targets_per_graph: int,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
     logging.info(f"Saving to {output_dir}")
@@ -73,7 +75,12 @@ def generate_all_fragments(
         "relative_positions": tf.TensorSpec(shape=(None, 3), dtype=tf.float32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
-        "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
+        "target_positions": tf.TensorSpec(
+            shape=(1, max_targets_per_graph, 3), dtype=tf.float32
+        ),
+        "target_position_mask": tf.TensorSpec(
+            shape=(1, max_targets_per_graph), dtype=tf.float32
+        ),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         "cell": tf.TensorSpec(shape=(1, 3, 3), dtype=tf.float32),
         # n_node and n_edge
@@ -97,7 +104,8 @@ def generate_all_fragments(
                 FLAGS.max_radius,
                 "nn",
                 heavy_first=FLAGS.config.heavy_first,
-                periodic=True
+                max_targets_per_graph=max_targets_per_graph,
+                periodic=True,
             )
             frags = list(frags)
 
@@ -154,21 +162,7 @@ def main(unused_argv) -> None:
         )
         for mol in structures
     ]
-    # # temporary fix for matproj api being down
-    # structures_pkl = pickle.load(open("/data/NFS/potato/songk/silica_fragments/structures_per_frag.pkl", "rb"))
-    # structures = []
-    # for s in range(1, len(structures_pkl)):
-    #     if structures_pkl[s] != structures_pkl[s-1]:
-    #         structures.append(structures_pkl[s])
-    # molecules = [
-    #     ase.Atoms(
-    #         positions=structure.cart_coords,
-    #         numbers=structure.atomic_numbers,
-    #         cell=structure.lattice.matrix,  # 3 unit cell vectors
-    #         pbc=True,
-    #     )
-    #     for structure in structures
-    # ]
+    output_dir = root_dirs.get_root_dir(FLAGS.config.dataset, FLAGS.config.fragment_logic, FLAGS.max_targets_per_graph)
 
     chunk_size = FLAGS.chunk
     args_list = [
@@ -178,12 +172,12 @@ def main(unused_argv) -> None:
             start,
             start + chunk_size,
             os.path.join(
-                FLAGS.config.root_dir,
+                output_dir,
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
             None,
-            # (FLAGS.config.nn_cutoff_min, FLAGS.config.nn_cutoff_max),
             FLAGS.config.min_n_nodes,
+            FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
         for start in range(0, len(structures), chunk_size)
@@ -196,7 +190,6 @@ def main(unused_argv) -> None:
     mp_ids_per_frag = []
     struct_per_frag = []
     ase_per_frag = []
-    output_dir = FLAGS.config.root_dir
     for start in range(0, len(structures), chunk_size):
         end = start + chunk_size
         with open(os.path.join(output_dir, f"mol_indices_{start:06d}_{end:06d}.pkl"), "rb") as f:
@@ -233,5 +226,8 @@ if __name__ == "__main__":
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")
+    flags.DEFINE_integer(
+        "max_targets_per_graph", 1, "Max num of targets per focus atom."
+    )
 
     app.run(main)

@@ -10,6 +10,10 @@ class NodesInfo(NamedTuple):
     species: jnp.ndarray  # [n_node] int array
 
 
+class EdgesInfo(NamedTuple):
+    relative_positions: jnp.ndarray  # [n_edge, 3] float array
+
+
 class GlobalsInfo(NamedTuple):
     cell: jnp.ndarray  # [3, 3] float array
 

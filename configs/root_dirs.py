@@ -29,8 +29,9 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int) 
             return f"/Users/ameyad/Documents/spherical-harmonic-net/temp/platonic_solids/{fragment_logic}"
     if dataset == "silica":
         if hostname == "potato.mit.edu":
-            return "/data/NFS/potato/songk/silica_fragments"
-            # return "/data/NFS/potato/songk/silica_fragments_heavy_first"
+            return f"/data/NFS/potato/songk/silica_fragments/{fragment_logic}/max_targets_{max_targets_per_graph}"
+        if username == "songk":
+            return f"/Users/songk/atomicarchitects/silica_fragments/{fragment_logic}/max_targets_{max_targets_per_graph}"
     if dataset == "silica_mini":
         if hostname == "potato.mit.edu":
             return "/home/songk/spherical-harmonic-net/silica_fragments_mini"

@@ -3,6 +3,7 @@ from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 import ase
 import ase.io
 import chex
+import itertools
 import jax
 import jax.numpy as jnp
 import jraph
@@ -265,13 +266,25 @@ def ase_atoms_to_jraph_graph(
         receivers, senders = matscipy.neighbours.neighbour_list(
             quantities="ij", positions=atoms.positions, cutoff=cutoffs, cell=np.eye(3)
         )
-
+    positions = np.asarray(atoms.positions)
     # Get the species indices
-    species = np.searchsorted(atomic_numbers, atoms.numbers)
+    species = np.asarray(np.searchsorted(atomic_numbers, atoms.numbers))
+
+    cell = atoms.cell
+    relative_positions = positions[receivers] - positions[senders]
+    if periodic:
+        # for periodic structures, re-center the target positions and recompute relative positions if necessary
+        for d in itertools.product(range(-1, 2), repeat=3):
+            shifted_rel_pos = positions[receivers] - positions[senders] + np.array(d) @ cell
+            relative_positions = np.where(
+                np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+                shifted_rel_pos,
+                relative_positions)
+    assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(np.asarray(atoms.positions), np.asarray(species)),
-        edges=np.ones(len(senders)),
+        nodes=datatypes.NodesInfo(positions, species),
+        edges=datatypes.EdgesInfo(relative_positions),
         globals=datatypes.GlobalsInfo(np.asarray(atoms.cell)),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
