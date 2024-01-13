@@ -1,5 +1,5 @@
-cuda=0
-for mode in "nn_edm" "radius"
+cuda=2
+for mode in "radius"
 do
     for max_targets in 1 4
     do
