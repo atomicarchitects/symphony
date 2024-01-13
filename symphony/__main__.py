@@ -58,7 +58,7 @@ def main(argv):
 
     # Freeze config.
     config = FLAGS.config
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic, config.max_targets_per_graph)
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!

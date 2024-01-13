@@ -191,12 +191,11 @@ def get_plotly_traces_for_fragment(
             target_positions = (
                 fragment.globals.target_positions + fragment.nodes.positions[0]
             )
-            target_positions = target_positions.reshape(3)
             molecule_traces.append(
                 go.Scatter3d(
-                    x=[target_positions[0]],
-                    y=[target_positions[1]],
-                    z=[target_positions[2]],
+                    x=[target_positions[:, 0]],
+                    y=[target_positions[:, 1]],
+                    z=[target_positions[:, 2]],
                     mode="markers",
                     marker=dict(
                         size=[
@@ -210,7 +209,7 @@ def get_plotly_traces_for_fragment(
                         color=["green"],
                     ),
                     opacity=0.5,
-                    name="Target Atom",
+                    name="Target Atoms",
                 )
             )
 

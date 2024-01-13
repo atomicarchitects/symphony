@@ -51,7 +51,7 @@ def update_dummy_config(
     config.focus_and_target_species_predictor.max_ell = 5
     config.loss_kwargs.position_loss_type = position_loss_type
     config.dataset = dataset
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
+    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic, config.max_targets_per_graph)
     if dataset == "qm9":
         config.train_on_split_smaller_than_chunk = train_on_split_smaller_than_chunk
         if train_on_split_smaller_than_chunk:
@@ -67,10 +67,10 @@ class TrainTest(parameterized.TestCase):
         self.preds, self.graphs = loss_test.create_dummy_data()
 
     @parameterized.product(
-        config_name=["nequip"],
+        config_name=["e3schnet_and_nequip"],
         train_on_split_smaller_than_chunk=[True],
         position_loss_type=["kl_divergence"],
-        dataset=["qm9"],
+        dataset=["platonic_solids"],
     )
     def test_train_and_evaluate(
         self,

@@ -169,7 +169,8 @@ def position_logits_to_position_distribution(
 
     position_probs = position_logits.apply(lambda logit: jnp.exp(logit - max_logit))
 
-    position_probs.grid_values /= position_probs.integrate().array.sum()
+    normalizing_factor = position_probs.integrate().array.sum()
+    position_probs.grid_values /= normalizing_factor
     return position_probs
 
 
@@ -202,7 +203,8 @@ def compute_grid_of_joint_distribution(
     res_alpha: int,
     quadrature: str,
 ) -> e3nn.SphericalSignal:
-    """Combines radial weights and angular coefficients to get a distribution on the spheres."""
+    """Combines radial weights and angular coefficients to get a distribution on the spheres.
+    Should theoretically only be used for distributions over a single position."""
     # Convert coefficients to a distribution on the sphere.
     log_angular_dist = e3nn.to_s2grid(
         log_angular_coeffs,
@@ -229,12 +231,17 @@ def compute_grid_of_joint_distribution(
     assert angular_dist.shape == (
         res_beta,
         res_alpha,
-    )
+    ), angular_dist.shape
 
     # Mix in the radius weights to get a distribution over all spheres.
-    dist = radial_weights * angular_dist[None, :, :]
+    dist = e3nn.SphericalSignal(
+        grid_values=jnp.einsum(
+            "r, ba -> rba", radial_weights, angular_dist.grid_values
+        ),
+        quadrature=angular_dist.quadrature,
+    )
     assert dist.shape == (num_radii, res_beta, res_alpha)
-    return dist
+    return dist  # [num_radii, res_beta, res_alpha]
 
 
 def compute_coefficients_of_logits_of_joint_distribution(
