@@ -16,11 +16,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.val_molecules = (100000, 120000)
     config.test_molecules = (120000, 135000)
     config.shuffle_datasets = True
+    config.max_targets_per_graph = 1
 
     # Optimizer.
     config.optimizer = "adam"
     config.momentum = None
-    config.learning_rate = 1e-3
+    config.learning_rate = 5e-4
     config.learning_rate_schedule = "constant"
     config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
     config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
@@ -53,7 +54,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
-    config.position_noise_std = 0.1
+    config.position_noise_std = 0.05
     config.freeze_node_embedders = False
 
     # Prediction heads.
@@ -66,7 +67,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.res_beta = 180
     config.target_position_predictor.res_alpha = 359
-    config.target_position_predictor.num_channels = 5
+    config.target_position_predictor.num_channels = 2
     config.target_position_predictor.min_radius = 0.9
     config.target_position_predictor.max_radius = 2.0
     config.target_position_predictor.num_radii = 64
