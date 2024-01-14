@@ -5,26 +5,13 @@ import ase.db
 import ase.io
 import os
 import numpy as np
+import re
 import sys
+import tensorflow as tf
 
+from absl import flags, app
 import analyses.generate_molecules as generate_molecules
 from symphony.data import qm9
-
-
-
-workdir = "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64"
-outputdir = "conditional_generation"
-beta_species = 1.0
-beta_position = 1.0
-step = "7530000"
-num_seeds_per_chunk = 25
-max_num_atoms = 35
-visualize = False
-num_mols = 1000
-
-all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
-test_mols = all_mols[-num_mols:]
-train_mols = all_mols[:num_mols]
 
 
 def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
@@ -33,45 +20,62 @@ def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
         mol = mols[i]
         num_atoms = len(mol)
         for j in range(num_atoms):
-            fragment = ase.Atoms(
-                positions=np.vstack([mol.positions[:j], mol.positions[j + 1 :]]),
-                numbers=np.concatenate([mol.numbers[:j], mol.numbers[j + 1 :]]),
-            )
-            fragments.append(fragment)
+            if mol.numbers[j] == 1:
+                fragment = ase.Atoms(
+                    positions=np.vstack([mol.positions[:j], mol.positions[j + 1 :]]),
+                    numbers=np.concatenate([mol.numbers[:j], mol.numbers[j + 1 :]]),
+                )
+                fragments.append(fragment)
     return fragments
 
-# Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
-mol_list = get_fragment_list(train_mols, num_mols)
-mol_list = mol_list[:num_seeds_per_chunk * (len(mol_list) // num_seeds_per_chunk)]
-print(f"Number of molecules: {len(mol_list)}")
 
-gen_mol_list = generate_molecules.generate_molecules(
-    workdir,
-    os.path.join(outputdir, "train"),
-    beta_species,
-    beta_position,
-    step,
-    len(mol_list),
-    num_seeds_per_chunk,
-    mol_list,
-    max_num_atoms,
-    visualize,
-)
+def main(unused_argv: Sequence[str]):
+    beta_species = 1.0
+    beta_position = 1.0
+    step = "best"
+    num_seeds_per_chunk = 25
+    max_num_atoms = 35
+    num_mols = 1000
 
-# Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
-mol_list = get_fragment_list(test_mols, num_mols)
-mol_list = mol_list[:num_seeds_per_chunk * (len(mol_list) // num_seeds_per_chunk)]
-print(f"Number of molecules: {len(mol_list)}")
+    all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
+    mols_by_split = {"train": all_mols[:num_mols], "test": all_mols[-num_mols:]}
 
-gen_mol_list = generate_molecules.generate_molecules(
-    workdir,
-    os.path.join(outputdir, "test"),
-    beta_species,
-    beta_position,
-    step,
-    len(mol_list),
-    num_seeds_per_chunk,
-    mol_list,
-    max_num_atoms,
-    visualize,
-)
+    for split, split_mols in mols_by_split.items():
+        # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
+        mol_list = get_fragment_list(split_mols, num_mols)
+        mol_list = split_mols[
+            : num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)
+        ]
+        print(f"Number of fragments for {split}: {len(mol_list)}")
+
+        gen_mol_list = generate_molecules.generate_molecules(
+            flags.FLAGS.workdir,
+            os.path.join(flags.FLAGS.outputdir, split),
+            beta_species,
+            beta_position,
+            step,
+            len(mol_list),
+            num_seeds_per_chunk,
+            mol_list,
+            max_num_atoms,
+            flags.FLAGS.visualize,
+        )
+
+
+if __name__ == "__main__":
+    flags.DEFINE_string(
+        "workdir",
+        "/data/NFS/potato/songk/spherical-harmonic-net/workdirs/",
+        "Workdir for model.",
+    )
+    flags.DEFINE_string(
+        "outputdir",
+        os.path.join(os.getcwd(), "conditional_generation", "analysed_workdirs"),
+        "Directory where molecules should be saved.",
+    )
+    flags.DEFINE_bool(
+        "visualize",
+        False,
+        "Whether to visualize the generation process step-by-step.",
+    )
+    app.run(main)

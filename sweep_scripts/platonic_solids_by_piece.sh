@@ -2,7 +2,7 @@
 
 # Set experiment name
 dataset="platonic_solids"
-expname="$dataset"_by_piece_meanangular
+expname="$dataset"_by_piece_meanangular_max_targets_5_pit_200_radius
 
 # Loop over hyperparameters
 for targets in 1 2 3 4 5
@@ -31,6 +31,9 @@ do
             --config.test_pieces="($piece, $((piece + 1)))" \
             --config.dataset="$dataset" \
             --config.max_n_graphs=16 \
+            --config.max_targets_per_graph=5 \
+            --config.loss_kwargs.target_position_inverse_temperature=200.0 \
+            --config.fragment_logic="radius" \
             --config.loss_kwargs.ignore_position_loss_for_small_fragments=False \
             --config.focus_and_target_species_predictor.embedder_config.max_ell="$lfocus" \
             --config.target_position_predictor.embedder_config.max_ell="$l" \

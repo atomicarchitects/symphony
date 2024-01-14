@@ -146,13 +146,20 @@ def main(unused_argv) -> None:
     logging.set_verbosity(logging.INFO)
     logging.set_stderrthreshold(logging.INFO)
 
+    use_edm_splits = FLAGS.use_edm_splits
+    mode = FLAGS.mode
+    if mode == "nn_edm":
+        use_edm_splits = True
+        mode = "nn"
+
     # Create a list of arguments to pass to generate_all_fragments
     molecules = qm9.load_qm9(
         "qm9_data",
-        use_edm_splits=FLAGS.use_edm_splits,
+        use_edm_splits=use_edm_splits,
         check_molecule_sanity=FLAGS.check_molecule_sanity,
     )
     chunk_size = FLAGS.chunk
+    output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     args_list = [
         (
             molecules,
@@ -160,10 +167,10 @@ def main(unused_argv) -> None:
             start,
             start + chunk_size,
             os.path.join(
-                FLAGS.output_dir,
+                output_dir,
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
-            FLAGS.mode,
+            mode,
             FLAGS.heavy_first,
             FLAGS.beta_com,
             FLAGS.nn_tolerance,
@@ -194,16 +201,16 @@ if __name__ == "__main__":
     )
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
     flags.DEFINE_string(
-        "output_dir", "/radish/qm9_fragments_fixed_mad/nn_edm/", "Output directory."
+        "output_dir", "/radish/qm9_fragments_fixed_mad/", "Output directory."
     )
-    flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
+    flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
-        "max_targets_per_graph", 20, "Max num of targets per focus atom."
+        "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )
 
     app.run(main)

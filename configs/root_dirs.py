@@ -4,7 +4,7 @@ from typing import Optional
 import os
 
 
-def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
+def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int) -> Optional[str]:
     """Get the root directory for the dataset."""
     hostname, username = os.uname()[1], os.environ.get("USER")
 
@@ -12,7 +12,7 @@ def get_root_dir(dataset: str, fragment_logic: str) -> Optional[str]:
         if hostname == "radish.mit.edu":
             return f"/data/NFS/radish/qm9_fragments/{fragment_logic}"
         if hostname == "potato.mit.edu":
-            return f"/radish/qm9_fragments_fixed_mad/{fragment_logic}"
+            return f"/radish/qm9_fragments_fixed_mad/{fragment_logic}/max_targets_{max_targets_per_graph}"
         if username == "ameyad":
             return f"/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/{fragment_logic}"
         if username == "songk":

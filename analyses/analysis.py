@@ -108,7 +108,7 @@ def load_model_at_step(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
+        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
     )
 
     # Update config.
@@ -119,7 +119,6 @@ def load_model_at_step(
     if res_beta is not None:
         logging.info(f"Setting res_beta to {res_beta}")
         config.target_position_predictor.res_beta = res_beta
-
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_map(jnp.asarray, params)
@@ -146,7 +145,7 @@ def load_weighted_average_model_at_steps(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
+        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
     )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
@@ -224,7 +223,7 @@ def load_metrics_from_workdir(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
+        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
     )
 
     checkpoint_dir = os.path.join(workdir, "checkpoints")
@@ -262,7 +261,7 @@ def load_from_workdir(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
+        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
     )
 
     # Mimic what we do in train.py.

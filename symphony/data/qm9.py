@@ -142,7 +142,10 @@ def load_qm9(
         mols_as_ase.append(mol_as_ase)
 
     if use_edm_splits:
-        splits = get_edm_splits(root_dir)
+        try:
+            splits = np.load(os.path.join(root_dir, "edm_splits.npz"))
+        except:
+            splits = get_edm_splits(root_dir)
         mols_as_ase_train = [mols_as_ase[idx] for idx in splits["train"]]
         mols_as_ase_valid = [mols_as_ase[idx] for idx in splits["valid"]]
         mols_as_ase_test = [mols_as_ase[idx] for idx in splits["test"]]
