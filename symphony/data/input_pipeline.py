@@ -255,6 +255,19 @@ def crystalnn(struct: Structure, cutoffs: float = (0.5, 1.0)):
     return np.asarray(receivers), np.asarray(senders)
 
 
+def get_relative_positions(positions, senders, receivers, cell, periodic):
+    relative_positions = positions[receivers] - positions[senders]
+    if not periodic: return relative_positions
+    # for periodic structures, re-center the target positions and recompute relative positions if necessary
+    for d in itertools.product(range(-1, 2), repeat=3):
+        shifted_rel_pos = positions[receivers] - positions[senders] + np.array(d) @ cell
+        relative_positions = np.where(
+            np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+            shifted_rel_pos,
+            relative_positions)
+    return relative_positions
+
+
 def ase_atoms_to_jraph_graph(
     atoms: ase.Atoms, atomic_numbers: jnp.ndarray, cutoffs: float | Tuple[float], periodic=False
 ) -> jraph.GraphsTuple:
@@ -271,15 +284,7 @@ def ase_atoms_to_jraph_graph(
     species = np.asarray(np.searchsorted(atomic_numbers, atoms.numbers))
 
     cell = atoms.cell
-    relative_positions = positions[receivers] - positions[senders]
-    if periodic:
-        # for periodic structures, re-center the target positions and recompute relative positions if necessary
-        for d in itertools.product(range(-1, 2), repeat=3):
-            shifted_rel_pos = positions[receivers] - positions[senders] + np.array(d) @ cell
-            relative_positions = np.where(
-                np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
-                shifted_rel_pos,
-                relative_positions)
+    relative_positions = get_relative_positions(positions, senders, receivers, cell, periodic)
     assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
 
     return jraph.GraphsTuple(
@@ -300,12 +305,15 @@ def material_to_jraph_graph(
     receivers, senders = crystalnn(struct, cutoffs=cutoffs)
 
     # Get the species indices
-    species = np.searchsorted(atomic_numbers, struct.atomic_numbers)
+    positions = np.asarray(struct.cart_coords)
+    species = np.asarray(np.searchsorted(atomic_numbers, struct.atomic_numbers))
+    cell = np.asarray(struct.lattice.matrix)
+    relative_positions = get_relative_positions(positions, senders, receivers, cell, True)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(np.asarray(struct.cart_coords), np.asarray(species)),
-        edges=np.ones(len(senders)),
-        globals=datatypes.GlobalsInfo(np.asarray(struct.lattice.matrix)),
+        nodes=datatypes.NodesInfo(positions, species),
+        edges=datatypes.EdgesInfo(relative_positions),
+        globals=datatypes.GlobalsInfo(cell),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([struct.num_sites]),

@@ -219,13 +219,17 @@ def generation_loss(
         target_positions = graphs.globals.target_positions
         target_position_mask = graphs.globals.target_position_mask
         true_radial_weights = jax.vmap(
-            lambda pos: target_position_to_radius_weights(
-                pos, radius_rbf_variance, radial_bins
+            jax.vmap(
+                lambda pos: target_position_to_radius_weights(
+                    pos, radius_rbf_variance, radial_bins
+                )
             )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
-            lambda pos: target_position_to_log_angular_coeffs(
-                pos, target_position_inverse_temperature, lmax
+            jax.vmap(
+                lambda pos: target_position_to_log_angular_coeffs(
+                    pos, target_position_inverse_temperature, lmax
+                )
             )
         )(target_positions)
 
@@ -233,7 +237,7 @@ def generation_loss(
             num_graphs,
             max_targets_per_graph,
             num_radii,
-        )
+        ), true_radial_weights.shape
         assert log_true_angular_coeffs.shape == (
             num_graphs,
             max_targets_per_graph,
@@ -246,7 +250,7 @@ def generation_loss(
             res_alpha=res_alpha,
             quadrature=quadrature,
         )
-        true_dist = jax.vmap(compute_joint_distribution_fn)(
+        true_dist = jax.vmap(jax.vmap(compute_joint_distribution_fn))(
             true_radial_weights, log_true_angular_coeffs
         )
 

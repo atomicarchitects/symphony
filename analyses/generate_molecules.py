@@ -173,13 +173,12 @@ def generate_molecules(
     elif isinstance(init_molecules[0], ase.Atoms):
         assert len(init_molecules) == num_seeds
         init_molecule_names = [f"mol_{i}_{init_molecule.get_chemical_formula()}" for i, init_molecule in enumerate(init_molecules)]
-        init_fragments = [
+        init_molecules = [
             input_pipeline.ase_atoms_to_jraph_graph(
                 init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff, init_molecule.get_cell()
             ) for init_molecule in init_molecules]
     elif isinstance(init_molecules[0], jraph.GraphsTuple) or isinstance(init_molecules[0], datatypes.Fragments):
         init_molecule_names = [f"mol_{i}" for i in range(len(init_molecules))]
-        init_fragments = init_molecules
     else:
         raise TypeError("input molecules must be a list of strings, ASE Atoms, or jraph.GraphsTuples")
 
@@ -234,7 +233,7 @@ def generate_molecules(
         n_node=(max_num_atoms + 1),
         n_edge=(max_num_atoms + 1) ** 2,
         n_graph=2,
-    ) for init_fragment in init_fragments]
+    ) for init_fragment in init_molecules]
     init_fragments = jax.tree_map(lambda *err: np.stack(err), *init_fragments)
     init_fragments = jax.vmap(lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment))(init_fragments)
 

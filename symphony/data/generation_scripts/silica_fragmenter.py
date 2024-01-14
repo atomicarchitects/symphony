@@ -18,7 +18,6 @@ import tqdm
 from symphony.data import fragments
 from symphony.data import input_pipeline, matproj
 
-import configs.silica.default as default
 from configs import root_dirs
 
 FLAGS = flags.FLAGS
@@ -30,6 +29,7 @@ def generate_all_fragments(
     start: int,
     end: int,
     output_dir: str,
+    mode: str,
     cutoffs: Tuple[float],
     min_n_nodes: float,
     max_targets_per_graph: int,
@@ -102,7 +102,7 @@ def generate_all_fragments(
                 atomic_numbers.shape[0],
                 FLAGS.nn_tolerance,
                 FLAGS.max_radius,
-                "nn",
+                mode,
                 heavy_first=FLAGS.config.heavy_first,
                 max_targets_per_graph=max_targets_per_graph,
                 periodic=True,
@@ -125,6 +125,9 @@ def generate_all_fragments(
                     "target_positions": frag.globals.target_positions.astype(
                         np.float32
                     ),
+                    "target_position_mask": frag.globals.target_position_mask.astype(
+                        np.float32
+                    ),
                     "target_species": frag.globals.target_species.astype(np.int32),
                     "cell": np.expand_dims(frag.globals.cell, 0).astype(np.float32),
                     "n_node": frag.n_node.astype(np.int32),
@@ -136,7 +139,7 @@ def generate_all_fragments(
     os.makedirs(output_dir, exist_ok=True)
     dataset.save(output_dir)
     chunk_start, chunk_end = output_dir.split('/')[-1].split('_')[-2:]
-    with open(os.path.join(FLAGS.config.root_dir, f"mol_indices_{chunk_start}_{chunk_end}.pkl"), "wb") as f:
+    with open(os.path.join(output_dir, f"mol_indices_{chunk_start}_{chunk_end}.pkl"), "wb") as f:
         pickle.dump(mol_indices, f)
 
 
@@ -175,6 +178,7 @@ def main(unused_argv) -> None:
                 output_dir,
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
+            FLAGS.mode,
             None,
             FLAGS.config.min_n_nodes,
             FLAGS.max_targets_per_graph,
@@ -224,8 +228,9 @@ if __name__ == "__main__":
     flags.DEFINE_integer("chunk", 50, "Number of molecules per fragment file.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
+    flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
-    flags.DEFINE_float("max_radius", 3.0, "Max radius (in Angstrom).")
+    flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )
