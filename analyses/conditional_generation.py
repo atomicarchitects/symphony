@@ -126,6 +126,6 @@ if __name__ == "__main__":
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )
     flags.DEFINE_string(
-        "data_dir", "/data/NFS/potato/songk/silica_fragments_single_tetrahedron"
+        "input_dir", "/data/NFS/potato/songk/silica_fragments_single_tetrahedron", "Directory for input fragments."
     )
     app.run(main)
