@@ -28,7 +28,7 @@ def main(unused_argv: Sequence[str]):
     mols_by_split = {"train": [], "test": []}
 
     # Root directory of the dataset.
-    file_dir = f"/data/NFS/potato/songk/silica_fragments_single_tetrahedron/{flags.FLAGS.mode}/max_targets_{flags.FLAGS.max_targets_per_graph}"
+    file_dir = f"{flags.FLAGS.data_dir}/{flags.FLAGS.mode}/max_targets_{flags.FLAGS.max_targets_per_graph}"
     filenames = sorted(os.listdir(file_dir))
     filenames = [
         os.path.join(file_dir, f)
@@ -124,5 +124,8 @@ if __name__ == "__main__":
     flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
+    )
+    flags.DEFINE_string(
+        "data_dir", "/data/NFS/potato/songk/silica_fragments_single_tetrahedron"
     )
     app.run(main)
