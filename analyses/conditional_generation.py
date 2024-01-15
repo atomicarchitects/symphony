@@ -28,7 +28,7 @@ def main(unused_argv: Sequence[str]):
     mols_by_split = {"train": [], "test": []}
 
     # Root directory of the dataset.
-    file_dir = f"{flags.FLAGS.data_dir}/{flags.FLAGS.mode}/max_targets_{flags.FLAGS.max_targets_per_graph}"
+    file_dir = f"{flags.FLAGS.input_dir}/{flags.FLAGS.mode}/max_targets_{flags.FLAGS.max_targets_per_graph}"
     filenames = sorted(os.listdir(file_dir))
     filenames = [
         os.path.join(file_dir, f)
