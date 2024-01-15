@@ -5,22 +5,25 @@ dataset="platonic_solids"
 expname="$dataset"_by_piece_meanangular_max_targets_5_pit_200_radius
 
 # Loop over hyperparameters
-for piece in 0 1 2 3 4
+for targets in 1 2 3 4 5
 do
-for model in "nequip"
+for piece in 2
+do
+for model in "mace"
 do
   for lfocus in 2
   do
   for l in 2
   do
-    for pc in 1
+    for pc in 2
     do
       for c in 32
       do
-        for i in 2
+        for i in 1
         do
-            CUDA_VISIBLE_DEVICES="$piece" python -m symphony \
+            CUDA_VISIBLE_DEVICES="$((piece + 3))" python -m symphony \
             --config=configs/"$dataset"/"$model".py \
+            --config.max_targets_per_graph="$targets" \
             --config.add_noise_to_positions=True \
             --config.position_noise_std=0.1 \
             --config.train_pieces="($piece, $((piece + 1)))" \
@@ -40,12 +43,13 @@ do
             --config.target_position_predictor.embedder_config.num_interactions="$i" \
             --config.target_position_predictor.num_channels="$pc" \
             --config.num_train_steps=10000 \
-            --workdir=workdirs/"$expname"/"$model"/interactions="$i"/l="$l"/lfocus="$lfocus"/position_channels="$pc"/channels="$c"/apply_gate="$apply_gate"/square_logits="$square_logits"/piece="$piece" \
-            > "$expname"_model="$model"_l="$l"_lfocus="$lfocus"_pc="$pc"_c="$c"_i="$i"_piece="$piece".txt 2>&1 &
+            --workdir=workdirs/"$expname"/"$model"/interactions="$i"/l="$l"/lfocus="$lfocus"/position_channels="$pc"/channels="$c"/apply_gate="$apply_gate"/square_logits="$square_logits"/piece="$piece"/targets="$targets"/ \
+            > "$expname"_model="$model"_l="$l"_lfocus="$lfocus"_pc="$pc"_c="$c"_i="$i"_piece="$piece"_targets="$targets".txt
           done
         done
       done
     done
   done
+done
 done
 done
