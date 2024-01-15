@@ -15,14 +15,11 @@ from symphony.data import input_pipeline_tf
 
 
 workdirs = {
-    "nn_edm_1": "/radish/qm9_fragments_fixed_mad/nn_edm/max_targets_1/",
-    "nn_edm_4": "/radish/qm9_fragments_fixed_mad/nn_edm/max_targets_4/",
-    "radius_1":"/radish/qm9_fragments_fixed_mad/radius/max_targets_1",
-    "radius_4":"/radish/qm9_fragments_fixed_mad/radius/max_targets_4",
+    "nn_1": "/home/songk/potato/songk/silica_fragments/nn/max_targets_1/",
+    "nn_4": "/home/songk/potato/songk/silica_fragments/nn/max_targets_4/",
+    "radius_1": "/home/songk/potato/songk/silica_fragments/radius/max_targets_1/",
+    "radius_4": "/home/songk/potato/songk/silica_fragments/radius/max_targets_4/",
 }
-train_molecules = (0, 100000)
-val_molecules = (100000, 120000)
-test_molecules = (120000, 135000)
 
 def get_dataset(method, seed=0):
     # Set the seed for reproducibility.
@@ -38,7 +35,6 @@ def get_dataset(method, seed=0):
     if len(filenames) == 0:
         raise ValueError(f"No files found in {workdirs[method]}.")
 
-    # Partition the filenames into train, val, and test.
     def filter_by_molecule_number(
         filenames: Sequence[str], start: int, end: int
     ) -> List[str]:
@@ -73,7 +69,7 @@ def get_dataset(method, seed=0):
     return dataset
 
 
-num_targets = {"nn_edm_1": [], "nn_edm_4": [], "radius_1": [], "radius_4": []}
+num_targets = {"nn_1": [], "nn_4": [], "radius_1": [], "radius_4": []}
 for frag_method in workdirs:
     dataset = get_dataset(frag_method)
     for graph in tqdm.tqdm(dataset.as_numpy_iterator()):
