@@ -107,9 +107,14 @@ def load_model_at_step(
         config = yaml.unsafe_load(config_file)
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
-    )
+    if 'max_targets_per_graph' in config:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
+        )
+    else:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn")
+        )
 
     # Update config.
     if res_alpha is not None:
@@ -145,9 +150,14 @@ def load_weighted_average_model_at_steps(
         config = yaml.unsafe_load(config_file)
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
-    )
+    if 'max_targets_per_graph' in config:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
+        )
+    else:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn")
+        )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params_avg = jax.tree_map(jnp.asarray, params_avg)
@@ -261,9 +271,14 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
-    )
+    if 'max_targets_per_graph' in config:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
+        )
+    else:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn")
+        )
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)

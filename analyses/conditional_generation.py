@@ -32,7 +32,7 @@ def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
 def main(unused_argv: Sequence[str]):
     beta_species = 1.0
     beta_position = 1.0
-    step = "best"
+    step = flags.FLAGS.step
     num_seeds_per_chunk = 25
     max_num_atoms = 35
     num_mols = 1000
@@ -77,5 +77,10 @@ if __name__ == "__main__":
         "visualize",
         False,
         "Whether to visualize the generation process step-by-step.",
+    )
+    flags.DEFINE_string(
+        "step",
+        "best",
+        "Step number to load model from. The default corresponds to the best model.",
     )
     app.run(main)

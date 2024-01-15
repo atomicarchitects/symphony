@@ -33,7 +33,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 2_000_000
+    config.num_train_steps = 10_000_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000

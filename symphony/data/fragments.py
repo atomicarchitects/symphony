@@ -155,7 +155,7 @@ def _make_first_fragment(
         visited=np.array([first_node]),
         focus_node=first_node,
         target_species_probability=species_probability,
-        target_node=target,
+        target_species=target_species,
         target_positions=target_positions,
         stop=False,
         max_targets_per_graph=max_targets_per_graph,
@@ -240,7 +240,7 @@ def _make_middle_fragment(
         visited,
         focus_node,
         target_species_probability,
-        target_node,
+        target_species,
         target_positions,
         stop=False,
         max_targets_per_graph=max_targets_per_graph,
@@ -256,7 +256,7 @@ def _make_last_fragment(graph, n_species, max_targets_per_graph: int = 1):
         visited=np.arange(len(graph.nodes.positions)),
         focus_node=0,
         target_species_probability=np.zeros((n_nodes, n_species)),
-        target_node=0,
+        target_species=np.array([0]),
         target_positions=np.zeros((1, 3)),
         stop=True,
         max_targets_per_graph=max_targets_per_graph,
@@ -268,7 +268,7 @@ def _into_fragment(
     visited,
     focus_node,
     target_species_probability,
-    target_node,
+    target_species,
     target_positions,
     stop,
     max_targets_per_graph,
@@ -289,7 +289,7 @@ def _into_fragment(
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
-        target_species=graph.nodes.species[target_node][None],  # [1]
+        target_species=np.array(target_species),  # [1]
         target_positions=target_positions_padded[None],  # [max_targets_per_graph, 3]
         target_position_mask=target_position_mask[None],  # [max_targets_per_graph]
     )
