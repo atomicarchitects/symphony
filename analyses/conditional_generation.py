@@ -28,18 +28,15 @@ def main(unused_argv: Sequence[str]):
     mols_by_split = {"train": [], "test": []}
 
     # Root directory of the dataset.
-    file_dir = "/data/NFS/potato/songk/silica_fragments_single_tetrahedron"
+    file_dir = f"/data/NFS/potato/songk/silica_fragments_single_tetrahedron/{flags.FLAGS.mode}/max_targets_{flags.FLAGS.max_targets_per_graph}"
     filenames = sorted(os.listdir(file_dir))
-    # filenames = sorted(os.listdir(config.root_dir))
     filenames = [
         os.path.join(file_dir, f)
-        # os.path.join(config.root_dir, f)
         for f in filenames
         if f.startswith("fragments_")
     ]
     if len(filenames) == 0:
         raise ValueError(f"No files found in {file_dir}.")
-        # raise ValueError(f"No files found in {config.root_dir}.")
 
     # Partition the filenames into train, val, and test.
     def filter_by_molecule_number(
@@ -123,5 +120,9 @@ if __name__ == "__main__":
         "step",
         "best",
         "Step number to load model from. The default corresponds to the best model.",
+    )
+    flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
+    flags.DEFINE_integer(
+        "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )
     app.run(main)

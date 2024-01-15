@@ -34,12 +34,10 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    # config.num_train_steps = 50_000
-    config.num_train_steps = 10_000
+    config.num_train_steps = 20_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
-    # config.eval_every_steps = 10000
     config.eval_every_steps = 2000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 3.0
@@ -72,10 +70,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    # config.target_position_predictor.res_beta = 180
-    # config.target_position_predictor.res_alpha = 359
-    config.target_position_predictor.res_beta = 90
-    config.target_position_predictor.res_alpha = 179
+    config.target_position_predictor.res_beta = 180
+    config.target_position_predictor.res_alpha = 359
     config.target_position_predictor.num_channels = 5
     config.target_position_predictor.min_radius = 0.9
     config.target_position_predictor.max_radius = 2.0
