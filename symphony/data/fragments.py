@@ -315,7 +315,7 @@ def _make_middle_fragment(
     # get all potential positions for that target, based on species
     target_species = graph.nodes.species[target_node:target_node+1]
     targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
-    sender_cond = graph.senders == target_node
+    sender_cond = graph.senders == focus_node
     receiver_cond = np.isin(graph.receivers, targets_of_same_species)
     target_positions = graph.edges.relative_positions[sender_cond & receiver_cond]
     assert jnp.linalg.norm(target_positions, axis=-1).min() > 1e-5, FragmentError()

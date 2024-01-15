@@ -96,20 +96,17 @@ def generate_all_fragments(
                 mol, atomic_numbers, cutoffs=cutoffs, periodic=True
             )
             assert np.equal(graph.senders, graph.receivers).sum() == 0, "self edges!"
-            frags = fragments.generate_silica_fragments(
+            frags = fragments.generate_fragments(
                 rng,
                 graph,
-                atomic_numbers,#.shape[0],
+                atomic_numbers.shape[0],
                 FLAGS.nn_tolerance,
                 FLAGS.max_radius,
                 mode,
                 heavy_first=FLAGS.config.heavy_first,
                 max_targets_per_graph=max_targets_per_graph,
-                # periodic=True,
+                periodic=True,
             )
-            frags = list(frags)
-
-            mol_indices.extend([mol_ndx] * len(frags))
 
             for frag in frags:
                 yield {
@@ -139,8 +136,6 @@ def generate_all_fragments(
     os.makedirs(output_dir, exist_ok=True)
     dataset.save(output_dir)
     chunk_start, chunk_end = output_dir.split('/')[-1].split('_')[-2:]
-    with open(os.path.join(output_dir, f"mol_indices_{chunk_start}_{chunk_end}.pkl"), "wb") as f:
-        pickle.dump(mol_indices, f)
 
 
 def _generate_all_fragments_wrapper(args):
