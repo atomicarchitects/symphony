@@ -187,7 +187,7 @@ def main(unused_argv) -> None:
             FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
-        for start in range(0, len(structures), chunk_size)
+        for start in range(0, len(molecules), chunk_size)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
