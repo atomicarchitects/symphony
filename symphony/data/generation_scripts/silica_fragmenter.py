@@ -96,16 +96,16 @@ def generate_all_fragments(
                 mol, atomic_numbers, cutoffs=cutoffs, periodic=True
             )
             assert np.equal(graph.senders, graph.receivers).sum() == 0, "self edges!"
-            frags = fragments.generate_fragments(
+            frags = fragments.generate_silica_fragments(
                 rng,
                 graph,
-                atomic_numbers.shape[0],
+                atomic_numbers,#.shape[0],
                 FLAGS.nn_tolerance,
                 FLAGS.max_radius,
                 mode,
                 heavy_first=FLAGS.config.heavy_first,
                 max_targets_per_graph=max_targets_per_graph,
-                periodic=True,
+                # periodic=True,
             )
             frags = list(frags)
 
@@ -165,8 +165,7 @@ def main(unused_argv) -> None:
         )
         for mol in structures
     ]
-    output_dir = root_dirs.get_root_dir(FLAGS.config.dataset, FLAGS.config.fragment_logic, FLAGS.max_targets_per_graph)
-
+    output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     chunk_size = FLAGS.chunk
     args_list = [
         (
@@ -229,6 +228,9 @@ if __name__ == "__main__":
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
+    flags.DEFINE_string(
+        "output_dir", "/data/NFS/potato/songk/silica_fragments/", "Output directory."
+    )
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
     flags.DEFINE_integer(

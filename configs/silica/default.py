@@ -17,7 +17,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.test_molecules = (300, 350)
     config.shuffle_datasets = True
     config.heavy_first=False
-    config.max_targets_per_graph = 8
+    config.max_targets_per_graph = 4
 
     # Optimizer.
     config.optimizer = "adam"

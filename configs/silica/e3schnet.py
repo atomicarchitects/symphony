@@ -15,7 +15,7 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config.num_filters = 16
     config.num_radial_basis_functions = 8
     config.num_channels = 32
-    config.max_ell = 3
+    config.max_ell = 2
     config.activation = "shifted_softplus"
 
     return config
