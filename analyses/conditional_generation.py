@@ -21,7 +21,7 @@ def main(unused_argv: Sequence[str]):
     beta_position = 1.0
     step = flags.FLAGS.step
     num_seeds_per_chunk = 1
-    max_num_atoms = 200  # ?
+    max_num_atoms = 200
     num_mols = 20
     config = config_src.get_config()
 
