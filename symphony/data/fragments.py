@@ -162,7 +162,8 @@ def generate_silica_fragments(
                     nn_tolerance,
                     max_radius,
                     mode,
-                    heavy_first=heavy_first
+                    heavy_first=heavy_first,
+                    max_targets_per_graph=max_targets_per_graph,
                 )
                 yield frag
         except ValueError:
