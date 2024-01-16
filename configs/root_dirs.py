@@ -38,6 +38,8 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
             if max_targets_per_graph:
                 return f"/Users/songk/atomicarchitects/silica_fragments/{fragment_logic}/max_targets_{max_targets_per_graph}"
             return f"/Users/songk/atomicarchitects/silica_fragments/{fragment_logic}"
+        if username == "sekim":  # supercloud
+            return f"/home/gridsan/sekim/fragments/silica/{fragment_logic}/max_targets_{max_targets_per_graph}"
     if dataset == "silica_mini":
         if hostname == "potato.mit.edu":
             return "/home/songk/spherical-harmonic-net/silica_fragments_mini"
