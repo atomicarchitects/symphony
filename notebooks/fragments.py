@@ -15,10 +15,10 @@ from symphony.data import input_pipeline_tf
 
 
 workdirs = {
-    "nn_1": "/home/songk/potato/songk/silica_fragments/nn/max_targets_1/",
-    "nn_4": "/home/songk/potato/songk/silica_fragments/nn/max_targets_4/",
-    "radius_1": "/home/songk/potato/songk/silica_fragments/radius/max_targets_1/",
-    "radius_4": "/home/songk/potato/songk/silica_fragments/radius/max_targets_4/",
+    "nn_1": "/home/songk/potato/songk/silica_fragments_single_tetrahedron/nn/max_targets_1/",
+    "nn_4": "/home/songk/potato/songk/silica_fragments_single_tetrahedron/nn/max_targets_4/",
+    "radius_1": "/home/songk/potato/songk/silica_fragments_single_tetrahedron/radius/max_targets_1/",
+    "radius_4": "/home/songk/potato/songk/silica_fragments_single_tetrahedron/radius/max_targets_4/",
 }
 
 def get_dataset(method, seed=0):
@@ -69,12 +69,19 @@ def get_dataset(method, seed=0):
     return dataset
 
 
-num_targets = {"nn_1": [], "nn_4": [], "radius_1": [], "radius_4": []}
+# num_targets = {"nn_1": [], "nn_4": [], "radius_1": [], "radius_4": []}
+stop = {"nn_1": [0, 0], "nn_4": [0, 0], "radius_1": [0, 0], "radius_4": [0, 0]}
 for frag_method in workdirs:
     dataset = get_dataset(frag_method)
     for graph in tqdm.tqdm(dataset.as_numpy_iterator()):
-        targets = graph.globals.target_position_mask.sum()
-        num_targets[frag_method].append(targets)
-import pickle
-with open("valid_target_counts.pkl", 'wb') as f:
-    pickle.dump(num_targets, f)
+        if graph.globals.stop.item():
+            stop[frag_method][0] += 1
+        stop[frag_method][1] += 1
+        # targets = graph.globals.target_position_mask.sum()
+        # num_targets[frag_method].append(targets)
+# import pickle
+# with open("valid_target_counts.pkl", 'wb') as f:
+#     pickle.dump(num_targets, f)
+
+for frag_method in stop:
+    print(frag_method, stop[frag_method][0] / stop[frag_method][1])
