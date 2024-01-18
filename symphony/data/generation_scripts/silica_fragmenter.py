@@ -118,6 +118,7 @@ def generate_all_fragments(
                     heavy_first=FLAGS.config.heavy_first,
                     max_targets_per_graph=max_targets_per_graph,
                     periodic=True,
+                    num_fragments=FLAGS.num_frags_per_graph,
                 )
 
             for frag in frags:
@@ -166,7 +167,7 @@ def main(unused_argv) -> None:
         with open(FLAGS.structure_file, "rb") as f:
             molecules = pickle.load(f)
     else:
-        structures = matproj.get_materials(FLAGS.config.matgen_query)
+        structures = matproj.get_materials({"elements": ["O", "Si"], "num_elements": (2, 2)})
         molecules = [
             ase.Atoms(
                 positions=mol.structure.cart_coords,
@@ -190,7 +191,7 @@ def main(unused_argv) -> None:
             ),
             FLAGS.mode,
             None,
-            FLAGS.config.min_n_nodes,
+            FLAGS.min_n_nodes,
             FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
@@ -227,6 +228,12 @@ if __name__ == "__main__":
     )
     flags.DEFINE_string(
         "structure_file", None, "Location of cached structures."
+    )
+    flags.DEFINE_integer(
+        "num_frags_per_graph", 0, "Number of fragments per structure. If 0, generate all fragments."
+    )
+    flags.DEFINE_integer(
+        "min_n_nodes", 30, "Minimum number of nodes per graph."
     )
 
     app.run(main)

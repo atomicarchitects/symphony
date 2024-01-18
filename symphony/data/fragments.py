@@ -23,7 +23,8 @@ def generate_fragments(
     heavy_first: bool = False,
     beta_com: float = 0.0,
     max_targets_per_graph: int = 1,
-    periodic: bool = False
+    periodic: bool = False,
+    num_fragments: int = 0,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -36,6 +37,8 @@ def generate_fragments(
         mode: How to generate the fragments. Either "nn" or "radius".
         heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
         beta_com: Inverse temperature value for the center of mass.
+        periodic: If true, fragments will account for periodic boundary conditions.
+        num_fragments: The number of fragments to generate. If 0, all possible fragments will be generated.
 
     Returns:
         A sequence of fragments.
@@ -62,6 +65,13 @@ def generate_fragments(
             ))
         assert dist.min() > 1e-5, FragmentError('self edges')
 
+    assert num_fragments >= 0
+    frags_to_generate = np.ones((n,), dtype=bool)
+    if 0 < num_fragments < n:
+        frag_rng, rng = jax.random.split(rng)
+        frags_to_ignore = jax.random.choice(frag_rng, jnp.arange(n-1), shape=(max(0, n-1-num_fragments),), replace=False)
+        frags_to_generate[frags_to_ignore] = False
+
     # make fragments
     try:
         rng, visited_nodes, frag = _make_first_fragment(
@@ -77,9 +87,10 @@ def generate_fragments(
             max_targets_per_graph=max_targets_per_graph,
             periodic=periodic
         )
-        yield frag
+        if frags_to_generate[0]:
+            yield frag
 
-        for _ in range(n - 2):
+        for i in range(n - 2):
             rng, visited_nodes, frag = _make_middle_fragment(
                 rng,
                 visited_nodes,
@@ -92,7 +103,8 @@ def generate_fragments(
                 heavy_first,
                 max_targets_per_graph=max_targets_per_graph,
             )
-            yield frag
+            if frags_to_generate[i]:
+                yield frag
     except ValueError:
         pass
     except FragmentError as e:
