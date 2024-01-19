@@ -21,8 +21,7 @@ def main(unused_argv: Sequence[str]):
     beta_position = 1.0
     step = flags.FLAGS.step
     num_seeds_per_chunk = 1
-    max_num_atoms = 200
-    num_mols = 20
+    num_mols = flags.FLAGS.num_mols
     config = config_src.get_config()
 
     mols_by_split = {"train": [], "test": []}
@@ -95,7 +94,7 @@ def main(unused_argv: Sequence[str]):
             len(mol_list),
             num_seeds_per_chunk,
             mol_list,
-            max_num_atoms,
+            flags.FLAGS.max_num_atoms,
             flags.FLAGS.visualize,
             filetype="cif"
         )
@@ -110,6 +109,16 @@ if __name__ == "__main__":
         "outputdir",
         os.path.join(os.getcwd(), "conditional_generation", "analysed_workdirs"),
         "Directory where molecules should be saved.",
+    )
+    flags.DEFINE_integer(
+        "num_mols",
+        20,
+        "Number of molecules to generate.",
+    )
+    flags.DEFINE_integer(
+        "max_num_atoms",
+        200,
+        "Number of molecules to generate.",
     )
     flags.DEFINE_bool(
         "visualize",
