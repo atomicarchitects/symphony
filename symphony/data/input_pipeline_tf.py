@@ -309,7 +309,7 @@ def pieces_to_unbatched_datasets(
         fragments_for_pieces = itertools.chain.from_iterable(
             generate_fragments_helper(split_seed, graph)
             for graph in split_pieces_as_graphs
-            for split_seed in config.get(f"{split}_seeds", [0])
+            for split_seed in config.get(f"{split}_seeds")
         )
 
         def fragment_yielder():
