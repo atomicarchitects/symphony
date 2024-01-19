@@ -17,6 +17,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
+    config.train_seeds = tuple(range(10))
+    config.val_seeds = tuple(range(10))
+    config.test_seeds = tuple(range(10))
     config.max_targets_per_graph = 1
 
     # Optimizer.

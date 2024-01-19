@@ -225,7 +225,7 @@ def ase_atoms_to_jraph_graph(
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=np.eye(3)
+        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff,
     )
 
     # Get the species indices
