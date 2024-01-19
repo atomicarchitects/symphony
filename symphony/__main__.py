@@ -13,15 +13,20 @@ import jax
 import ml_collections
 from ml_collections import config_flags
 import tensorflow as tf
+import wandb
 
-
-from symphony import train, train_position_updater
+from symphony import train
 from configs import root_dirs
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Directory to store model data.")
+flags.DEFINE_bool("use_wandb", True, "Whether to log to Weights & Biases.")
+flags.DEFINE_list("wandb_tags", [], "Tags to add to the Weights & Biases run.")
+flags.DEFINE_string("wandb_name", None, "Name of the Weights & Biases run. Uses the Weights & Biases default if not specified.")
+flags.DEFINE_string("wandb_notes", None, "Notes for the Weights & Biases run.")
+
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -61,11 +66,21 @@ def main(argv):
     config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
     config = ml_collections.FrozenConfigDict(config)
 
+    # Initialize wandb.
+    if FLAGS.use_wandb:
+        wandb.login()
+        wandb.init(
+            project="symphony",
+            config=config.to_dict(),
+            dir=FLAGS.workdir,
+            sync_tensorboard=True,
+            tags=FLAGS.wandb_tags,
+            name=FLAGS.wandb_name,
+            notes=FLAGS.wandb_notes,
+        )
+
     # Start training!
-    if config.get("position_updater"):
-        train_position_updater.train_and_evaluate(config, FLAGS.workdir)
-    else:
-        train.train_and_evaluate(config, FLAGS.workdir)
+    train.train_and_evaluate(config, FLAGS.workdir)
 
 
 if __name__ == "__main__":
