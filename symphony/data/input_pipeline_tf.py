@@ -265,11 +265,12 @@ def pieces_to_unbatched_datasets(
     """Converts a sequence of pieces to a tf.data.Dataset for each split."""
 
     def generate_fragments_helper(
-        rng: chex.PRNGKey, graph: jraph.GraphsTuple
+        split_seed: int, graph: jraph.GraphsTuple
     ) -> Iterator[datatypes.Fragments]:
         """Helper function to generate fragments from a graph."""
+        split_rng = jax.random.fold_in(rng, split_seed)
         return fragments.generate_fragments(
-            rng,
+            split_rng,
             graph,
             n_species=1,
             nn_tolerance=config.nn_tolerance,
@@ -292,18 +293,13 @@ def pieces_to_unbatched_datasets(
 
     # Create an example graph to get the specs.
     # This is a bit ugly but I don't want to consume the generator.
-    example_rng, rng = jax.random.split(rng)
     example_graph = next(
-        iter(generate_fragments_helper(example_rng, pieces_as_graphs[0]))
+        iter(generate_fragments_helper(0, pieces_as_graphs[0]))
     )
     element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
 
-    # We will save our datasets to a temporary directory.
     datasets = {}
-
     for split in ["train", "val", "test"]:
-        split_rng, rng = jax.random.split(rng)
-
         split_pieces = config.get(f"{split}_pieces")
         if None not in [split_pieces, split_pieces[0], split_pieces[1]]:
             split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
@@ -311,8 +307,9 @@ def pieces_to_unbatched_datasets(
             split_pieces_as_graphs = pieces_as_graphs
 
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_rng, graph)
+            generate_fragments_helper(split_seed, graph)
             for graph in split_pieces_as_graphs
+            for split_seed in config.get(f"{split}_seeds")
         )
 
         def fragment_yielder():

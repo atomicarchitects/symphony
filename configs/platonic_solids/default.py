@@ -9,12 +9,17 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "platonic_solids"
-    config.fragment_logic = "radius"
+    config.fragment_logic = "nn"
+    config.nn_tolerance = 0.1
+    config.nn_cutoff = 1.01
     config.root_dir = None
     config.shuffle_datasets = True
     config.train_pieces = (None, None)
     config.val_pieces = (None, None)
     config.test_pieces = (None, None)
+    config.train_seeds = tuple(range(10))
+    config.val_seeds = tuple(range(10))
+    config.test_seeds = tuple(range(10))
     config.max_targets_per_graph = 1
 
     # Optimizer.
@@ -36,8 +41,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
     config.eval_every_steps = 30000
-    config.nn_tolerance = 0.5
-    config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 15 * config.get_ref("max_n_graphs")
