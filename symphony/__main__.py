@@ -13,7 +13,6 @@ import jax
 import ml_collections
 from ml_collections import config_flags
 import tensorflow as tf
-import wandb
 
 from symphony import train
 from configs import root_dirs
@@ -24,7 +23,11 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("workdir", None, "Directory to store model data.")
 flags.DEFINE_bool("use_wandb", True, "Whether to log to Weights & Biases.")
 flags.DEFINE_list("wandb_tags", [], "Tags to add to the Weights & Biases run.")
-flags.DEFINE_string("wandb_name", None, "Name of the Weights & Biases run. Uses the Weights & Biases default if not specified.")
+flags.DEFINE_string(
+    "wandb_name",
+    None,
+    "Name of the Weights & Biases run. Uses the Weights & Biases default if not specified.",
+)
 flags.DEFINE_string("wandb_notes", None, "Notes for the Weights & Biases run.")
 
 config_flags.DEFINE_config_file(
@@ -68,6 +71,9 @@ def main(argv):
 
     # Initialize wandb.
     if FLAGS.use_wandb:
+        # Import wandb here so that we don't need to install it if we don't use it.
+        import wandb
+
         wandb.login()
         wandb.init(
             project="symphony",
