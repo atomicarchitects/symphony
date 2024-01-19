@@ -28,11 +28,13 @@ def get_datasets(
     # Get the raw datasets.
     if config.dataset == "qm9":
         del rng
-        datasets = get_unbatched_qm9_datasets(config)
+        datasets = get_unbatched_datasets(config)
     elif config.dataset == "tetris":
         datasets = get_unbatched_tetris_datasets(rng, config)
     elif config.dataset == "platonic_solids":
         datasets = get_unbatched_platonic_solids_datasets(rng, config)
+    elif config.dataset == "tmqm":
+        datasets = get_unbatched_datasets(config)
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:
@@ -373,11 +375,11 @@ def _deprecated_get_unbatched_qm9_datasets(
     return datasets
 
 
-def get_unbatched_qm9_datasets(
+def get_unbatched_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
 ) -> Dict[str, tf.data.Dataset]:
-    """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
+    """Loads a raw dataset as tf.data.Datasets for each split."""
     # Set the seed for reproducibility.
     tf.random.set_seed(seed)
 

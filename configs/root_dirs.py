@@ -13,8 +13,8 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
             return f"/data/NFS/radish/qm9_fragments/{fragment_logic}"
         if hostname == "potato.mit.edu":
             if max_targets_per_graph:
-                return f"/radish/qm9_fragments_fixed_mad/{fragment_logic}/max_targets_{max_targets_per_graph}"
-            return f"/radish/qm9_fragments_fixed_mad/{fragment_logic}"
+                return f"/radish/qm9_fragments_mad/{fragment_logic}/max_targets_{max_targets_per_graph}"
+            return f"/radish/qm9_fragments_mad/{fragment_logic}"
         if username == "ameyad":
             return f"/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/{fragment_logic}"
         if username == "songk":
