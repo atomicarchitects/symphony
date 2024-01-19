@@ -320,6 +320,7 @@ def _make_middle_fragment(
     focus_node = int(focus_node)
 
     # pick a random target species
+    targets = receivers[(senders == focus_node) & mask]
     rng, species_rng = jax.random.split(rng)
     target_species = jax.random.choice(species_rng, graph.nodes.species[targets]).reshape((1,))
     targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
