@@ -101,7 +101,11 @@ def generate_all_fragments(
                     )
                     skip = True
 
-            if len(frags) == 0 or not frags[-1].globals.stop:
+            if len(frags) == 0:
+                logging.info("No fragments were generated.")
+                skip = True
+
+            if not frags[-1].globals.stop:
                 logging.info("The last fragment is not a stop fragment.")
                 skip = True
 
@@ -201,7 +205,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
     flags.DEFINE_string(
-        "output_dir", "/radish/qm9_fragments_fixed_mad/", "Output directory."
+        "output_dir", "/radish/qm9_fragments_mad/", "Output directory."
     )
     flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
