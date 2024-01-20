@@ -7,7 +7,7 @@ import urllib
 import numpy as np
 from sh import gunzip
 import ase.io
-from symphony.data.utils import clone_url, molecule_sanity
+from symphony.data.utils import clone_url
 
 TMQM_URL = "https://github.com/bbskjelstad/tmqm.git"
 

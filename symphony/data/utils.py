@@ -1,9 +1,10 @@
-from typing import List
-
 import logging
 import os
 import zipfile
+import tarfile
 import urllib
+import urllib.error
+import urllib.request
 from git import Repo
 import rdkit.Chem as Chem
 
@@ -91,6 +92,13 @@ def extract_zip(path: str, root: str):
                 continue
             logging.info(f"Extracting {name} to {root}...")
             f.extract(name, root)
+
+
+def extract_tar(path: str, root: str):
+    """Extract tar."""
+    logging.info(f"Extracting {path} to {root}...")
+    with tarfile.TarFile(path, "r") as f:
+        f.extractall(path=root)
 
 
 def molecule_sanity(mol: Chem.Mol) -> bool:

@@ -2,12 +2,11 @@ from typing import List
 
 import logging
 import os
-import zipfile
 import urllib
 import numpy as np
 import ase
 import rdkit.Chem as Chem
-from utils import download_url, extract_zip, molecule_sanity
+from symphony.data.utils import download_url, extract_zip, molecule_sanity
 
 
 QM9_URL = (
