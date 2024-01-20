@@ -135,12 +135,13 @@ def _make_first_fragment(
         graph.nodes.species[targets], n_species
     )
 
-    # pick a random target
-    rng, target_rng = jax.random.split(rng)
-    target = jax.random.choice(target_rng, targets)
-    # get all potential positions for that target, based on species
-    target_species = graph.nodes.species[target:target+1]
+    # pick a random target species
+    rng, species_rng = jax.random.split(rng)
+    target_species = jax.random.choice(species_rng, graph.nodes.species[targets]).reshape((1,))
     targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
+    # get all potential positions for that species
+    rng, target_rng = jax.random.split(rng)
+    target = jax.random.choice(target_rng, targets_of_same_species)
     target_positions = (
         graph.nodes.positions[targets_of_same_species]
         - graph.nodes.positions[first_node]
@@ -216,14 +217,14 @@ def _make_middle_fragment(
     focus_node = jax.random.choice(k, n_nodes, p=focus_probability)
     focus_node = int(focus_node)
 
-    # pick a random target
-    rng, k = jax.random.split(rng)
+    # pick a random target species
     targets = receivers[(senders == focus_node) & mask]
-    target_node = jax.random.choice(k, targets)
-    target_node = int(target_node)
-    # get all potential positions for that target, based on species
-    target_species = graph.nodes.species[target_node:target_node+1]
+    rng, species_rng = jax.random.split(rng)
+    target_species = jax.random.choice(species_rng, graph.nodes.species[targets]).reshape((1,))
     targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
+    # get all potential positions for that species
+    rng, target_rng = jax.random.split(rng)
+    target_node = jax.random.choice(target_rng, targets_of_same_species)
     target_positions = (
         graph.nodes.positions[targets_of_same_species]
         - graph.nodes.positions[focus_node]
