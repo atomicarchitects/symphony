@@ -168,6 +168,7 @@ def get_plotly_traces_for_fragment(
             legendrank=1,
         )
     )
+
     # Add bonds.
     for i, j in zip(fragment.senders, fragment.receivers):
         molecule_traces.append(
@@ -181,34 +182,53 @@ def get_plotly_traces_for_fragment(
             )
         )
 
-    # Highlight the target atom.
-    if fragment.globals is not None:
-        if fragment.globals.target_positions is not None and not fragment.globals.stop:
-            # The target position is relative to the fragment's focus node.
-            target_positions = (
-                fragment.globals.target_positions + fragment.nodes.positions[0]
-            )
-            molecule_traces.append(
-                go.Scatter3d(
-                    x=[target_positions[:, 0]],
-                    y=[target_positions[:, 1]],
-                    z=[target_positions[:, 2]],
-                    mode="markers",
-                    marker=dict(
-                        size=[
-                            1.05
-                            * ATOMIC_SIZES[
-                                models.ATOMIC_NUMBERS[
-                                    fragment.globals.target_species.item()
-                                ]
+    # If this is a training fragment, highlight the focus atom.
+    if fragment.globals is not None and fragment.globals.target_positions is not None:
+        molecule_traces.append(
+            go.Scatter3d(
+                x=[fragment.nodes.positions[0, 0]],
+                y=[fragment.nodes.positions[0, 1]],
+                z=[fragment.nodes.positions[0, 2]],
+                mode="markers",
+                marker=dict(
+                    size= 1.05
+                        * ATOMIC_SIZES[
+                            models.ATOMIC_NUMBERS[
+                                fragment.nodes.species[0]
                             ]
                         ],
-                        color=["green"],
-                    ),
-                    opacity=0.5,
-                    name="Target Atoms",
-                )
+                    color="rgba(150, 75, 0, 0.5)",
+                ),
+                name="True Focus",
             )
+        )
+
+    # Highlight the target atom.
+    if fragment.globals is not None and fragment.globals.target_positions is not None and not fragment.globals.stop:
+        # The target position is relative to the fragment's focus node.
+        target_positions = (
+            fragment.globals.target_positions + fragment.nodes.positions[0]
+        )
+        target_positions = target_positions[fragment.globals.target_position_mask, :]
+        print("target_positions", target_positions, fragment.globals.target_position_mask)
+        molecule_traces.append(
+            go.Scatter3d(
+                x=target_positions[:, 0],
+                y=target_positions[:, 1],
+                z=target_positions[:, 2],
+                mode="markers",
+                marker=dict(
+                    size= 1.05
+                        * ATOMIC_SIZES[
+                            models.ATOMIC_NUMBERS[
+                                fragment.globals.target_species.item()
+                            ]
+                        ],
+                    color="green",
+                ),
+                name="Target Atoms",
+            )
+        )
 
     return molecule_traces
 
@@ -222,48 +242,53 @@ def get_plotly_traces_for_predictions(
         int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
     )
     focus = pred.globals.focus_indices.item()
-    focus_position = fragment.nodes.positions[focus]
     focus_and_target_species_probs = pred.nodes.focus_and_target_species_probs
     focus_probs = focus_and_target_species_probs.sum(axis=-1)
     num_nodes, num_elements = focus_and_target_species_probs.shape
 
     # Highlight the focus probabilities, obtained by marginalization over all elements.
-    def get_scaling_factor(focus_prob: float, num_nodes: int) -> float:
+    def get_scaling_factor(index: int, focus_prob: float, num_nodes: int) -> float:
         """Returns a scaling factor for the size of the atom."""
+        if index == focus:
+            factor = 2
+        else:
+            factor = 1
         if focus_prob < 1 / num_nodes - 1e-3:
-            return 0.95
-        return 1 + focus_prob**2
+            return factor * 0.95
+        return factor * (1 + focus_prob**2)
 
     def chosen_focus_string(index: int, focus: int) -> str:
         """Returns a string indicating whether the atom was chosen as the focus."""
         if index == focus:
             return f"Atom {index} (Chosen as Focus)"
         return f"Atom {index} (Not Chosen as Focus)"
-
+    
     molecule_traces = []
-    molecule_traces.append(
-        go.Scatter3d(
-            x=fragment.nodes.positions[:, 0],
-            y=fragment.nodes.positions[:, 1],
-            z=fragment.nodes.positions[:, 2],
-            mode="markers",
-            marker=dict(
-                size=[
-                    get_scaling_factor(float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
-                    for focus_prob, num in zip(focus_probs, atomic_numbers)
+    if not pred.globals.stop:
+        molecule_traces.append(
+            go.Scatter3d(
+                x=fragment.nodes.positions[:, 0],
+                y=fragment.nodes.positions[:, 1],
+                z=fragment.nodes.positions[:, 2],
+                mode="markers",
+                marker=dict(
+                    size=[
+                        get_scaling_factor(index, float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
+                        for index, (focus_prob, num) in enumerate(zip(focus_probs, atomic_numbers))
+                    ],
+                    color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
+                ),
+                hovertext=[
+                    f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
+                    for i, focus_prob in enumerate(focus_probs)
                 ],
-                color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
-            ),
-            hovertext=[
-                f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
-                for i, focus_prob in enumerate(focus_probs)
-            ],
-            name="Focus Probabilities",
+                name="Focus Probabilities",
+            )
         )
-    )
 
     # Highlight predicted position, if not stopped.
-    if not pred.globals.stop:
+    focus_position = fragment.nodes.positions[focus]
+    if not pred.globals.stop and pred.globals.position_vectors is not None:
         predicted_target_position = focus_position + pred.globals.position_vectors
         molecule_traces.append(
             go.Scatter3d(
@@ -319,8 +344,12 @@ def get_plotly_traces_for_predictions(
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
+    if pred.globals.position_vectors is None:
+        radius = np.linalg.norm(fragment.globals.target_positions[0], axis=-1)
+    else:
+        radius = np.linalg.norm(pred.globals.position_vectors, axis=-1)
+
     radii = pred.globals.radial_bins
-    radius = np.linalg.norm(pred.globals.position_vectors, axis=-1)
     most_likely_radius_index = np.abs(radii - radius).argmin()
     most_likely_radius = radii[most_likely_radius_index]
     all_sigs = e3nn.to_s2grid(
@@ -350,7 +379,11 @@ def get_plotly_traces_for_predictions(
 
     # Plot target species probabilities.
     stop_probability = pred.globals.stop_probs.item()
-    predicted_target_species = pred.globals.target_species.item()
+    if pred.globals.target_species is None:
+        predicted_target_species = fragment.globals.target_species.item()
+    else:
+        predicted_target_species = pred.globals.target_species.item()
+
     if fragment.globals is not None and not fragment.globals.stop:
         true_focus = 0  # This is a convention used in our training pipeline.
         true_target_species = fragment.globals.target_species.item()
@@ -495,18 +528,21 @@ def visualize_predictions(
 
     # Update the layout.
     centre_of_mass = np.mean(fragment.nodes.positions, axis=0)
-    furthest_dist = np.max(
+    if pred.globals.position_vectors is None:
+        target_position = fragment.globals.target_positions[0]
+    else:
+        target_position = pred.globals.position_vectors
+
+    furthest_dist = np.max(np.concatenate([
         np.linalg.norm(
-            fragment.nodes.positions + pred.globals.position_vectors - centre_of_mass,
+            fragment.nodes.positions + target_position - centre_of_mass,
+            axis=-1,
+        ),
+        np.linalg.norm(
+            fragment.nodes.positions - target_position - centre_of_mass,
             axis=-1,
         )
-    )
-    furthest_dist = np.max(
-        np.linalg.norm(
-            fragment.nodes.positions - pred.globals.position_vectors - centre_of_mass,
-            axis=-1,
-        )
-    )
+    ]))
     min_range = centre_of_mass - furthest_dist
     max_range = centre_of_mass + furthest_dist
     axis = dict(
