@@ -93,13 +93,13 @@ def generate_all_fragments(
             frags = list(frags)
 
             skip = False
-            for frag in frags:
-                d = np.linalg.norm(frag.globals.target_positions, axis=-1)
-                if np.sum(d > max_radius) > 0:
-                    logging.info(
-                        f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
-                    )
-                    skip = True
+            # for frag in frags:
+            #     d = np.linalg.norm(frag.globals.target_positions, axis=-1)
+            #     if np.sum(d > max_radius) > 0:
+            #         logging.info(
+            #             f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
+            #         )
+            #         skip = True
 
             if len(frags) == 0:
                 logging.info("No fragments were generated.")
@@ -150,11 +150,7 @@ def main(unused_argv) -> None:
     logging.set_verbosity(logging.INFO)
     logging.set_stderrthreshold(logging.INFO)
 
-    use_edm_splits = FLAGS.use_edm_splits
     mode = FLAGS.mode
-    if mode == "nn_edm":
-        use_edm_splits = True
-        mode = "nn"
 
     # Create a list of arguments to pass to generate_all_fragments
     molecules = tmqm.load_tmqm(
@@ -204,7 +200,7 @@ if __name__ == "__main__":
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
-    flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
+    flags.DEFINE_float("max_radius", 2.6, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )

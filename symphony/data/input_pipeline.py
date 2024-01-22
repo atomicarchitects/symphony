@@ -35,7 +35,7 @@ def get_raw_datasets(
     all_molecules = qm9.load_qm9(root_dir)
 
     # Atomic numbers map to elements H, C, N, O, F.
-    atomic_numbers = jnp.array([1, 6, 7, 8, 9])
+    atomic_numbers = jnp.array(jnp.arange(1, 81))
 
     # Get different randomness for each split.
     rng, train_rng, val_rng, test_rng = jax.random.split(rng, 4)
@@ -221,11 +221,11 @@ def pad_graph_to_nearest_ceil_mantissa(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float, cell: np.ndarray = np.eye(3)
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff,
+        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=cell
     )
 
     # Get the species indices
