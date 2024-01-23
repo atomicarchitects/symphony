@@ -104,8 +104,7 @@ def generate_all_fragments(
             if len(frags) == 0:
                 logging.info("No fragments were generated.")
                 skip = True
-
-            if not frags[-1].globals.stop:
+            elif not frags[-1].globals.stop:
                 logging.info("The last fragment is not a stop fragment.")
                 skip = True
 
