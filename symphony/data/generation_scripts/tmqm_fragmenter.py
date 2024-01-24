@@ -184,7 +184,7 @@ def main(unused_argv) -> None:
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
     tqdm.contrib.concurrent.process_map(
-        _generate_all_fragments_wrapper, args_list, chunksize=128
+        _generate_all_fragments_wrapper, args_list, chunksize=FLAGS.chunksize
     )
 
 
@@ -194,6 +194,7 @@ if __name__ == "__main__":
     flags.DEFINE_integer("start_index", 0, "Start molecule.")
     flags.DEFINE_integer("end_index", -1, "End molecule.")
     flags.DEFINE_integer("chunk", 1000, "Number of molecules per fragment file.")
+    flags.DEFINE_integer("chunksize", 128, "Chunk size for parallelization.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_string(
