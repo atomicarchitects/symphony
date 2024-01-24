@@ -155,9 +155,8 @@ def main(unused_argv) -> None:
     molecules = tmqm.load_tmqm(
         "tmqm_data",
     )
-    molecules = molecules[FLAGS.start_index :]
-    if FLAGS.end_index != -1:
-        molecules = molecules[: FLAGS.end_index]
+    start_index = FLAGS.start_index
+    end_index = FLAGS.end_index if FLAGS.end_index != -1 else len(molecules)
     chunk_size = FLAGS.chunk
     output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     args_list = [
@@ -179,7 +178,7 @@ def main(unused_argv) -> None:
             FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
-        for start in range(0, len(molecules), chunk_size)
+        for start in range(start_index, end_index, chunk_size)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
