@@ -155,6 +155,9 @@ def main(unused_argv) -> None:
     molecules = tmqm.load_tmqm(
         "tmqm_data",
     )
+    molecules = molecules[FLAGS.start_index :]
+    if FLAGS.end_index != -1:
+        molecules = molecules[: FLAGS.end_index]
     chunk_size = FLAGS.chunk
     output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     args_list = [
@@ -188,6 +191,8 @@ def main(unused_argv) -> None:
 if __name__ == "__main__":
     flags.DEFINE_integer("start_seed", 0, "Start random seed.")
     flags.DEFINE_integer("end_seed", 8, "End random seed.")
+    flags.DEFINE_integer("start_index", 0, "Start molecule.")
+    flags.DEFINE_integer("end_index", -1, "End molecule.")
     flags.DEFINE_integer("chunk", 1000, "Number of molecules per fragment file.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
