@@ -29,4 +29,9 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
             return f"/radish/platonic_solids/{fragment_logic}"
         if username == "ameyad":
             return f"/Users/ameyad/Documents/spherical-harmonic-net/temp/platonic_solids/{fragment_logic}"
+    if dataset == "tmqm":
+        if hostname == "potato.mit.edu":
+            if max_targets_per_graph:
+                return f"/data/NFS/potato/songk/tmqm_fragments_reduced/{fragment_logic}/max_targets_{max_targets_per_graph}"
+            return f"/data/NFS/potato/songk/tmqm_fragments/{fragment_logic}"
     return None

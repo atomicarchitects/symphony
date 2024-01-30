@@ -5,6 +5,7 @@ import haiku as hk
 import e3nn_jax as e3nn
 
 from symphony import datatypes
+from symphony.models import ptable
 
 
 def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
@@ -116,6 +117,7 @@ class E3SchNet(hk.Module):
         max_ell: int,
         num_species: int,
         name: Optional[str] = None,
+        simple_embedding: bool = True
     ):
         """
         Args:
@@ -145,6 +147,7 @@ class E3SchNet(hk.Module):
         self.cutoff_fn = lambda x: cosine_cutoff(x, cutoff=cutoff)
         self.max_ell = max_ell
         self.num_species = num_species
+        self.simple_embedding = simple_embedding
 
     def __call__(self, fragments: datatypes.Fragments) -> jnp.ndarray:
         # 'species' are actually atomic numbers mapped to [0, self.num_species).
@@ -166,7 +169,14 @@ class E3SchNet(hk.Module):
 
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
-        x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
+        if self.simple_embedding:
+            x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
+        else:
+            x_species = hk.Embed(self.num_species, self.init_embedding_dim)(species)
+            x_group = hk.Embed(18, self.init_embedding_dim)(jax.vmap(lambda s: ptable.groups[s])(species))
+            x_row = hk.Embed(7, self.init_embedding_dim)(jax.vmap(lambda s: ptable.rows[s])(species))
+            x_block = hk.Embed(4, self.init_embedding_dim)(jax.vmap(lambda s: ptable.blocks[s])(species))
+            x = x_species + x_group + x_row + x_block  # TODO: what's the best way to combine these things?
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps, force_irreps_out=True)(x)
 
