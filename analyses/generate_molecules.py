@@ -30,7 +30,9 @@ FLAGS = flags.FLAGS
 
 
 def append_predictions(
-    pred: datatypes.Predictions, padded_fragment: datatypes.Fragments, nn_cutoff: float,
+    pred: datatypes.Predictions,
+    padded_fragment: datatypes.Fragments,
+    nn_cutoff: float,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -151,7 +153,9 @@ def generate_molecules(
         init_molecule_names = [init_molecule_name] * num_seeds
     else:
         assert len(init_molecules) == num_seeds
-        init_molecule_names = [init_molecule.get_chemical_formula() for init_molecule in init_molecules]
+        init_molecule_names = [
+            init_molecule.get_chemical_formula() for init_molecule in init_molecules
+        ]
 
     # Load model.
     name = analysis.name_from_workdir(workdir)
@@ -162,13 +166,14 @@ def generate_molecules(
         )
     else:
         model, params, config = analysis.load_model_at_step(
-            workdir, step, run_in_evaluation_mode=True,
+            workdir,
+            step,
+            run_in_evaluation_mode=True,
             res_alpha=res_alpha,
             res_beta=res_beta,
         )
     config = config.unlock()
     logging.info(config.to_dict())
-
 
     # Create output directories.
     molecules_outputdir = os.path.join(
@@ -201,15 +206,22 @@ def generate_molecules(
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
             init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
-        ) for init_molecule in init_molecules]
-    init_fragments = [jraph.pad_with_graphs(
-        init_fragment,
-        n_node=(max_num_atoms + 1),
-        n_edge=(max_num_atoms + 1) ** 2,
-        n_graph=2,
-    ) for init_fragment in init_fragments]
+        )
+        for init_molecule in init_molecules
+    ]
+    init_fragments = [
+        jraph.pad_with_graphs(
+            init_fragment,
+            n_node=(max_num_atoms + 1),
+            n_edge=(max_num_atoms + 1) ** 2,
+            n_graph=2,
+        )
+        for init_fragment in init_fragments
+    ]
     init_fragments = jax.tree_map(lambda *err: np.stack(err), *init_fragments)
-    init_fragments = jax.vmap(lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment))(init_fragments)
+    init_fragments = jax.vmap(
+        lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment)
+    )(init_fragments)
 
     @jax.jit
     def chunk_and_apply(
@@ -242,7 +254,13 @@ def generate_molecules(
             return jax.vmap(generate_for_one_seed_fn)(rngs, init_fragments)
 
         # Chunk the seeds, apply the model, and unchunk the results.
-        init_fragments, rngs = jax.tree_map(lambda arr: jnp.reshape(arr, (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:])), (init_fragments, rngs))
+        init_fragments, rngs = jax.tree_map(
+            lambda arr: jnp.reshape(
+                arr,
+                (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:]),
+            ),
+            (init_fragments, rngs),
+        )
         results = jax.lax.map(apply_on_chunk, (init_fragments, rngs))
         results = jax.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
@@ -355,6 +373,8 @@ def generate_molecules(
         for mol in molecule_list:
             conn.write(mol)
 
+    return molecule_list
+
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
@@ -418,7 +438,7 @@ if __name__ == "__main__":
         "res_alpha",
         None,
         "Angular resolution of alpha.",
-    )   
+    )
     flags.DEFINE_integer(
         "res_beta",
         None,
