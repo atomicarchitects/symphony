@@ -15,7 +15,6 @@ import yaml
 from absl import logging
 import matplotlib.pyplot as plt
 
-
 from clu import (
     checkpoint,
     metric_writers,
@@ -27,6 +26,8 @@ from flax.training import train_state
 
 from symphony import datatypes, models, loss
 from symphony.data import input_pipeline_tf
+from analyses import generate_molecules
+from analyses import metrics as analyses_metrics
 
 LOG = True
 LOGGING_DIR = "logging_outputs"
@@ -85,11 +86,13 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 
     if config.optimizer == "adam":
         tx = optax.adam(learning_rate=learning_rate_or_schedule)
-
-    if config.optimizer == "sgd":
+    elif config.optimizer == "sgd":
         tx = optax.sgd(
             learning_rate=learning_rate_or_schedule, momentum=config.momentum
         )
+    else:
+        raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
+
 
     if not config.get("freeze_node_embedders"):
         return tx
@@ -117,7 +120,6 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn)
     )
 
-    raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
 @jax.profiler.annotate_function
@@ -396,12 +398,16 @@ def train_and_evaluate(
     logging.info("Starting training.")
     train_metrics = flax.jax_utils.replicate(Metrics.empty())
     train_metrics_empty = True
-    all_grad_norms = []
-    all_param_norms = []
-    all_params = []
-    all_focus_and_atom_type_losses = []
-    all_num_nodes = []
-    all_num_edges = []
+
+    # Generate only once the checkpoint is saved.
+    config = ml_collections.ConfigDict(config)
+    if config.get("generate_every_steps") is None:
+        config.generate_every_steps = config.eval_every_steps
+    if not config.generate_every_steps % config.eval_every_steps == 0:
+        raise ValueError(
+            "config.generate_every_steps must be a multiple of config.eval_every_steps."
+        )
+    config = ml_collections.FrozenConfigDict(config)
 
     for step in range(initial_step, config.num_train_steps + 1):
         # Log, if required.
@@ -451,6 +457,36 @@ def train_and_evaluate(
                     "metrics_for_best_state": metrics_for_best_state,
                 }
             )
+
+        # Generate molecules, if required.
+        if step % config.generate_every_steps == 0 or first_or_last_step:
+            molecules_ase = generate_molecules.generate_molecules(
+                workdir,
+                outputdir=workdir,
+                focus_and_atom_type_inverse_temperature=1.0,
+                position_inverse_temperature=1.0,
+                step=step,
+                num_seeds=100,
+                num_seeds_per_chunk=20,
+                init_molecules='H',
+                max_num_atoms=35,
+                visualize=False,
+            )
+
+            # Compute metrics.
+            molecules = [analyses_metrics.ase_to_rdkit_molecule(mol) for mol in molecules_ase]
+            validity = analyses_metrics.compute_validity(molecules)
+            uniqueness = analyses_metrics.compute_uniqueness(molecules)
+
+            # Write metrics out.
+            writer.write_scalars(
+                step,
+                {
+                    "validity": validity,
+                    "uniqueness": uniqueness,
+                },
+            )
+            writer.flush()
 
         # Get a batch of graphs.
         try:

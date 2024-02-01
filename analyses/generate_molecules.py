@@ -32,7 +32,9 @@ FLAGS = flags.FLAGS
 
 
 def append_predictions(
-    pred: datatypes.Predictions, padded_fragment: datatypes.Fragments, nn_cutoff: float,
+    pred: datatypes.Predictions,
+    padded_fragment: datatypes.Fragments,
+    nn_cutoff: float,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -215,6 +217,7 @@ def generate_molecules(
     print(f"Creating output directory {molecules_outputdir}")
     os.makedirs(molecules_outputdir, exist_ok=True)
 
+
     if visualize:
         visualizations_dir = os.path.join(
             outputdir,
@@ -235,7 +238,9 @@ def generate_molecules(
         n_graph=2,
     ) for init_fragment in init_molecules]
     init_fragments = jax.tree_map(lambda *err: np.stack(err), *init_fragments)
-    init_fragments = jax.vmap(lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment))(init_fragments)
+    init_fragments = jax.vmap(
+        lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment)
+    )(init_fragments)
 
     @jax.jit
     def chunk_and_apply(
@@ -268,7 +273,13 @@ def generate_molecules(
             return jax.vmap(generate_for_one_seed_fn)(rngs, init_fragments)
 
         # Chunk the seeds, apply the model, and unchunk the results.
-        init_fragments, rngs = jax.tree_map(lambda arr: jnp.reshape(arr, (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:])), (init_fragments, rngs))
+        init_fragments, rngs = jax.tree_map(
+            lambda arr: jnp.reshape(
+                arr,
+                (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:]),
+            ),
+            (init_fragments, rngs),
+        )
         results = jax.lax.map(apply_on_chunk, (init_fragments, rngs))
         results = jax.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
@@ -384,6 +395,8 @@ def generate_molecules(
     with connect(output_db) as conn:
         for mol in molecule_list:
             conn.write(mol)
+
+    return molecule_list
 
 
 def main(unused_argv: Sequence[str]) -> None:
