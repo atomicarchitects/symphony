@@ -101,13 +101,13 @@ def generate_one_step(
 def generate_for_one_seed(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     init_fragment: datatypes.Fragments,
-    max_num_atoms: int,
+    max_num_steps: int,
     cutoff: float,
     rng: chex.PRNGKey,
     return_intermediates: bool = False,
 ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
     """Generates a single molecule for a given seed."""
-    step_rngs = jax.random.split(rng, num=max_num_atoms)
+    step_rngs = jax.random.split(rng, num=max_num_steps)
     (final_padded_fragment, stop), (padded_fragments, preds) = jax.lax.scan(
         lambda args, rng: generate_one_step(*args, rng, apply_fn, cutoff),
         (init_fragment, False),
@@ -129,6 +129,7 @@ def generate_molecules(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
+    max_num_steps: int,
     visualize: bool,
     steps_for_weight_averaging: Optional[Sequence[int]] = None,
     res_alpha: Optional[int] = None,
@@ -234,7 +235,7 @@ def generate_molecules(
             generate_for_one_seed_fn = lambda rng, init_fragment: generate_for_one_seed(
                 apply_fn,
                 init_fragment,
-                max_num_atoms,
+                max_num_steps,
                 config.nn_cutoff,
                 rng,
                 return_intermediates=visualize,
@@ -383,6 +384,7 @@ def main(unused_argv: Sequence[str]) -> None:
         num_seeds_per_chunk,
         init_molecule,
         max_num_atoms,
+        FLAGS.max_steps,
         visualize,
         steps_for_weight_averaging,
         res_alpha=FLAGS.res_alpha,
@@ -442,7 +444,12 @@ if __name__ == "__main__":
     flags.DEFINE_integer(
         "max_num_atoms",
         30,
-        "Maximum number of atoms to generate per molecule.",
+        "Maximum number of atoms per molecule.",
+    )
+    flags.DEFINE_integer(
+        "max_steps",
+        200,
+        "Maximum number of atoms to add.",
     )
     flags.DEFINE_bool(
         "visualize",

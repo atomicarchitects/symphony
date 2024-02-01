@@ -11,7 +11,7 @@ import tensorflow as tf
 
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
-from symphony.data import qm9
+from symphony.data import tmqm
 
 
 def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
@@ -33,11 +33,12 @@ def main(unused_argv: Sequence[str]):
     beta_species = 1.0
     beta_position = 1.0
     step = flags.FLAGS.step
-    num_seeds_per_chunk = 25
-    max_num_atoms = 35
-    num_mols = 1000
+    num_seeds_per_chunk = 1
+    max_num_atoms = 200
+    max_num_steps = 10
+    num_mols = 20
 
-    all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
+    all_mols = tmqm.load_tmqm("../tmqm_data")
     mols_by_split = {"train": all_mols[:num_mols], "test": all_mols[-num_mols:]}
 
     for split, split_mols in mols_by_split.items():
@@ -58,6 +59,7 @@ def main(unused_argv: Sequence[str]):
             num_seeds_per_chunk,
             mol_list,
             max_num_atoms,
+            max_num_steps,
             flags.FLAGS.visualize,
         )
 
