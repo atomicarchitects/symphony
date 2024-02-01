@@ -398,7 +398,7 @@ def train_and_evaluate(
     train_metrics_empty = True
 
     # Generate only once the checkpoint is saved.
-    config = ml_collections.ConfigDict(config)
+    config = ml_collections.ConfigDict(config).unlock()
     if config.get("generate_every_steps") is None:
         config.generate_every_steps = config.eval_every_steps
     if not config.generate_every_steps % config.eval_every_steps == 0:
