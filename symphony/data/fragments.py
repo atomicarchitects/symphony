@@ -52,18 +52,10 @@ def generate_fragments(
     assert n >= 2, "Graph must have at least two nodes."
 
     # compute edge distances
+    assert len(graph.receivers[graph.receivers == graph.senders]) == 0
     dist = np.linalg.norm(
-        graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
-        axis=1,
+        graph.edges.relative_positions, axis=-1
     )  # [n_edge]
-    if periodic:
-        cell = graph.globals.cell[0]
-        for d in itertools.product(range(-1, 2), repeat=3):
-            dist = np.minimum(dist, np.linalg.norm(
-                graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders] + np.array(d) @ cell,
-                axis=1,
-            ))
-        assert dist.min() > 1e-5, FragmentError('self edges')
 
     assert num_fragments >= 0
     frags_to_generate = np.ones((n,), dtype=bool)
@@ -334,7 +326,7 @@ def _make_middle_fragment(
         :max_targets_per_graph
     ]
 
-    new_visited = np.concatenate([visited, np.array([target_node])])
+    new_visited = np.concatenate([visited, np.array(target_node)])
 
     sample = _into_fragment(
         graph,

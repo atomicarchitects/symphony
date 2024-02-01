@@ -269,16 +269,18 @@ def get_relative_positions(positions, senders, receivers, cell, periodic):
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, cutoffs: float | Tuple[float], periodic=False
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, cutoff: float | Tuple[float], periodic=False
 ) -> jraph.GraphsTuple:
-    if periodic:
-        struct = Structure(atoms.cell, atoms.numbers, atoms.positions, coords_are_cartesian=True)
-        receivers, senders = crystalnn(struct, cutoffs=cutoffs)
-    else:
-        # Create edges
-        receivers, senders = matscipy.neighbours.neighbour_list(
-            quantities="ij", positions=atoms.positions, cutoff=cutoffs, cell=np.eye(3)
-        )
+    # if periodic:
+    #     struct = Structure(atoms.cell, atoms.numbers, atoms.positions, coords_are_cartesian=True)
+    #     receivers, senders = crystalnn(struct)
+    # else:
+    # Create edges
+    receivers0, senders0 = matscipy.neighbours.neighbour_list(
+        quantities="ij", atoms=atoms, cutoff=cutoff
+    )
+    senders = senders0[senders0 != receivers0]
+    receivers = receivers0[senders0 != receivers0]
     positions = np.asarray(atoms.positions)
     # Get the species indices
     species = np.asarray(np.searchsorted(atomic_numbers, atoms.numbers))
@@ -302,7 +304,9 @@ def material_to_jraph_graph(
    struct: Structure, atomic_numbers: jnp.ndarray, cutoffs: Tuple[float]
 ) -> jraph.GraphsTuple:
     # Create edges
-    receivers, senders = crystalnn(struct, cutoffs=cutoffs)
+    receivers0, senders0 = crystalnn(struct, cutoffs=cutoffs)
+    senders = senders0[senders0 != receivers0]
+    receivers = receivers0[senders0 != receivers0]
 
     # Get the species indices
     positions = np.asarray(struct.cart_coords)

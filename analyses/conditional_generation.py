@@ -12,6 +12,7 @@ sys.path.append('../configs/silica/allegro.py')
 
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
+import analyses.generate_molecules_intermediates as generate_molecules_intermediates
 from symphony.data import input_pipeline_tf
 
 import configs.silica.e3schnet_and_nequip as config_src
@@ -77,15 +78,13 @@ def main(unused_argv: Sequence[str]):
 
     mols_by_split['train'] = mols_by_split['train'][:num_mols]
     mols_by_split['test'] = mols_by_split['test'][-num_mols:]
-    print([g.n_node for g in mols_by_split['train']])
-    print([g.n_node for g in mols_by_split['test']])
 
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
         mol_list = split_mols[:num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)]
         print(f"Number of molecules: {len(mol_list)}")
 
-        gen_mol_list = generate_molecules.generate_molecules(
+        args = [
             flags.FLAGS.workdir,
             os.path.join(flags.FLAGS.outputdir, split),
             beta_species,
@@ -95,9 +94,14 @@ def main(unused_argv: Sequence[str]):
             num_seeds_per_chunk,
             mol_list,
             flags.FLAGS.max_num_atoms,
-            flags.FLAGS.visualize,
-            filetype="cif"
-        )
+        ]
+
+        if flags.FLAGS.store_intermediates:
+            args = args[:-3] + args[-2:] + [flags.FLAGS.max_steps, None, "cif"]
+            gen_mol_list = generate_molecules_intermediates.generate_molecules(*args)
+        else:
+            args += [flags.FLAGS.visualize, None, "cif"]
+            gen_mol_list = generate_molecules.generate_molecules(*args)
 
 if __name__ == "__main__":
     flags.DEFINE_string(
@@ -118,7 +122,12 @@ if __name__ == "__main__":
     flags.DEFINE_integer(
         "max_num_atoms",
         200,
-        "Number of molecules to generate.",
+        "Maximum number of atoms in molecule.",
+    )
+    flags.DEFINE_integer(
+        "max_steps",
+        200,
+        "Maximum number of atoms to add.",
     )
     flags.DEFINE_bool(
         "visualize",
@@ -129,6 +138,11 @@ if __name__ == "__main__":
         "step",
         "best",
         "Step number to load model from. The default corresponds to the best model.",
+    )
+    flags.DEFINE_bool(
+        "store_intermediates",
+        False,
+        "Whether to store intermediates.",
     )
     flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_integer(

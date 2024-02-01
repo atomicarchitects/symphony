@@ -14,6 +14,7 @@ import pickle
 from pymatgen.core.structure import Structure
 import tensorflow as tf
 import tqdm
+import random
 
 from symphony.data import fragments
 from symphony.data import input_pipeline, matproj
@@ -30,7 +31,7 @@ def generate_all_fragments(
     end: int,
     output_dir: str,
     mode: str,
-    cutoffs: Tuple[float],
+    cutoff: float,
     min_n_nodes: float,
     max_targets_per_graph: int,
 ):
@@ -93,7 +94,7 @@ def generate_all_fragments(
     def generator():
         for mol_ndx, mol in tqdm.tqdm(enumerate(molecules)):
             graph = input_pipeline.ase_atoms_to_jraph_graph(
-                mol, atomic_numbers, cutoffs=cutoffs, periodic=True
+                mol, atomic_numbers, cutoff=cutoff, periodic=True
             )
             assert np.equal(graph.senders, graph.receivers).sum() == 0, "self edges!"
             if FLAGS.tetrahedra_only:
@@ -177,6 +178,9 @@ def main(unused_argv) -> None:
             )
             for mol in structures
         ]
+    if FLAGS.shuffle:
+        random.seed(FLAGS.shuffle_seed)
+        random.shuffle(molecules)
     output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     chunk_size = FLAGS.chunk
     args_list = [
@@ -190,7 +194,7 @@ def main(unused_argv) -> None:
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
             FLAGS.mode,
-            None,
+            FLAGS.nn_cutoff,
             FLAGS.min_n_nodes,
             FLAGS.max_targets_per_graph,
         )
@@ -235,5 +239,12 @@ if __name__ == "__main__":
     flags.DEFINE_integer(
         "min_n_nodes", 30, "Minimum number of nodes per graph."
     )
+    flags.DEFINE_bool(
+        "shuffle", False, "Whether to shuffle the dataset."
+    )
+    flags.DEFINE_integer(
+        "shuffle_seed", 0, "Seed to use when shuffling dataset."
+    )
+    flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
 
     app.run(main)
