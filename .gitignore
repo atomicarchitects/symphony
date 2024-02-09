@@ -187,5 +187,7 @@ cached/
 *.txt
 *.xyz
 *.mol_dict
+*.sdf
 
 analyses/molecules
+linker_data/

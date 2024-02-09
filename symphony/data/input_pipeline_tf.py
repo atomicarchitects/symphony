@@ -26,15 +26,13 @@ def get_datasets(
     """Loads and preprocesses the dataset as tf.data.Datasets for each split."""
 
     # Get the raw datasets.
-    if config.dataset == "qm9":
+    if config.dataset in ["qm9", "tmqm", "linker"]:
         del rng
         datasets = get_unbatched_datasets(config)
     elif config.dataset == "tetris":
         datasets = get_unbatched_tetris_datasets(rng, config)
     elif config.dataset == "platonic_solids":
         datasets = get_unbatched_platonic_solids_datasets(rng, config)
-    elif config.dataset == "tmqm":
-        datasets = get_unbatched_datasets(config)
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:

@@ -22,8 +22,9 @@ from symphony.models.position_updater import PositionUpdater
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 # ATOMIC_NUMBERS = list(range(1, 84))  # QCD
-ATOMIC_NUMBERS = list(range(1, 81))  # TMQM
+# ATOMIC_NUMBERS = list(range(1, 81))  # TMQM
 # ATOMIC_NUMBERS = [1, 6, 7, 8, 9]  # QM9
+ATOMIC_NUMBERS = [6, 7, 8, 9, 16, 17, 35, 53]  # linker
 
 
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
@@ -283,7 +284,7 @@ def _irreps_from_lmax(
 
 def get_num_species_for_dataset(dataset: str) -> int:
     """Returns the number of species for a given dataset."""
-    if dataset in ["qm9", "tmqm"]:
+    if dataset in ["qm9", "tmqm", "linker"]:
         return len(ATOMIC_NUMBERS)
     if dataset in ["tetris", "platonic_solids"]:
         return 1

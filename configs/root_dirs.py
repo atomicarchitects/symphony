@@ -34,4 +34,9 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
             if max_targets_per_graph:
                 return f"/data/NFS/potato/songk/tmqm_fragments_reduced/{fragment_logic}/max_targets_{max_targets_per_graph}"
             return f"/data/NFS/potato/songk/tmqm_fragments/{fragment_logic}"
+    if dataset == "linker":
+        if hostname == "potato.mit.edu":
+            if max_targets_per_graph:
+                return f"/data/NFS/potato/songk/linker_fragments_1seed/{fragment_logic}/max_targets_{max_targets_per_graph}"
+            return f"/data/NFS/potato/songk/linker_fragments_1seed/{fragment_logic}"
     return None

@@ -237,6 +237,6 @@ def ase_atoms_to_jraph_graph(
         globals=None,
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
-        n_node=np.array([len(atoms)]),
+        n_node=np.array([len(atoms.numbers)]),
         n_edge=np.array([len(senders)]),
     )

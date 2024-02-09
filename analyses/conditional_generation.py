@@ -11,44 +11,31 @@ import tensorflow as tf
 
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
-from symphony.data import qm9
-
-
-def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
-    fragments = []
-    for i in range(num_mols):
-        mol = mols[i]
-        num_atoms = len(mol)
-        for j in range(num_atoms):
-            if mol.numbers[j] == 1:
-                fragment = ase.Atoms(
-                    positions=np.vstack([mol.positions[:j], mol.positions[j + 1 :]]),
-                    numbers=np.concatenate([mol.numbers[:j], mol.numbers[j + 1 :]]),
-                )
-                fragments.append(fragment)
-    return fragments
+import analyses.generate_molecules_intermediates as generate_molecules_intermediates
+from symphony.data import linker
 
 
 def main(unused_argv: Sequence[str]):
     beta_species = 1.0
     beta_position = 1.0
     step = flags.FLAGS.step
-    num_seeds_per_chunk = 25
-    max_num_atoms = 35
-    num_mols = 1000
+    num_seeds_per_chunk = 1
+    max_num_atoms = 60
+    max_num_steps = 35
+    # num_mols = 1
+    num_mols = 50
 
-    all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
-    mols_by_split = {"train": all_mols[:num_mols], "test": all_mols[-num_mols:]}
+    all_mols = linker.load_linker("/home/songk/symphony-linker/linker_data")
+    mols_by_split = {"train": all_mols['frags'][:num_mols], "test": all_mols['frags'][-num_mols:]}
 
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
-        mol_list = get_fragment_list(split_mols, num_mols)
         mol_list = split_mols[
             : num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)
         ]
         print(f"Number of fragments for {split}: {len(mol_list)}")
 
-        gen_mol_list = generate_molecules.generate_molecules(
+        args = [
             flags.FLAGS.workdir,
             os.path.join(flags.FLAGS.outputdir, split),
             beta_species,
@@ -58,8 +45,15 @@ def main(unused_argv: Sequence[str]):
             num_seeds_per_chunk,
             mol_list,
             max_num_atoms,
-            flags.FLAGS.visualize,
-        )
+            max_num_steps,
+        ]
+
+        if flags.FLAGS.store_intermediates:
+            args = args[:6] + args[7:]
+            gen_mol_list = generate_molecules_intermediates.generate_molecules(*args)
+        else:
+            args += [flags.FLAGS.visualize]
+            gen_mol_list = generate_molecules.generate_molecules(*args)
 
 
 if __name__ == "__main__":
@@ -82,5 +76,10 @@ if __name__ == "__main__":
         "step",
         "best",
         "Step number to load model from. The default corresponds to the best model.",
+    )
+    flags.DEFINE_bool(
+        "store_intermediates",
+        False,
+        "Whether to store intermediates.",
     )
     app.run(main)

@@ -1,4 +1,4 @@
-from typing import Iterator
+from typing import Iterator, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -85,6 +85,75 @@ def generate_fragments(
         assert len(visited_nodes) == n
 
         yield _make_last_fragment(graph, n_species, max_targets_per_graph)
+
+
+def generate_linker_fragments(
+    rng: chex.PRNGKey,
+    graph: jraph.GraphsTuple,
+    frag_indices: np.ndarray,
+    n_species: int,
+    nn_tolerance: float = 0.01,
+    max_radius: float = 2.03,
+    mode: str = "nn",
+    heavy_first: bool = False,
+    beta_com: float = 0.0,
+    max_targets_per_graph: int = 1,
+) -> Iterator[datatypes.Fragments]:
+    """Generative sequence for a molecular graph.
+
+    Args:
+        rng: The random number generator.
+        graph: The molecular graph.
+        n_species: The number of different species considered.
+        nn_tolerance: Tolerance for the nearest neighbours.
+        max_radius: The maximum distance of the focus-target
+        mode: How to generate the fragments. Either "nn" or "radius".
+        heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
+        beta_com: Inverse temperature value for the center of mass.
+
+    Returns:
+        A sequence of fragments.
+    """
+    assert mode in ["nn", "radius"]
+    n = len(graph.nodes.positions)
+
+    assert (
+        len(graph.n_edge) == 1 and len(graph.n_node) == 1
+    ), "Only single graphs supported."
+    assert n >= 2, "Graph must have at least two nodes."
+
+    # compute edge distances
+    dist = np.linalg.norm(
+        graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
+        axis=1,
+    )  # [n_edge]
+
+    # use middle- and last-fragment generators; everything not in ndx_exclude can be "visited"
+    n_nodes = graph.n_node[0]
+    visited_nodes = np.asarray(range(n_nodes))[np.isin(np.asarray(range(n_nodes)), frag_indices)]
+
+    # make fragments
+    # try:
+    for _ in range(len(frag_indices), n):
+        rng, visited_nodes, frag = _make_middle_fragment(
+            rng,
+            visited_nodes,
+            graph,
+            dist,
+            n_species,
+            nn_tolerance,
+            max_radius,
+            mode,
+            heavy_first,
+            max_targets_per_graph=max_targets_per_graph,
+        )
+        yield frag
+    # except ValueError:
+    #     pass
+    # else:
+    assert len(visited_nodes) == n
+
+    yield _make_last_fragment(graph, n_species, max_targets_per_graph)
 
 
 def _make_first_fragment(

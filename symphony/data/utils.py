@@ -9,17 +9,19 @@ from git import Repo
 import rdkit.Chem as Chem
 
 
-def download_url(url: str, root: str) -> str:
+def download_url(url: str, root: str, progress: bool = True, filename: str | None = None) -> str:
     """Download if file does not exist in root already. Returns path to file."""
-    filename = url.rpartition("/")[2]
+    if filename is None:
+        filename = url.rpartition("/")[2]
     file_path = os.path.join(root, filename)
 
-    try:
-        from tqdm import tqdm
+    if progress:
+        try:
+            from tqdm import tqdm
 
-        progress = True
-    except ImportError:
-        progress = False
+            progress = True
+        except ImportError:
+            progress = False
 
     try:
         if os.path.exists(file_path):
@@ -35,12 +37,13 @@ def download_url(url: str, root: str) -> str:
         raise
 
     chunk_size = 1024
-    total_size = int(data.info()["Content-Length"].strip())
+    if data.info()["Content-Length"] is not None:
+        total_size = int(data.info()["Content-Length"].strip())
 
-    if os.path.exists(file_path):
-        if os.path.getsize(file_path) == total_size:
-            logging.info(f"Using downloaded and verified file: {file_path}")
-            return file_path
+        if os.path.exists(file_path):
+            if os.path.getsize(file_path) == total_size:
+                logging.info(f"Using downloaded and verified file: {file_path}")
+                return file_path
 
     logging.info(f"Downloading {url} to {file_path}")
 
