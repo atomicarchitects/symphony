@@ -458,35 +458,35 @@ def train_and_evaluate(
                 }
             )
 
-        # Generate molecules, if required.
-        if step % config.generate_every_steps == 0 or first_or_last_step:
-            molecules_ase = generate_molecules.generate_molecules(
-                workdir,
-                outputdir=workdir,
-                focus_and_atom_type_inverse_temperature=1.0,
-                position_inverse_temperature=1.0,
-                step=step,
-                num_seeds=100,
-                num_seeds_per_chunk=20,
-                init_molecules='H',
-                max_num_atoms=35,
-                visualize=False,
-            )
+        # # Generate molecules, if required.
+        # if step % config.generate_every_steps == 0 or first_or_last_step:
+        #     molecules_ase = generate_molecules.generate_molecules(
+        #         workdir,
+        #         outputdir=workdir,
+        #         focus_and_atom_type_inverse_temperature=1.0,
+        #         position_inverse_temperature=1.0,
+        #         step=step,
+        #         num_seeds=100,
+        #         num_seeds_per_chunk=20,
+        #         init_molecules='H',
+        #         max_num_atoms=35,
+        #         visualize=False,
+        #     )
 
-            # Compute metrics.
-            molecules = [analyses_metrics.ase_to_rdkit_molecule(mol) for mol in molecules_ase]
-            validity = analyses_metrics.compute_validity(molecules)
-            uniqueness = analyses_metrics.compute_uniqueness(molecules)
+        #     # Compute metrics.
+        #     molecules = [analyses_metrics.ase_to_rdkit_molecule(mol) for mol in molecules_ase]
+        #     validity = analyses_metrics.compute_validity(molecules)
+        #     uniqueness = analyses_metrics.compute_uniqueness(molecules)
 
-            # Write metrics out.
-            writer.write_scalars(
-                step,
-                {
-                    "validity": validity,
-                    "uniqueness": uniqueness,
-                },
-            )
-            writer.flush()
+        #     # Write metrics out.
+        #     writer.write_scalars(
+        #         step,
+        #         {
+        #             "validity": validity,
+        #             "uniqueness": uniqueness,
+        #         },
+        #     )
+        #     writer.flush()
 
         # Get a batch of graphs.
         try:

@@ -300,6 +300,7 @@ def generate_molecules(
         figs = []
         final_padded_fragment = init_fragment
         for padded_fragment, pred, stop in generator(init_fragment, rng, max_steps):
+            # print(padded_fragment.n_node, jraph.get_number_of_padding_with_graphs_graphs(padded_fragment))
             fragment = jraph.unpad_with_graphs(padded_fragment)
             fragment = fragment._replace(
                 globals=jax.tree_map(
@@ -319,6 +320,8 @@ def generate_molecules(
             # Check if we should stop.
             stop = pred.globals.stop
             if stop:
+                break
+            if fragment.n_node[0] >= max_num_atoms:
                 break
 
         # Save the visualizations of the generation process.

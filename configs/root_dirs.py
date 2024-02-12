@@ -32,8 +32,8 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
     if dataset == "silica":
         if hostname == "potato.mit.edu":
             if max_targets_per_graph:
-                return f"/data/NFS/potato/songk/silica_shuffled_matscipy_nn3/{fragment_logic}/max_targets_{max_targets_per_graph}"
-                # return f"/data/NFS/potato/songk/silica_fragments/{fragment_logic}/max_targets_{max_targets_per_graph}"
+                return f"/data/NFS/potato/songk/silica_shuffled_Cubic/{fragment_logic}/max_targets_{max_targets_per_graph}"
+                # return f"/data/NFS/potato/songk/silica_shuffled_matscipy_nn3/{fragment_logic}/max_targets_{max_targets_per_graph}"
             return f"/data/NFS/potato/songk/silica_fragments/{fragment_logic}"
         if username == "songk":
             if max_targets_per_graph:

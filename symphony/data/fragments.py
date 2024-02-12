@@ -202,7 +202,10 @@ def _make_first_fragment(
     )
     distances_com = np.linalg.norm(graph.nodes.positions - com, axis=1)
     if periodic:
-        cell = graph.globals.cell[0]
+        if len(graph.globals.cell.shape) == 2:
+            cell = graph.globals.cell
+        else:
+            cell = graph.globals.cell[0]
         for d in itertools.product(range(-1, 2), repeat=3):
             distances_com = np.minimum(distances_com, np.linalg.norm(graph.nodes.positions + np.array(d) @ cell - com, axis=1))
     probs_com = jax.nn.softmax(-beta_com * distances_com**2)

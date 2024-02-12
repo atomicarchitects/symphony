@@ -12,9 +12,11 @@ from ml_collections import config_flags
 import numpy as np
 import pickle
 from pymatgen.core.structure import Structure
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 import tensorflow as tf
 import tqdm
 import random
+from emmet.core.symmetry import CrystalSystem
 
 from symphony.data import fragments
 from symphony.data import input_pipeline, matproj
@@ -168,15 +170,22 @@ def main(unused_argv) -> None:
         with open(FLAGS.structure_file, "rb") as f:
             molecules = pickle.load(f)
     else:
-        structures = matproj.get_materials({"elements": ["O", "Si"], "num_elements": (2, 2)})
+        mpr_query = {"elements": ["O", "Si"], "num_elements": (2, 2)}
+        if FLAGS.crystal_system != "all":
+            mpr_query["crystal_system"] = CrystalSystem(FLAGS.crystal_system.capitalize())
+        materials = matproj.get_materials(mpr_query)
+        structures = []
+        for m in materials:
+            sga = SpacegroupAnalyzer(m.structure)
+            structures.append(sga.get_conventional_standard_structure())
         molecules = [
             ase.Atoms(
-                positions=mol.structure.cart_coords,
-                numbers=mol.structure.atomic_numbers,
-                cell=mol.structure.lattice.matrix,  # 3 unit cell vectors
+                positions=struct.cart_coords,
+                numbers=struct.atomic_numbers,
+                cell=struct.lattice.matrix,  # 3 unit cell vectors
                 pbc=True,
             )
-            for mol in structures
+            for struct in structures
         ]
     if FLAGS.shuffle:
         random.seed(FLAGS.shuffle_seed)
@@ -246,5 +255,6 @@ if __name__ == "__main__":
         "shuffle_seed", 0, "Seed to use when shuffling dataset."
     )
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
+    flags.DEFINE_string("crystal_system", "all", "Crystal system to use. Default all.")
 
     app.run(main)
