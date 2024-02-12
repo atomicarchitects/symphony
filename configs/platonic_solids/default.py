@@ -11,7 +11,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "platonic_solids"
     config.fragment_logic = "nn"
     config.nn_tolerance = 0.1
-    config.nn_cutoff = 1.01
+    config.nn_cutoff = 1.1
     config.root_dir = None
     config.shuffle_datasets = True
     config.train_pieces = (None, None)

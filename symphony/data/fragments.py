@@ -105,7 +105,7 @@ def _make_first_fragment(
         axis=0,
         weights=(graph.nodes.species > 0) if heavy_first else None,
     )
-    distances_com = jnp.linalg.norm(graph.nodes.positions - com, axis=1)
+    distances_com = np.linalg.norm(graph.nodes.positions - com, axis=1)
     probs_com = jax.nn.softmax(-beta_com * distances_com**2)
     rng, k = jax.random.split(rng)
     if heavy_first and (graph.nodes.species != 0).sum() > 0:
@@ -181,7 +181,7 @@ def _make_middle_fragment(
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
 
-    mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
+    mask = np.isin(senders, visited) & ~np.isin(receivers, visited)
 
     if heavy_first:
         heavy = graph.nodes.species > 0

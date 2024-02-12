@@ -15,7 +15,6 @@ import yaml
 from absl import logging
 import matplotlib.pyplot as plt
 
-
 from clu import (
     checkpoint,
     metric_writers,

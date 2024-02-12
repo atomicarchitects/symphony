@@ -7,13 +7,13 @@ expname="$dataset"_by_piece_meanangular_fixedcutoff
 # Loop over hyperparameters
 for targets in 1 2 3 4 5
 do
-for piece in 2
+for piece in 0 1 2 3 4
 do
 for model in "nequip"
 do
   for lfocus in 2
   do
-  for l in 4
+  for l in 1 2 3 4 5 6
   do
     for pc in 2
     do
@@ -31,7 +31,7 @@ do
             --config.test_pieces="($piece, $((piece + 1)))" \
             --config.dataset="$dataset" \
             --config.max_n_graphs=16 \
-            --config.loss_kwargs.target_position_inverse_temperature=200.0 \
+            --config.loss_kwargs.target_position_inverse_temperature=1000.0 \
             --config.fragment_logic="nn" \
             --config.loss_kwargs.ignore_position_loss_for_small_fragments=False \
             --config.focus_and_target_species_predictor.embedder_config.max_ell="$lfocus" \

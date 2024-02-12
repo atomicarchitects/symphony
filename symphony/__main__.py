@@ -14,7 +14,10 @@ import ml_collections
 from ml_collections import config_flags
 import tensorflow as tf
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 360cf8c4cff0a3a3532c9f79c216c128e309b776
 from symphony import train
 from configs import root_dirs
 
@@ -30,6 +33,10 @@ flags.DEFINE_string(
     "Name of the Weights & Biases run. Uses the Weights & Biases default if not specified.",
 )
 flags.DEFINE_string("wandb_notes", None, "Notes for the Weights & Biases run.")
+<<<<<<< HEAD
+=======
+
+>>>>>>> 360cf8c4cff0a3a3532c9f79c216c128e309b776
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -71,10 +78,17 @@ def main(argv):
 
     # Initialize wandb.
     if FLAGS.use_wandb:
+<<<<<<< HEAD
         import wandb
         wandb.login()
         wandb_dir = os.path.join(FLAGS.workdir, "wandb")
         os.makedirs(wandb_dir, exist_ok=True)
+=======
+        # Import wandb here so that we don't need to install it if we don't use it.
+        import wandb
+
+        wandb.login()
+>>>>>>> 360cf8c4cff0a3a3532c9f79c216c128e309b776
         wandb.init(
             project="symphony",
             config=config.to_dict(),
