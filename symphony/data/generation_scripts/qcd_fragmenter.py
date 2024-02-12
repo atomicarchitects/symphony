@@ -14,7 +14,7 @@ import tqdm
 
 from symphony.data import fragments
 from symphony.data import input_pipeline
-from symphony.data import tmqm
+from symphony.data import qcd
 
 FLAGS = flags.FLAGS
 
@@ -45,7 +45,7 @@ def generate_all_fragments(
     if start is not None and end is not None:
         molecules = molecules[start:end]
 
-    atomic_numbers = np.arange(1, 81)
+    atomic_numbers = np.arange(1, 84)
     molecules_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
             molecule, atomic_numbers, nn_cutoff=nn_cutoff
@@ -79,7 +79,6 @@ def generate_all_fragments(
 
     def generator():
         for graph in tqdm.tqdm(molecules_as_graphs):
-            assert graph.senders.shape == graph.receivers.shape
             frags = fragments.generate_fragments(
                 seed,
                 graph,
@@ -105,7 +104,8 @@ def generate_all_fragments(
             if len(frags) == 0:
                 logging.info("No fragments were generated.")
                 skip = True
-            elif not frags[-1].globals.stop:
+
+            if not frags[-1].globals.stop:
                 logging.info("The last fragment is not a stop fragment.")
                 skip = True
 
@@ -153,11 +153,9 @@ def main(unused_argv) -> None:
     mode = FLAGS.mode
 
     # Create a list of arguments to pass to generate_all_fragments
-    molecules = tmqm.load_tmqm(
-        "tmqm_data",
+    molecules = qcd.load_qcd(
+        "qcd_data",
     )
-    start_index = FLAGS.start_index
-    end_index = FLAGS.end_index if FLAGS.end_index != -1 else len(molecules)
     chunk_size = FLAGS.chunk
     output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     args_list = [
@@ -179,35 +177,30 @@ def main(unused_argv) -> None:
             FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
-        for start in range(start_index, end_index, chunk_size)
+        for start in range(0, len(molecules), chunk_size)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
-    # tqdm.contrib.concurrent.process_map(
-    #     _generate_all_fragments_wrapper, args_list, chunksize=FLAGS.chunksize
-    # )
-    for arg_list in args_list:
-        generate_all_fragments(*arg_list)
+    tqdm.contrib.concurrent.process_map(
+        _generate_all_fragments_wrapper, args_list, chunksize=128
+    )
 
 
 if __name__ == "__main__":
     flags.DEFINE_integer("start_seed", 0, "Start random seed.")
     flags.DEFINE_integer("end_seed", 8, "End random seed.")
-    flags.DEFINE_integer("start_index", 0, "Start molecule.")
-    flags.DEFINE_integer("end_index", -1, "End molecule.")
     flags.DEFINE_integer("chunk", 1000, "Number of molecules per fragment file.")
-    flags.DEFINE_integer("chunksize", 128, "Chunk size for parallelization.")
     flags.DEFINE_integer("start", None, "Start index.")
     flags.DEFINE_integer("end", None, "End index.")
     flags.DEFINE_string(
-        "output_dir", "/data/NFS/potato/songk/tmqm_fragments/", "Output directory."
+        "output_dir", "/data/NFS/potato/songk/qcd_fragments/", "Output directory."
     )
     flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
-    flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
-    flags.DEFINE_float("max_radius", 2.6, "Max radius (in Angstrom).")
+    flags.DEFINE_float("nn_cutoff", 8.0, "NN cutoff (in Angstrom).")
+    flags.DEFINE_float("max_radius", 8.0, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )

@@ -176,7 +176,7 @@ class E3SchNet(hk.Module):
             x_group = hk.Embed(18, self.init_embedding_dim)(jax.vmap(lambda s: ptable.groups[s])(species))
             x_row = hk.Embed(7, self.init_embedding_dim)(jax.vmap(lambda s: ptable.rows[s])(species))
             x_block = hk.Embed(4, self.init_embedding_dim)(jax.vmap(lambda s: ptable.blocks[s])(species))
-            x = x_species + x_group + x_row + x_block  # TODO: what's the best way to combine these things?
+            x = e3nn.IrrepsArray(x_species.irreps, jnp.concatenate([x_species, x_group, x_row, x_block]))  # TODO: what's the best way to combine these things?
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps, force_irreps_out=True)(x)
 

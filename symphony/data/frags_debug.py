@@ -24,7 +24,7 @@ def generate_all_fragments(
     seed: int,
     start: int,
     end: int,
-    output_dir: str,
+    # output_dir: str,
     mode: str,
     heavy_first: bool,
     beta_com: float,
@@ -34,7 +34,7 @@ def generate_all_fragments(
     max_targets_per_graph: int,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
-    logging.info(f"Saving to {output_dir}")
+    # logging.info(f"Saving to {output_dir}")
     logging.info(f"Mode: {mode}, heavy_first: {heavy_first}, beta_com: {beta_com}")
     logging.info(
         f"NN tolerance: {nn_tolerance}, NN cutoff: {nn_cutoff}, max_radius: {max_radius}"
@@ -134,9 +134,11 @@ def generate_all_fragments(
                 }
 
     dataset = tf.data.Dataset.from_generator(generator, output_signature=signature)
+    for frag in dataset:
+        print(frag)
 
-    os.makedirs(output_dir, exist_ok=True)
-    dataset.save(output_dir)
+    # os.makedirs(output_dir, exist_ok=True)
+    # dataset.save(output_dir)
 
 
 def _generate_all_fragments_wrapper(args):
@@ -163,13 +165,9 @@ def main(unused_argv) -> None:
     args_list = [
         (
             molecules,
-            seed,
+            0,
             start,
-            start + chunk_size,
-            os.path.join(
-                output_dir,
-                f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
-            ),
+            start + 10,
             mode,
             FLAGS.heavy_first,
             FLAGS.beta_com,
@@ -178,8 +176,7 @@ def main(unused_argv) -> None:
             FLAGS.max_radius,
             FLAGS.max_targets_per_graph,
         )
-        for seed in range(FLAGS.start_seed, FLAGS.end_seed)
-        for start in range(start_index, end_index, chunk_size)
+        for start in range(2870, 2880, 10)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
@@ -202,14 +199,14 @@ if __name__ == "__main__":
     flags.DEFINE_string(
         "output_dir", "/data/NFS/potato/songk/tmqm_fragments/", "Output directory."
     )
-    flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
+    flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.6, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
-        "max_targets_per_graph", 1, "Max num of targets per focus atom."
+        "max_targets_per_graph", 4, "Max num of targets per focus atom."
     )
 
     app.run(main)

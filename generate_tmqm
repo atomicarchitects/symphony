@@ -1,0 +1,1004 @@
+I0207 12:05:44.694121 140307704055616 generate_molecules.py:148] Initial molecule: Ni with numbers [28] and positions [[ 0.0022 -0.006   0.002 ]]
+I0207 12:05:45.835982 140307704055616 generate_molecules.py:171] {'add_noise_to_positions': True, 'compute_padding_dynamically': False, 'dataset': 'tmqm', 'eval_every_steps': 30000, 'focus_and_target_species_predictor': {'activation': 'softplus', 'compute_global_embedding': False, 'embedder_config': {'activation': 'shifted_softplus', 'cutoff': 5.0, 'max_ell': 2, 'model': 'E3SchNet', 'num_channels': 64, 'num_filters': 16, 'num_interactions': 3, 'num_radial_basis_functions': 8, 'simple_embedding': True}, 'latent_size': 128, 'num_layers': 3}, 'fragment_logic': 'nn', 'freeze_node_embedders': False, 'learning_rate': 0.0005, 'learning_rate_schedule': 'constant', 'learning_rate_schedule_kwargs': {'decay_steps': 50000, 'init_value': 0.0005, 'peak_value': 0.001, 'warmup_steps': 2000}, 'log_every_steps': 1000, 'loss_kwargs': {'ignore_position_loss_for_small_fragments': False, 'mask_atom_types': False, 'position_loss_type': 'kl_divergence', 'radial_loss_scaling_factor': 1.0, 'radius_rbf_variance': 1e-05, 'target_position_inverse_temperature': 20.0, 'target_position_lmax': 5}, 'mask_atom_types': False, 'max_n_edges': 8000, 'max_n_graphs': 16, 'max_n_nodes': 960, 'max_targets_per_graph': 4, 'momentum': None, 'nn_cutoff': 3.0, 'nn_tolerance': 0.5, 'num_eval_steps': 3000, 'num_eval_steps_at_end_of_training': 5000, 'num_train_steps': 1000000, 'optimizer': 'adam', 'position_noise_std': 0.05, 'rng_seed': 0, 'root_dir': '/data/NFS/potato/songk/tmqm_fragments_nn_cutoff_3/nn/max_targets_4', 'shuffle_datasets': True, 'target_position_predictor': {'apply_gate': False, 'embedder_config': {'activation': 'softplus', 'avg_num_neighbors': 300.0, 'even_activation': 'swish', 'max_ell': 5, 'mlp_activation': 'swish', 'mlp_n_layers': 2, 'model': 'NequIP', 'num_basis_fns': 8, 'num_channels': 64, 'num_interactions': 3, 'odd_activation': 'tanh', 'r_max': 5, 'skip_connection': True, 'use_pseudoscalars_and_pseudovectors': False}, 'factorized': False, 'max_radius': 2.0, 'min_radius': 0.9, 'num_channels': 2, 'num_radii': 64, 'radial_mlp_activation': 'swish', 'radial_mlp_latent_size': 128, 'radial_mlp_num_layers': 2, 'res_alpha': 359, 'res_beta': 180}, 'test_molecules': (9000, 10000), 'train_molecules': (0, 8000), 'train_on_split_smaller_than_chunk': False, 'val_molecules': (8000, 9000)}
+I0207 12:06:33.181054 140307704055616 generate_molecules.py:259] Compilation time: 46.77 s
+Visualizing molecules:   0%|          | 0/1000 [00:00<?, ?it/s]I0207 21:53:22.926639 140307704055616 generate_molecules.py:342] Generated C21H27N7NiO
+Visualizing molecules:   0%|          | 1/1000 [00:01<31:55,  1.92s/it]I0207 21:53:23.243877 140307704055616 generate_molecules.py:342] Generated C95H75ClFN13NiO8PPt
+Visualizing molecules:   0%|          | 2/1000 [00:02<16:14,  1.02it/s]I0207 21:53:23.546914 140307704055616 generate_molecules.py:342] Generated C9H13NNiOP
+Visualizing molecules:   0%|          | 3/1000 [00:02<11:06,  1.50it/s]I0207 21:53:23.845379 140307704055616 generate_molecules.py:342] Generated C7H13B10NNiO
+Visualizing molecules:   0%|          | 4/1000 [00:02<08:40,  1.91it/s]I0207 21:53:24.155188 140307704055616 generate_molecules.py:342] Generated C35H24F6N5Ni2O3PPd
+Visualizing molecules:   0%|          | 5/1000 [00:03<07:23,  2.24it/s]I0207 21:53:24.443135 140307704055616 generate_molecules.py:342] Generated C56H44AgF5N5NiOSi
+Visualizing molecules:   1%|          | 6/1000 [00:03<06:29,  2.55it/s]I0207 21:53:24.744380 140307704055616 generate_molecules.py:342] Generated C43H35BrN3Ni
+Visualizing molecules:   1%|          | 7/1000 [00:03<05:59,  2.76it/s]I0207 21:53:24.963507 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:   1%|          | 8/1000 [00:03<05:14,  3.16it/s]I0207 21:53:24.979619 140307704055616 generate_molecules.py:342] Generated C29H22Cl2FN2Ni
+I0207 21:53:25.985206 140307704055616 generate_molecules.py:342] Generated C36H54ClN7NiOPPdS
+Visualizing molecules:   1%|          | 10/1000 [00:04<06:45,  2.44it/s]I0207 21:53:26.284609 140307704055616 generate_molecules.py:342] Generated C61H30ClF16IrN4NiOSW
+Visualizing molecules:   1%|          | 11/1000 [00:05<06:17,  2.62it/s]I0207 21:53:26.298860 140307704055616 generate_molecules.py:342] Generated C25H20Cl2CuF3N4NiO
+I0207 21:53:26.310389 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:26.602442 140307704055616 generate_molecules.py:342] Generated C42H40N6NiO5P
+Visualizing molecules:   1%|▏         | 14/1000 [00:05<03:54,  4.20it/s]I0207 21:53:26.906721 140307704055616 generate_molecules.py:342] Generated C32H25Cl2F4IN3NiO2S
+Visualizing molecules:   2%|▏         | 15/1000 [00:05<04:07,  3.98it/s]I0207 21:53:27.222962 140307704055616 generate_molecules.py:342] Generated C37H29BrN5NiO2
+Visualizing molecules:   2%|▏         | 16/1000 [00:06<04:21,  3.77it/s]I0207 21:53:27.520883 140307704055616 generate_molecules.py:342] Generated C28H31N2NiO4P
+Visualizing molecules:   2%|▏         | 17/1000 [00:06<04:28,  3.66it/s]I0207 21:53:27.822177 140307704055616 generate_molecules.py:342] Generated C6H6N3NiO3
+Visualizing molecules:   2%|▏         | 18/1000 [00:06<04:35,  3.57it/s]I0207 21:53:28.132406 140307704055616 generate_molecules.py:342] Generated C50H25F7N7NiO
+Visualizing molecules:   2%|▏         | 19/1000 [00:07<04:42,  3.47it/s]I0207 21:53:28.430985 140307704055616 generate_molecules.py:342] Generated C14H5F9Ni
+Visualizing molecules:   2%|▏         | 20/1000 [00:07<04:45,  3.43it/s]I0207 21:53:28.735503 140307704055616 generate_molecules.py:342] Generated C3H5Ni
+Visualizing molecules:   2%|▏         | 21/1000 [00:07<04:48,  3.39it/s]I0207 21:53:29.042797 140307704055616 generate_molecules.py:342] Generated C32H18AuF4N2NiP2
+Visualizing molecules:   2%|▏         | 22/1000 [00:08<04:51,  3.35it/s]I0207 21:53:29.330715 140307704055616 generate_molecules.py:342] Generated C12H15BrCl2FeNNiO2
+Visualizing molecules:   2%|▏         | 23/1000 [00:08<04:48,  3.39it/s]I0207 21:53:29.344939 140307704055616 generate_molecules.py:342] Generated C32H34F3N8NiO4Pt
+I0207 21:53:29.671426 140307704055616 generate_molecules.py:342] Generated C16H11ClN3Ni
+Visualizing molecules:   2%|▎         | 25/1000 [00:08<03:52,  4.19it/s]I0207 21:53:29.985487 140307704055616 generate_molecules.py:342] Generated C29H32NiP2S
+Visualizing molecules:   3%|▎         | 26/1000 [00:08<04:10,  3.89it/s]I0207 21:53:30.303077 140307704055616 generate_molecules.py:342] Generated C69H63N3NiO5S
+Visualizing molecules:   3%|▎         | 27/1000 [00:09<04:25,  3.67it/s]I0207 21:53:30.618906 140307704055616 generate_molecules.py:342] Generated C25H40AgAuB7ClNNiOP4SSi
+Visualizing molecules:   3%|▎         | 28/1000 [00:09<04:36,  3.51it/s]I0207 21:53:30.937472 140307704055616 generate_molecules.py:342] Generated C18H16NNiOS2
+Visualizing molecules:   3%|▎         | 29/1000 [00:09<04:45,  3.40it/s]I0207 21:53:30.951307 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:31.255805 140307704055616 generate_molecules.py:342] Generated C47H51BN11NiO9SZn
+Visualizing molecules:   3%|▎         | 31/1000 [00:10<03:46,  4.27it/s]I0207 21:53:31.563488 140307704055616 generate_molecules.py:342] Generated C35H35ClF3N4NiO8S2Si
+Visualizing molecules:   3%|▎         | 32/1000 [00:10<04:03,  3.97it/s]I0207 21:53:31.870061 140307704055616 generate_molecules.py:342] Generated C35H33FNiP2
+Visualizing molecules:   3%|▎         | 33/1000 [00:10<04:17,  3.76it/s]I0207 21:53:31.883829 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:32.179684 140307704055616 generate_molecules.py:342] Generated C27H25N2NiO3V
+Visualizing molecules:   4%|▎         | 35/1000 [00:11<03:31,  4.57it/s]I0207 21:53:32.194256 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:32.206053 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:32.218556 140307704055616 generate_molecules.py:342] Generated C31H29N6NiO2PPd
+I0207 21:53:32.386066 140307704055616 generate_molecules.py:342] Generated C17H16NNiO
+Visualizing molecules:   4%|▍         | 39/1000 [00:11<02:02,  7.85it/s]I0207 21:53:32.681756 140307704055616 generate_molecules.py:342] Generated C63H60F4N5NiO5
+Visualizing molecules:   4%|▍         | 40/1000 [00:11<02:28,  6.45it/s]I0207 21:53:32.981489 140307704055616 generate_molecules.py:342] Generated C14H19ClF8N2NiP
+Visualizing molecules:   4%|▍         | 41/1000 [00:11<02:54,  5.48it/s]I0207 21:53:33.292558 140307704055616 generate_molecules.py:342] Generated C59H59N6NiO3P3SSe
+Visualizing molecules:   4%|▍         | 42/1000 [00:12<03:20,  4.77it/s]I0207 21:53:33.605960 140307704055616 generate_molecules.py:342] Generated C11H10BN6NiO2S3
+Visualizing molecules:   4%|▍         | 43/1000 [00:12<03:43,  4.28it/s]I0207 21:53:33.620026 140307704055616 generate_molecules.py:342] Generated C26H32B2N5NiS
+I0207 21:53:33.631362 140307704055616 generate_molecules.py:342] Generated C27H29NiP2S
+I0207 21:53:33.642115 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:33.653080 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:33.665593 140307704055616 generate_molecules.py:342] Generated C36H41N4NiO7P
+I0207 21:53:33.972533 140307704055616 generate_molecules.py:342] Generated C13H8F4N2NiO2S
+Visualizing molecules:   5%|▍         | 49/1000 [00:12<01:52,  8.42it/s]I0207 21:53:34.261848 140307704055616 generate_molecules.py:342] Generated C10H9N3NiO
+Visualizing molecules:   5%|▌         | 50/1000 [00:13<02:14,  7.04it/s]I0207 21:53:34.569052 140307704055616 generate_molecules.py:342] Generated C15H27AuCl3NNiPSe
+Visualizing molecules:   5%|▌         | 51/1000 [00:13<02:40,  5.91it/s]I0207 21:53:34.880955 140307704055616 generate_molecules.py:342] Generated C37H34NNiO7P2
+Visualizing molecules:   5%|▌         | 52/1000 [00:13<03:05,  5.10it/s]I0207 21:53:34.895101 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:35.198133 140307704055616 generate_molecules.py:342] Generated C7H10Cl2N2Ni
+Visualizing molecules:   5%|▌         | 54/1000 [00:14<02:53,  5.47it/s]I0207 21:53:35.532802 140307704055616 generate_molecules.py:342] Generated C11H7F4Ni
+Visualizing molecules:   6%|▌         | 55/1000 [00:14<03:21,  4.69it/s]I0207 21:53:35.549773 140307704055616 generate_molecules.py:342] Generated C8H9BrF2NiP
+I0207 21:53:35.894690 140307704055616 generate_molecules.py:342] Generated C36H44F4FeN6NiOP
+Visualizing molecules:   6%|▌         | 57/1000 [00:14<03:10,  4.96it/s]I0207 21:53:35.910114 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:36.266053 140307704055616 generate_molecules.py:342] Generated C73H71ClF2N12NiPdS
+Visualizing molecules:   6%|▌         | 59/1000 [00:15<03:04,  5.09it/s]I0207 21:53:36.603175 140307704055616 generate_molecules.py:342] Generated C31H27ClCuN6NiRe
+Visualizing molecules:   6%|▌         | 60/1000 [00:15<03:30,  4.47it/s]I0207 21:53:36.619394 140307704055616 generate_molecules.py:342] Generated C29H27F3N5NiO3PSSi
+I0207 21:53:36.633232 140307704055616 generate_molecules.py:342] Generated C9H10NNiS
+I0207 21:53:36.958015 140307704055616 generate_molecules.py:342] Generated C25H24N2NiO3
+Visualizing molecules:   6%|▋         | 63/1000 [00:15<02:44,  5.69it/s]I0207 21:53:36.975994 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:36.989119 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:37.296093 140307704055616 generate_molecules.py:342] Generated C19H25Cl2CrF4N3NiO5Si
+Visualizing molecules:   7%|▋         | 66/1000 [00:16<02:20,  6.64it/s]I0207 21:53:37.601094 140307704055616 generate_molecules.py:342] Generated C36H40NNiP3
+Visualizing molecules:   7%|▋         | 67/1000 [00:16<02:43,  5.71it/s]I0207 21:53:37.880881 140307704055616 generate_molecules.py:342] Generated Ni
+Visualizing molecules:   7%|▋         | 68/1000 [00:16<03:01,  5.14it/s]I0207 21:53:37.895429 140307704055616 generate_molecules.py:342] Generated C14H6N2Ni3Si2WZr
+I0207 21:53:37.907462 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:38.197372 140307704055616 generate_molecules.py:342] Generated C16H21N3NiO2
+Visualizing molecules:   7%|▋         | 71/1000 [00:17<02:24,  6.44it/s]I0207 21:53:38.212497 140307704055616 generate_molecules.py:342] Generated C36H36BCl2N10NiO2PdRhSe
+I0207 21:53:38.225501 140307704055616 generate_molecules.py:342] Generated C39H31ClN6NiOPtS
+I0207 21:53:38.529267 140307704055616 generate_molecules.py:342] Generated C23H17ClN5NiO2
+Visualizing molecules:   7%|▋         | 74/1000 [00:17<02:07,  7.25it/s]I0207 21:53:38.544102 140307704055616 generate_molecules.py:342] Generated C11H16F4IrNNiO2S3
+I0207 21:53:38.842213 140307704055616 generate_molecules.py:342] Generated C3H2BN4NiW
+Visualizing molecules:   8%|▊         | 76/1000 [00:17<02:12,  7.00it/s]I0207 21:53:38.856917 140307704055616 generate_molecules.py:342] Generated C16H13ClFIN6Ni
+I0207 21:53:39.163607 140307704055616 generate_molecules.py:342] Generated C17H16N4NiO4
+Visualizing molecules:   8%|▊         | 78/1000 [00:18<02:16,  6.76it/s]I0207 21:53:39.457455 140307704055616 generate_molecules.py:342] Generated C12H28N3NiZr
+Visualizing molecules:   8%|▊         | 79/1000 [00:18<02:38,  5.81it/s]I0207 21:53:39.748334 140307704055616 generate_molecules.py:342] Generated CH2BNiO
+Visualizing molecules:   8%|▊         | 80/1000 [00:18<02:59,  5.14it/s]I0207 21:53:40.041242 140307704055616 generate_molecules.py:342] Generated C17H20NNiO5
+Visualizing molecules:   8%|▊         | 81/1000 [00:19<03:18,  4.63it/s]I0207 21:53:40.360633 140307704055616 generate_molecules.py:342] Generated C28H29ClN4Ni
+Visualizing molecules:   8%|▊         | 82/1000 [00:19<03:40,  4.16it/s]I0207 21:53:40.375479 140307704055616 generate_molecules.py:342] Generated C13H16F5N3NiP
+I0207 21:53:40.387918 140307704055616 generate_molecules.py:342] Generated C17H22Cl3N2NiO
+I0207 21:53:40.687774 140307704055616 generate_molecules.py:342] Generated C73H66FN7NiOPPd
+Visualizing molecules:   8%|▊         | 85/1000 [00:19<02:39,  5.74it/s]I0207 21:53:40.701532 140307704055616 generate_molecules.py:342] Generated C34H24F11NiO4P3
+I0207 21:53:40.998269 140307704055616 generate_molecules.py:342] Generated C62H68Cl4F7FeIrN5NiO4PSi2
+Visualizing molecules:   9%|▊         | 87/1000 [00:19<02:33,  5.95it/s]I0207 21:53:41.301095 140307704055616 generate_molecules.py:342] Generated C29H25F3N2NiO6
+Visualizing molecules:   9%|▉         | 88/1000 [00:20<02:56,  5.17it/s]I0207 21:53:41.610406 140307704055616 generate_molecules.py:342] Generated C7H10Ni
+Visualizing molecules:   9%|▉         | 89/1000 [00:20<03:18,  4.59it/s]I0207 21:53:41.624025 140307704055616 generate_molecules.py:342] Generated C39H36BN4NiPTc
+I0207 21:53:41.636435 140307704055616 generate_molecules.py:342] Generated C33H39CoN7NiO3
+I0207 21:53:41.948700 140307704055616 generate_molecules.py:342] Generated C26H33Cl2N6NiO
+Visualizing molecules:   9%|▉         | 92/1000 [00:20<02:32,  5.95it/s]I0207 21:53:42.267124 140307704055616 generate_molecules.py:342] Generated C41H46N10NiO2Pd
+Visualizing molecules:   9%|▉         | 93/1000 [00:21<02:57,  5.11it/s]I0207 21:53:42.280996 140307704055616 generate_molecules.py:342] Generated C26H27BClF3N5NiO
+I0207 21:53:42.578196 140307704055616 generate_molecules.py:342] Generated C2H3NNiRu
+Visualizing molecules:  10%|▉         | 95/1000 [00:21<02:44,  5.50it/s]I0207 21:53:42.875626 140307704055616 generate_molecules.py:342] Generated C2MnNNiRuS
+Visualizing molecules:  10%|▉         | 96/1000 [00:21<03:05,  4.89it/s]I0207 21:53:42.888923 140307704055616 generate_molecules.py:342] Generated C23H15ClHgN2NiO2P
+I0207 21:53:42.912533 140307704055616 generate_molecules.py:342] Generated C16H21N5NiRuSe
+I0207 21:53:43.221260 140307704055616 generate_molecules.py:342] Generated C34H34N2NiO4S
+Visualizing molecules:  10%|▉         | 99/1000 [00:22<02:27,  6.11it/s]I0207 21:53:43.236013 140307704055616 generate_molecules.py:342] Generated C5H11NiO7
+I0207 21:53:43.541871 140307704055616 generate_molecules.py:342] Generated C36H27N4Ni2O2PS2SiWYZr
+Visualizing molecules:  10%|█         | 101/1000 [00:22<02:26,  6.15it/s]I0207 21:53:43.555294 140307704055616 generate_molecules.py:342] Generated C11H14BClN8NiO4S3
+I0207 21:53:43.857193 140307704055616 generate_molecules.py:342] Generated C33H24AuNNiP2
+Visualizing molecules:  10%|█         | 103/1000 [00:22<02:24,  6.21it/s]I0207 21:53:43.870499 140307704055616 generate_molecules.py:342] Generated C57H58F2N4Ni
+I0207 21:53:44.159267 140307704055616 generate_molecules.py:342] Generated C16H16N6NiS
+Visualizing molecules:  10%|█         | 105/1000 [00:23<02:21,  6.33it/s]I0207 21:53:44.466850 140307704055616 generate_molecules.py:342] Generated C75H63BClF9FeMoN4NiO2PS6Si
+Visualizing molecules:  11%|█         | 106/1000 [00:23<02:45,  5.41it/s]I0207 21:53:44.766226 140307704055616 generate_molecules.py:342] Generated C57H74B23FeN3NiO3PS
+Visualizing molecules:  11%|█         | 107/1000 [00:23<03:05,  4.81it/s]I0207 21:53:45.102622 140307704055616 generate_molecules.py:342] Generated C41H45BrClN2NiP
+Visualizing molecules:  11%|█         | 108/1000 [00:24<03:31,  4.23it/s]I0207 21:53:45.412341 140307704055616 generate_molecules.py:342] Generated C15H30B3NiO2P2Pd
+Visualizing molecules:  11%|█         | 109/1000 [00:24<03:46,  3.93it/s]I0207 21:53:45.427078 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:53:45.439253 140307704055616 generate_molecules.py:342] Generated C27H30CdClF3N7NiO12P2
+I0207 21:53:45.450899 140307704055616 generate_molecules.py:342] Generated C17H10F4N5NiSSe
+I0207 21:53:45.750754 140307704055616 generate_molecules.py:342] Generated C24H17NNiO2PRe
+Visualizing molecules:  11%|█▏        | 113/1000 [00:24<02:18,  6.42it/s]I0207 21:53:46.039306 140307704055616 generate_molecules.py:342] Generated CN2Ni
+Visualizing molecules:  11%|█▏        | 114/1000 [00:25<02:38,  5.60it/s]I0207 21:53:46.053347 140307704055616 generate_molecules.py:342] Generated C22H29FeN6NiO4
+I0207 21:53:46.366226 140307704055616 generate_molecules.py:342] Generated C52H40Cl3FIN8NiO4Pd
+Visualizing molecules:  12%|█▏        | 116/1000 [00:25<02:33,  5.76it/s]I0207 21:53:46.380600 140307704055616 generate_molecules.py:342] Generated N3NiRhTa
+I0207 21:53:46.392899 140307704055616 generate_molecules.py:342] Generated C28H30N3Ni2OS4
+I0207 21:53:46.404872 140307704055616 generate_molecules.py:342] Generated C19H19N4NiO2
+I0207 21:53:46.416902 140307704055616 generate_molecules.py:342] Generated H2NNi
+I0207 21:53:46.738883 140307704055616 generate_molecules.py:342] Generated C62H49BBrF6N5NiO13PS2SiZn
+Visualizing molecules:  12%|█▏        | 121/1000 [00:25<01:45,  8.33it/s]I0207 21:53:47.053497 140307704055616 generate_molecules.py:342] Generated C28H30ClF6N5NiO3
+Visualizing molecules:  12%|█▏        | 122/1000 [00:26<02:08,  6.84it/s]I0207 21:53:47.067477 140307704055616 generate_molecules.py:342] Generated C17H23N3NiPd
+I0207 21:53:47.366816 140307704055616 generate_molecules.py:342] Generated C49H46Cl4N6NiO2RhS
+Visualizing molecules:  12%|█▏        | 124/1000 [00:26<02:10,  6.71it/s]I0207 21:53:47.380691 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:53:47.392905 140307704055616 generate_molecules.py:342] Generated C22H18BrNiO3S
+I0207 21:53:47.685241 140307704055616 generate_molecules.py:342] Generated C94H69CdClF7N8NiO6Si2Ti
+Visualizing molecules:  13%|█▎        | 127/1000 [00:26<01:56,  7.52it/s]I0207 21:53:47.989679 140307704055616 generate_molecules.py:342] Generated C76H65N2Ni2O9P3PdSSi
+Visualizing molecules:  13%|█▎        | 128/1000 [00:26<02:18,  6.30it/s]I0207 21:53:48.002543 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:48.015212 140307704055616 generate_molecules.py:342] Generated C47H46Cl5F6N4NiO5PPdTi
+I0207 21:53:48.027126 140307704055616 generate_molecules.py:342] Generated C20H10F5N3NiS
+I0207 21:53:48.330331 140307704055616 generate_molecules.py:342] Generated C20H21BrF7N2Ni
+Visualizing molecules:  13%|█▎        | 132/1000 [00:27<01:48,  8.02it/s]I0207 21:53:48.640262 140307704055616 generate_molecules.py:342] Generated C4H6N2Ni
+Visualizing molecules:  13%|█▎        | 133/1000 [00:27<02:10,  6.62it/s]I0207 21:53:48.947778 140307704055616 generate_molecules.py:342] Generated C38H46N6Ni2O6PSi
+Visualizing molecules:  13%|█▎        | 134/1000 [00:27<02:33,  5.64it/s]I0207 21:53:49.245905 140307704055616 generate_molecules.py:342] Generated C47H41Cl2FN3NiO
+Visualizing molecules:  14%|█▎        | 135/1000 [00:28<02:53,  4.98it/s]I0207 21:53:49.541398 140307704055616 generate_molecules.py:342] Generated C18H18NiP
+Visualizing molecules:  14%|█▎        | 136/1000 [00:28<03:11,  4.52it/s]I0207 21:53:49.554922 140307704055616 generate_molecules.py:342] Generated C8H6F9N2Ni
+I0207 21:53:49.566933 140307704055616 generate_molecules.py:342] Generated C22H27N6NiO4SSi
+I0207 21:53:49.578155 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:49.888296 140307704055616 generate_molecules.py:342] Generated CMoNNiO
+Visualizing molecules:  14%|█▍        | 140/1000 [00:28<02:06,  6.81it/s]I0207 21:53:49.904536 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:49.920333 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:50.233512 140307704055616 generate_molecules.py:342] Generated C51H50Cl3F3MoN6NiO3PS2
+Visualizing molecules:  14%|█▍        | 143/1000 [00:29<01:55,  7.41it/s]I0207 21:53:50.541071 140307704055616 generate_molecules.py:342] Generated C39H38N5NiO2Pd
+Visualizing molecules:  14%|█▍        | 144/1000 [00:29<02:17,  6.21it/s]I0207 21:53:50.554390 140307704055616 generate_molecules.py:342] Generated C27H26F3IN5NiO2Re
+I0207 21:53:50.861820 140307704055616 generate_molecules.py:342] Generated C58H52AgBrClF4IN9NiO10PPdS
+Visualizing molecules:  15%|█▍        | 146/1000 [00:29<02:17,  6.22it/s]I0207 21:53:51.169249 140307704055616 generate_molecules.py:342] Generated C68H72N3Ni2O2S
+Visualizing molecules:  15%|█▍        | 147/1000 [00:30<02:39,  5.35it/s]I0207 21:53:51.182393 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:51.195107 140307704055616 generate_molecules.py:342] Generated C20H19NNiO13
+I0207 21:53:51.498197 140307704055616 generate_molecules.py:342] Generated HNNi
+Visualizing molecules:  15%|█▌        | 150/1000 [00:30<02:10,  6.52it/s]I0207 21:53:51.511740 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:51.524624 140307704055616 generate_molecules.py:342] Generated C38H28F5NiP2
+I0207 21:53:51.537440 140307704055616 generate_molecules.py:342] Generated C31H39ClF3N6NiO9
+I0207 21:53:51.549598 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:53:51.855899 140307704055616 generate_molecules.py:342] Generated C60H58B2F3N3NiO5RhS2Zn
+Visualizing molecules:  16%|█▌        | 155/1000 [00:30<01:34,  8.93it/s]I0207 21:53:51.869428 140307704055616 generate_molecules.py:342] Generated C15H14Cl2N4NiO2
+I0207 21:53:51.881395 140307704055616 generate_molecules.py:342] Generated C36H28N7NiO2
+I0207 21:53:51.893242 140307704055616 generate_molecules.py:342] Generated CNNiO
+I0207 21:53:51.904736 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:52.207127 140307704055616 generate_molecules.py:342] Generated C14H11ClMoNNiO
+Visualizing molecules:  16%|█▌        | 160/1000 [00:31<01:19, 10.59it/s]I0207 21:53:52.222231 140307704055616 generate_molecules.py:342] Generated C26H22N7NiOPdS3
+I0207 21:53:52.236087 140307704055616 generate_molecules.py:342] Generated C26H22N5NiO
+I0207 21:53:52.249002 140307704055616 generate_molecules.py:342] Generated NNiO
+I0207 21:53:52.261191 140307704055616 generate_molecules.py:342] Generated C7H11BrN2Ni
+I0207 21:53:52.278778 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:52.577642 140307704055616 generate_molecules.py:342] Generated C73H82Cl2FeN6NiO12P3PtZn
+Visualizing molecules:  17%|█▋        | 166/1000 [00:31<01:07, 12.38it/s]I0207 21:53:52.591482 140307704055616 generate_molecules.py:342] Generated C30H41N4NiO
+I0207 21:53:52.603619 140307704055616 generate_molecules.py:342] Generated C37H38N2NiO5S
+I0207 21:53:52.615744 140307704055616 generate_molecules.py:342] Generated C32H34N4NiP4
+I0207 21:53:52.931733 140307704055616 generate_molecules.py:342] Generated C28H22BrClMoN8NiOP
+Visualizing molecules:  17%|█▋        | 170/1000 [00:31<01:08, 12.05it/s]I0207 21:53:52.947518 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:52.960315 140307704055616 generate_molecules.py:342] Generated C33H20BrF4N3Ni
+I0207 21:53:53.266503 140307704055616 generate_molecules.py:342] Generated C15H19N3NiO2S
+Visualizing molecules:  17%|█▋        | 173/1000 [00:32<01:14, 11.15it/s]I0207 21:53:53.280833 140307704055616 generate_molecules.py:342] Generated C22H25MnN2NiO6
+I0207 21:53:53.593936 140307704055616 generate_molecules.py:342] Generated C61H57ClN5Ni2P2S2
+Visualizing molecules:  18%|█▊        | 175/1000 [00:32<01:25,  9.69it/s]I0207 21:53:53.607493 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:53:53.619755 140307704055616 generate_molecules.py:342] Generated C34H33F3N4NiO2
+I0207 21:53:53.915163 140307704055616 generate_molecules.py:342] Generated C6H5CrNNiPdRhS
+Visualizing molecules:  18%|█▊        | 178/1000 [00:32<01:25,  9.59it/s]I0207 21:53:53.929667 140307704055616 generate_molecules.py:342] Generated C14H10ClN3Ni
+I0207 21:53:53.942040 140307704055616 generate_molecules.py:342] Generated CBrNiO2
+I0207 21:53:54.264832 140307704055616 generate_molecules.py:342] Generated C54H44CoN4NiPS2
+Visualizing molecules:  18%|█▊        | 181/1000 [00:33<01:28,  9.28it/s]I0207 21:53:54.278701 140307704055616 generate_molecules.py:342] Generated C17H18ClFN4NiO5
+I0207 21:53:54.290880 140307704055616 generate_molecules.py:342] Generated C27H24CoN5NiO3
+I0207 21:53:54.303048 140307704055616 generate_molecules.py:342] Generated C36H28N3NiO
+I0207 21:53:54.606848 140307704055616 generate_molecules.py:342] Generated C25H22BrN2NiO5
+Visualizing molecules:  18%|█▊        | 185/1000 [00:33<01:21, 10.01it/s]I0207 21:53:54.621646 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:54.634579 140307704055616 generate_molecules.py:342] Generated C24H23NiO2
+I0207 21:53:54.646538 140307704055616 generate_molecules.py:342] Generated C9H2F14NiO2Rh
+I0207 21:53:54.957761 140307704055616 generate_molecules.py:342] Generated C83H73Cl2F7MoN13NiO4S
+Visualizing molecules:  19%|█▉        | 189/1000 [00:33<01:17, 10.43it/s]I0207 21:53:54.971775 140307704055616 generate_molecules.py:342] Generated C25H22N5NiS
+I0207 21:53:54.983606 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:55.289288 140307704055616 generate_molecules.py:342] Generated C45H42BrN6NiO2S
+Visualizing molecules:  19%|█▉        | 192/1000 [00:34<01:20, 10.03it/s]I0207 21:53:55.301989 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:55.314418 140307704055616 generate_molecules.py:342] Generated C27H27N7NiO5S2
+I0207 21:53:55.326905 140307704055616 generate_molecules.py:342] Generated C60H63ClCrN3NiO7PSi
+I0207 21:53:55.641796 140307704055616 generate_molecules.py:342] Generated C37H38N4Ni
+Visualizing molecules:  20%|█▉        | 196/1000 [00:34<01:17, 10.44it/s]I0207 21:53:55.949865 140307704055616 generate_molecules.py:342] Generated C77H62BCl2N7NiO5SZr
+I0207 21:53:55.963474 140307704055616 generate_molecules.py:342] Generated C10H13N2NiO2S
+Visualizing molecules:  20%|█▉        | 198/1000 [00:34<01:26,  9.23it/s]I0207 21:53:56.268282 140307704055616 generate_molecules.py:342] Generated C32H26F10N2NiO2
+Visualizing molecules:  20%|█▉        | 199/1000 [00:35<01:45,  7.57it/s]I0207 21:53:56.281468 140307704055616 generate_molecules.py:342] Generated C20H16ClF5NiPS
+I0207 21:53:56.583792 140307704055616 generate_molecules.py:342] Generated C49H40ClF3NNiP2
+Visualizing molecules:  20%|██        | 201/1000 [00:35<01:50,  7.21it/s]I0207 21:53:56.596381 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:56.607968 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:56.623444 140307704055616 generate_molecules.py:342] Generated C15H12FN3NiSe
+I0207 21:53:56.941784 140307704055616 generate_molecules.py:342] Generated C60H53FN8NiO7PRu
+Visualizing molecules:  20%|██        | 205/1000 [00:35<01:33,  8.48it/s]I0207 21:53:57.255671 140307704055616 generate_molecules.py:342] Generated C22H28N4NiO2S
+Visualizing molecules:  21%|██        | 206/1000 [00:36<01:54,  6.96it/s]I0207 21:53:57.561915 140307704055616 generate_molecules.py:342] Generated C36H42N4NiO2
+Visualizing molecules:  21%|██        | 207/1000 [00:36<02:14,  5.91it/s]I0207 21:53:57.866808 140307704055616 generate_molecules.py:342] Generated C21H19F5N2NiOPS
+Visualizing molecules:  21%|██        | 208/1000 [00:36<02:33,  5.15it/s]I0207 21:53:57.879973 140307704055616 generate_molecules.py:342] Generated C21H23N3NiPS
+I0207 21:53:57.892767 140307704055616 generate_molecules.py:342] Generated C11H9N2NiO
+I0207 21:53:58.207061 140307704055616 generate_molecules.py:342] Generated C49H39BBr2F6IN6NiO7Pd2S4
+Visualizing molecules:  21%|██        | 211/1000 [00:37<02:05,  6.30it/s]I0207 21:53:58.221063 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:58.233802 140307704055616 generate_molecules.py:342] Generated C4H3NNi
+I0207 21:53:58.245672 140307704055616 generate_molecules.py:342] Generated C12H10ClNNiO3PS
+I0207 21:53:58.257534 140307704055616 generate_molecules.py:342] Generated C22H22N2NiO2S
+I0207 21:53:58.561172 140307704055616 generate_molecules.py:342] Generated C25H22N5Ni
+Visualizing molecules:  22%|██▏       | 216/1000 [00:37<01:29,  8.80it/s]I0207 21:53:58.574695 140307704055616 generate_molecules.py:342] Generated C35H27N8NiO
+I0207 21:53:58.875457 140307704055616 generate_molecules.py:342] Generated C72H62F9N4Ni2O12PtZr
+Visualizing molecules:  22%|██▏       | 218/1000 [00:37<01:36,  8.09it/s]I0207 21:53:58.894210 140307704055616 generate_molecules.py:342] Generated C45H50Cl2CuN7NiO7S
+I0207 21:53:58.907116 140307704055616 generate_molecules.py:342] Generated C31H27N6Ni
+I0207 21:53:58.919456 140307704055616 generate_molecules.py:342] Generated C14H11I2N3Ni
+I0207 21:53:58.931519 140307704055616 generate_molecules.py:342] Generated C24H33CuNNiOOsP3
+I0207 21:53:58.942696 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:53:58.955341 140307704055616 generate_molecules.py:342] Generated C27H19F10NNi
+I0207 21:53:58.967734 140307704055616 generate_molecules.py:342] Generated C13H17N3NiO
+I0207 21:53:58.979541 140307704055616 generate_molecules.py:342] Generated C51H45BrClFN6NiO9PdS2
+Visualizing molecules:  23%|██▎       | 226/1000 [00:37<00:47, 16.36it/s]I0207 21:53:59.276119 140307704055616 generate_molecules.py:342] Generated C7H2F2NNbNiP
+I0207 21:53:59.292241 140307704055616 generate_molecules.py:342] Generated C2HNNi
+I0207 21:53:59.304290 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  23%|██▎       | 229/1000 [00:38<00:55, 13.87it/s]I0207 21:53:59.320328 140307704055616 generate_molecules.py:342] Generated C29H29N6NiPS
+I0207 21:53:59.333888 140307704055616 generate_molecules.py:342] Generated C63H43ClF2NNiP2Ru
+I0207 21:53:59.650013 140307704055616 generate_molecules.py:342] Generated C39H42N5Ni
+Visualizing molecules:  23%|██▎       | 232/1000 [00:38<01:03, 12.07it/s]I0207 21:53:59.664818 140307704055616 generate_molecules.py:342] Generated C17H16N5NiOPd
+I0207 21:53:59.677670 140307704055616 generate_molecules.py:342] Generated C11H18ClF2N3NiO10P
+I0207 21:53:59.690355 140307704055616 generate_molecules.py:342] Generated C34H38MnN4NiO8
+I0207 21:53:59.995812 140307704055616 generate_molecules.py:342] Generated C9H8N3Ni
+Visualizing molecules:  24%|██▎       | 236/1000 [00:38<01:04, 11.91it/s]I0207 21:54:00.303202 140307704055616 generate_molecules.py:342] Generated C7H8INNi2O
+I0207 21:54:00.315585 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  24%|██▍       | 238/1000 [00:39<01:14, 10.18it/s]I0207 21:54:00.619449 140307704055616 generate_molecules.py:342] Generated C4H3N2NiS
+I0207 21:54:00.632934 140307704055616 generate_molecules.py:342] Generated C28H40N3NiO8
+Visualizing molecules:  24%|██▍       | 240/1000 [00:39<01:24,  9.02it/s]I0207 21:54:00.645264 140307704055616 generate_molecules.py:342] Generated C34H27F3N2NiO3PS
+I0207 21:54:00.661900 140307704055616 generate_molecules.py:342] Generated C23H30N4NiO2
+I0207 21:54:00.676844 140307704055616 generate_molecules.py:342] Generated C31H32AuN9NiO
+I0207 21:54:00.688902 140307704055616 generate_molecules.py:342] Generated C43H35B2F3N6NiO3S
+I0207 21:54:00.703304 140307704055616 generate_molecules.py:342] Generated C40H33FN4NiPSZn2
+I0207 21:54:01.602035 140307704055616 generate_molecules.py:342] Generated C36H32N5NiO5
+Visualizing molecules:  25%|██▍       | 246/1000 [00:40<01:41,  7.41it/s]I0207 21:54:01.616109 140307704055616 generate_molecules.py:342] Generated CHMnN2Ni
+I0207 21:54:01.913886 140307704055616 generate_molecules.py:342] Generated C3H3N2NiS
+Visualizing molecules:  25%|██▍       | 248/1000 [00:40<01:44,  7.21it/s]I0207 21:54:01.927764 140307704055616 generate_molecules.py:342] Generated C54H39Cl2F6N5NiOP2
+I0207 21:54:01.940344 140307704055616 generate_molecules.py:342] Generated C7H5IrNiOPPd
+I0207 21:54:02.252573 140307704055616 generate_molecules.py:342] Generated C90H77AuF2N7NiO6
+Visualizing molecules:  25%|██▌       | 251/1000 [00:41<01:38,  7.60it/s]I0207 21:54:02.558025 140307704055616 generate_molecules.py:342] Generated C38H49NNiO6P2SSe
+Visualizing molecules:  25%|██▌       | 252/1000 [00:41<01:53,  6.57it/s]I0207 21:54:02.574425 140307704055616 generate_molecules.py:342] Generated C2NNi
+I0207 21:54:02.588606 140307704055616 generate_molecules.py:342] Generated C10H12N5NiO3
+I0207 21:54:02.910954 140307704055616 generate_molecules.py:342] Generated C55H56N6NiO
+Visualizing molecules:  26%|██▌       | 255/1000 [00:41<01:44,  7.12it/s]I0207 21:54:02.924849 140307704055616 generate_molecules.py:342] Generated C5H5N3NiS
+I0207 21:54:02.936938 140307704055616 generate_molecules.py:342] Generated C12H16N2NiO2
+I0207 21:54:03.246513 140307704055616 generate_molecules.py:342] Generated C7H4N2NiOS
+Visualizing molecules:  26%|██▌       | 258/1000 [00:42<01:37,  7.62it/s]I0207 21:54:03.260687 140307704055616 generate_molecules.py:342] Generated C4F6NiO2PSe
+I0207 21:54:03.272078 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:03.284340 140307704055616 generate_molecules.py:342] Generated C90H75N8NiOP3PdRhS2TiZn
+I0207 21:54:03.297923 140307704055616 generate_molecules.py:342] Generated C21H12ClNNi
+I0207 21:54:03.309694 140307704055616 generate_molecules.py:342] Generated FN2Ni
+I0207 21:54:03.321439 140307704055616 generate_molecules.py:342] Generated C6H7Cl2NNi
+I0207 21:54:03.333514 140307704055616 generate_molecules.py:342] Generated C55H45Cl2F4N4NiO8PSTi
+I0207 21:54:03.632190 140307704055616 generate_molecules.py:342] Generated C19H22BrN2NiO2S
+Visualizing molecules:  27%|██▋       | 266/1000 [00:42<01:02, 11.73it/s]I0207 21:54:03.645841 140307704055616 generate_molecules.py:342] Generated C73H63ClF8N8NiO4P2S2W
+I0207 21:54:03.658774 140307704055616 generate_molecules.py:342] Generated C39H38N5NiOP
+I0207 21:54:03.670353 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:03.682006 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:03.694641 140307704055616 generate_molecules.py:342] Generated C26H29N3NiO2
+I0207 21:54:03.706871 140307704055616 generate_molecules.py:342] Generated C6H9N4Ni
+I0207 21:54:03.718704 140307704055616 generate_molecules.py:342] Generated C19H18F3NNiO
+I0207 21:54:03.730484 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:03.742208 140307704055616 generate_molecules.py:342] Generated C24H24N4NiOS
+Visualizing molecules:  28%|██▊       | 275/1000 [00:42<00:36, 19.66it/s]I0207 21:54:03.754965 140307704055616 generate_molecules.py:342] Generated C31H29ClF3N4Ni
+I0207 21:54:04.048547 140307704055616 generate_molecules.py:342] Generated C53H46NNiP2PtS
+I0207 21:54:04.061456 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:04.363203 140307704055616 generate_molecules.py:342] Generated C7H15ClFN2NiO
+Visualizing molecules:  28%|██▊       | 279/1000 [00:43<00:54, 13.35it/s]I0207 21:54:04.662737 140307704055616 generate_molecules.py:342] Generated C13H12NNi
+I0207 21:54:04.974264 140307704055616 generate_molecules.py:342] Generated C82H67AgBF6NNi2O7PS
+I0207 21:54:04.987441 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  28%|██▊       | 282/1000 [00:43<01:12,  9.88it/s]I0207 21:54:05.000734 140307704055616 generate_molecules.py:342] Generated C41H37FN7NiO3
+I0207 21:54:05.319737 140307704055616 generate_molecules.py:342] Generated C89H67BIrN4NiO7SSi3
+Visualizing molecules:  28%|██▊       | 284/1000 [00:44<01:19,  8.96it/s]I0207 21:54:05.332822 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:05.625127 140307704055616 generate_molecules.py:342] Generated C44H51FN7NiO2PRu
+Visualizing molecules:  29%|██▊       | 286/1000 [00:44<01:25,  8.40it/s]I0207 21:54:05.639226 140307704055616 generate_molecules.py:342] Generated C17H16N3Ni2O
+I0207 21:54:05.651618 140307704055616 generate_molecules.py:342] Generated C32H32F3N4NiS
+I0207 21:54:05.663869 140307704055616 generate_molecules.py:342] Generated C8H13Ni
+I0207 21:54:05.675976 140307704055616 generate_molecules.py:342] Generated C26H31FN2NiOP
+I0207 21:54:05.688233 140307704055616 generate_molecules.py:342] Generated C3NNiOPd
+I0207 21:54:05.700102 140307704055616 generate_molecules.py:342] Generated C32H35N6NiO7Zn
+I0207 21:54:06.007660 140307704055616 generate_molecules.py:342] Generated C60H63BrClCrF2NNiO6P2Si
+Visualizing molecules:  29%|██▉       | 293/1000 [00:44<01:02, 11.34it/s]I0207 21:54:06.021909 140307704055616 generate_molecules.py:342] Generated C31H20Cl3F2N3NiOPdS
+I0207 21:54:06.034114 140307704055616 generate_molecules.py:342] Generated C7H9AgN4NiO
+I0207 21:54:06.046079 140307704055616 generate_molecules.py:342] Generated C19H23N5NiO
+I0207 21:54:06.057724 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:06.070388 140307704055616 generate_molecules.py:342] Generated C21H17N5Ni
+I0207 21:54:06.082355 140307704055616 generate_molecules.py:342] Generated C55H55N8NiO2P
+I0207 21:54:06.094576 140307704055616 generate_molecules.py:342] Generated C20H13Br2N7NiS2
+I0207 21:54:06.395334 140307704055616 generate_molecules.py:342] Generated NNi
+Visualizing molecules:  30%|███       | 301/1000 [00:45<00:49, 14.14it/s]I0207 21:54:06.409033 140307704055616 generate_molecules.py:342] Generated C21H24N3NiO2
+I0207 21:54:06.421219 140307704055616 generate_molecules.py:342] Generated C30H26F7N2NiO
+I0207 21:54:06.433624 140307704055616 generate_molecules.py:342] Generated C47H29ClF15NNiPRu
+I0207 21:54:06.736371 140307704055616 generate_molecules.py:342] Generated C49H58Au2Cl4N6NiOPPdS
+Visualizing molecules:  30%|███       | 305/1000 [00:45<00:51, 13.48it/s]I0207 21:54:06.752939 140307704055616 generate_molecules.py:342] Generated C47H56B3CoN5NiO2P2
+I0207 21:54:06.765453 140307704055616 generate_molecules.py:342] Generated C17H25F3N2NiO4Si
+I0207 21:54:07.075702 140307704055616 generate_molecules.py:342] Generated C30H30AuCl2N5NiS
+Visualizing molecules:  31%|███       | 308/1000 [00:46<00:56, 12.17it/s]I0207 21:54:07.089052 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:07.104210 140307704055616 generate_molecules.py:342] Generated C34H31F2N3NiO3S3
+I0207 21:54:07.116403 140307704055616 generate_molecules.py:342] Generated C16H9BrCl2N2NiO3
+I0207 21:54:07.128691 140307704055616 generate_molecules.py:342] Generated C38H33F5N4NiOPS2Si
+I0207 21:54:07.140988 140307704055616 generate_molecules.py:342] Generated C24H24N2NiOPS
+I0207 21:54:07.155566 140307704055616 generate_molecules.py:342] Generated C29H36Cl2N2NiPd
+I0207 21:54:07.167867 140307704055616 generate_molecules.py:342] Generated C36H43BrN6NiO2P2S
+I0207 21:54:07.179078 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  32%|███▏      | 316/1000 [00:46<00:35, 19.28it/s]I0207 21:54:07.191711 140307704055616 generate_molecules.py:342] Generated C11H17F2N6NiO3
+I0207 21:54:07.499601 140307704055616 generate_molecules.py:342] Generated C66H54ClCrCuF2IN10NiO6PTi
+I0207 21:54:07.513972 140307704055616 generate_molecules.py:342] Generated C48H57FeN5NiO5
+I0207 21:54:07.526606 140307704055616 generate_molecules.py:342] Generated C81H88N7NiO5
+Visualizing molecules:  32%|███▏      | 320/1000 [00:46<00:40, 16.61it/s]I0207 21:54:07.539222 140307704055616 generate_molecules.py:342] Generated C24H26BrN5NiP
+I0207 21:54:07.836743 140307704055616 generate_molecules.py:342] Generated C6H4N2NiS
+I0207 21:54:07.850085 140307704055616 generate_molecules.py:342] Generated C36H30NiP2S
+Visualizing molecules:  32%|███▏      | 323/1000 [00:46<00:47, 14.31it/s]I0207 21:54:07.862242 140307704055616 generate_molecules.py:342] Generated CAuNNiO
+I0207 21:54:07.874208 140307704055616 generate_molecules.py:342] Generated C20H23B2N4Ni2O3S2
+I0207 21:54:08.173885 140307704055616 generate_molecules.py:342] Generated C80H73AuBCl3F3N9NiO6PdReW
+Visualizing molecules:  33%|███▎      | 326/1000 [00:47<00:52, 12.75it/s]I0207 21:54:08.188045 140307704055616 generate_molecules.py:342] Generated C4MnMoNNi2PW
+I0207 21:54:08.202257 140307704055616 generate_molecules.py:342] Generated C7H10N5NiO3
+I0207 21:54:08.214035 140307704055616 generate_molecules.py:342] Generated C5H8N2Ni
+I0207 21:54:08.225801 140307704055616 generate_molecules.py:342] Generated C24H18N3Ni
+I0207 21:54:08.237540 140307704055616 generate_molecules.py:342] Generated C24H20N3Ni
+I0207 21:54:08.249422 140307704055616 generate_molecules.py:342] Generated C35H43BrN4NiO3
+I0207 21:54:08.261146 140307704055616 generate_molecules.py:342] Generated C4H6N6NiO
+I0207 21:54:08.272481 140307704055616 generate_molecules.py:342] Generated C59H65Cl2N7NiOP2Pd2
+I0207 21:54:08.284832 140307704055616 generate_molecules.py:342] Generated C40H47ClN8NiY
+Visualizing molecules:  34%|███▎      | 335/1000 [00:47<00:30, 21.75it/s]I0207 21:54:08.296492 140307704055616 generate_molecules.py:342] Generated C26H39F4N2NiP
+I0207 21:54:08.308033 140307704055616 generate_molecules.py:342] Generated C31H32N2NiP
+I0207 21:54:08.319591 140307704055616 generate_molecules.py:342] Generated C44H48BrN6NiO7S
+I0207 21:54:08.331145 140307704055616 generate_molecules.py:342] Generated CN2NiPtSe
+I0207 21:54:08.630426 140307704055616 generate_molecules.py:342] Generated C16H19NNi
+Visualizing molecules:  34%|███▍      | 340/1000 [00:47<00:34, 19.06it/s]I0207 21:54:08.643416 140307704055616 generate_molecules.py:342] Generated C22H17N4NiO4
+I0207 21:54:08.655034 140307704055616 generate_molecules.py:342] Generated CAuN2NiOSe
+I0207 21:54:08.666638 140307704055616 generate_molecules.py:342] Generated C7H10N2NiS
+I0207 21:54:08.678182 140307704055616 generate_molecules.py:342] Generated C16H9N3NiO7
+I0207 21:54:08.689584 140307704055616 generate_molecules.py:342] Generated C35H30N5Ni2O3
+I0207 21:54:08.701641 140307704055616 generate_molecules.py:342] Generated C33H40BrN7NiO3
+I0207 21:54:08.713284 140307704055616 generate_molecules.py:342] Generated C20H20N3NiO7
+I0207 21:54:08.724657 140307704055616 generate_molecules.py:342] Generated C2H2NNiO
+I0207 21:54:08.736076 140307704055616 generate_molecules.py:342] Generated C26H18N3NiPd
+Visualizing molecules:  35%|███▍      | 349/1000 [00:47<00:23, 28.25it/s]I0207 21:54:08.747025 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:08.758861 140307704055616 generate_molecules.py:342] Generated C25H31N3NiOPSi
+I0207 21:54:08.770695 140307704055616 generate_molecules.py:342] Generated C56H67F3IN9NiO9PPt
+I0207 21:54:08.782235 140307704055616 generate_molecules.py:342] Generated C59H73ClN11NiO2P
+I0207 21:54:08.794063 140307704055616 generate_molecules.py:342] Generated C13H18BNNiS
+I0207 21:54:08.805728 140307704055616 generate_molecules.py:342] Generated INNiOPt
+I0207 21:54:08.817285 140307704055616 generate_molecules.py:342] Generated C57H61BCl2N9NiOPt
+I0207 21:54:08.829123 140307704055616 generate_molecules.py:342] Generated C34H35BrF3FeN7NiO3Pt
+I0207 21:54:08.840790 140307704055616 generate_molecules.py:342] Generated C45H45BrN7Ni2O8PS
+Visualizing molecules:  36%|███▌      | 358/1000 [00:47<00:17, 37.73it/s]I0207 21:54:08.852859 140307704055616 generate_molecules.py:342] Generated C16H14ClF3N2NiP
+I0207 21:54:08.864606 140307704055616 generate_molecules.py:342] Generated C71H70BrN7NiO2P2Se2W
+I0207 21:54:08.876255 140307704055616 generate_molecules.py:342] Generated C9H6F6NNiO4
+I0207 21:54:08.887761 140307704055616 generate_molecules.py:342] Generated C28H33N4NiOS
+I0207 21:54:08.899650 140307704055616 generate_molecules.py:342] Generated C15H21NNiO3PtS
+I0207 21:54:08.911297 140307704055616 generate_molecules.py:342] Generated C16H16N3NiOS
+I0207 21:54:08.922853 140307704055616 generate_molecules.py:342] Generated C35H39ClN2NiP
+I0207 21:54:08.934259 140307704055616 generate_molecules.py:342] Generated C33H29F5NNiO9Ti
+I0207 21:54:08.945701 140307704055616 generate_molecules.py:342] Generated C2ClNNiO2PZr
+Visualizing molecules:  37%|███▋      | 367/1000 [00:47<00:13, 46.90it/s]I0207 21:54:08.957026 140307704055616 generate_molecules.py:342] Generated C3H3N2NiS
+I0207 21:54:08.968355 140307704055616 generate_molecules.py:342] Generated C41H36N5NiP2
+I0207 21:54:08.979854 140307704055616 generate_molecules.py:342] Generated Cl3Ni
+I0207 21:54:08.991520 140307704055616 generate_molecules.py:342] Generated C18H24N4NiO2S2Zn
+I0207 21:54:09.003407 140307704055616 generate_molecules.py:342] Generated C16H15BN5NiO
+I0207 21:54:09.015190 140307704055616 generate_molecules.py:342] Generated C23H29BN2NiS
+I0207 21:54:09.026646 140307704055616 generate_molecules.py:342] Generated C6H8NNiO
+I0207 21:54:09.038148 140307704055616 generate_molecules.py:342] Generated C12H12N5NiS
+I0207 21:54:09.049584 140307704055616 generate_molecules.py:342] Generated C41H37F5N8NiOTi
+Visualizing molecules:  38%|███▊      | 376/1000 [00:48<00:11, 55.31it/s]I0207 21:54:09.061290 140307704055616 generate_molecules.py:342] Generated C41H55BrN4NiO2Ta
+I0207 21:54:09.073100 140307704055616 generate_molecules.py:342] Generated C66H63B5IMnN3NiOPdSi
+I0207 21:54:09.085595 140307704055616 generate_molecules.py:342] Generated C16H15BrF3N5NiO
+I0207 21:54:09.097302 140307704055616 generate_molecules.py:342] Generated C23H32Br2N4Ni
+I0207 21:54:09.109205 140307704055616 generate_molecules.py:342] Generated C8H7N3NiS
+I0207 21:54:09.120780 140307704055616 generate_molecules.py:342] Generated C8H14ClN6Ni
+I0207 21:54:09.132381 140307704055616 generate_molecules.py:342] Generated C2HAuN2NiPt
+I0207 21:54:09.143583 140307704055616 generate_molecules.py:342] Generated C17H10ClFN2NiS
+I0207 21:54:09.154319 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  38%|███▊      | 385/1000 [00:48<00:09, 62.44it/s]I0207 21:54:09.456357 140307704055616 generate_molecules.py:342] Generated C90H83F4MoN8NiO6
+I0207 21:54:09.737799 140307704055616 generate_molecules.py:342] Generated C66H57FMoN5NiO3P
+I0207 21:54:10.023800 140307704055616 generate_molecules.py:342] Generated C87H83CrN7NiO7PRh
+I0207 21:54:10.037424 140307704055616 generate_molecules.py:342] Generated C6H12Cl2NNiP
+I0207 21:54:10.048335 140307704055616 generate_molecules.py:342] Generated C74H46Cl3CoF7FeI2N6NiO6Pd
+I0207 21:54:10.063575 140307704055616 generate_molecules.py:342] Generated C35H35N5NiOPS
+I0207 21:54:10.356272 140307704055616 generate_molecules.py:342] Generated C51H65AuBCl2NNiO4PPtSe
+I0207 21:54:10.367987 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  39%|███▉      | 393/1000 [00:49<00:33, 18.05it/s]I0207 21:54:10.380586 140307704055616 generate_molecules.py:342] Generated C24H26ClNNiP
+I0207 21:54:10.392482 140307704055616 generate_molecules.py:342] Generated C18H23ClN5NiOSSi
+I0207 21:54:10.412460 140307704055616 generate_molecules.py:342] Generated C22H19N4NiO10PS
+I0207 21:54:10.426298 140307704055616 generate_molecules.py:342] Generated C66H48BClF9N8NiOPPdS
+I0207 21:54:10.438654 140307704055616 generate_molecules.py:342] Generated C17H16BrN5NiOS
+I0207 21:54:10.450266 140307704055616 generate_molecules.py:342] Generated C30H37NiO3PS
+I0207 21:54:10.461437 140307704055616 generate_molecules.py:342] Generated C32H34BrNiO4P2
+I0207 21:54:10.474915 140307704055616 generate_molecules.py:342] Generated NNiO
+Visualizing molecules:  40%|████      | 401/1000 [00:49<00:25, 23.23it/s]I0207 21:54:10.487038 140307704055616 generate_molecules.py:342] Generated C3Ni2OSY
+I0207 21:54:10.500083 140307704055616 generate_molecules.py:342] Generated C56H62MoN12NiO4PtS
+I0207 21:54:10.786057 140307704055616 generate_molecules.py:342] Generated C39H41Cl2CrN4NiO3PW
+I0207 21:54:10.798246 140307704055616 generate_molecules.py:342] Generated C34H31N5NiO
+I0207 21:54:10.809484 140307704055616 generate_molecules.py:342] Generated C14H11N3NiO4S
+I0207 21:54:10.820409 140307704055616 generate_molecules.py:342] Generated C27H21N4NiO
+I0207 21:54:10.831729 140307704055616 generate_molecules.py:342] Generated C47H53F7N8NiO7S
+Visualizing molecules:  41%|████      | 408/1000 [00:49<00:26, 22.11it/s]I0207 21:54:10.845757 140307704055616 generate_molecules.py:342] Generated C34H37NNiP2
+I0207 21:54:10.857033 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:10.867930 140307704055616 generate_molecules.py:342] Generated C79H76AuClFN11Ni2O14PPtRuSZr
+I0207 21:54:10.878959 140307704055616 generate_molecules.py:342] Generated C20H40N5NiO4
+I0207 21:54:11.165581 140307704055616 generate_molecules.py:342] Generated C89H89BrCl6N7NiO2P2Pd2
+Visualizing molecules:  41%|████▏     | 413/1000 [00:50<00:29, 20.06it/s]I0207 21:54:11.453880 140307704055616 generate_molecules.py:342] Generated C71H73N4Ni2O8P
+I0207 21:54:11.466562 140307704055616 generate_molecules.py:342] Generated C10H14Cl2NNiPS
+I0207 21:54:11.763432 140307704055616 generate_molecules.py:342] Generated C60H65BF7N5NiO3PRu
+I0207 21:54:11.775759 140307704055616 generate_molecules.py:342] Generated C5H3F6NiO5
+Visualizing molecules:  42%|████▏     | 417/1000 [00:50<00:40, 14.28it/s]I0207 21:54:11.787386 140307704055616 generate_molecules.py:342] Generated C33H21N2NiO9W
+I0207 21:54:11.798636 140307704055616 generate_molecules.py:342] Generated C17H12ClN2NiO5RuW
+I0207 21:54:11.812998 140307704055616 generate_molecules.py:342] Generated C37H33BrN3NiOS
+I0207 21:54:11.823813 140307704055616 generate_molecules.py:342] Generated C4H6FN4NiP
+I0207 21:54:11.834430 140307704055616 generate_molecules.py:342] Generated C15H23NNiO2PS
+I0207 21:54:11.844504 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:11.855709 140307704055616 generate_molecules.py:342] Generated C10H15B16CrINiO2P
+I0207 21:54:11.866381 140307704055616 generate_molecules.py:342] Generated C14H9ClN2NiO
+I0207 21:54:11.876984 140307704055616 generate_molecules.py:342] Generated C26H27IN3NiO2S2
+Visualizing molecules:  43%|████▎     | 426/1000 [00:50<00:27, 21.17it/s]I0207 21:54:11.888492 140307704055616 generate_molecules.py:342] Generated C16H11BMnNiP2S2
+I0207 21:54:11.899261 140307704055616 generate_molecules.py:342] Generated C19H13N4NiOPS
+I0207 21:54:11.909139 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:11.924123 140307704055616 generate_molecules.py:342] Generated C16H17N6NiS
+I0207 21:54:11.936656 140307704055616 generate_molecules.py:342] Generated C47H44N6NiOS
+I0207 21:54:11.947656 140307704055616 generate_molecules.py:342] Generated C65H59ClFN2NiO3PRuSe
+I0207 21:54:11.958890 140307704055616 generate_molecules.py:342] Generated C25H27BN3NiS2
+I0207 21:54:11.969598 140307704055616 generate_molecules.py:342] Generated NNiO
+I0207 21:54:11.983700 140307704055616 generate_molecules.py:342] Generated C13H9F3N4NiO5
+Visualizing molecules:  44%|████▎     | 435/1000 [00:50<00:19, 28.87it/s]I0207 21:54:11.995954 140307704055616 generate_molecules.py:342] Generated C24H35ClF2IrN3NiO5P2
+I0207 21:54:12.007260 140307704055616 generate_molecules.py:342] Generated C35H35NiO4PSe
+I0207 21:54:12.297140 140307704055616 generate_molecules.py:342] Generated C51H44B2ClN2NiO2P2Zn
+I0207 21:54:12.594553 140307704055616 generate_molecules.py:342] Generated C66H53N3NiO12PS
+I0207 21:54:12.607363 140307704055616 generate_molecules.py:342] Generated C57H62NiO9P2PtSi4
+I0207 21:54:12.618746 140307704055616 generate_molecules.py:342] Generated C23H16N8Ni
+Visualizing molecules:  44%|████▍     | 441/1000 [00:51<00:29, 18.98it/s]I0207 21:54:12.630058 140307704055616 generate_molecules.py:342] Generated C42H22BrCl3CoN4NiO4PPdRuSSeSiWY
+I0207 21:54:12.645442 140307704055616 generate_molecules.py:342] Generated C14H12N3NiO2P
+I0207 21:54:12.657567 140307704055616 generate_molecules.py:342] Generated C24H30N4Ni
+I0207 21:54:12.668627 140307704055616 generate_molecules.py:342] Generated C10H11BrN3NiO2S
+I0207 21:54:12.958744 140307704055616 generate_molecules.py:342] Generated C91H75ClIrN9NiO3
+Visualizing molecules:  45%|████▍     | 446/1000 [00:51<00:31, 17.77it/s]I0207 21:54:12.972519 140307704055616 generate_molecules.py:342] Generated C29H31N6NiOS2
+I0207 21:54:12.983552 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:12.994389 140307704055616 generate_molecules.py:342] Generated C49H51ClN12Ni
+I0207 21:54:13.005513 140307704055616 generate_molecules.py:342] Generated C40H33BrClCuF5IN7NiO4
+I0207 21:54:13.016381 140307704055616 generate_molecules.py:342] Generated C7H7N2NiO2S
+I0207 21:54:13.027365 140307704055616 generate_molecules.py:342] Generated C37H33N7NiO6
+I0207 21:54:13.038228 140307704055616 generate_molecules.py:342] Generated C13H19NiO
+I0207 21:54:13.048874 140307704055616 generate_molecules.py:342] Generated C7HBCuMnN2NiSiZr
+I0207 21:54:13.059495 140307704055616 generate_molecules.py:342] Generated C36H29BClN12Ni2O3S2Se
+I0207 21:54:13.070657 140307704055616 generate_molecules.py:342] Generated C23H22N5Ni
+Visualizing molecules:  46%|████▌     | 456/1000 [00:52<00:20, 26.13it/s]I0207 21:54:13.358554 140307704055616 generate_molecules.py:342] Generated C45H55IN3NiO7PSi2Ti
+I0207 21:54:13.370871 140307704055616 generate_molecules.py:342] Generated C18H19AuClCrFeIN3NiOP
+I0207 21:54:13.381202 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:13.392628 140307704055616 generate_molecules.py:342] Generated C20H14F3NNiO7
+I0207 21:54:13.403112 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:13.414795 140307704055616 generate_molecules.py:342] Generated C3H3N3Ni2
+Visualizing molecules:  46%|████▌     | 462/1000 [00:52<00:23, 23.19it/s]I0207 21:54:13.429865 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:13.443384 140307704055616 generate_molecules.py:342] Generated C51H49ClN12NiO5OsPd
+I0207 21:54:13.455634 140307704055616 generate_molecules.py:342] Generated C57H51ClN5NiOP
+I0207 21:54:13.744420 140307704055616 generate_molecules.py:342] Generated C56H59AuBrCl2F5N2NiO5PS
+I0207 21:54:14.048280 140307704055616 generate_molecules.py:342] Generated C59H54NiO9
+Visualizing molecules:  47%|████▋     | 467/1000 [00:53<00:33, 15.97it/s]I0207 21:54:14.338412 140307704055616 generate_molecules.py:342] Generated C48H63N3NiO2PSiTi
+I0207 21:54:14.638622 140307704055616 generate_molecules.py:342] Generated C41H47Cl2FeN3NiO6S
+I0207 21:54:14.654690 140307704055616 generate_molecules.py:342] Generated C6H13N4NiOS
+I0207 21:54:14.665240 140307704055616 generate_molecules.py:342] Generated C28H27AgBrCl6N4NiP2PdRuS
+Visualizing molecules:  47%|████▋     | 471/1000 [00:53<00:43, 12.23it/s]I0207 21:54:14.676031 140307704055616 generate_molecules.py:342] Generated C13H12CrFeNNiOPt2Si
+I0207 21:54:14.686540 140307704055616 generate_molecules.py:342] Generated C5NNiOSeSiZr
+I0207 21:54:14.697211 140307704055616 generate_molecules.py:342] Generated C73H76Cl3N5NiO2P2Zn
+I0207 21:54:14.708177 140307704055616 generate_molecules.py:342] Generated C80H86N5NiO6PRh2
+I0207 21:54:14.719224 140307704055616 generate_molecules.py:342] Generated C21H9Cl2F14N2NiPSi2Zn
+I0207 21:54:14.729817 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:14.740207 140307704055616 generate_molecules.py:342] Generated C26H20F8NNiP
+I0207 21:54:14.751050 140307704055616 generate_molecules.py:342] Generated C21H16F10NNiOP
+I0207 21:54:14.761639 140307704055616 generate_molecules.py:342] Generated C19H17NNiO
+I0207 21:54:14.773144 140307704055616 generate_molecules.py:342] Generated C3F4Ni
+Visualizing molecules:  48%|████▊     | 481/1000 [00:53<00:26, 19.47it/s]I0207 21:54:14.783654 140307704055616 generate_molecules.py:342] Generated C33H29N3NiO
+I0207 21:54:14.793639 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:14.804510 140307704055616 generate_molecules.py:342] Generated C24H17Cl2N3Ni
+I0207 21:54:14.815047 140307704055616 generate_molecules.py:342] Generated C39H34NiOP2
+I0207 21:54:14.825976 140307704055616 generate_molecules.py:342] Generated C47H37Br2F11IrNiO7P
+I0207 21:54:14.836809 140307704055616 generate_molecules.py:342] Generated C18H24FN3NiO2
+I0207 21:54:14.847292 140307704055616 generate_molecules.py:342] Generated C55H41N3NiP2
+I0207 21:54:14.858450 140307704055616 generate_molecules.py:342] Generated C12H9N3NiO2
+I0207 21:54:15.163963 140307704055616 generate_molecules.py:342] Generated C93H60AuCl2FFeIN7Ni2O7SSe
+Visualizing molecules:  49%|████▉     | 490/1000 [00:54<00:24, 20.59it/s]I0207 21:54:15.464438 140307704055616 generate_molecules.py:342] Generated C57H70Cl2FN5Ni3O15Ti
+I0207 21:54:15.478596 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:15.490414 140307704055616 generate_molecules.py:342] Generated C16H15N3NiO4S
+I0207 21:54:15.502354 140307704055616 generate_molecules.py:342] Generated C26H26Br2N7NiO2
+Visualizing molecules:  49%|████▉     | 494/1000 [00:54<00:27, 18.12it/s]I0207 21:54:15.514348 140307704055616 generate_molecules.py:342] Generated C51H54N9NiO5PdPtSZr
+I0207 21:54:15.526463 140307704055616 generate_molecules.py:342] Generated C34H30F3N2NiO7S
+I0207 21:54:15.538181 140307704055616 generate_molecules.py:342] Generated C4H6N4Ni
+I0207 21:54:15.549103 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:15.561127 140307704055616 generate_molecules.py:342] Generated C27H20B7N4NiO10
+I0207 21:54:15.572898 140307704055616 generate_molecules.py:342] Generated C53H53FN9NiOPd
+I0207 21:54:15.586383 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:15.598780 140307704055616 generate_molecules.py:342] Generated C12H11F4NNi
+I0207 21:54:15.610511 140307704055616 generate_molecules.py:342] Generated C24H31B2N3NiO2
+Visualizing molecules:  50%|█████     | 503/1000 [00:54<00:19, 25.55it/s]I0207 21:54:15.622624 140307704055616 generate_molecules.py:342] Generated C32H37N5NiO
+I0207 21:54:15.635296 140307704055616 generate_molecules.py:342] Generated C19H21N4Ni
+I0207 21:54:15.646051 140307704055616 generate_molecules.py:342] Generated C39H35CuFN3NiO3
+I0207 21:54:15.656928 140307704055616 generate_molecules.py:342] Generated C15H15N4NiO3
+I0207 21:54:15.667532 140307704055616 generate_molecules.py:342] Generated C14H20F3N3NiO5Pt
+I0207 21:54:15.968242 140307704055616 generate_molecules.py:342] Generated C68H64Cl2FeN6NiO3Pt
+Visualizing molecules:  51%|█████     | 509/1000 [00:54<00:21, 22.47it/s]I0207 21:54:15.980501 140307704055616 generate_molecules.py:342] Generated C38H41IN2NiP
+I0207 21:54:16.269726 140307704055616 generate_molecules.py:342] Generated C90H86BN12NiOP3S2Se
+I0207 21:54:16.281915 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:16.292560 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  51%|█████▏    | 513/1000 [00:55<00:25, 19.31it/s]I0207 21:54:16.303235 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:16.606846 140307704055616 generate_molecules.py:342] Generated C53H51N2NiOP4S
+I0207 21:54:16.619362 140307704055616 generate_molecules.py:342] Generated C47H39N6Ni2O2OsP
+Visualizing molecules:  52%|█████▏    | 516/1000 [00:55<00:29, 16.17it/s]I0207 21:54:16.633369 140307704055616 generate_molecules.py:342] Generated NNiPPd
+I0207 21:54:16.646248 140307704055616 generate_molecules.py:342] Generated C29H33N3Ni2O3PSW
+I0207 21:54:16.657279 140307704055616 generate_molecules.py:342] Generated C32H22FN4NiO5Pd
+I0207 21:54:16.670067 140307704055616 generate_molecules.py:342] Generated C47H45FN5NiOPSSi
+I0207 21:54:16.681331 140307704055616 generate_molecules.py:342] Generated C54H56CrF3N6NiO9
+I0207 21:54:16.692309 140307704055616 generate_molecules.py:342] Generated N2Ni
+I0207 21:54:16.703173 140307704055616 generate_molecules.py:342] Generated C13H27Cl2N3Ni
+I0207 21:54:16.719287 140307704055616 generate_molecules.py:342] Generated C13H12F3N2NiO4
+I0207 21:54:16.729984 140307704055616 generate_molecules.py:342] Generated C2HNNiO
+Visualizing molecules:  52%|█████▎    | 525/1000 [00:55<00:19, 24.68it/s]I0207 21:54:16.739981 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:16.755144 140307704055616 generate_molecules.py:342] Generated C28H24Cl2N4NiP
+I0207 21:54:16.766048 140307704055616 generate_molecules.py:342] Generated C18H27N3NiO3
+I0207 21:54:16.780767 140307704055616 generate_molecules.py:342] Generated C26H22ClN3NiPPtS2
+I0207 21:54:16.791620 140307704055616 generate_molecules.py:342] Generated C17H23ClN2NiOS2Se
+I0207 21:54:16.802352 140307704055616 generate_molecules.py:342] Generated C15H22BNiOPdSi
+I0207 21:54:16.813341 140307704055616 generate_molecules.py:342] Generated C36H36F3NNiO3P3SSi
+I0207 21:54:16.824655 140307704055616 generate_molecules.py:342] Generated C79H79FIN7NiO
+I0207 21:54:16.836388 140307704055616 generate_molecules.py:342] Generated C35H33ClMnN4NiO4PS
+Visualizing molecules:  53%|█████▎    | 534/1000 [00:55<00:13, 33.77it/s]I0207 21:54:16.847562 140307704055616 generate_molecules.py:342] Generated C63H53F5N5Ni2O3PPdSe2Zn
+I0207 21:54:16.858527 140307704055616 generate_molecules.py:342] Generated C22H25NiO4P
+I0207 21:54:16.869622 140307704055616 generate_molecules.py:342] Generated C12H14N4NiS
+I0207 21:54:16.880334 140307704055616 generate_molecules.py:342] Generated C32H26NNiO2P
+I0207 21:54:16.893415 140307704055616 generate_molecules.py:342] Generated C7F14Ni
+I0207 21:54:16.906291 140307704055616 generate_molecules.py:342] Generated C37H39MoN5NiO7S2
+I0207 21:54:17.202640 140307704055616 generate_molecules.py:342] Generated C74H63AuIrN7NiO6RuW
+Visualizing molecules:  54%|█████▍    | 541/1000 [00:56<00:16, 27.49it/s]I0207 21:54:17.215042 140307704055616 generate_molecules.py:342] Generated C35H34NiO4P2
+I0207 21:54:17.225885 140307704055616 generate_molecules.py:342] Generated C19H16Cl4F2FeN3NiO
+I0207 21:54:17.236740 140307704055616 generate_molecules.py:342] Generated C43H34NiO2P2
+I0207 21:54:17.534060 140307704055616 generate_molecules.py:342] Generated C70H59Cl3FN7NiO2S2TiV
+I0207 21:54:17.546386 140307704055616 generate_molecules.py:342] Generated C30H38N3NiOP
+Visualizing molecules:  55%|█████▍    | 546/1000 [00:56<00:19, 22.79it/s]I0207 21:54:17.557383 140307704055616 generate_molecules.py:342] Generated C2HBF6Ni
+I0207 21:54:17.568210 140307704055616 generate_molecules.py:342] Generated C28H29NiO2P
+I0207 21:54:17.579010 140307704055616 generate_molecules.py:342] Generated C37H38BrN2NiOP2
+I0207 21:54:17.589825 140307704055616 generate_molecules.py:342] Generated C38H38NNiO2P
+I0207 21:54:17.599892 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:17.611090 140307704055616 generate_molecules.py:342] Generated C6H5ClNNiSZn
+I0207 21:54:17.621596 140307704055616 generate_molecules.py:342] Generated C14H23NNiPS
+I0207 21:54:17.632538 140307704055616 generate_molecules.py:342] Generated C22H17N5NiO3W
+I0207 21:54:17.643588 140307704055616 generate_molecules.py:342] Generated C16H12ClN3NiO2
+I0207 21:54:17.653782 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  56%|█████▌    | 556/1000 [00:56<00:13, 32.61it/s]I0207 21:54:17.664966 140307704055616 generate_molecules.py:342] Generated C36H33BN7NiS
+I0207 21:54:17.675717 140307704055616 generate_molecules.py:342] Generated C28H23BrN2NiO4
+I0207 21:54:17.686656 140307704055616 generate_molecules.py:342] Generated C20H20AuCl2N3NiO2P
+I0207 21:54:17.697403 140307704055616 generate_molecules.py:342] Generated C62H85BrIN3NiO3P3Pd2S2
+I0207 21:54:17.708478 140307704055616 generate_molecules.py:342] Generated C31H36FNNiP
+I0207 21:54:17.719155 140307704055616 generate_molecules.py:342] Generated C66H67ClN8Ni2O2P
+I0207 21:54:17.735279 140307704055616 generate_molecules.py:342] Generated C4BNiO3Zr
+I0207 21:54:17.746106 140307704055616 generate_molecules.py:342] Generated C16H10ClF5NiO4
+I0207 21:54:17.757582 140307704055616 generate_molecules.py:342] Generated C68H47BBrCl2F10FeIIrN5NiO8PPdReS2
+Visualizing molecules:  56%|█████▋    | 565/1000 [00:56<00:10, 41.38it/s]I0207 21:54:17.772902 140307704055616 generate_molecules.py:342] Generated C9H7BrN3Ni
+I0207 21:54:17.787285 140307704055616 generate_molecules.py:342] Generated C54H60BF5IN5NiOPSi
+I0207 21:54:17.798186 140307704055616 generate_molecules.py:342] Generated C31H43AuNiO5PW
+I0207 21:54:17.808756 140307704055616 generate_molecules.py:342] Generated C3H3N2NiS
+I0207 21:54:17.819283 140307704055616 generate_molecules.py:342] Generated C30H21NiSTc
+I0207 21:54:17.830302 140307704055616 generate_molecules.py:342] Generated C4H4NiO4
+I0207 21:54:17.840809 140307704055616 generate_molecules.py:342] Generated C19H25N4NiO2
+I0207 21:54:17.851356 140307704055616 generate_molecules.py:342] Generated C15H14BN7NiOS
+I0207 21:54:17.862071 140307704055616 generate_molecules.py:342] Generated C37H32ClN5NiOPPdS2
+Visualizing molecules:  57%|█████▋    | 574/1000 [00:56<00:08, 49.85it/s]I0207 21:54:17.873159 140307704055616 generate_molecules.py:342] Generated C51H38F12N9NiO8SW
+I0207 21:54:17.884614 140307704055616 generate_molecules.py:342] Generated C18H25IN2NiP
+I0207 21:54:17.895176 140307704055616 generate_molecules.py:342] Generated C20H16N3NiO
+I0207 21:54:17.905725 140307704055616 generate_molecules.py:342] Generated C36H44ClF4FeNNiO3P2
+I0207 21:54:17.915809 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:17.927204 140307704055616 generate_molecules.py:342] Generated C43H49ClN2NiO
+I0207 21:54:17.938318 140307704055616 generate_molecules.py:342] Generated C13H12F3N2NiO2
+I0207 21:54:17.948892 140307704055616 generate_molecules.py:342] Generated C27H39BrN6NiO2
+I0207 21:54:17.959569 140307704055616 generate_molecules.py:342] Generated C36H31NNiP3
+I0207 21:54:17.970210 140307704055616 generate_molecules.py:342] Generated C30H26N7NiOS
+Visualizing molecules:  58%|█████▊    | 584/1000 [00:56<00:07, 59.16it/s]I0207 21:54:17.980495 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:17.994166 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:18.007412 140307704055616 generate_molecules.py:342] Generated C20H22NNiS3Se
+I0207 21:54:18.017507 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:18.028763 140307704055616 generate_molecules.py:342] Generated C6H4FN4NiO2
+I0207 21:54:18.043390 140307704055616 generate_molecules.py:342] Generated C33H40FNiP2S
+I0207 21:54:18.054105 140307704055616 generate_molecules.py:342] Generated C4H6N2Ni
+I0207 21:54:18.064705 140307704055616 generate_molecules.py:342] Generated C26H25CoN9NiOS
+I0207 21:54:18.075802 140307704055616 generate_molecules.py:342] Generated C40H43BN7Ni2O6PW
+Visualizing molecules:  59%|█████▉    | 593/1000 [00:57<00:06, 65.23it/s]I0207 21:54:18.086820 140307704055616 generate_molecules.py:342] Generated C58H64B2NiO3P
+I0207 21:54:18.097624 140307704055616 generate_molecules.py:342] Generated C2H3INNiOS
+I0207 21:54:18.108561 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:18.119561 140307704055616 generate_molecules.py:342] Generated C28H30BrN3NiO7
+I0207 21:54:18.130478 140307704055616 generate_molecules.py:342] Generated C56H57AuCl2N9Ni2O7S4
+I0207 21:54:18.141304 140307704055616 generate_molecules.py:342] Generated C25H34N5NiO2PReSSe
+I0207 21:54:18.152055 140307704055616 generate_molecules.py:342] Generated C21H22N6NiS
+I0207 21:54:18.164702 140307704055616 generate_molecules.py:342] Generated C32H29ClN2NiO3
+I0207 21:54:18.175502 140307704055616 generate_molecules.py:342] Generated CH3NiO3P
+I0207 21:54:18.186198 140307704055616 generate_molecules.py:342] Generated C27H30NNiO
+Visualizing molecules:  60%|██████    | 603/1000 [00:57<00:05, 71.81it/s]I0207 21:54:18.197072 140307704055616 generate_molecules.py:342] Generated C17H27NNiO6PS2Si
+I0207 21:54:18.207913 140307704055616 generate_molecules.py:342] Generated C36H48BrCrN8NiOPSeSi
+I0207 21:54:18.219215 140307704055616 generate_molecules.py:342] Generated C12H17BN2NiP
+I0207 21:54:18.230524 140307704055616 generate_molecules.py:342] Generated C4H9Cl3FFeN2NiSSi
+I0207 21:54:18.241101 140307704055616 generate_molecules.py:342] Generated NNiO2
+I0207 21:54:18.552284 140307704055616 generate_molecules.py:342] Generated C64H78B7ClCoF3FeN6NiO9ReSe
+I0207 21:54:18.853695 140307704055616 generate_molecules.py:342] Generated C49H52Cl2MoN7NiO13PSW
+I0207 21:54:18.865868 140307704055616 generate_molecules.py:342] Generated C49H47AuClNi2O4P3
+I0207 21:54:18.876933 140307704055616 generate_molecules.py:342] Generated C47H44Cl2N4Ni2O2P2S2
+Visualizing molecules:  61%|██████    | 612/1000 [00:57<00:12, 30.77it/s]I0207 21:54:18.888006 140307704055616 generate_molecules.py:342] Generated C31H25N4NiOP
+I0207 21:54:18.899022 140307704055616 generate_molecules.py:342] Generated C18H15NiP
+I0207 21:54:18.915744 140307704055616 generate_molecules.py:342] Generated C40H35ClN4Ni
+I0207 21:54:18.927714 140307704055616 generate_molecules.py:342] Generated C29H33NNiO3P
+I0207 21:54:18.938570 140307704055616 generate_molecules.py:342] Generated C76H74Cl2CuFeN12NiO6S
+I0207 21:54:18.949812 140307704055616 generate_molecules.py:342] Generated C18H20N3NiS
+I0207 21:54:18.959934 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:18.970329 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:18.981323 140307704055616 generate_molecules.py:342] Generated C17H26N2NiO
+Visualizing molecules:  62%|██████▏   | 621/1000 [00:57<00:09, 38.04it/s]I0207 21:54:18.991951 140307704055616 generate_molecules.py:342] Generated C19H18ClN3NiZn
+I0207 21:54:19.006914 140307704055616 generate_molecules.py:342] Generated C60H50BrClI2N5NiO12PPdS2SiZn
+I0207 21:54:19.018511 140307704055616 generate_molecules.py:342] Generated C20H26BrN2NiOS
+I0207 21:54:19.029351 140307704055616 generate_molecules.py:342] Generated CMnNNiO
+I0207 21:54:19.039287 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:19.050375 140307704055616 generate_molecules.py:342] Generated C26H18Cl2F2N2NiOPd
+I0207 21:54:19.061179 140307704055616 generate_molecules.py:342] Generated C83H66CrN6NiO22P2STcZn
+I0207 21:54:19.072259 140307704055616 generate_molecules.py:342] Generated NNiO
+I0207 21:54:19.082868 140307704055616 generate_molecules.py:342] Generated C16H18ClN4Ni
+Visualizing molecules:  63%|██████▎   | 630/1000 [00:58<00:08, 45.83it/s]I0207 21:54:19.093657 140307704055616 generate_molecules.py:342] Generated C26H27BN6NiO
+I0207 21:54:19.104539 140307704055616 generate_molecules.py:342] Generated C21H15FFeN2NiO3P3ReS2
+I0207 21:54:19.403337 140307704055616 generate_molecules.py:342] Generated C47H45F3FeN8NiO6S
+I0207 21:54:19.697369 140307704055616 generate_molecules.py:342] Generated C38H32ClF3IN5NiO5SSeTa
+I0207 21:54:19.710084 140307704055616 generate_molecules.py:342] Generated C25H26BrNiO2PSi
+I0207 21:54:19.721405 140307704055616 generate_molecules.py:342] Generated C35H31N6NiO3S
+I0207 21:54:19.732313 140307704055616 generate_molecules.py:342] Generated C4HF7INi
+I0207 21:54:20.028815 140307704055616 generate_molecules.py:342] Generated C9H13BNNi
+Visualizing molecules:  64%|██████▍   | 638/1000 [00:59<00:17, 20.71it/s]I0207 21:54:20.041603 140307704055616 generate_molecules.py:342] Generated C10H19N2NiO2
+I0207 21:54:20.056055 140307704055616 generate_molecules.py:342] Generated C17H14F3N4NiO
+I0207 21:54:20.067038 140307704055616 generate_molecules.py:342] Generated C29H31FN4NiO2P
+I0207 21:54:20.082505 140307704055616 generate_molecules.py:342] Generated C2N2NiO2Se
+I0207 21:54:20.093174 140307704055616 generate_molecules.py:342] Generated C20H25NNiO3
+I0207 21:54:20.103181 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:20.113547 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:20.124531 140307704055616 generate_molecules.py:342] Generated C28H26ClN3Ni2O4
+I0207 21:54:20.135181 140307704055616 generate_molecules.py:342] Generated C14H23N3NiS
+Visualizing molecules:  65%|██████▍   | 647/1000 [00:59<00:13, 26.94it/s]I0207 21:54:20.146085 140307704055616 generate_molecules.py:342] Generated C32H32NiP
+I0207 21:54:20.160837 140307704055616 generate_molecules.py:342] Generated C17H22BClCoN6Ni
+I0207 21:54:20.172325 140307704055616 generate_molecules.py:342] Generated NNi
+I0207 21:54:20.471415 140307704055616 generate_molecules.py:342] Generated C69H65BrN9Ni2O3PS2Zr
+I0207 21:54:20.483586 140307704055616 generate_molecules.py:342] Generated C25H28Cl2CuNNiOP2Si
+I0207 21:54:20.494631 140307704055616 generate_molecules.py:342] Generated C12H10NiP
+I0207 21:54:20.505343 140307704055616 generate_molecules.py:342] Generated C18H29ClNiP
+Visualizing molecules:  65%|██████▌   | 654/1000 [00:59<00:14, 24.32it/s]I0207 21:54:20.516588 140307704055616 generate_molecules.py:342] Generated C82H79Cl4CuF13N11NiO6SZr
+I0207 21:54:20.527757 140307704055616 generate_molecules.py:342] Generated C18H25NNiO
+I0207 21:54:20.538355 140307704055616 generate_molecules.py:342] Generated C34H39BIN4NiO3P
+I0207 21:54:20.548980 140307704055616 generate_molecules.py:342] Generated C32H24N4NiOPd
+I0207 21:54:20.559982 140307704055616 generate_molecules.py:342] Generated C14H11Cl2N3Ni
+I0207 21:54:20.574150 140307704055616 generate_molecules.py:342] Generated C43H34FeN9NiO2S2
+I0207 21:54:20.584972 140307704055616 generate_molecules.py:342] Generated C8H8BrMoNNiO4
+I0207 21:54:20.595638 140307704055616 generate_molecules.py:342] Generated C32H24N7NiS
+I0207 21:54:20.606428 140307704055616 generate_molecules.py:342] Generated C14H19N3Ni
+Visualizing molecules:  66%|██████▋   | 663/1000 [00:59<00:10, 31.63it/s]I0207 21:54:20.617439 140307704055616 generate_molecules.py:342] Generated C34H33N2NiO2P2SSe
+I0207 21:54:20.628349 140307704055616 generate_molecules.py:342] Generated C5H9N2NiPSSe
+I0207 21:54:20.639624 140307704055616 generate_molecules.py:342] Generated C36H35IN7Ni2OS
+I0207 21:54:20.650339 140307704055616 generate_molecules.py:342] Generated C67H58BrN4NiO10PS3
+I0207 21:54:20.660577 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:20.671524 140307704055616 generate_molecules.py:342] Generated C18H16F3N7NiO4S2
+I0207 21:54:20.682210 140307704055616 generate_molecules.py:342] Generated C30H32AuN3Ni2P2PdSSeSi
+I0207 21:54:20.694462 140307704055616 generate_molecules.py:342] Generated C24H26N3NiO2
+I0207 21:54:20.705424 140307704055616 generate_molecules.py:342] Generated C27H22INNiP
+I0207 21:54:20.715453 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  67%|██████▋   | 673/1000 [00:59<00:08, 40.51it/s]I0207 21:54:20.726583 140307704055616 generate_molecules.py:342] Generated C36H32NNiOP2S
+I0207 21:54:20.737612 140307704055616 generate_molecules.py:342] Generated C24H24N3NiO2PS2
+I0207 21:54:20.748771 140307704055616 generate_molecules.py:342] Generated C3H3N5NiS
+I0207 21:54:21.045793 140307704055616 generate_molecules.py:342] Generated C68H64BFIrN7NiO5P2
+I0207 21:54:21.058503 140307704055616 generate_molecules.py:342] Generated C57H52ClN2NiO2P3
+I0207 21:54:21.069028 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:21.082186 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:21.095113 140307704055616 generate_molecules.py:342] Generated C63H49Cl5F3IN6NiO9PtSZn2
+Visualizing molecules:  68%|██████▊   | 681/1000 [01:00<00:09, 32.27it/s]I0207 21:54:21.106479 140307704055616 generate_molecules.py:342] Generated C14H13ClN3Ni
+I0207 21:54:21.117087 140307704055616 generate_molecules.py:342] Generated C43H43BrN6NiPdS3
+I0207 21:54:21.132437 140307704055616 generate_molecules.py:342] Generated C28H14F4N3NiO6
+I0207 21:54:21.147032 140307704055616 generate_molecules.py:342] Generated C44H55Cl2N4NiOPSiZr
+I0207 21:54:21.159599 140307704055616 generate_molecules.py:342] Generated C19H16BIN7NiO2
+I0207 21:54:21.172362 140307704055616 generate_molecules.py:342] Generated C28H26N3NiO4
+I0207 21:54:21.183650 140307704055616 generate_molecules.py:342] Generated C32H26ClN7NiO5S
+I0207 21:54:21.197683 140307704055616 generate_molecules.py:342] Generated C50H42Cl2N2NiO3P
+Visualizing molecules:  69%|██████▉   | 689/1000 [01:00<00:08, 38.71it/s]I0207 21:54:21.208868 140307704055616 generate_molecules.py:342] Generated C17H15N4NiSe
+I0207 21:54:21.223080 140307704055616 generate_molecules.py:342] Generated C18H20IN5Ni
+I0207 21:54:21.234250 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:21.537171 140307704055616 generate_molecules.py:342] Generated C59H58Au2Cl3NNiO3P3Ru
+I0207 21:54:21.830935 140307704055616 generate_molecules.py:342] Generated C34H35BrCdN6NiO8S2
+I0207 21:54:21.843249 140307704055616 generate_molecules.py:342] Generated C34H33N8NiO
+I0207 21:54:22.156888 140307704055616 generate_molecules.py:342] Generated C89H70BrF3N5Ni2O17PPt
+Visualizing molecules:  70%|██████▉   | 696/1000 [01:01<00:16, 18.20it/s]I0207 21:54:22.169573 140307704055616 generate_molecules.py:342] Generated C23H28Cl2N6NiO
+I0207 21:54:22.180213 140307704055616 generate_molecules.py:342] Generated C26H24F3N6NiO
+I0207 21:54:22.477097 140307704055616 generate_molecules.py:342] Generated C43H45IrN5Ni2O5PPtS
+I0207 21:54:22.489667 140307704055616 generate_molecules.py:342] Generated C27H27N5NiO2
+I0207 21:54:22.502654 140307704055616 generate_molecules.py:342] Generated NNiO
+Visualizing molecules:  70%|███████   | 701/1000 [01:01<00:17, 17.27it/s]I0207 21:54:22.513029 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:22.524335 140307704055616 generate_molecules.py:342] Generated C26H37N4NiOP2
+I0207 21:54:22.535229 140307704055616 generate_molecules.py:342] Generated C35H38ClF8NNiO4P2PtS2Si
+I0207 21:54:22.546139 140307704055616 generate_molecules.py:342] Generated C21H20ClN3NiPS
+I0207 21:54:22.556815 140307704055616 generate_molecules.py:342] Generated C29H33ClN4NiO2Re
+I0207 21:54:22.567769 140307704055616 generate_molecules.py:342] Generated C69H67AsBrClCrFeN4NiO11PPt
+I0207 21:54:22.579087 140307704055616 generate_molecules.py:342] Generated C15H14N3Ni
+I0207 21:54:22.590043 140307704055616 generate_molecules.py:342] Generated C22H21FN2NiO
+I0207 21:54:22.601521 140307704055616 generate_molecules.py:342] Generated C24H25IN3NiO6
+I0207 21:54:22.612359 140307704055616 generate_molecules.py:342] Generated C42H60N5NiO4S
+Visualizing molecules:  71%|███████   | 711/1000 [01:01<00:11, 24.83it/s]I0207 21:54:22.622729 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:22.637639 140307704055616 generate_molecules.py:342] Generated C44H56BrClF2N4NiO5PPdRh
+I0207 21:54:22.647978 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:22.659111 140307704055616 generate_molecules.py:342] Generated C16H13CoN3NiO7S
+I0207 21:54:22.669147 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:22.680348 140307704055616 generate_molecules.py:342] Generated C35H34F7N5NiO10PSi
+I0207 21:54:22.691488 140307704055616 generate_molecules.py:342] Generated C34H46FNiO3P2
+I0207 21:54:22.702728 140307704055616 generate_molecules.py:342] Generated C6H4IN2NiO2S
+I0207 21:54:22.715480 140307704055616 generate_molecules.py:342] Generated C40H43N6NiO
+Visualizing molecules:  72%|███████▏  | 720/1000 [01:01<00:08, 32.38it/s]I0207 21:54:22.726706 140307704055616 generate_molecules.py:342] Generated C24H21NNiP
+I0207 21:54:22.736829 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:22.748067 140307704055616 generate_molecules.py:342] Generated C21H21N6NiO2S
+I0207 21:54:22.758947 140307704055616 generate_molecules.py:342] Generated C23H23N4NiO3
+I0207 21:54:22.770386 140307704055616 generate_molecules.py:342] Generated C13H12F3NNiO2S2
+I0207 21:54:22.784939 140307704055616 generate_molecules.py:342] Generated C7H8ClN4NiO7
+I0207 21:54:22.796069 140307704055616 generate_molecules.py:342] Generated C21H25NNiO2
+I0207 21:54:22.807068 140307704055616 generate_molecules.py:342] Generated C43H54F3N5NiO3S
+I0207 21:54:22.817748 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  73%|███████▎  | 729/1000 [01:01<00:06, 40.49it/s]I0207 21:54:22.829670 140307704055616 generate_molecules.py:342] Generated C38H41BCrF5N7Ni2O5P3
+I0207 21:54:22.841313 140307704055616 generate_molecules.py:342] Generated C29H36CuN7NiO
+I0207 21:54:22.852554 140307704055616 generate_molecules.py:342] Generated C9H9NNiOPZnZr
+I0207 21:54:22.863578 140307704055616 generate_molecules.py:342] Generated C8H13N2NiO2
+I0207 21:54:22.874579 140307704055616 generate_molecules.py:342] Generated C32H39NiOP2
+I0207 21:54:22.885986 140307704055616 generate_molecules.py:342] Generated C61H52ClN5NiO8S3W
+I0207 21:54:22.897297 140307704055616 generate_molecules.py:342] Generated C41H43MoN2NiO7P3S
+I0207 21:54:22.908453 140307704055616 generate_molecules.py:342] Generated C19H14F4N5NiO2SSe
+I0207 21:54:22.919482 140307704055616 generate_molecules.py:342] Generated C20H16ClFeN4NiO5
+Visualizing molecules:  74%|███████▍  | 738/1000 [01:01<00:05, 48.78it/s]I0207 21:54:22.930638 140307704055616 generate_molecules.py:342] Generated C69H69AuCl3N7NiPPtS2
+I0207 21:54:22.942487 140307704055616 generate_molecules.py:342] Generated C8H9IN2Ni
+I0207 21:54:22.961697 140307704055616 generate_molecules.py:342] Generated C8H7ClNNiO
+I0207 21:54:22.972639 140307704055616 generate_molecules.py:342] Generated C14H19F2NNiP
+I0207 21:54:22.983630 140307704055616 generate_molecules.py:342] Generated C41H43N5NiOP
+I0207 21:54:22.994695 140307704055616 generate_molecules.py:342] Generated C11H10BrClN2NiO
+I0207 21:54:23.293943 140307704055616 generate_molecules.py:342] Generated C69H65F7N5NiO9P2
+I0207 21:54:23.306614 140307704055616 generate_molecules.py:342] Generated C16H16N2NiO4
+Visualizing molecules:  75%|███████▍  | 746/1000 [01:02<00:07, 35.18it/s]I0207 21:54:23.317530 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:23.329108 140307704055616 generate_molecules.py:342] Generated C19H18ClN4NiS
+I0207 21:54:23.340156 140307704055616 generate_molecules.py:342] Generated C43H43ClF7N4NiO3Pt
+I0207 21:54:23.351345 140307704055616 generate_molecules.py:342] Generated C8H9BCrN2NiO3PSiY
+I0207 21:54:23.362255 140307704055616 generate_molecules.py:342] Generated C43H50N7NiPSe
+I0207 21:54:23.373382 140307704055616 generate_molecules.py:342] Generated C34H30BN4NiO4PS
+I0207 21:54:23.384527 140307704055616 generate_molecules.py:342] Generated HNNi
+I0207 21:54:23.395720 140307704055616 generate_molecules.py:342] Generated C55H36Au2ClINNiO6PPdS2
+I0207 21:54:23.411572 140307704055616 generate_molecules.py:342] Generated C24H28BrCl2N5NiO2Zn
+Visualizing molecules:  76%|███████▌  | 755/1000 [01:02<00:05, 43.16it/s]I0207 21:54:23.422648 140307704055616 generate_molecules.py:342] Generated C24H20F15N2NiO
+I0207 21:54:23.433543 140307704055616 generate_molecules.py:342] Generated C28H23BrF3N5NiO3S2
+I0207 21:54:23.444463 140307704055616 generate_molecules.py:342] Generated C31H28CuN10NiO2S2
+I0207 21:54:23.455469 140307704055616 generate_molecules.py:342] Generated CHN2NiOPt
+I0207 21:54:23.466195 140307704055616 generate_molecules.py:342] Generated C3H3N2NiS
+I0207 21:54:23.481680 140307704055616 generate_molecules.py:342] Generated C21H18N7NiO2
+I0207 21:54:23.492745 140307704055616 generate_molecules.py:342] Generated C75H65BBrFeN5NiO5P
+I0207 21:54:23.503990 140307704055616 generate_molecules.py:342] Generated C15H14FNNiO6
+I0207 21:54:23.515489 140307704055616 generate_molecules.py:342] Generated C35H32N4NiO3PS
+Visualizing molecules:  76%|███████▋  | 764/1000 [01:02<00:04, 51.08it/s]I0207 21:54:23.526065 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:23.537468 140307704055616 generate_molecules.py:342] Generated C47H45IN10Ni2O
+I0207 21:54:23.548650 140307704055616 generate_molecules.py:342] Generated C36H38B11Cl2F9IrN6NiO
+I0207 21:54:23.559793 140307704055616 generate_molecules.py:342] Generated C70H55Cl5F3FeN5NiO10P2RhSSi
+I0207 21:54:23.859505 140307704055616 generate_molecules.py:342] Generated C75H57AgBrCl2F15N3NiO4OsP5SW
+I0207 21:54:23.872579 140307704055616 generate_molecules.py:342] Generated C31H29NNiP
+I0207 21:54:23.883971 140307704055616 generate_molecules.py:342] Generated C44H42ClFN4NiO3P2
+I0207 21:54:23.895228 140307704055616 generate_molecules.py:342] Generated C34H32F3NNiO3P2
+Visualizing molecules:  77%|███████▋  | 772/1000 [01:02<00:06, 36.44it/s]I0207 21:54:23.906555 140307704055616 generate_molecules.py:342] Generated C10H24B14NNbNiSiTiZr
+I0207 21:54:23.917701 140307704055616 generate_molecules.py:342] Generated C26H31N2NiP
+I0207 21:54:23.928169 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:23.943068 140307704055616 generate_molecules.py:342] Generated C62H81AuB18F5N2NiO4PS2
+I0207 21:54:23.956280 140307704055616 generate_molecules.py:342] Generated C25H27Cl2F3N2NiO2P
+I0207 21:54:23.967665 140307704055616 generate_molecules.py:342] Generated C37H33N10NiO2
+I0207 21:54:23.979453 140307704055616 generate_molecules.py:342] Generated C39H67B23Cl6N5NiO2P2PdPtRhSSeZr
+I0207 21:54:23.990699 140307704055616 generate_molecules.py:342] Generated NNiO
+I0207 21:54:24.001641 140307704055616 generate_molecules.py:342] Generated C14H11ClN2NiS2
+Visualizing molecules:  78%|███████▊  | 781/1000 [01:02<00:04, 44.31it/s]I0207 21:54:24.012604 140307704055616 generate_molecules.py:342] Generated C25H31FeN2NiO2P
+I0207 21:54:24.023562 140307704055616 generate_molecules.py:342] Generated C12H17NiO
+I0207 21:54:24.034547 140307704055616 generate_molecules.py:342] Generated C47H44BN8NiO3S
+I0207 21:54:24.045619 140307704055616 generate_molecules.py:342] Generated C6H8Ni
+I0207 21:54:24.056523 140307704055616 generate_molecules.py:342] Generated C48H47F5N3NiO4PSi
+I0207 21:54:24.067748 140307704055616 generate_molecules.py:342] Generated C43H37N3NiO5
+I0207 21:54:24.079107 140307704055616 generate_molecules.py:342] Generated C21H17F3N8NiO3Pd
+I0207 21:54:24.093019 140307704055616 generate_molecules.py:342] Generated C43H47FIrN3Ni
+I0207 21:54:24.106326 140307704055616 generate_molecules.py:342] Generated C55H43BClCuN11NiO3Se
+Visualizing molecules:  79%|███████▉  | 790/1000 [01:03<00:04, 52.07it/s]I0207 21:54:24.117662 140307704055616 generate_molecules.py:342] Generated HNNi
+I0207 21:54:24.128874 140307704055616 generate_molecules.py:342] Generated C25H25N5Ni
+I0207 21:54:24.139655 140307704055616 generate_molecules.py:342] Generated C28H19N6NiO2
+I0207 21:54:24.150545 140307704055616 generate_molecules.py:342] Generated C17H15ClN3Ni
+I0207 21:54:24.161589 140307704055616 generate_molecules.py:342] Generated C61H60BCl2N3Ni2OP3
+I0207 21:54:24.172821 140307704055616 generate_molecules.py:342] Generated C75H52AuBBrN2NiO12PV
+I0207 21:54:24.183828 140307704055616 generate_molecules.py:342] Generated C25H21N7NiO2
+I0207 21:54:24.194740 140307704055616 generate_molecules.py:342] Generated C44H43F3N7NiOPSe
+I0207 21:54:24.209290 140307704055616 generate_molecules.py:342] Generated C53H68BrN4NiO10P2PdS
+Visualizing molecules:  80%|███████▉  | 799/1000 [01:03<00:03, 59.40it/s]I0207 21:54:24.220907 140307704055616 generate_molecules.py:342] Generated C62H54BClN9NiP2PtSSeW
+I0207 21:54:24.234544 140307704055616 generate_molecules.py:342] Generated C22H22N3NiO3
+I0207 21:54:24.246959 140307704055616 generate_molecules.py:342] Generated C16H7CrNNiO4S2
+I0207 21:54:24.258161 140307704055616 generate_molecules.py:342] Generated C9H7N2Ni
+I0207 21:54:24.269179 140307704055616 generate_molecules.py:342] Generated C16H20F3NNiO9
+I0207 21:54:24.280297 140307704055616 generate_molecules.py:342] Generated C40H36F6N2Ni2O3P2
+I0207 21:54:24.290844 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:24.302222 140307704055616 generate_molecules.py:342] Generated C7H7NNiO2
+I0207 21:54:24.318234 140307704055616 generate_molecules.py:342] Generated C65H56Cl2N12Ni3O4P2PdPtSSi
+Visualizing molecules:  81%|████████  | 808/1000 [01:03<00:02, 64.95it/s]I0207 21:54:24.329576 140307704055616 generate_molecules.py:342] Generated C5H4NNi
+I0207 21:54:24.340816 140307704055616 generate_molecules.py:342] Generated C83H72F6N5NiO4P2Ru
+I0207 21:54:24.352442 140307704055616 generate_molecules.py:342] Generated C43H47NNiO4PPd
+I0207 21:54:24.363833 140307704055616 generate_molecules.py:342] Generated C72H70IrN3NiO9PSSi
+I0207 21:54:24.374898 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:24.386415 140307704055616 generate_molecules.py:342] Generated Cl4Ni
+I0207 21:54:24.397974 140307704055616 generate_molecules.py:342] Generated C20H24F3N7Ni
+I0207 21:54:24.409055 140307704055616 generate_molecules.py:342] Generated C16H12AuCl4F5N4NiO6PS2
+I0207 21:54:24.419470 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  82%|████████▏ | 817/1000 [01:03<00:02, 70.70it/s]I0207 21:54:24.431127 140307704055616 generate_molecules.py:342] Generated C2H2Cl2FeN2NiPtS
+I0207 21:54:24.441998 140307704055616 generate_molecules.py:342] Generated C31H26ClN2NiP2SSe
+I0207 21:54:24.453082 140307704055616 generate_molecules.py:342] Generated C17H13Cl2N3NiO5S
+I0207 21:54:24.464035 140307704055616 generate_molecules.py:342] Generated C16H11BrN3NiO
+I0207 21:54:24.475029 140307704055616 generate_molecules.py:342] Generated C3H3N2NiS
+I0207 21:54:24.486007 140307704055616 generate_molecules.py:342] Generated C32H40N3NiOP
+I0207 21:54:24.497350 140307704055616 generate_molecules.py:342] Generated C18H15BrClN7NiS
+I0207 21:54:24.509007 140307704055616 generate_molecules.py:342] Generated C18H12NNiO5RuSe
+I0207 21:54:24.519953 140307704055616 generate_molecules.py:342] Generated C24H22Cl2N6Ni
+Visualizing molecules:  83%|████████▎ | 826/1000 [01:03<00:02, 75.57it/s]I0207 21:54:24.531021 140307704055616 generate_molecules.py:342] Generated C68H55BBrCl5F17IrMoN6NiO4PPdZn
+I0207 21:54:24.542406 140307704055616 generate_molecules.py:342] Generated C33H41N6NiP
+I0207 21:54:24.552888 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:24.564258 140307704055616 generate_molecules.py:342] Generated C26H30Br3N3Ni
+I0207 21:54:24.575265 140307704055616 generate_molecules.py:342] Generated C21H21N2NiO3
+I0207 21:54:24.586237 140307704055616 generate_molecules.py:342] Generated C50H34AuClN4NiO3P2
+I0207 21:54:24.597299 140307704055616 generate_molecules.py:342] Generated C28H17Cl2N3NiO2Pd
+I0207 21:54:24.607800 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:24.619870 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:24.630044 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+Visualizing molecules:  84%|████████▎ | 836/1000 [01:03<00:02, 79.84it/s]I0207 21:54:24.641528 140307704055616 generate_molecules.py:342] Generated C16H17Cl2N2NiO2
+I0207 21:54:24.658289 140307704055616 generate_molecules.py:342] Generated NNi
+I0207 21:54:24.670421 140307704055616 generate_molecules.py:342] Generated C12H11ClNNiOP2Ru
+I0207 21:54:24.681477 140307704055616 generate_molecules.py:342] Generated C15H14N5NiS2
+I0207 21:54:24.692404 140307704055616 generate_molecules.py:342] Generated CFeNNiO2
+I0207 21:54:24.703330 140307704055616 generate_molecules.py:342] Generated C32H30CdFN3NiO10
+I0207 21:54:24.714468 140307704055616 generate_molecules.py:342] Generated C35H37N3Ni
+I0207 21:54:24.726485 140307704055616 generate_molecules.py:342] Generated C48H52FN6NiOP
+I0207 21:54:24.737660 140307704055616 generate_molecules.py:342] Generated C42H37NiO2P2S
+Visualizing molecules:  84%|████████▍ | 845/1000 [01:03<00:01, 80.98it/s]I0207 21:54:24.748900 140307704055616 generate_molecules.py:342] Generated C9H7Br2N5NiO2Re
+I0207 21:54:25.056303 140307704055616 generate_molecules.py:342] Generated C51H52F4IN9Ni2O4S3
+I0207 21:54:25.069508 140307704055616 generate_molecules.py:342] Generated C26H42ClN2NiO6Si
+I0207 21:54:25.081649 140307704055616 generate_molecules.py:342] Generated C27H19ClF3N9NiO2S
+I0207 21:54:25.093561 140307704055616 generate_molecules.py:342] Generated C27H35N3Ni2OPSe2
+I0207 21:54:25.105477 140307704055616 generate_molecules.py:342] Generated C12H12BrCl2N9NiS
+I0207 21:54:25.117272 140307704055616 generate_molecules.py:342] Generated C23H25F4NNiO4P
+I0207 21:54:25.129037 140307704055616 generate_molecules.py:342] Generated N3Ni
+I0207 21:54:25.433609 140307704055616 generate_molecules.py:342] Generated C54H62IrN7NiOS
+Visualizing molecules:  85%|████████▌ | 854/1000 [01:04<00:04, 31.66it/s]I0207 21:54:25.446358 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:25.458701 140307704055616 generate_molecules.py:342] Generated C25H30BN4NiPRu
+I0207 21:54:25.471166 140307704055616 generate_molecules.py:342] Generated C21H24ClN2Ni
+I0207 21:54:25.482941 140307704055616 generate_molecules.py:342] Generated C19H19N2NiO3S
+I0207 21:54:25.494634 140307704055616 generate_molecules.py:342] Generated C24H20F3N4NiO3S
+I0207 21:54:25.507536 140307704055616 generate_molecules.py:342] Generated C21H19CrN5NiO2S
+I0207 21:54:25.806217 140307704055616 generate_molecules.py:342] Generated C52H49BF10N3Ni2O7P
+Visualizing molecules:  86%|████████▌ | 861/1000 [01:04<00:05, 27.07it/s]I0207 21:54:25.819702 140307704055616 generate_molecules.py:342] Generated C39H38N3NiO3
+I0207 21:54:25.831868 140307704055616 generate_molecules.py:342] Generated C28H28N3NiO4
+I0207 21:54:25.843195 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:25.855537 140307704055616 generate_molecules.py:342] Generated C17H11N2NiO3
+I0207 21:54:25.867395 140307704055616 generate_molecules.py:342] Generated C65H64AgCl4F12N9Ni2O11Re
+I0207 21:54:25.879789 140307704055616 generate_molecules.py:342] Generated C7H9ClN3Ni
+I0207 21:54:25.891854 140307704055616 generate_molecules.py:342] Generated CH2BClFeNiZr
+I0207 21:54:25.904036 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:25.916099 140307704055616 generate_molecules.py:342] Generated C20H46B9FeN2NbNiP2PdRuSi
+Visualizing molecules:  87%|████████▋ | 870/1000 [01:04<00:03, 34.25it/s]I0207 21:54:25.927988 140307704055616 generate_molecules.py:342] Generated C47H61CoN8Ni2O4Re
+I0207 21:54:25.939250 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:25.951455 140307704055616 generate_molecules.py:342] Generated C30H34NNiP
+I0207 21:54:25.963333 140307704055616 generate_molecules.py:342] Generated C63H58ClF13N7NiO6PPt2Si
+I0207 21:54:25.975502 140307704055616 generate_molecules.py:342] Generated C12H12ClN3NiOPd
+I0207 21:54:25.986555 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:25.998820 140307704055616 generate_molecules.py:342] Generated C30H37F5N6NiO3PRuS2
+I0207 21:54:26.011184 140307704055616 generate_molecules.py:342] Generated C50H50N6Ni
+I0207 21:54:26.023100 140307704055616 generate_molecules.py:342] Generated C29H30NNiP
+Visualizing molecules:  88%|████████▊ | 879/1000 [01:05<00:02, 41.92it/s]I0207 21:54:26.034919 140307704055616 generate_molecules.py:342] Generated C32H45N2NiO6
+I0207 21:54:26.046822 140307704055616 generate_molecules.py:342] Generated C41H43ClN5NiO2
+I0207 21:54:26.058726 140307704055616 generate_molecules.py:342] Generated C45H44N5NiO
+I0207 21:54:26.069917 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:26.082156 140307704055616 generate_molecules.py:342] Generated C19H24ClN3NiO2
+I0207 21:54:26.093760 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:26.105481 140307704055616 generate_molecules.py:342] Generated C36H46N8NiO15OsP
+I0207 21:54:26.117841 140307704055616 generate_molecules.py:342] Generated C29H27F5N4Ni
+I0207 21:54:26.129979 140307704055616 generate_molecules.py:342] Generated C21H12F8NiO6
+Visualizing molecules:  89%|████████▉ | 888/1000 [01:05<00:02, 49.53it/s]I0207 21:54:26.141121 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:26.152552 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:26.164852 140307704055616 generate_molecules.py:342] Generated C36H37BrN5NiO2
+I0207 21:54:26.176759 140307704055616 generate_molecules.py:342] Generated C61H62FN3NiO2P
+I0207 21:54:26.188668 140307704055616 generate_molecules.py:342] Generated C39H33F5INi2OP2S
+I0207 21:54:26.200521 140307704055616 generate_molecules.py:342] Generated C3H3N3NiO2
+I0207 21:54:26.212130 140307704055616 generate_molecules.py:342] Generated C10H11NNiO4P
+I0207 21:54:26.224679 140307704055616 generate_molecules.py:342] Generated C73H69N9NiO9P2S2Ti
+I0207 21:54:26.237555 140307704055616 generate_molecules.py:342] Generated C37H37AuCl2N6NiP2S4
+Visualizing molecules:  90%|████████▉ | 897/1000 [01:05<00:01, 56.54it/s]I0207 21:54:26.249810 140307704055616 generate_molecules.py:342] Generated C73H91Cl2CoN7NiO6P2PtSi
+I0207 21:54:26.261995 140307704055616 generate_molecules.py:342] Generated C73H50F6N7NiO10P2RuTi
+I0207 21:54:26.274100 140307704055616 generate_molecules.py:342] Generated C75H63N7NiO5SSi2
+I0207 21:54:26.289340 140307704055616 generate_molecules.py:342] Generated C22H13F4N3NiO2
+I0207 21:54:26.301101 140307704055616 generate_molecules.py:342] Generated C14H11NiO
+I0207 21:54:26.609569 140307704055616 generate_molecules.py:342] Generated C86H72ClN3NiOP3Zr
+I0207 21:54:26.623036 140307704055616 generate_molecules.py:342] Generated C35H36N2Ni2PSSe
+I0207 21:54:26.642895 140307704055616 generate_molecules.py:342] Generated C41H46B4F3N6NiO2PdSi
+Visualizing molecules:  90%|█████████ | 905/1000 [01:05<00:02, 37.17it/s]I0207 21:54:26.657469 140307704055616 generate_molecules.py:342] Generated C8H15NiP
+I0207 21:54:26.669924 140307704055616 generate_molecules.py:342] Generated C56H57BCl2IN10NiORu
+I0207 21:54:26.682405 140307704055616 generate_molecules.py:342] Generated HN2Ni
+I0207 21:54:26.694158 140307704055616 generate_molecules.py:342] Generated C15H19NiPS
+I0207 21:54:26.705842 140307704055616 generate_molecules.py:342] Generated C31H23ClF4N4NiO2
+I0207 21:54:26.717607 140307704055616 generate_molecules.py:342] Generated C72H76AuClMnN4NiO8P2S
+I0207 21:54:26.729827 140307704055616 generate_molecules.py:342] Generated C33H29F3N5NiO6P2S3
+I0207 21:54:26.741549 140307704055616 generate_molecules.py:342] Generated C13H10N2NiOS
+I0207 21:54:26.753332 140307704055616 generate_molecules.py:342] Generated C14H10F6N2NiO
+Visualizing molecules:  91%|█████████▏| 914/1000 [01:05<00:01, 44.75it/s]I0207 21:54:26.764472 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:26.775957 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:27.086296 140307704055616 generate_molecules.py:342] Generated C45H60N2NiO7
+I0207 21:54:27.099500 140307704055616 generate_molecules.py:342] Generated C63H59N8NiO5
+I0207 21:54:27.111634 140307704055616 generate_molecules.py:342] Generated C21H19ClN4NiO
+I0207 21:54:27.123838 140307704055616 generate_molecules.py:342] Generated C6H5Br2F2NiP
+I0207 21:54:27.135457 140307704055616 generate_molecules.py:342] Generated C19H25N4NiOPSSi
+Visualizing molecules:  92%|█████████▏| 921/1000 [01:06<00:02, 32.69it/s]I0207 21:54:27.149944 140307704055616 generate_molecules.py:342] Generated C34H48ClN7NiO3Ru
+I0207 21:54:27.161981 140307704055616 generate_molecules.py:342] Generated C32H27BF9N3NiOP
+I0207 21:54:27.173732 140307704055616 generate_molecules.py:342] Generated CN2Ni
+I0207 21:54:27.185252 140307704055616 generate_molecules.py:342] Generated CuNNiO2
+I0207 21:54:27.196141 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:27.208205 140307704055616 generate_molecules.py:342] Generated C7H18B11NiO
+I0207 21:54:27.219734 140307704055616 generate_molecules.py:342] Generated C43H40N3NiOP2SiZr
+I0207 21:54:27.232177 140307704055616 generate_molecules.py:342] Generated C75H59B5ClF11N4NiO7PdScSe
+I0207 21:54:27.244893 140307704055616 generate_molecules.py:342] Generated C30H41MnMoN8NiO10SiZnZr
+Visualizing molecules:  93%|█████████▎| 930/1000 [01:06<00:01, 40.48it/s]I0207 21:54:27.257195 140307704055616 generate_molecules.py:342] Generated C11H9F9N2NiO2P
+I0207 21:54:27.268900 140307704055616 generate_molecules.py:342] Generated C18H16Cl2F3N4NiOZr
+I0207 21:54:27.280517 140307704055616 generate_molecules.py:342] Generated C45H41F2NiO4P3PdS
+I0207 21:54:27.292292 140307704055616 generate_molecules.py:342] Generated C29H34N2NiP
+I0207 21:54:27.304159 140307704055616 generate_molecules.py:342] Generated C27H27ClNiOP2S2
+I0207 21:54:27.315655 140307704055616 generate_molecules.py:342] Generated C26H23N3Ni
+I0207 21:54:27.327280 140307704055616 generate_molecules.py:342] Generated C83H85BCl2CuIrN2NiO4P2SSi2
+I0207 21:54:27.339093 140307704055616 generate_molecules.py:342] Generated HNNiOPd
+I0207 21:54:27.350833 140307704055616 generate_molecules.py:342] Generated C30H37N4NiO3
+Visualizing molecules:  94%|█████████▍| 939/1000 [01:06<00:01, 48.43it/s]I0207 21:54:27.363287 140307704055616 generate_molecules.py:342] Generated C75H82CuN5NiOP2Se
+I0207 21:54:27.374794 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:27.386982 140307704055616 generate_molecules.py:342] Generated C35H31N3NiP2
+I0207 21:54:27.398817 140307704055616 generate_molecules.py:342] Generated C26H15ClF17N2Ni
+I0207 21:54:27.410490 140307704055616 generate_molecules.py:342] Generated C21H19F3N3NiS
+I0207 21:54:27.422055 140307704055616 generate_molecules.py:342] Generated C6H5N2NiPd
+I0207 21:54:27.433661 140307704055616 generate_molecules.py:342] Generated C29H27Cl2F3N4NiO3Pd
+I0207 21:54:27.444769 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:27.456922 140307704055616 generate_molecules.py:342] Generated C17H19N2NiO4
+Visualizing molecules:  95%|█████████▍| 948/1000 [01:06<00:00, 55.85it/s]I0207 21:54:27.469207 140307704055616 generate_molecules.py:342] Generated C70H79B10Cl3N5NiO5PPdRuSe
+I0207 21:54:27.481661 140307704055616 generate_molecules.py:342] Generated C15H19N2NiO2
+I0207 21:54:27.494041 140307704055616 generate_molecules.py:342] Generated C16H16Cl2N3NiO2ReS3
+I0207 21:54:27.506262 140307704055616 generate_molecules.py:342] Generated C14H11CrN2NiO9
+I0207 21:54:27.518008 140307704055616 generate_molecules.py:342] Generated C47H46BrCl4N3NiO2P2W
+I0207 21:54:27.530213 140307704055616 generate_molecules.py:342] Generated C11H9ClN3NiO9PdS
+I0207 21:54:27.541920 140307704055616 generate_molecules.py:342] Generated C43H41BIN5NiP2PdSe
+I0207 21:54:27.553970 140307704055616 generate_molecules.py:342] Generated C26H22Cl2N3NiO
+I0207 21:54:27.565694 140307704055616 generate_molecules.py:342] Generated C22H21NiPSi
+Visualizing molecules:  96%|█████████▌| 957/1000 [01:06<00:00, 62.02it/s]I0207 21:54:27.577797 140307704055616 generate_molecules.py:342] Generated C83H74FeIrN6NiP2Pt
+I0207 21:54:27.590255 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:27.602405 140307704055616 generate_molecules.py:342] Generated C56H54ClN5NiO4Pd
+I0207 21:54:27.913659 140307704055616 generate_molecules.py:342] Generated C66H56F6NiO2P6PdSSi
+I0207 21:54:27.926965 140307704055616 generate_molecules.py:342] Generated C31H21NNiO5P
+I0207 21:54:27.939172 140307704055616 generate_molecules.py:342] Generated C18H16Cl2NiP
+I0207 21:54:27.950856 140307704055616 generate_molecules.py:342] Generated C11H20ClN2Ni
+I0207 21:54:27.962467 140307704055616 generate_molecules.py:342] Generated AuN2NiO
+Visualizing molecules:  96%|█████████▋| 965/1000 [01:06<00:00, 39.22it/s]I0207 21:54:27.974174 140307704055616 generate_molecules.py:342] Generated C16H13N2Ni
+I0207 21:54:27.986185 140307704055616 generate_molecules.py:342] Generated C68H70MoN10NiO11PS2
+I0207 21:54:27.997703 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:28.009156 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:28.021142 140307704055616 generate_molecules.py:342] Generated C21H20NNiP
+I0207 21:54:28.036633 140307704055616 generate_molecules.py:342] Generated C21H19NiO2P
+I0207 21:54:28.051250 140307704055616 generate_molecules.py:342] Generated C24H27Cl2N5NiO6S3Zr
+I0207 21:54:28.065470 140307704055616 generate_molecules.py:342] Generated C60H58Cl2F3N3NiOP2Ru2S
+Visualizing molecules:  97%|█████████▋| 973/1000 [01:07<00:00, 45.64it/s]I0207 21:54:28.078016 140307704055616 generate_molecules.py:342] Generated C14H20AgN4NiS
+I0207 21:54:28.089955 140307704055616 generate_molecules.py:342] Generated CH2NNiPd
+I0207 21:54:28.101992 140307704055616 generate_molecules.py:342] Generated C50H53B2ClI2N5Ni2OPSiZn
+I0207 21:54:28.114032 140307704055616 generate_molecules.py:342] Generated C38H45N4NiO2PS2Si
+I0207 21:54:28.126426 140307704055616 generate_molecules.py:342] Generated C13H16N3NiO
+I0207 21:54:28.138282 140307704055616 generate_molecules.py:342] Generated C13H15N3Ni
+I0207 21:54:28.149942 140307704055616 generate_molecules.py:342] Generated C30H30N2NiO5
+I0207 21:54:28.465419 140307704055616 generate_molecules.py:342] Generated C77H65Cl4CrIN8Ni2O6P
+Visualizing molecules:  98%|█████████▊| 981/1000 [01:07<00:00, 33.27it/s]I0207 21:54:28.480340 140307704055616 generate_molecules.py:342] Generated C47H36AuBrF3N4NiP
+I0207 21:54:28.493860 140307704055616 generate_molecules.py:342] Generated C12H10FeN2NiO3RuS
+I0207 21:54:28.505075 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:28.517246 140307704055616 generate_molecules.py:342] Generated C3H2MnNNiPS
+I0207 21:54:28.832968 140307704055616 generate_molecules.py:342] Generated C70H69N6Ni2SSi
+I0207 21:54:28.847579 140307704055616 generate_molecules.py:342] Generated C33H45N5NiO3S
+Visualizing molecules:  99%|█████████▊| 987/1000 [01:07<00:00, 26.31it/s]I0207 21:54:28.861161 140307704055616 generate_molecules.py:342] Generated C6NNiO5W
+I0207 21:54:28.873232 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:28.885351 140307704055616 generate_molecules.py:342] Generated C45H54N8NiO3Si
+I0207 21:54:28.897613 140307704055616 generate_molecules.py:342] Generated CNNi2O
+I0207 21:54:28.909278 140307704055616 generate_molecules.py:342] Generated C46H42Cl2N8Ni2O6S
+I0207 21:54:28.921581 140307704055616 generate_molecules.py:345] STOP was not produced. Discarding...
+I0207 21:54:28.935369 140307704055616 generate_molecules.py:342] Generated C22H22ClF6N3NiO5S2
+I0207 21:54:28.948502 140307704055616 generate_molecules.py:342] Generated C69H80N6NiO2
+Visualizing molecules: 100%|█████████▉| 995/1000 [01:07<00:00, 33.20it/s]I0207 21:54:28.961897 140307704055616 generate_molecules.py:342] Generated C88H86Cl3N8NiO9P2SZn
+I0207 21:54:28.974714 140307704055616 generate_molecules.py:342] Generated Ni
+I0207 21:54:28.986816 140307704055616 generate_molecules.py:342] Generated C11H10F3NiO7
+I0207 21:54:28.999056 140307704055616 generate_molecules.py:342] Generated C64H60Cl2N9NiO3PRu
+I0207 21:54:29.012448 140307704055616 generate_molecules.py:342] Generated C27H22N4NiS
+Visualizing molecules: 100%|██████████| 1000/1000 [01:08<00:00, 14.71it/s]

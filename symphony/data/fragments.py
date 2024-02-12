@@ -7,6 +7,7 @@ import numpy as np
 import chex
 
 from symphony import datatypes
+from symphony.models import ptable
 
 
 def generate_fragments(
@@ -50,9 +51,25 @@ def generate_fragments(
     )  # [n_edge]
 
     # make fragments
-    try:
-        rng, visited_nodes, frag = _make_first_fragment(
+    # try:
+    rng, visited_nodes, frag = _make_first_fragment(
+        rng,
+        graph,
+        dist,
+        n_species,
+        nn_tolerance,
+        max_radius,
+        mode,
+        heavy_first,
+        beta_com,
+        max_targets_per_graph=max_targets_per_graph,
+    )
+    yield frag
+
+    for _ in range(n - 2):
+        rng, visited_nodes, frag = _make_middle_fragment(
             rng,
+            visited_nodes,
             graph,
             dist,
             n_species,
@@ -60,31 +77,15 @@ def generate_fragments(
             max_radius,
             mode,
             heavy_first,
-            beta_com,
             max_targets_per_graph=max_targets_per_graph,
         )
         yield frag
+    # except ValueError:
+    #     pass
+    # else:
+    assert len(visited_nodes) == n
 
-        for _ in range(n - 2):
-            rng, visited_nodes, frag = _make_middle_fragment(
-                rng,
-                visited_nodes,
-                graph,
-                dist,
-                n_species,
-                nn_tolerance,
-                max_radius,
-                mode,
-                heavy_first,
-                max_targets_per_graph=max_targets_per_graph,
-            )
-            yield frag
-    except ValueError:
-        pass
-    else:
-        assert len(visited_nodes) == n
-
-        yield _make_last_fragment(graph, n_species, max_targets_per_graph)
+    yield _make_last_fragment(graph, n_species, max_targets_per_graph)
 
 
 def _make_first_fragment(
@@ -100,11 +101,14 @@ def _make_first_fragment(
     max_targets_per_graph: int = 1,
 ):
     # get distances from (approximate) center of mass - assume all atoms have the same mass
-    com = np.average(
-        graph.nodes.positions,
-        axis=0,
-        weights=(graph.nodes.species > 0) if heavy_first else None,
-    )
+    # com = np.average(
+    #     graph.nodes.positions,
+    #     axis=0,
+    #     weights=(graph.nodes.species > 0) if heavy_first else None,
+    # )
+    bound1 = ptable.groups[graph.nodes.species] >= 2
+    bound2 = ptable.groups[graph.nodes.species] <= 11
+    com = np.average(graph.nodes.positions[bound1 & bound2], axis=0)
     distances_com = jnp.linalg.norm(graph.nodes.positions - com, axis=1)
     probs_com = jax.nn.softmax(-beta_com * distances_com**2)
     rng, k = jax.random.split(rng)
@@ -182,6 +186,16 @@ def _make_middle_fragment(
     senders, receivers = graph.senders, graph.receivers
 
     mask = jnp.isin(senders, visited) & ~jnp.isin(receivers, visited)
+    if sum(mask) <= 0:
+        import logging
+        logging.info(senders)
+        logging.info(receivers)
+        logging.info(visited)
+        import ase.io
+        import ase
+        out_atoms = ase.Atoms(positions=graph.nodes.positions, numbers=graph.nodes.species+1)
+        ase.io.write("bad.xyz", out_atoms)
+    assert sum(mask) > 0
 
     if heavy_first:
         heavy = graph.nodes.species > 0
