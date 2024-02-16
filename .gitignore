@@ -169,6 +169,7 @@ qm9_data
 qm9_data_tf
 qm9_fragments_fixed
 tmqm_data
+tmQMg_data
 qcd_data
 data_tf2
 *.pb

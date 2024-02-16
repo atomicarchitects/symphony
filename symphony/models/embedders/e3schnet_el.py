@@ -169,14 +169,7 @@ class E3SchNet(hk.Module):
 
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
-        if self.simple_embedding:
-            x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
-        else:
-            x_species = hk.Embed(self.num_species, self.init_embedding_dim)(species)
-            x_group = hk.Embed(18, self.init_embedding_dim)(jax.vmap(lambda s: ptable.groups[s])(species))
-            x_row = hk.Embed(7, self.init_embedding_dim)(jax.vmap(lambda s: ptable.rows[s])(species))
-            x_block = hk.Embed(4, self.init_embedding_dim)(jax.vmap(lambda s: ptable.blocks[s])(species))
-            x = jnp.concatenate([x_species, x_group, x_row, x_block], axis=-1)  # TODO: what's the best way to combine these things?
+        x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps, force_irreps_out=True)(x)
 
@@ -203,4 +196,11 @@ class E3SchNet(hk.Module):
             x = x + v
         # In SchNetPack, the output is only the scalar features.
         # Here, we return the entire IrrepsArray.
+        if self.simple_embedding:
+            return x
+        x_species = x.array
+        x_group = hk.Embed(18, self.init_embedding_dim)(jax.vmap(lambda s: ptable.groups[s])(species))
+        x_row = hk.Embed(7, self.init_embedding_dim)(jax.vmap(lambda s: ptable.rows[s])(species))
+        x_block = hk.Embed(4, self.init_embedding_dim)(jax.vmap(lambda s: ptable.blocks[s])(species))
+        x = e3nn.IrrepsArray(x.irreps, jnp.concatenate([x_species, x_group, x_row, x_block], axis=-1))
         return x

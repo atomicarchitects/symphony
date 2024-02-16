@@ -19,7 +19,9 @@ from symphony.models.position_predictor import (
     FactorizedTargetPositionPredictor,
 )
 from symphony.models.position_updater import PositionUpdater
-from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
+from symphony.models.embedders import nequip, marionette, mace, allegro
+# from symphony.models.embedders import e3schnet
+from symphony.models.embedders import e3schnet_el as e3schnet  # TODO temporary, just want to see what this does
 
 # ATOMIC_NUMBERS = list(range(1, 84))  # QCD
 ATOMIC_NUMBERS = list(range(1, 81))  # TMQM
@@ -379,6 +381,7 @@ def create_node_embedder(
             max_ell=config.max_ell,
             num_species=num_species,
             name=f"node_embedder_{name_prefix}_e3schnet",
+            simple_embedding=config.simple_embedding,
         )
 
     if config.model == "Allegro":
