@@ -512,6 +512,7 @@ def _specs_from_graphs_tuple(
                 graph.globals.target_species, is_global=True
             ),
             stop=get_tensor_spec(graph.globals.stop, is_global=True),
+            coord_num=get_tensor_spec(graph.globals.coord_num, is_global=True),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -533,6 +534,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         raise ValueError(list(graph.keys()))
 
     stop = graph["stop"]
+    coord_num = graph["coord_num"]
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
@@ -556,6 +558,7 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             target_position_mask=target_position_mask,
             target_species=target_species,
             stop=stop,
+            coord_num=coord_num,
         ),
         n_node=n_node,
         n_edge=n_edge,

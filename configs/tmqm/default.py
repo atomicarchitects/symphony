@@ -15,9 +15,9 @@ def get_config() -> ml_collections.ConfigDict:
     # config.train_molecules = (0, 65000)
     # config.val_molecules = (65000, 75000)
     # config.test_molecules = (75000, 87000)
-    config.train_molecules = (0, 8000)
-    config.val_molecules = (8000, 9000)
-    config.test_molecules = (9000, 10000)
+    config.train_molecules = (0, 16000)
+    config.val_molecules = (16000, 18000)
+    config.test_molecules = (18000, 20000)
     config.shuffle_datasets = True
     config.max_targets_per_graph = 1
 

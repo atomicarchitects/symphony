@@ -128,6 +128,54 @@ def earthmover_distance_for_radii(
     return out.reg_ot_cost
 
 
+def coordination_loss(graphs, pred_logits) -> jnp.ndarray:
+    num_graphs = graphs.n_node.shape[0]
+    num_nodes = graphs.nodes.positions.shape[0]
+    n_node = graphs.n_node
+
+    target_coordination_dist = graphs.nodes.coord_num
+
+    # Subtract the maximum value for numerical stability.
+    # This doesn't affect the forward pass, nor the backward pass.
+    segment_ids = models.get_segment_ids(n_node, num_nodes)
+    logits_max = jraph.segment_max(
+        pred_logits, segment_ids, num_segments=num_graphs
+    ).max(axis=-1)
+    logits_max = jax.lax.stop_gradient(logits_max)
+    pred_logits -= logits_max[segment_ids, None]
+
+    # Compute the cross-entropy loss.
+    loss_coordination = -target_coordination_dist * pred_logits.reshape(-1,)
+    jax.debug.print("dists: {target}, {pred}", target=target_coordination_dist[:300], pred=pred_logits[:300])
+    jax.debug.print("loss_coordination 1: {intermediate_loss}", intermediate_loss=loss_coordination[:300])
+    loss_coordination = jraph.segment_sum(
+        loss_coordination, segment_ids, num_graphs
+    )
+    jax.debug.print("loss_coordination 2: {intermediate_loss}", intermediate_loss=loss_coordination)
+    loss_coordination += jnp.log(
+        jraph.segment_sum(
+            jnp.exp(pred_logits.reshape(-1,)), segment_ids, num_graphs
+        )
+    )
+    jax.debug.print("loss_coordination 3: {intermediate_loss}", intermediate_loss=loss_coordination)
+
+    # Compute the lower bound on cross-entropy loss as the entropy of the target distribution.
+    lower_bounds = -(target_coordination_dist * models.safe_log(target_coordination_dist)).sum(
+        axis=-1
+    )
+    jax.debug.print("lower_bounds intermediate: {lower_bounds}", lower_bounds=lower_bounds)
+    lower_bounds = jraph.segment_sum(lower_bounds, segment_ids, num_graphs)
+    lower_bounds = jax.lax.stop_gradient(lower_bounds)
+
+    # Subtract out self-entropy (lower bound) to get the KL divergence.
+    loss_coordination -= lower_bounds
+    assert loss_coordination.shape == (num_graphs,)
+    jax.debug.print("lower_bounds: {lower_bounds}", lower_bounds=lower_bounds)
+    jax.debug.print("loss_coordination: {intermediate_loss}", intermediate_loss=loss_coordination)
+
+    return loss_coordination
+
+
 @jax.profiler.annotate_function
 def generation_loss(
     preds: datatypes.Predictions,

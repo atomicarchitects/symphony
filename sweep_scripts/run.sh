@@ -1,16 +1,16 @@
 mode=nn
 max_targets_per_graph=4
 cuda=1
-workdir=/home/songk/workdirs/tmqm_fragments_metal_first_reduced_elementinfo2/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+workdir=/home/songk/workdirs/tmqmg_fragments_reduced_elementinfo/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=0 python -m symphony.data.generation_scripts.tmqm_fragmenter \
-#     --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.0 \
-#     --output_dir=/data/NFS/potato/songk/tmqm_fragments_heavy_first --end_seed=1
+#     --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.5 \
+#     --output_dir=/data/NFS/potato/songk/tmqmg_fragments_heavy_first --end_seed=1
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config=configs/tmqm/e3schnet_and_nequip.py \
     --config.fragment_logic=$mode \
     --config.max_targets_per_graph=$max_targets_per_graph \
-    --config.num_train_steps=200000 \
+    --config.num_train_steps=100000 \
     --workdir=$workdir
 CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
     --workdir=$workdir \
