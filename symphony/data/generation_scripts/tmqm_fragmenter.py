@@ -21,7 +21,7 @@ FLAGS = flags.FLAGS
 
 def generate_all_fragments(
     molecules: List[ase.Atoms],
-    target_n_neighbors: List[int],
+    target_neighbors: List[List[int]],
     seed: int,
     start: int,
     end: int,
@@ -45,7 +45,7 @@ def generate_all_fragments(
 
     if start is not None and end is not None:
         molecules = molecules[start:end]
-        target_n_neighbors = target_n_neighbors[start:end]
+        target_neighbors = target_neighbors[start:end]
 
     atomic_numbers = np.arange(1, 81)
     molecules_as_graphs = [
@@ -62,6 +62,7 @@ def generate_all_fragments(
         "focus_and_target_species_probs": tf.TensorSpec(
             shape=(None, len(atomic_numbers)), dtype=tf.float32
         ),
+        "neighbor_probs": tf.TensorSpec(shape=(None, 2), dtype=tf.float32),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
@@ -74,14 +75,13 @@ def generate_all_fragments(
             shape=(1, max_targets_per_graph), dtype=tf.float32
         ),
         "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
-        "coord_num": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
     }
 
     def generator():
-        for graph, n_neighbors in tqdm.tqdm(zip(molecules_as_graphs, target_n_neighbors)):
+        for graph, neighbors in tqdm.tqdm(zip(molecules_as_graphs, target_neighbors)):
             assert graph.senders.shape == graph.receivers.shape
             frags = fragments.generate_fragments(
                 seed,
@@ -93,7 +93,7 @@ def generate_all_fragments(
                 heavy_first,
                 beta_com,
                 max_targets_per_graph,
-                n_neighbors
+                neighbors
             )
             frags = list(frags)
 
@@ -123,6 +123,7 @@ def generate_all_fragments(
                     "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
                         np.float32
                     ),
+                    "neighbor_probs": frag.nodes.neighbor_probs.astype(np.float32),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
                     "stop": frag.globals.stop.astype(np.bool_),
@@ -133,7 +134,6 @@ def generate_all_fragments(
                         np.float32
                     ),
                     "target_species": frag.globals.target_species.astype(np.int32),
-                    "coord_num": frag.globals.target_species.astype(np.int32),
                     "n_node": frag.n_node.astype(np.int32),
                     "n_edge": frag.n_edge.astype(np.int32),
                 }
@@ -161,7 +161,7 @@ def main(unused_argv) -> None:
     # molecules = tmqm.load_tmqm(
     #     "tmqm_data",
     # )
-    molecules, target_n_neighbors = tmqm.load_tmqmg("tmqmg_data")
+    molecules, target_neighbors = tmqm.load_tmqmg("tmqmg_data")
     start_index = FLAGS.start_index
     end_index = FLAGS.end_index if FLAGS.end_index != -1 else len(molecules)
     chunk_size = FLAGS.chunk
@@ -169,7 +169,7 @@ def main(unused_argv) -> None:
     args_list = [
         (
             molecules,
-            target_n_neighbors,
+            target_neighbors,
             seed,
             start,
             start + chunk_size,

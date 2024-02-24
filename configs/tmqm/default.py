@@ -15,9 +15,9 @@ def get_config() -> ml_collections.ConfigDict:
     # config.train_molecules = (0, 65000)
     # config.val_molecules = (65000, 75000)
     # config.test_molecules = (75000, 87000)
-    config.train_molecules = (0, 16000)
-    config.val_molecules = (16000, 18000)
-    config.test_molecules = (18000, 20000)
+    config.train_molecules = (0, 8000)
+    config.val_molecules = (8000, 9000)
+    config.test_molecules = (9000, 10000)
     config.shuffle_datasets = True
     config.max_targets_per_graph = 1
 
@@ -61,6 +61,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
     config.freeze_node_embedders = False
+
+    config.coord_predictor = ml_collections.ConfigDict()
+    config.coord_predictor.compute_global_embedding = False
+    config.coord_predictor.latent_size = 128
+    config.coord_predictor.num_layers = 3
+    config.coord_predictor.activation = "softplus"
 
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()

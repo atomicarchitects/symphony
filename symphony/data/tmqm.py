@@ -5,6 +5,7 @@ import os
 import zipfile
 import tqdm
 import urllib
+import pickle
 import numpy as np
 import networkx as nx
 from sh import gunzip
@@ -61,6 +62,12 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
 
 def load_tmqmg(root_dir: str) -> List[ase.Atoms]:
     """Load the TMQMg dataset."""
+    pkl_path = os.path.join(root_dir, "data.pkl")
+    if os.path.exists(pkl_path):
+        logging.info(f"Using downloaded data: {root_dir}")
+        with open(pkl_path, "rb") as f:
+            mols, neighbor_lists = pickle.load(f)
+            return mols, neighbor_lists
     data_path = os.path.join(root_dir, "uNatQ_graphs")
     if os.path.exists(data_path):
         logging.info(f"Using downloaded data: {data_path}")
@@ -75,7 +82,7 @@ def load_tmqmg(root_dir: str) -> List[ase.Atoms]:
 
     filenames = os.listdir(data_path)
     mols = []
-    coord_nums = []
+    neighbor_lists = []
     for mol_file in tqdm.tqdm(filenames):
         gml_mol = nx.read_gml(os.path.join(data_path, mol_file))
         gml_nodes = list(gml_mol.nodes.keys())
@@ -101,14 +108,17 @@ def load_tmqmg(root_dir: str) -> List[ase.Atoms]:
         bound2 = ptable.groups[gml_species-1] <= 11
         heavy = gml_species[bound1 & bound2]
         assert heavy.shape[0] == 1, print(ptable.groups[gml_species-1])
-        neighbors = gml_receivers[gml_senders == heavy[0]].shape[0]
+        neighbors = gml_receivers[gml_species[gml_senders] == heavy[0]]
 
         mol_ase = ase.Atoms(
             positions=np.asarray(gml_positions),
             numbers=np.asarray(gml_species),
         )
         mols.append(mol_ase)
-        coord_nums.append(neighbors)
+        neighbor_lists.append(neighbors)
+
+    with open(pkl_path, "wb") as f:
+        pickle.dump((mols, neighbor_lists), f)
 
     logging.info(f"Loaded {len(mols)} molecules.")
-    return mols, coord_nums
+    return mols, neighbor_lists

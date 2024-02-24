@@ -13,6 +13,7 @@ import ml_collections
 from symphony import datatypes
 from symphony.models.predictor import Predictor
 from symphony.models.embedders.global_embedder import GlobalEmbedder
+from symphony.models.coord_predictor import CoordPredictor
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.position_predictor import (
     TargetPositionPredictor,
@@ -422,6 +423,36 @@ def create_position_updater(
                 name_prefix="position_updater",
             )
         )(graphs)
+
+    return hk.transform(model_fn)
+
+
+def create_coord_model(config: ml_collections.ConfigDict) -> hk.Transformed:
+    def model_fn(
+        graphs: datatypes.Fragments,
+        focus_and_atom_type_inverse_temperature: float = 1.0,
+        position_inverse_temperature: float = 1.0,
+    ) -> datatypes.Predictions:
+        """Defines the entire network."""
+        dataset = config.get("dataset", "qm9")
+        num_species = get_num_species_for_dataset(dataset)
+
+        coord_predictor = CoordPredictor(
+            node_embedder=create_node_embedder(
+                config.coord_predictor.embedder_config,
+                num_species,
+                name_prefix="coord_predictor",
+            ),
+            latent_size=config.coord_predictor.latent_size,
+            num_layers=config.coord_predictor.num_layers,
+            activation=get_activation(
+                config.coord_predictor.activation
+            ),
+            num_species=num_species,
+        )
+        return coord_predictor(
+            graphs,
+        )
 
     return hk.transform(model_fn)
 

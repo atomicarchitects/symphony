@@ -9,6 +9,10 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the NequIP model."""
     config = default.get_config()
 
+    config.coord_predictor.embedder_config = (
+        e3schnet.get_embedder_config()
+    )
+
     config.focus_and_target_species_predictor.embedder_config = (
         e3schnet.get_embedder_config()
     )

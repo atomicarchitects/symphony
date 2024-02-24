@@ -21,7 +21,7 @@ class FragmentsNodes(NamedTuple):
     positions: jnp.ndarray  # [n_node, 3] float array
     species: jnp.ndarray  # [n_node] int array
     focus_and_target_species_probs: jnp.ndarray  # [n_node, n_species] float array (only for training)
-
+    neighbor_probs: jnp.ndarray  # [n_node, 2] float array (only for training)
 
 class Fragments(jraph.GraphsTuple):
     nodes: FragmentsNodes

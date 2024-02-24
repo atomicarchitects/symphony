@@ -1,4 +1,4 @@
-from typing import Iterator
+from typing import Iterator, List
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +20,7 @@ def generate_fragments(
     heavy_first: bool = False,
     beta_com: float = 0.0,
     max_targets_per_graph: int = 1,
-    coord_num: int = -1  # coordination # of the central transition metal
+    neighbors: List[int] = []  # neighbors of the central transition metal
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -64,7 +64,7 @@ def generate_fragments(
         heavy_first,
         beta_com,
         max_targets_per_graph=max_targets_per_graph,
-        coord_num=coord_num
+        neighbors=neighbors
     )
     yield frag
 
@@ -80,7 +80,7 @@ def generate_fragments(
             mode,
             heavy_first,
             max_targets_per_graph=max_targets_per_graph,
-            coord_num=coord_num
+            neighbors=neighbors
         )
         yield frag
     # except ValueError:
@@ -88,7 +88,7 @@ def generate_fragments(
     # else:
     assert len(visited_nodes) == n
 
-    yield _make_last_fragment(graph, n_species, max_targets_per_graph, coord_num)
+    yield _make_last_fragment(graph, n_species, max_targets_per_graph, neighbors)
 
 
 def _make_first_fragment(
@@ -102,7 +102,7 @@ def _make_first_fragment(
     heavy_first=False,
     beta_com=0.0,
     max_targets_per_graph: int = 1,
-    coord_num = -1,
+    neighbors = [],
 ):
     # get distances from (approximate) center of mass - assume all atoms have the same mass
     # com = np.average(
@@ -170,7 +170,7 @@ def _make_first_fragment(
         target_positions=target_positions,
         stop=False,
         max_targets_per_graph=max_targets_per_graph,
-        coord_num=coord_num
+        neighbors=neighbors
     )
 
     visited = np.array([first_node, target])
@@ -188,7 +188,7 @@ def _make_middle_fragment(
     mode,
     heavy_first=False,
     max_targets_per_graph: int = 1,
-    coord_num: int = -1,
+    neighbors: List[int] = [],
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
@@ -267,13 +267,13 @@ def _make_middle_fragment(
         target_positions,
         stop=False,
         max_targets_per_graph=max_targets_per_graph,
-        coord_num=coord_num
+        neighbors=neighbors
     )
 
     return rng, new_visited, sample
 
 
-def _make_last_fragment(graph, n_species, max_targets_per_graph: int = 1, coord_num: int = -1):
+def _make_last_fragment(graph, n_species, max_targets_per_graph: int = 1, neighbors: List[int] = []):
     n_nodes = len(graph.nodes.positions)
     return _into_fragment(
         graph,
@@ -284,7 +284,7 @@ def _make_last_fragment(graph, n_species, max_targets_per_graph: int = 1, coord_
         target_positions=np.zeros((1, 3)),
         stop=True,
         max_targets_per_graph=max_targets_per_graph,
-        coord_num=coord_num
+        neighbors=neighbors
     )
 
 
@@ -297,9 +297,9 @@ def _into_fragment(
     target_positions,
     stop,
     max_targets_per_graph,
-    coord_num,
+    neighbors,
 ):
-    pos = graph.nodes.positions
+    n_nodes = graph.n_node[0]
     assert target_positions.shape[0] <= max_targets_per_graph
     # for batching purposes
     target_positions_padded = np.zeros((max_targets_per_graph, 3))
@@ -308,22 +308,27 @@ def _into_fragment(
         (target_positions_padded.shape[0],), dtype=np.bool_
     )
     target_position_mask[: target_positions.shape[0]] = True
+
+    neighbor_probs = np.zeros((n_nodes, 2))
+    neighbor_probs[:, 1] = np.isin(np.arange(n_nodes), neighbors).astype(float)
+    neighbor_probs[:, 0] = 1 - neighbor_probs[:, 1]
+
     nodes = datatypes.FragmentsNodes(
-        positions=pos,
+        positions=graph.nodes.positions,
         species=graph.nodes.species,
         focus_and_target_species_probs=target_species_probability,
+        neighbor_probs=neighbor_probs,
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
         target_species=np.array(target_species),  # [1]
         target_positions=target_positions_padded[None],  # [max_targets_per_graph, 3]
         target_position_mask=target_position_mask[None],  # [max_targets_per_graph]
-        coord_num=np.array([coord_num], dtype=int),  # [1]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 
     if stop:
-        assert len(visited) == len(pos)
+        assert len(visited) == len(graph.nodes.positions)
         return graph
     else:
         # put focus node at the beginning
