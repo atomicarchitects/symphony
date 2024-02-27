@@ -83,6 +83,7 @@ def generate_all_fragments(
     def generator():
         for graph, neighbors in tqdm.tqdm(zip(molecules_as_graphs, target_neighbors)):
             assert graph.senders.shape == graph.receivers.shape
+            # frags = fragments.generate_fragments_coord(
             frags = fragments.generate_fragments(
                 seed,
                 graph,

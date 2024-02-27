@@ -192,3 +192,7 @@ cached/
 *.mol_dict
 
 analyses/molecules
+
+slurm_scripts
+slurm_logs
+slurm-*

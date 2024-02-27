@@ -179,15 +179,15 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
     # https://en.wikipedia.org/wiki/Platonic_solid
     phi = (1 + np.sqrt(5)) / 2
     pieces = [
-        [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
-        [
-            (1, 0, 0),
-            (-1, 0, 0),
-            (0, 1, 0),
-            (0, -1, 0),
-            (0, 0, 1),
-            (0, 0, -1),
-        ],  # octahedron
+        # [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
+        # [
+        #     (1, 0, 0),
+        #     (-1, 0, 0),
+        #     (0, 1, 0),
+        #     (0, -1, 0),
+        #     (0, 0, 1),
+        #     (0, 0, -1),
+        # ],  # octahedron
         [
             (1, 1, 1),
             (-1, 1, 1),
@@ -198,42 +198,42 @@ def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
             (-1, 1, -1),
             (-1, -1, -1),
         ],  # cube
-        [
-            (0, 1, phi),
-            (0, -1, phi),
-            (0, 1, -phi),
-            (0, -1, -phi),
-            (1, phi, 0),
-            (-1, phi, 0),
-            (1, -phi, 0),
-            (-1, -phi, 0),
-            (phi, 0, 1),
-            (phi, 0, -1),
-            (-phi, 0, 1),
-            (-phi, 0, -1),
-        ],  # icosahedron
-        [
-            (1, 1, 1),
-            (-1, 1, 1),
-            (1, -1, 1),
-            (1, 1, -1),
-            (-1, -1, 1),
-            (1, -1, -1),
-            (-1, 1, -1),
-            (-1, -1, -1),
-            (0, 1 / phi, phi),
-            (0, -1 / phi, phi),
-            (0, 1 / phi, -phi),
-            (0, -1 / phi, -phi),
-            (1 / phi, phi, 0),
-            (-1 / phi, phi, 0),
-            (1 / phi, -phi, 0),
-            (-1 / phi, -phi, 0),
-            (phi, 0, 1 / phi),
-            (phi, 0, -1 / phi),
-            (-phi, 0, 1 / phi),
-            (-phi, 0, -1 / phi),
-        ],  # dodacahedron
+        # [
+        #     (0, 1, phi),
+        #     (0, -1, phi),
+        #     (0, 1, -phi),
+        #     (0, -1, -phi),
+        #     (1, phi, 0),
+        #     (-1, phi, 0),
+        #     (1, -phi, 0),
+        #     (-1, -phi, 0),
+        #     (phi, 0, 1),
+        #     (phi, 0, -1),
+        #     (-phi, 0, 1),
+        #     (-phi, 0, -1),
+        # ],  # icosahedron
+        # [
+        #     (1, 1, 1),
+        #     (-1, 1, 1),
+        #     (1, -1, 1),
+        #     (1, 1, -1),
+        #     (-1, -1, 1),
+        #     (1, -1, -1),
+        #     (-1, 1, -1),
+        #     (-1, -1, -1),
+        #     (0, 1 / phi, phi),
+        #     (0, -1 / phi, phi),
+        #     (0, 1 / phi, -phi),
+        #     (0, -1 / phi, -phi),
+        #     (1 / phi, phi, 0),
+        #     (-1 / phi, phi, 0),
+        #     (1 / phi, -phi, 0),
+        #     (-1 / phi, -phi, 0),
+        #     (phi, 0, 1 / phi),
+        #     (phi, 0, -1 / phi),
+        #     (-phi, 0, 1 / phi),
+        #     (-phi, 0, -1 / phi),
+        # ],  # dodacahedron
     ]
     # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
     pieces_as_arrays = [np.asarray(piece) for piece in pieces]

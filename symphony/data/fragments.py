@@ -91,6 +91,50 @@ def generate_fragments(
     yield _make_last_fragment(graph, n_species, max_targets_per_graph, neighbors)
 
 
+def generate_fragments_coord(
+    rng: chex.PRNGKey,
+    graph: jraph.GraphsTuple,
+    n_species: int,
+    nn_tolerance: float = 0.01,
+    max_radius: float = 2.03,
+    mode: str = "nn",
+    heavy_first: bool = False,
+    beta_com: float = 0.0,
+    max_targets_per_graph: int = 1,
+    neighbors: List[int] = []  # neighbors of the central transition metal
+) -> Iterator[datatypes.Fragments]:
+    """Generative sequence for a molecular graph.
+
+    Args:
+        rng: The random number generator.
+        graph: The molecular graph.
+        n_species: The number of different species considered.
+        nn_tolerance: Tolerance for the nearest neighbours.
+        max_radius: The maximum distance of the focus-target
+        mode: How to generate the fragments. Either "nn" or "radius".
+        heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
+        beta_com: Inverse temperature value for the center of mass.
+
+    Returns:
+        A sequence of fragments.
+    """
+    assert mode in ["nn", "radius"]
+    n = len(graph.nodes.positions)
+
+    assert (
+        len(graph.n_edge) == 1 and len(graph.n_node) == 1
+    ), "Only single graphs supported."
+    assert n >= 2, "Graph must have at least two nodes."
+
+    # compute edge distances
+    dist = np.linalg.norm(
+        graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
+        axis=1,
+    )  # [n_edge]
+
+    yield _make_last_fragment(graph, n_species, max_targets_per_graph, neighbors)
+
+
 def _make_first_fragment(
     rng,
     graph,

@@ -35,5 +35,5 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
                 return f"/data/NFS/potato/songk/tmqmg_fragments_reduced/{fragment_logic}/max_targets_{max_targets_per_graph}"
                 # return f"/data/NFS/potato/songk/tmqm_fragments_nn_cutoff_3/{fragment_logic}/max_targets_{max_targets_per_graph}"
             return f"/data/NFS/potato/songk/tmqm_fragments/{fragment_logic}"
-        return f"/home/songk/data/tmqmg_fragments_heavy_first/{fragment_logic}/max_targets_{max_targets_per_graph}"
+        return f"/pool001/songk/tmqmg_fragments_heavy_first/{fragment_logic}/max_targets_{max_targets_per_graph}"
     return None

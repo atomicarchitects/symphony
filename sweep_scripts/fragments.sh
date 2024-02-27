@@ -1,10 +1,19 @@
-cuda=0
-for mode in "nn_edm" "radius"
-do
-    for max_targets in 1 4
-    do
-        CUDA_VISIBLE_DEVICES="$cuda$" python -m symphony.data.generation_scripts.qm9_fragmenter --mode="$mode" --max_targets_per_graph="$max_targets" \
-        > "$cuda"_generate_fragments.txt 2>&1 &
-        cuda=$((cuda + 1))
-    done
-done
+#!/bin/bash
+#SBATCH -N 1
+#SBATCH -n 8
+#SBATCH -p sched_mit_hill
+
+cd /home/songk
+
+source .bashrc
+conda activate tmqm-dev
+cd symphony-tmqm
+
+mode=nn
+max_targets_per_graph=4
+cuda=1
+
+python -m symphony.data.generation_scripts.tmqm_fragmenter \
+   --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.5 \
+   --output_dir=/pool001/songk/tmqmg_fragments_heavy_first --end_seed=1 \
+   --start_index=60000 --end_index=63000

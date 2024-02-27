@@ -12,14 +12,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    # config.train_molecules = (0, 65000)
-    # config.val_molecules = (65000, 75000)
-    # config.test_molecules = (75000, 87000)
-    config.train_molecules = (0, 8000)
-    config.val_molecules = (8000, 9000)
-    config.test_molecules = (9000, 10000)
+    config.train_molecules = (0, 48000)
+    config.val_molecules = (48000, 54000)
+    config.test_molecules = (54000, 60000)
     config.shuffle_datasets = True
-    config.max_targets_per_graph = 1
+    config.max_targets_per_graph = 4
 
     # Optimizer.
     config.optimizer = "adam"
@@ -39,8 +36,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_train_steps = 1_000_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
-    config.log_every_steps = 1000
-    config.eval_every_steps = 30000
+    config.log_every_steps = 3000
+    config.eval_every_steps = 10000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 3.0
     # config.nn_cutoff = 5.0
