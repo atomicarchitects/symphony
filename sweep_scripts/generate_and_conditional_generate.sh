@@ -3,7 +3,7 @@ workdirs=(
     # "/home/songk/workdirs/silica_shuffled_matscipy_jan25/e3schnet_and_nequip/nn/max_targets_4"
     "/home/songk/workdirs/silica_shuffled_Cubic/e3schnet_and_nequip/nn/max_targets_4"
 )
-cuda=2
+cuda=1
 for workdir in "${workdirs[@]}"
 do
     # CUDA_VISIBLE_DEVICES="$cuda$" python -m analyses.generate_molecules --workdir="$workdir" --max_num_atoms=35 --num_seeds=10000 --num_seeds_per_chunk=25 \

@@ -121,7 +121,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "max_num_atoms",
-        200,
+        300,
         "Maximum number of atoms in molecule.",
     )
     flags.DEFINE_integer(
