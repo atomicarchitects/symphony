@@ -1,16 +1,14 @@
-# GMACE
+# Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation (ICLR, 2024)
+
 
 ### Instructions
 
 Clone the repository:
 
 ```shell
-git clone git@github.com:atomicarchitects/spherical-harmonic-net.git
-cd spherical-harmonic-net
+git clone git@github.com:atomicarchitects/symphony.git
+cd symphony
 ```
-
-Are you using MIT SuperCloud? If so, follow the instructions in the section ["MIT SuperCloud Setup"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#mit-supercloud-setup).
-Otherwise, continue with ["Default Setup"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#default-setup).
 
 #### Default Setup
 Create and activate a virtual environment:
@@ -27,22 +25,12 @@ pip install --upgrade pip && pip install -r requirements.txt
 
 Running the analysis script requires `openbabel==3.1.1`. This can be installed through conda.
 
-Continue to ["Checking Installation"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#checking-installation).
-
-#### MIT SuperCloud Setup
-
-```shell
-module load anaconda/2023a
-pip install -r supercloud_requirements.txt
-```
-
-Continue to ["Checking Installation"](https://github.com/atomicarchitects/spherical-harmonic-net/edit/main/README.md#checking-installation).
 
 #### Checking Installation
 Check that installation suceeded by running a short test:
 
 ```shell
-python -m train_test
+python -m tests.train_test
 ```
 
 #### Start a Training Run 
@@ -50,20 +38,24 @@ Start training with a configuration defined
 under `configs/`:
 
 ```shell
-python -m symphony --workdir=./workdirs --config=configs/graphnet.py
+python -m symphony --workdir=./workdirs --config=configs/qm9/e3schnet_and_nequip.py
 ```
+
+The `--workdir` flag specifies the directory where the
+model checkpoints, logs, and other artifacts will be saved.
 
 #### Changing Hyperparameters
 
 Since the configuration is defined using
 [config_flags](https://github.com/google/ml_collections/tree/master#config-flags),
-you can override hyperparameters. For example, to change the number of training
-steps, the batch size and the dataset:
+you can override hyperparameters.
+For example, to change the number of training
+steps, and the batch size:
 
 ```shell
-python main.py --workdir=./workdirs --config=configs/graphnet.py \
---config.num_training_steps=10 --config.batch_size=50
+python main.py --workdir=./workdirs  --config=configs/qm9/e3schnet_and_nequip.py \
+--config.num_train_steps=10 --config.max_n_graphs=16
 ```
 
-For more extensive changes, you can directly edit the configuration files,
-and even add your own.
+For more extensive changes, directly edit the configuration files,
+or add your own.
