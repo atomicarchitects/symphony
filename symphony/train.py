@@ -330,7 +330,6 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-    # datasets = input_pipeline.get_datasets(dataset_rng, config)
     datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
 
     # Create and initialize the network.
