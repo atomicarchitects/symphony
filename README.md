@@ -1,5 +1,8 @@
-# Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation (ICLR, 2024)
+## Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation
 
+![A high-level overview of Symphony.](cover.png)
+
+This is the official code-release for the paper [Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation](https://openreview.net/forum?id=MIEnYtlGyv), published at ICLR 2024.
 
 ### Instructions
 
@@ -38,7 +41,9 @@ Start training with a configuration defined
 under `configs/`:
 
 ```shell
-python -m symphony --workdir=./workdirs --config=configs/qm9/e3schnet_and_nequip.py
+python -m symphony \
+    --config configs/qm9/e3schnet_and_nequip.py \
+    --workdir ./workdirs
 ```
 
 The `--workdir` flag specifies the directory where the
@@ -53,9 +58,26 @@ For example, to change the number of training
 steps, and the batch size:
 
 ```shell
-python main.py --workdir=./workdirs  --config=configs/qm9/e3schnet_and_nequip.py \
---config.num_train_steps=10 --config.max_n_graphs=16
+python -m symphony --config configs/qm9/e3schnet_and_nequip.py \
+    --workdir ./workdirs \
+    --config.num_train_steps=10 --config.max_n_graphs=16
 ```
 
 For more extensive changes, directly edit the configuration files,
 or add your own.
+
+
+## Citation
+
+Please cite our paper if you use this code!
+
+```bibtex
+@inproceedings{
+    daigavane2024symphony,
+    title={Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation},
+    author={Ameya Daigavane and Song Eun Kim and Mario Geiger and Tess Smidt},
+    booktitle={The Twelfth International Conference on Learning Representations},
+    year={2024},
+    url={https://openreview.net/forum?id=MIEnYtlGyv}
+}
+```

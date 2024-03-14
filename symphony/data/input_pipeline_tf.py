@@ -449,18 +449,16 @@ def get_unbatched_qm9_datasets(
             dataset_split = dataset_split.skip(num_steps_to_skip).take(
                 num_steps_to_take
             )
-            # for graph in dataset_split:
-            #     print(graph["species"], graph["target_species_probs"])
-            #     print(_convert_to_graphstuple(graph).globals.stop)
-            #     print(_convert_to_graphstuple(graph).nodes.stop)
-            #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
-            #     print()
 
         # This is usually the case, when the split is larger than a single chunk.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
+
+            def load_dataset(file_path):
+                return tf.data.Dataset.load(file_path, element_spec=element_spec)
+
             dataset_split = dataset_split.interleave(
-                lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
+                lambda x: load_dataset(x),
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )
