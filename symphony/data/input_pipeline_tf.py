@@ -449,12 +449,6 @@ def get_unbatched_qm9_datasets(
             dataset_split = dataset_split.skip(num_steps_to_skip).take(
                 num_steps_to_take
             )
-            # for graph in dataset_split:
-            #     print(graph["species"], graph["target_species_probs"])
-            #     print(_convert_to_graphstuple(graph).globals.stop)
-            #     print(_convert_to_graphstuple(graph).nodes.stop)
-            #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
-            #     print()
 
         # This is usually the case, when the split is larger than a single chunk.
         else:
