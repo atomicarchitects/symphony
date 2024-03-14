@@ -10,8 +10,8 @@ Clone the repository:
 
 ```shell
 git clone git@github.com:atomicarchitects/symphony.git
-git checkout iclr_2024_final
 cd symphony
+git checkout iclr_2024_final
 ```
 
 Since this repository is actively being developed, we recommend using the `iclr_2024_final` branch for the most stable version of the code.
