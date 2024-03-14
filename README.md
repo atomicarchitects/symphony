@@ -6,6 +6,7 @@ Clone the repository:
 
 ```shell
 git clone git@github.com:atomicarchitects/symphony.git
+git checkout iclr_2024_final
 cd symphony
 ```
 
