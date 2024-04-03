@@ -12,9 +12,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.train_molecules = (0, 48000)
-    config.val_molecules = (48000, 54000)
-    config.test_molecules = (54000, 60000)
+    # config.train_molecules = (0, 48000)
+    # config.val_molecules = (48000, 54000)
+    # config.test_molecules = (54000, 60000)
+    config.train_molecules = (0, 8)
+    config.val_molecules = (8, 9)
+    config.test_molecules = (9, 10)
     config.shuffle_datasets = True
     config.max_targets_per_graph = 4
 
@@ -77,8 +80,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.res_alpha = 359
     config.target_position_predictor.num_channels = 2
     config.target_position_predictor.min_radius = 0.9
-    config.target_position_predictor.max_radius = 2.0
-    config.target_position_predictor.num_radii = 64
+    config.target_position_predictor.max_radius = 3.5
+    config.target_position_predictor.num_radii = 128
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
     config.target_position_predictor.radial_mlp_latent_size = 128

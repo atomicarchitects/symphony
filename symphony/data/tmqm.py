@@ -35,11 +35,11 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
             os.makedirs(xyzs_path)
 
         for i in range(1, 3):
-            gz_path = os.path.join(data_path, f"tmQM_X{i}.xyz.gz")
+            gz_path = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz.gz")
             logging.info(f"Unzipping {gz_path}...")
             gunzip(gz_path)
 
-            mol_file = os.path.join(data_path, f"tmQM_X{i}.xyz")
+            mol_file = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz")
             with open(mol_file, "r") as f:
                 all_xyzs = f.read().split("\n\n")
                 for xyz_n, xyz in enumerate(all_xyzs):
@@ -69,6 +69,7 @@ def load_tmqmg(root_dir: str) -> List[ase.Atoms]:
             mols, neighbor_lists = pickle.load(f)
             return mols, neighbor_lists
     data_path = os.path.join(root_dir, "uNatQ_graphs")
+    xyz_path = os.path.join(root_dir, 'xyz')
     if os.path.exists(data_path):
         logging.info(f"Using downloaded data: {data_path}")
     else:
@@ -83,6 +84,8 @@ def load_tmqmg(root_dir: str) -> List[ase.Atoms]:
     filenames = os.listdir(data_path)
     mols = []
     neighbor_lists = []
+    if not os.path.exists(xyz_path):
+        os.makedirs(xyz_path)
     for mol_file in tqdm.tqdm(filenames):
         gml_mol = nx.read_gml(os.path.join(data_path, mol_file))
         gml_nodes = list(gml_mol.nodes.keys())
@@ -114,6 +117,8 @@ def load_tmqmg(root_dir: str) -> List[ase.Atoms]:
             positions=np.asarray(gml_positions),
             numbers=np.asarray(gml_species),
         )
+        mol_name = mol_file.split('.')[-2]
+        ase.io.write(os.path.join(xyz_path, f'{mol_name}.xyz'), mol_ase)
         mols.append(mol_ase)
         neighbor_lists.append(neighbors)
 

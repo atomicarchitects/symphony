@@ -192,6 +192,7 @@ cached/
 *.mol_dict
 
 analyses/molecules
+analyses/platonic_solids
 
 slurm_scripts
 slurm_logs
