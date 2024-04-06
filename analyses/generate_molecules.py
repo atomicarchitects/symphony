@@ -138,9 +138,10 @@ def generate_molecules(
     verbose: bool = False,
 ):
     """Generates molecules from a trained model at the given workdir."""
-    if not verbose:
-        origial_verbosity = logging.get_verbosity()
-        logging.set_verbosity(logging.DEBUG)
+    if verbose:
+        logging_fn = logging.info
+    else:
+        logging_fn = lambda *args: None
 
     # Check that we can divide the seeds into chunks properly.
     if num_seeds % num_seeds_per_chunk != 0:
@@ -151,7 +152,7 @@ def generate_molecules(
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
         init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
-        logging.info(
+        logging_fn(
             f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
         )
         init_molecules = [init_molecule] * num_seeds
@@ -165,7 +166,7 @@ def generate_molecules(
     # Load model.
     name = analysis.name_from_workdir(workdir)
     if steps_for_weight_averaging is not None:
-        logging.info("Loading model averaged from steps %s", steps_for_weight_averaging)
+        logging_fn("Loading model averaged from steps %s", steps_for_weight_averaging)
         model, params, config = analysis.load_weighted_average_model_at_steps(
             workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
         )
@@ -178,8 +179,7 @@ def generate_molecules(
             res_beta=res_beta,
         )
     config = config.unlock()
-        
-    logging.info(config.to_dict())
+    logging_fn(config.to_dict())
 
     # Create output directories.
     molecules_outputdir = os.path.join(
@@ -279,7 +279,7 @@ def generate_molecules(
     start_time = time.time()
     chunk_and_apply.lower(params, init_fragments, rngs).compile()
     compilation_time = time.time() - start_time
-    logging.info("Compilation time: %.2f s", compilation_time)
+    logging_fn("Compilation time: %.2f s", compilation_time)
 
     # Generate molecules (and intermediate steps, if visualizing).
     if visualize:
@@ -362,10 +362,10 @@ def generate_molecules(
             ),
         )
         if stop:
-            logging.info("Generated %s", generated_molecule.get_chemical_formula())
+            logging_fn("Generated %s", generated_molecule.get_chemical_formula())
             outputfile = f"{init_molecule_name}_seed={seed}.xyz"
         else:
-            logging.info("STOP was not produced. Discarding...")
+            logging_fn("STOP was not produced. Discarding...")
             outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
 
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
@@ -378,10 +378,6 @@ def generate_molecules(
     with connect(output_db) as conn:
         for mol in molecule_list:
             conn.write(mol)
-
-    # Restore verbosity.
-    if not verbose:
-        logging.set_verbosity(origial_verbosity)
 
     return molecule_list, molecules_outputdir
 
