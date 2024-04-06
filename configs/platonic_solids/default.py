@@ -35,6 +35,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_eval_steps_at_end_of_training = 100
     config.log_every_steps = 1000
     config.eval_every_steps = 2000
+    config.generate_every_steps = 2000
     config.nn_tolerance = 0.1
     config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
@@ -78,5 +79,14 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_mlp_latent_size = 128
     config.target_position_predictor.radial_mlp_num_layers = 2
     config.target_position_predictor.radial_mlp_activation = "swish"
+
+    # Generation.
+    config.generation = ml_collections.ConfigDict()
+    config.generation.focus_and_atom_type_inverse_temperature = 1.0
+    config.generation.position_inverse_temperature = 1.0
+    config.generation.num_seeds = 100
+    config.generation.num_seeds_per_chunk = 20
+    config.generation.init_molecules = "H"
+    config.generation.max_num_atoms = 35
 
     return config

@@ -21,9 +21,8 @@ from clu import (
     parameter_overview,
     periodic_actions,
 )
-from flax.training import train_state
 
-from symphony import datatypes, models, loss, helpers
+from symphony import datatypes, hooks, models, loss, train_state
 from symphony.data import input_pipeline_tf
 from analyses import generate_molecules
 from analyses import metrics as analyses_metrics
@@ -34,15 +33,6 @@ class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     focus_and_atom_type_loss: metrics.Average.from_output("focus_and_atom_type_loss")
     position_loss: metrics.Average.from_output("position_loss")
-
-
-class TrainState(train_state.TrainState):
-    """State for keeping track of training progress."""
-
-    best_params: flax.core.FrozenDict[str, Any]
-    step_for_best_params: float
-    metrics_for_best_params: Optional[Dict[str, metrics.Collection]]
-    train_metrics: metrics.Collection
 
 
 def device_batch(
@@ -318,13 +308,13 @@ def train_and_evaluate(
     tx = create_optimizer(config)
 
     # Create the training state.
-    state = TrainState.create(
+    state = train_state.TrainState.create(
         apply_fn=jax.jit(net.apply),
         params=params,
         tx=tx,
         best_params=params,
         step_for_best_params=0,
-        metrics_for_best_params=None,
+        metrics_for_best_params={},
         train_metrics=Metrics.empty(),
     )
 
@@ -334,8 +324,9 @@ def train_and_evaluate(
     # Set up checkpointing of the model.
     # We will record the best model seen during training.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
-    checkpoint_hook = helpers.CheckpointHook(checkpoint_dir, max_to_keep=1)
+    checkpoint_hook = hooks.CheckpointHook(checkpoint_dir, max_to_keep=1)
     state = checkpoint_hook.restore_or_initialize(state)
+    initial_step = state.step
 
     # Replicate the training and evaluation state across devices.
     state = flax.jax_utils.replicate(state)
@@ -348,8 +339,8 @@ def train_and_evaluate(
         logdir=workdir,
         every_secs=10800,
     )
-    train_metrics_hook = helpers.LogTrainMetricsHook(writer)
-    evaluate_model_hook = helpers.EvaluateModelHook(
+    train_metrics_hook = hooks.LogTrainMetricsHook(writer)
+    evaluate_model_hook = hooks.EvaluateModelHook(
         evaluate_model_fn=lambda state, rng: evaluate_model(
             state,
             datasets,
@@ -362,7 +353,7 @@ def train_and_evaluate(
         ),
         writer=writer,
     )
-    generate_molecules_hook = helpers.GenerateMoleculesHook(
+    generate_molecules_hook = hooks.GenerateMoleculesHook(
         workdir=workdir,
         writer=writer,
         focus_and_atom_type_inverse_temperature=config.generation.focus_and_atom_type_inverse_temperature,
@@ -375,8 +366,6 @@ def train_and_evaluate(
 
     # Begin training loop.
     logging.info("Starting training.")
-
-    initial_step = state.step
     for step in range(initial_step, config.num_train_steps):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
@@ -386,7 +375,7 @@ def train_and_evaluate(
         # Evaluate model, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
             rng, eval_rng = jax.random.split(rng)
-            evaluate_model_hook(state, eval_rng)
+            state = evaluate_model_hook(state, eval_rng)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
@@ -415,7 +404,9 @@ def train_and_evaluate(
             )
 
             # Update metrics.
-            train_metrics = train_metrics.merge(batch_metrics)
+            state = state.replace(
+                train_metrics=state.train_metrics.merge(batch_metrics)
+            )
 
         # Quick indication that training is happening.
         logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
@@ -425,10 +416,10 @@ def train_and_evaluate(
     # Once training is complete, return the best state and corresponding metrics.
     logging.info(
         "Evaluating best state from step %d at the end of training.",
-        state,
+        state.get_step(),
     )
     rng, eval_rng = jax.random.split(rng)
-    final_evaluate_model_hook = helpers.EvaluateModelHook(
+    final_evaluate_model_hook = hooks.EvaluateModelHook(
         evaluate_model_fn=lambda state, rng: evaluate_model(
             state,
             datasets,
@@ -437,8 +428,9 @@ def train_and_evaluate(
             config.loss_kwargs,
         ),
         writer=writer,
+        update_state=False,
     )
-    final_evaluate_model_hook(state, eval_rng)
+    state = final_evaluate_model_hook(state, eval_rng)
     checkpoint_hook(state)
 
     return state

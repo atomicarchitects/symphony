@@ -220,7 +220,6 @@ def get_edm_splits(root_dir: str):
 
     splits = {"train": train, "valid": valid, "test": test}
     np.savez(os.path.join(root_dir, "edm_splits.npz"), **splits)
-    print(os.path.join(root_dir, "edm_splits.npz"))
 
     # Cleanup file.
     try:

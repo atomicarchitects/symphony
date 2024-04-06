@@ -135,8 +135,13 @@ def generate_molecules(
     steps_for_weight_averaging: Optional[Sequence[int]] = None,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
+    verbose: bool = False,
 ):
     """Generates molecules from a trained model at the given workdir."""
+    if not verbose:
+        origial_verbosity = logging.get_verbosity()
+        logging.set_verbosity(logging.DEBUG)
+
     # Check that we can divide the seeds into chunks properly.
     if num_seeds % num_seeds_per_chunk != 0:
         raise ValueError(
@@ -173,6 +178,7 @@ def generate_molecules(
             res_beta=res_beta,
         )
     config = config.unlock()
+        
     logging.info(config.to_dict())
 
     # Create output directories.
@@ -373,7 +379,11 @@ def generate_molecules(
         for mol in molecule_list:
             conn.write(mol)
 
-    return molecule_list
+    # Restore verbosity.
+    if not verbose:
+        logging.set_verbosity(origial_verbosity)
+
+    return molecule_list, molecules_outputdir
 
 
 def main(unused_argv: Sequence[str]) -> None:

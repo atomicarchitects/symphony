@@ -12,7 +12,7 @@ def plot_molecules_with_py3Dmol(
 ) -> py3Dmol.view:
     # Reshape into a grid.
     molecules = [
-        molecules[i : i + num_columns] for i in range(0, len(molecules), num_rows)
+        molecules[i : i + num_columns] for i in range(0, len(molecules), num_columns)
     ]
 
     view = py3Dmol.view(
