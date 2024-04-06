@@ -88,6 +88,8 @@ def main(argv):
 
     # Initialize wandb.
     if FLAGS.use_wandb:
+        os.makedirs(os.path.join(FLAGS.workdir, "wandb"), exist_ok=True)
+
         wandb.login()
         wandb.init(
             project="symphony",
