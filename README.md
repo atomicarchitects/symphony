@@ -29,7 +29,8 @@ Install pip dependencies with:
 pip install --upgrade pip && pip install -r requirements.txt
 ```
 
-Running the analysis script requires `openbabel==3.1.1`. This can be installed through conda.
+Some of the analysis scripts require `openbabel==3.1.1`.
+This can be installed through conda.
 
 
 #### Checking Installation
