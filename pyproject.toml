@@ -33,6 +33,7 @@ dependencies = [
     "tensorflow==2.13.0",
     "rdkit",
     "wandb",
+    "py3dmol",
     "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
     "allegro-jax @ git+https://github.com/mariogeiger/allegro-jax",
