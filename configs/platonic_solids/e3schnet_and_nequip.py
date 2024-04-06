@@ -4,7 +4,7 @@ from configs.platonic_solids import default, nequip, e3schnet
 
 
 def get_config() -> ml_collections.ConfigDict:
-    """Get the hyperparameter configuration for the NequIP model."""
+    """Get the hyperparameter configuration for the E3SchNet + NequIP model."""
     config = default.get_config()
 
     config.focus_and_target_species_predictor.embedder_config = (
@@ -12,5 +12,4 @@ def get_config() -> ml_collections.ConfigDict:
     )
     config.target_position_predictor.embedder_config = nequip.get_embedder_config()
 
-    # NequIP hyperparameters.
     return config

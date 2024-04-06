@@ -40,6 +40,11 @@ def xyz_to_rdkit_molecule(molecules_file: str) -> Chem.Mol:
     return Chem.Mol(mol)
 
 
+def ase_to_rdkit_molecules(ase_mol: Sequence[ase.Atoms]) -> List[Chem.Mol]:
+    """Converts molecules from ase format to RDKit molecules."""
+    return [ase_to_rdkit_molecule(mol) for mol in ase_mol]
+
+
 def ase_to_rdkit_molecule(ase_mol: ase.Atoms) -> Chem.Mol:
     """Converts a molecule from ase format to an RDKit molecule."""
     with io.StringIO() as f:

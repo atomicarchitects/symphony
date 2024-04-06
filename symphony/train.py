@@ -16,15 +16,13 @@ from absl import logging
 import matplotlib.pyplot as plt
 
 from clu import (
-    checkpoint,
     metric_writers,
     metrics,
     parameter_overview,
     periodic_actions,
 )
-from flax.training import train_state
 
-from symphony import datatypes, models, loss
+from symphony import datatypes, hooks, models, loss, train_state
 from symphony.data import input_pipeline_tf
 from analyses import generate_molecules
 from analyses import metrics as analyses_metrics
@@ -35,11 +33,6 @@ class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     focus_and_atom_type_loss: metrics.Average.from_output("focus_and_atom_type_loss")
     position_loss: metrics.Average.from_output("position_loss")
-
-
-def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
-    """Adds a prefix to the keys of a dict, returning a new dict."""
-    return {f"{prefix}/{key}": val for key, val in result.items()}
 
 
 def device_batch(
@@ -89,7 +82,6 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     else:
         raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
-
     if not config.get("freeze_node_embedders"):
         return tx
 
@@ -115,7 +107,6 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     return optax.multi_transform(
         {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn)
     )
-
 
 
 @jax.profiler.annotate_function
@@ -216,7 +207,7 @@ def evaluate_step(
 
 def evaluate_model(
     eval_state: train_state.TrainState,
-    datasets: Iterator[datatypes.Fragments],
+    datasets: Dict[str, Iterator[datatypes.Fragments]],
     splits: Iterable[str],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
@@ -286,36 +277,7 @@ def train_and_evaluate(
     # We only support single-host training.
     assert jax.process_count() == 1
 
-    # Helper for evaluation.
-    def evaluate_model_helper(
-        eval_state: train_state.TrainState,
-        step: int,
-        rng: chex.PRNGKey,
-        is_final_eval: bool,
-    ) -> Dict[str, metrics.Collection]:
-        # Final eval splits are usually different.
-        if is_final_eval:
-            splits = ["train_eval_final", "val_eval_final", "test_eval_final"]
-        else:
-            splits = ["train_eval", "val_eval", "test_eval"]
-
-        # Evaluate the model.
-        with report_progress.timed("eval"):
-            eval_metrics = evaluate_model(
-                eval_state,
-                datasets,
-                splits,
-                rng,
-                config.loss_kwargs,
-            )
-
-        # Compute and write metrics.
-        for split in splits:
-            eval_metrics[split] = eval_metrics[split].compute()
-            writer.write_scalars(step, add_prefix_to_keys(eval_metrics[split], split))
-        writer.flush()
-
-        return eval_metrics
+    # Check the config file.
 
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
@@ -347,143 +309,78 @@ def train_and_evaluate(
 
     # Create the training state.
     state = train_state.TrainState.create(
-        apply_fn=jax.jit(net.apply), params=params, tx=tx
+        apply_fn=jax.jit(net.apply),
+        params=params,
+        tx=tx,
+        best_params=params,
+        step_for_best_params=0,
+        metrics_for_best_params={},
+        train_metrics=Metrics.empty(),
     )
 
     # Create a corresponding evaluation state.
     eval_net = models.create_model(config, run_in_evaluation_mode=False)
-    eval_state = state.replace(apply_fn=jax.jit(eval_net.apply))
 
     # Set up checkpointing of the model.
     # We will record the best model seen during training.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
-    ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
-    restored = ckpt.restore_or_initialize(
-        {
-            "state": state,
-            "best_state": state,
-            "step_for_best_state": 1.0,
-            "metrics_for_best_state": None,
-        }
-    )
-    state = restored["state"]
-    best_state = restored["best_state"]
-    step_for_best_state = restored["step_for_best_state"]
-    metrics_for_best_state = restored["metrics_for_best_state"]
-    if metrics_for_best_state is None:
-        min_val_loss = float("inf")
-    else:
-        min_val_loss = metrics_for_best_state["val_eval"]["total_loss"]
-    initial_step = int(state.step) + 1
+    checkpoint_hook = hooks.CheckpointHook(checkpoint_dir, max_to_keep=1)
+    state = checkpoint_hook.restore_or_initialize(state)
+    initial_step = state.step
 
     # Replicate the training and evaluation state across devices.
     state = flax.jax_utils.replicate(state)
-    best_state = flax.jax_utils.replicate(best_state)
-    eval_state = flax.jax_utils.replicate(eval_state)
 
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
         num_train_steps=config.num_train_steps, writer=writer
     )
-    profile = periodic_actions.Profile(
+    profiler = periodic_actions.Profile(
         logdir=workdir,
         every_secs=10800,
     )
-    hooks = [report_progress, profile]
+    train_metrics_hook = hooks.LogTrainMetricsHook(writer)
+    evaluate_model_hook = hooks.EvaluateModelHook(
+        evaluate_model_fn=lambda state, rng: evaluate_model(
+            state,
+            datasets,
+            [
+                "val_eval",
+                "test_eval",
+            ],
+            rng,
+            config.loss_kwargs,
+        ),
+        writer=writer,
+    )
+    generate_molecules_hook = hooks.GenerateMoleculesHook(
+        workdir=workdir,
+        writer=writer,
+        focus_and_atom_type_inverse_temperature=config.generation.focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature=config.generation.position_inverse_temperature,
+        num_seeds=config.generation.num_seeds,
+        num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
+        init_molecules=config.generation.init_molecules,
+        max_num_atoms=config.generation.max_num_atoms,
+    )
 
     # Begin training loop.
     logging.info("Starting training.")
-    train_metrics = flax.jax_utils.replicate(Metrics.empty())
-    train_metrics_empty = True
-
-    # Generate only once the checkpoint is saved.
-    config = ml_collections.ConfigDict(config).unlock()
-    if config.get("generate_every_steps") is None:
-        config.generate_every_steps = config.eval_every_steps
-    if not config.generate_every_steps % config.eval_every_steps == 0:
-        raise ValueError(
-            "config.generate_every_steps must be a multiple of config.eval_every_steps."
-        )
-    config = ml_collections.FrozenConfigDict(config)
-
-    for step in range(initial_step, config.num_train_steps + 1):
+    for step in range(initial_step, config.num_train_steps):
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
         if step % config.log_every_steps == 0 or first_or_last_step:
-            if not train_metrics_empty:
-                writer.write_scalars(
-                    step,
-                    add_prefix_to_keys(
-                        flax.jax_utils.unreplicate(train_metrics).compute(), "train"
-                    ),
-                )
-            train_metrics = flax.jax_utils.replicate(Metrics.empty())
-            train_metrics_empty = True
+            train_metrics_hook(state)
 
-        # Evaluate on validation and test splits, if required.
+        # Evaluate model, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
-            eval_state = eval_state.replace(params=state.params)
-            # Evaluate on validation and test splits.
             rng, eval_rng = jax.random.split(rng)
-            eval_metrics = evaluate_model_helper(
-                eval_state,
-                step,
-                eval_rng,
-                is_final_eval=False,
-            )
-
-            # Note best state seen so far.
-            # Best state is defined as the state with the lowest validation loss.
-            if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
-                min_val_loss = eval_metrics["val_eval"]["total_loss"]
-                metrics_for_best_state = eval_metrics
-                best_state = state
-                step_for_best_state = step
-                logging.info("New best state found at step %d.", step)
-
-            # Save the current state and best state seen so far.
-            with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "wb") as f:
-                pickle.dump(flax.jax_utils.unreplicate(state.params), f)
-            with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-                pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
-            ckpt.save(
-                {
-                    "state": flax.jax_utils.unreplicate(state),
-                    "best_state": flax.jax_utils.unreplicate(best_state),
-                    "step_for_best_state": step_for_best_state,
-                    "metrics_for_best_state": metrics_for_best_state,
-                }
-            )
+            state = evaluate_model_hook(state, eval_rng)
+            checkpoint_hook(state)
 
         # Generate molecules, if required.
         if step % config.generate_every_steps == 0 or first_or_last_step:
-            molecules_ase = generate_molecules.generate_molecules(
-                workdir,
-                outputdir=workdir,
-                focus_and_atom_type_inverse_temperature=1.0,
-                position_inverse_temperature=1.0,
-                step=step,
-                num_seeds=100,
-                num_seeds_per_chunk=20,
-                init_molecules='H',
-                max_num_atoms=35,
-                visualize=False,
-            )
-
-            # Compute metrics.
-            molecules = [analyses_metrics.ase_to_rdkit_molecule(mol) for mol in molecules_ase]
-            validity = analyses_metrics.compute_validity(molecules)
-            uniqueness = analyses_metrics.compute_uniqueness(molecules)
-
-            # Write metrics out.
-            writer.write_scalars(
-                step,
-                {
-                    "validity": validity,
-                    "uniqueness": uniqueness,
-                },
-            )
-            writer.flush()
+            generate_molecules_hook(step)
 
         # Get a batch of graphs.
         try:
@@ -507,42 +404,33 @@ def train_and_evaluate(
             )
 
             # Update metrics.
-            train_metrics = train_metrics.merge(batch_metrics)
-            train_metrics_empty = False
+            state = state.replace(
+                train_metrics=state.train_metrics.merge(batch_metrics)
+            )
 
         # Quick indication that training is happening.
         logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
-        for hook in hooks:
-            hook(step)
+        report_progress(step)
+        profiler(step)
 
     # Once training is complete, return the best state and corresponding metrics.
     logging.info(
         "Evaluating best state from step %d at the end of training.",
-        step_for_best_state,
+        state.get_step(),
     )
-    eval_state = eval_state.replace(params=best_state.params)
-
-    # Evaluate on validation and test splits, but at the end of training.
     rng, eval_rng = jax.random.split(rng)
-    final_metrics_for_best_state = evaluate_model_helper(
-        eval_state,
-        step,
-        eval_rng,
-        is_final_eval=True,
+    final_evaluate_model_hook = hooks.EvaluateModelHook(
+        evaluate_model_fn=lambda state, rng: evaluate_model(
+            state,
+            datasets,
+            ["val_eval_final", "test_eval_final"],
+            rng,
+            config.loss_kwargs,
+        ),
+        writer=writer,
+        update_state=False,
     )
+    state = final_evaluate_model_hook(state, eval_rng)
+    checkpoint_hook(state)
 
-    # Checkpoint the best state and corresponding metrics seen during training.
-    # Save pickled parameters for easy access during evaluation.
-    with report_progress.timed("checkpoint"):
-        with open(os.path.join(checkpoint_dir, "params_best.pkl"), "wb") as f:
-            pickle.dump(flax.jax_utils.unreplicate(best_state.params), f)
-        ckpt.save(
-            {
-                "state": flax.jax_utils.unreplicate(state),
-                "best_state": flax.jax_utils.unreplicate(best_state),
-                "step_for_best_state": step_for_best_state,
-                "metrics_for_best_state": metrics_for_best_state,
-            }
-        )
-
-    return best_state, final_metrics_for_best_state
+    return state
