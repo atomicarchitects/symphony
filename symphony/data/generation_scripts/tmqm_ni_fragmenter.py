@@ -62,7 +62,6 @@ def generate_all_fragments(
         "focus_and_target_species_probs": tf.TensorSpec(
             shape=(None, len(atomic_numbers)), dtype=tf.float32
         ),
-        "neighbor_probs": tf.TensorSpec(shape=(None, 2), dtype=tf.float32),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
@@ -125,7 +124,6 @@ def generate_all_fragments(
                     "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
                         np.float32
                     ),
-                    "neighbor_probs": frag.nodes.neighbor_probs.astype(np.float32),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
                     "stop": frag.globals.stop.astype(np.bool_),

@@ -493,26 +493,26 @@ def _specs_from_graphs_tuple(
         dtype = array.dtype
         return tf.TensorSpec(shape=shape, dtype=dtype)
 
-    return jraph.GraphsTuple(
+    spec = jraph.GraphsTuple(
         nodes=datatypes.FragmentsNodes(
             positions=get_tensor_spec(graph.nodes.positions),
             species=get_tensor_spec(graph.nodes.species),
             focus_and_target_species_probs=get_tensor_spec(
                 graph.nodes.focus_and_target_species_probs
             ),
-            neighbor_probs=get_tensor_spec(graph.nodes.neighbor_probs),
+            focus_mask=get_tensor_spec(graph.nodes.focus_mask),
         ),
         globals=datatypes.FragmentsGlobals(
-            target_positions=get_tensor_spec(
-                graph.globals.target_positions, is_global=True
-            ),
+            stop=get_tensor_spec(graph.globals.stop, is_global=True),
             target_position_mask=get_tensor_spec(
                 graph.globals.target_position_mask, is_global=True
             ),
             target_species=get_tensor_spec(
                 graph.globals.target_species, is_global=True
             ),
-            stop=get_tensor_spec(graph.globals.stop, is_global=True),
+            target_positions=get_tensor_spec(
+                graph.globals.target_positions, is_global=True
+            ),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -520,6 +520,7 @@ def _specs_from_graphs_tuple(
         n_node=get_tensor_spec(graph.n_node),
         n_edge=get_tensor_spec(graph.n_edge),
     )
+    return spec
 
 
 def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
@@ -534,12 +535,12 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         raise ValueError(list(graph.keys()))
 
     stop = graph["stop"]
-    neighbor_probs = graph["neighbor_probs"]
     receivers = graph["receivers"]
     senders = graph["senders"]
     n_node = graph["n_node"]
     n_edge = graph["n_edge"]
     edges = tf.ones((tf.shape(senders)[0], 1))
+    focus_mask = graph["focus_mask"]
     target_positions = graph["target_positions"]
     target_position_mask = graph["target_position_mask"]
     target_species = graph["target_species"]
@@ -549,16 +550,16 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             positions=positions,
             species=species,
             focus_and_target_species_probs=focus_and_target_species_probs,
-            neighbor_probs=neighbor_probs,
+            focus_mask=focus_mask,
         ),
         edges=edges,
         receivers=receivers,
         senders=senders,
         globals=datatypes.FragmentsGlobals(
+            stop=stop,
             target_positions=target_positions,
             target_position_mask=target_position_mask,
             target_species=target_species,
-            stop=stop,
         ),
         n_node=n_node,
         n_edge=n_edge,

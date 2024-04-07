@@ -32,8 +32,7 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
     if dataset == "tmqm":
         if hostname == "potato.mit.edu":
             if max_targets_per_graph:
-                return f"/data/NFS/potato/songk/tmqm_ni_fragments_single/{fragment_logic}/max_targets_{max_targets_per_graph}"
-                #return f"/data/NFS/potato/songk/tmqmg_fragments_heavy_first/{fragment_logic}/max_targets_{max_targets_per_graph}"
+                return f"/data/NFS/potato/songk/tmqm_fragments_multifocus/{fragment_logic}/max_targets_{max_targets_per_graph}"
             return f"/data/NFS/potato/songk/tmqm_fragments_coords/{fragment_logic}"
         return f"/pool001/songk/tmqmg_fragments_heavy_first/{fragment_logic}/max_targets_{max_targets_per_graph}"
     return None

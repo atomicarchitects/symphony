@@ -128,46 +128,6 @@ def earthmover_distance_for_radii(
     return out.reg_ot_cost
 
 
-def coordination_loss(graphs, pred_logits) -> jnp.ndarray:
-    num_graphs = graphs.n_node.shape[0]
-    num_nodes = graphs.nodes.positions.shape[0]
-    n_node = graphs.n_node
-
-    target_coordination_dist = graphs.nodes.neighbor_probs
-
-    # # Subtract the maximum value for numerical stability.
-    # # This doesn't affect the forward pass, nor the backward pass.
-    segment_ids = models.get_segment_ids(n_node, num_nodes)
-    logits_max = jraph.segment_max(
-        pred_logits, segment_ids, num_segments=num_graphs
-    ).max(axis=-1)
-    logits_max = jax.lax.stop_gradient(logits_max)
-    pred_logits -= logits_max[segment_ids, None]
-
-    # Compute the cross-entropy loss.
-    loss_coordination = (-target_coordination_dist * pred_logits).sum(axis=-1)
-    # loss_coordination = jraph.segment_sum(
-    #     loss_coordination, segment_ids, num_graphs
-    # )
-    loss_coordination += models.safe_log(jnp.exp(pred_logits).sum(axis=-1))
-    #jax.debug.print("intermediate coordination loss: {loss_coordination}", loss_coordination=loss_coordination)
-
-    # Compute the lower bound on cross-entropy loss as the entropy of the target distribution.
-    lower_bounds = -(target_coordination_dist * models.safe_log(target_coordination_dist)).sum(
-        axis=-1
-    )
-    # lower_bounds = jraph.segment_sum(lower_bounds, segment_ids, num_graphs)
-    lower_bounds = jax.lax.stop_gradient(lower_bounds)
-
-    # Subtract out self-entropy (lower bound) to get the KL divergence.
-    loss_coordination -= lower_bounds
-    loss_coordination = jraph.segment_sum(loss_coordination, segment_ids, num_graphs)
-    assert loss_coordination.shape == (num_graphs,)
-    #jax.debug.print("coordination loss: {loss_coordination}", loss_coordination=loss_coordination)
-
-    return loss_coordination
-
-
 @jax.profiler.annotate_function
 def generation_loss(
     preds: datatypes.Predictions,
@@ -185,15 +145,17 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
-    radial_bins = preds.globals.radial_bins[0]  # Assume all radii are the same.
+    radial_bins = preds.nodes.radial_bins[0]  # Assume all radii are the same.
     num_radii = radial_bins.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
+    num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
     n_node = graphs.n_node
-    max_targets_per_graph = graphs.globals.target_positions.shape[1]
+    max_targets_per_graph = graphs.nodes.target_positions.shape[1]
     segment_ids = models.get_segment_ids(n_node, num_nodes)
+    segment_ids_multifocus = jnp.repeat(jnp.arange(num_graphs), num_nodes_for_multifocus, axis=0)
     if target_position_lmax is None:
-        lmax = preds.globals.log_position_coeffs.irreps.lmax
+        lmax = preds.nodes.log_position_coeffs.irreps.lmax
     else:
         lmax = target_position_lmax
 
@@ -204,8 +166,8 @@ def generation_loss(
         stop_logits = preds.globals.stop_logits
         stop_targets = graphs.globals.stop.astype(jnp.float32)
 
-        assert species_logits.shape == (num_nodes, species_logits.shape[-1])
-        assert species_targets.shape == (num_nodes, species_logits.shape[-1])
+        assert species_logits.shape == (num_nodes_for_multifocus, species_logits.shape[-1])
+        assert species_targets.shape == (num_nodes_for_multifocus, species_logits.shape[-1])
         assert stop_logits.shape == (num_graphs,)
         assert stop_targets.shape == (num_graphs,)
 
@@ -249,15 +211,15 @@ def generation_loss(
     def position_loss_with_kl_divergence() -> jnp.ndarray:
         """Computes the loss over position probabilities using the KL divergence."""
 
-        position_logits = preds.globals.position_logits
+        position_logits = preds.nodes.position_logits
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
             position_logits.quadrature,
         )
 
-        target_positions = graphs.globals.target_positions
-        target_position_mask = graphs.globals.target_position_mask
+        target_positions = graphs.nodes.target_positions
+        target_position_mask = graphs.nodes.target_position_mask
         true_radial_weights = jax.vmap(
             jax.vmap(
                 lambda pos: target_position_to_radius_weights(
@@ -274,12 +236,12 @@ def generation_loss(
         )(target_positions)
 
         assert true_radial_weights.shape == (
-            num_graphs,
+            num_nodes_for_multifocus,
             max_targets_per_graph,
             num_radii,
         )
         assert log_true_angular_coeffs.shape == (
-            num_graphs,
+            num_nodes_for_multifocus,
             max_targets_per_graph,
             log_true_angular_coeffs.irreps.dim,
         ), log_true_angular_coeffs.shape
@@ -295,36 +257,36 @@ def generation_loss(
         )
 
         assert true_dist.shape == (
-            num_graphs,
+            num_nodes_for_multifocus,
             max_targets_per_graph,
             num_radii,
             res_beta,
             res_alpha,
         )
-        assert target_position_mask.shape == (num_graphs, max_targets_per_graph)
+        assert target_position_mask.shape == (num_nodes_for_multifocus, max_targets_per_graph)
 
         target_position_mask = target_position_mask[:, :, None, None, None]
         num_valid_targets = jnp.sum(target_position_mask, axis=1, keepdims=False)
         num_valid_targets = jnp.maximum(num_valid_targets, 1.0)
         mean_true_dist = jnp.sum(true_dist.grid_values * target_position_mask, axis=1)
         mean_true_dist = mean_true_dist / num_valid_targets
-        assert mean_true_dist.shape == (num_graphs, num_radii, res_beta, res_alpha), (
+        assert mean_true_dist.shape == (num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,
-            (num_graphs, num_radii, res_beta, res_alpha),
+            (num_nodes_for_multifocus, num_radii, res_beta, res_alpha),
         )
 
         mean_true_dist = e3nn.SphericalSignal(
             grid_values=mean_true_dist, quadrature=true_dist.quadrature
         )
-        assert mean_true_dist.shape == (num_graphs, num_radii, res_beta, res_alpha), (
+        assert mean_true_dist.shape == (num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,
-            (num_graphs, num_radii, res_beta, res_alpha),
+            (num_nodes_for_multifocus, num_radii, res_beta, res_alpha),
         )
 
         log_predicted_dist = position_logits
 
         assert log_predicted_dist.grid_values.shape == (
-            num_graphs,
+            num_nodes_for_multifocus,
             num_radii,
             res_beta,
             res_alpha,
@@ -334,6 +296,11 @@ def generation_loss(
             mean_true_dist, log_predicted_dist
         )
 
+        ## TODO ??
+        loss_position = jraph.segment_sum(
+            loss_position * graphs.globals.target_position_mask, segment_ids_multifocus, num_graphs
+        )
+
         assert loss_position.shape == (num_graphs,)
 
         return loss_position
@@ -341,9 +308,9 @@ def generation_loss(
     def position_loss_with_l2() -> jnp.ndarray:
         """Computes the loss over position probabilities using the L2 loss on the logits."""
 
-        log_position_coeffs = preds.globals.log_position_coeffs
-        target_positions = graphs.globals.target_positions
-        target_position_mask = graphs.globals.target_position_mask
+        log_position_coeffs = preds.nodes.log_position_coeffs
+        target_positions = graphs.nodes.target_positions
+        target_position_mask = graphs.nodes.target_position_mask
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -399,15 +366,15 @@ def generation_loss(
     def factorized_position_loss(position_loss_type: str) -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
 
-        position_logits = preds.globals.position_logits
+        position_logits = preds.nodes.position_logits
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
             position_logits.quadrature,
         )
 
-        target_positions = graphs.globals.target_positions
-        target_position_mask = graphs.globals.target_position_mask
+        target_positions = graphs.nodes.target_positions
+        target_position_mask = graphs.nodes.target_position_mask
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -468,9 +435,9 @@ def generation_loss(
             num_radii,
         ), mean_radial_weights.shape
 
-        predicted_radial_logits = preds.globals.radial_logits
+        predicted_radial_logits = preds.nodes.radial_logits
         if predicted_radial_logits is None:
-            position_logits = preds.globals.position_logits
+            position_logits = preds.nodes.position_logits
             position_probs = jax.vmap(models.position_logits_to_position_distribution)(
                 position_logits
             )
@@ -495,7 +462,7 @@ def generation_loss(
             )
         loss_radial = radial_loss_scaling_factor * loss_radial
 
-        predicted_angular_logits = preds.globals.angular_logits
+        predicted_angular_logits = preds.nodes.angular_logits
         if predicted_angular_logits is None:
             position_probs = jax.vmap(models.position_logits_to_position_distribution)(
                 position_logits

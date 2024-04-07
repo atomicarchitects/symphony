@@ -52,10 +52,6 @@ class Predictor(hk.Module):
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
         )
 
-        # Get the embeddings of the focus nodes.
-        # These are the first nodes in each graph during training.
-        focus_node_indices = utils.get_first_node_indices(graphs)
-
         # Get the coefficients for the target positions.
         (
             log_position_coeffs,
@@ -64,7 +60,6 @@ class Predictor(hk.Module):
             radial_logits,
         ) = self.target_position_predictor(
             graphs,
-            focus_node_indices,
             graphs.globals.target_species,
             inverse_temperature=1.0,
         )
@@ -88,13 +83,13 @@ class Predictor(hk.Module):
             num_species,
         )
         assert log_position_coeffs.shape == (
-            num_graphs,
+            num_nodes,
             self.target_position_predictor.num_channels,
             self.target_position_predictor.num_radii,
             log_position_coeffs.shape[-1],
         )
         assert position_logits.shape == (
-            num_graphs,
+            num_nodes,
             self.target_position_predictor.num_radii,
             self.target_position_predictor.res_beta,
             self.target_position_predictor.res_alpha,
@@ -110,13 +105,7 @@ class Predictor(hk.Module):
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-            ),
-            edges=None,
-            globals=datatypes.GlobalPredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
-                stop=None,
-                focus_indices=focus_node_indices,
+                focus_mask=None,
                 target_species=None,
                 log_position_coeffs=log_position_coeffs,
                 position_logits=position_logits,
@@ -125,6 +114,12 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

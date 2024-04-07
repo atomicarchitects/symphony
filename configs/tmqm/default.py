@@ -12,12 +12,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    # config.train_molecules = (0, 48000)
-    # config.val_molecules = (48000, 54000)
-    # config.test_molecules = (54000, 60000)
-    config.train_molecules = (0, 8)
-    config.val_molecules = (8, 9)
-    config.test_molecules = (9, 10)
+    config.train_molecules = (0, 48000)
+    config.val_molecules = (48000, 54000)
+    config.test_molecules = (54000, 60000)
     config.shuffle_datasets = True
     config.max_targets_per_graph = 4
 
@@ -48,7 +45,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_graphs = 16
     config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
     config.max_n_edges = 500 * config.get_ref("max_n_graphs")
-    # config.max_n_edges = 400 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.radius_rbf_variance = 1e-5
     config.loss_kwargs.target_position_inverse_temperature = 20.0

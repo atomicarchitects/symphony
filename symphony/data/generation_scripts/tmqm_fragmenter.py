@@ -21,7 +21,6 @@ FLAGS = flags.FLAGS
 
 def generate_all_fragments(
     molecules: List[ase.Atoms],
-    target_neighbors: List[List[int]],
     seed: int,
     start: int,
     end: int,
@@ -32,6 +31,7 @@ def generate_all_fragments(
     nn_tolerance: float,
     nn_cutoff: float,
     max_radius: float,
+    num_nodes_for_multifocus: int,
     max_targets_per_graph: int,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
@@ -45,7 +45,6 @@ def generate_all_fragments(
 
     if start is not None and end is not None:
         molecules = molecules[start:end]
-        target_neighbors = target_neighbors[start:end]
 
     atomic_numbers = np.arange(1, 81)
     molecules_as_graphs = [
@@ -62,26 +61,28 @@ def generate_all_fragments(
         "focus_and_target_species_probs": tf.TensorSpec(
             shape=(None, len(atomic_numbers)), dtype=tf.float32
         ),
-        "neighbor_probs": tf.TensorSpec(shape=(None, 2), dtype=tf.float32),
+        "focus_mask": tf.TensorSpec(
+            shape=(None, ), dtype=tf.float32
+        ),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
         "target_positions": tf.TensorSpec(
-            shape=(1, max_targets_per_graph, 3), dtype=tf.float32
+            shape=(1, num_nodes_for_multifocus, max_targets_per_graph, 3), dtype=tf.float32
         ),
         "target_position_mask": tf.TensorSpec(
-            shape=(1, max_targets_per_graph), dtype=tf.float32
+            shape=(1, num_nodes_for_multifocus, max_targets_per_graph), dtype=tf.float32
         ),
-        "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
+        "target_species": tf.TensorSpec(shape=(1, num_nodes_for_multifocus,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
     }
 
     def generator():
-        for graph, neighbors in tqdm.tqdm(zip(molecules_as_graphs, target_neighbors)):
+        for graph in tqdm.tqdm(molecules_as_graphs,):
             assert graph.senders.shape == graph.receivers.shape
             # frags = fragments.generate_fragments_coord(
             frags = fragments.generate_fragments(
@@ -91,10 +92,10 @@ def generate_all_fragments(
                 nn_tolerance,
                 max_radius,
                 mode,
+                num_nodes_for_multifocus,
                 heavy_first,
                 beta_com,
                 max_targets_per_graph,
-                neighbors
             )
             frags = list(frags)
 
@@ -118,16 +119,13 @@ def generate_all_fragments(
                 continue
 
             for frag in frags:
-                yield {
+                frag_to_yield = {
                     "positions": frag.nodes.positions.astype(np.float32),
                     "species": frag.nodes.species.astype(np.int32),
                     "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
                         np.float32
                     ),
-                    "neighbor_probs": frag.nodes.neighbor_probs.astype(np.float32),
-                    "senders": frag.senders.astype(np.int32),
-                    "receivers": frag.receivers.astype(np.int32),
-                    "stop": frag.globals.stop.astype(np.bool_),
+                    "focus_mask": frag.nodes.focus_mask.astype(np.float32),
                     "target_positions": frag.globals.target_positions.astype(
                         np.float32
                     ),
@@ -135,9 +133,14 @@ def generate_all_fragments(
                         np.float32
                     ),
                     "target_species": frag.globals.target_species.astype(np.int32),
+                    "senders": frag.senders.astype(np.int32),
+                    "receivers": frag.receivers.astype(np.int32),
+                    "stop": frag.globals.stop.astype(np.bool_),
                     "n_node": frag.n_node.astype(np.int32),
                     "n_edge": frag.n_edge.astype(np.int32),
                 }
+                print([x.shape for x in frag_to_yield.values()])
+                yield frag_to_yield
 
     dataset = tf.data.Dataset.from_generator(generator, output_signature=signature)
 
@@ -159,10 +162,7 @@ def main(unused_argv) -> None:
     mode = FLAGS.mode
 
     # Create a list of arguments to pass to generate_all_fragments
-    # molecules = tmqm.load_tmqm(
-    #     "tmqm_data",
-    # )
-    molecules, target_neighbors = tmqm.load_tmqmg("tmqmg_data")
+    molecules = tmqm.load_tmqm("tmqm_data")
     start_index = FLAGS.start_index
     end_index = FLAGS.end_index if FLAGS.end_index != -1 else len(molecules)
     chunk_size = FLAGS.chunk
@@ -170,7 +170,6 @@ def main(unused_argv) -> None:
     args_list = [
         (
             molecules,
-            target_neighbors,
             seed,
             start,
             start + chunk_size,
@@ -184,6 +183,7 @@ def main(unused_argv) -> None:
             FLAGS.nn_tolerance,
             FLAGS.nn_cutoff,
             FLAGS.max_radius,
+            FLAGS.num_nodes_for_multifocus,
             FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
@@ -216,6 +216,9 @@ if __name__ == "__main__":
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.6, "Max radius (in Angstrom).")
+    flags.DEFINE_integer(
+        "num_nodes_for_multifocus", 1, "Max num of focus atoms chosen."
+    )
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )
