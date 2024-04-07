@@ -56,20 +56,36 @@ def plot_molecules_in_wandb(
 class GenerateMoleculesHook:
     workdir: str
     writer: metric_writers.SummaryWriter
+    eval_apply_fn: Callable
     focus_and_atom_type_inverse_temperature: float
     position_inverse_temperature: float
+    res_alpha: int
+    res_beta: int
+    nn_cutoff: float
     num_seeds: int
     num_seeds_per_chunk: int
     init_molecules: str
     max_num_atoms: int
 
-    def __call__(self, step: int) -> None:
-        molecules_ase, molecules_outputdir = generate_molecules.generate_molecules(
+    def __call__(self, state: train_state.TrainState) -> None:
+        molecules_outputdir = os.path.join(
             self.workdir,
-            outputdir=self.workdir,
+            "molecules",
+            f"fait={self.focus_and_atom_type_inverse_temperature}",
+            f"pit={self.position_inverse_temperature}",
+            f"res_alpha={self.res_alpha}",
+            f"res_beta={self.res_beta}",
+            f"nn_cutoff={self.nn_cutoff}",
+            f"step={state.get_step()}",
+        )
+
+        molecules_ase, _ = generate_molecules.generate_molecules(
+            apply_fn=self.eval_apply_fn,
+            params=flax.jax_utils.unreplicate(state.params),
+            molecules_outputdir=molecules_outputdir,
+            nn_cutoff=self.nn_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=self.position_inverse_temperature,
-            step=step,
             num_seeds=self.num_seeds,
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,
@@ -92,7 +108,7 @@ class GenerateMoleculesHook:
 
         # Write metrics out.
         self.writer.write_scalars(
-            step,
+            state.get_step(),
             {
                 "validity": validity,
                 "uniqueness": uniqueness,
@@ -101,7 +117,7 @@ class GenerateMoleculesHook:
         self.writer.flush()
 
         # Plot molecules.
-        plot_molecules_in_wandb(molecules, step)
+        plot_molecules_in_wandb(molecules, state.get_step())
 
 
 @dataclass

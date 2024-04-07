@@ -81,6 +81,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation = ml_collections.ConfigDict()
     config.generation.focus_and_atom_type_inverse_temperature = 1.0
     config.generation.position_inverse_temperature = 1.0
+    config.generation.res_beta = config.target_position_predictor.get_ref("res_beta")
+    config.generation.res_alpha = config.target_position_predictor.get_ref("res_alpha")
+    config.generation.nn_cutoff = config.get_ref("nn_cutoff")
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"

@@ -59,7 +59,7 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 def name_from_workdir(workdir: str) -> str:
     """Returns the full name of the model from the workdir."""
     if "workdirs" not in workdir:
-        return workdir
+        return ""
     index = workdir.find("workdirs") + len("workdirs/")
     return workdir[index:]
 
@@ -91,7 +91,6 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
 
 def load_model_at_step(
     workdir: str, step: str, run_in_evaluation_mode: bool,
-    res_alpha: Optional[float] = None, res_beta: Optional[float] = None
 ) -> Tuple[hk.Transformed, optax.Params, ml_collections.ConfigDict]:
     """Loads the model at a given step.
 
@@ -101,10 +100,6 @@ def load_model_at_step(
     with open(params_file, "rb") as f:
         params = pickle.load(f)
 
-    # # Remove the batch dimension, if it exists.
-    # if "attempt6" in workdir and int(step) < 5000000:
-    #     params = jax.tree_map(lambda x: x[0], params)
-
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
     assert config is not None
@@ -112,17 +107,6 @@ def load_model_at_step(
     config.root_dir = root_dirs.get_root_dir(
         config.dataset, config.get("fragment_logic", "nn")
     )
-
-    # Update config.
-    if res_alpha is not None:
-        logging.info(f"Setting res_alpha to {res_alpha}")
-        config.target_position_predictor.res_alpha = res_alpha
-
-    if res_beta is not None:
-        logging.info(f"Setting res_beta to {res_beta}")
-        config.target_position_predictor.res_beta = res_beta
-
-
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_map(jnp.asarray, params)
     return model, params, config

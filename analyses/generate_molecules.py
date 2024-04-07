@@ -122,26 +122,32 @@ def generate_for_one_seed(
 
 
 def generate_molecules(
-    workdir: str,
-    outputdir: str,
+    apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    params: optax.Params,
+    molecules_outputdir: str,
+    nn_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
-    step: str,
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
-    visualize: bool,
-    steps_for_weight_averaging: Optional[Sequence[int]] = None,
-    res_alpha: Optional[int] = None,
-    res_beta: Optional[int] = None,
+    visualize: bool = False,
+    visualizations_dir: Optional[str] = None,
     verbose: bool = False,
 ):
     """Generates molecules from a trained model at the given workdir."""
+
     if verbose:
         logging_fn = logging.info
     else:
         logging_fn = lambda *args: None
+
+    # Create output directories.
+    os.makedirs(molecules_outputdir, exist_ok=True)
+    if visualize:
+        assert visualizations_dir is not None
+        os.makedirs(visualizations_dir, exist_ok=True)
 
     # Check that we can divide the seeds into chunks properly.
     if num_seeds % num_seeds_per_chunk != 0:
@@ -163,55 +169,13 @@ def generate_molecules(
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
 
-    # Load model.
-    name = analysis.name_from_workdir(workdir)
-    if steps_for_weight_averaging is not None:
-        logging_fn("Loading model averaged from steps %s", steps_for_weight_averaging)
-        model, params, config = analysis.load_weighted_average_model_at_steps(
-            workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
-        )
-    else:
-        model, params, config = analysis.load_model_at_step(
-            workdir,
-            step,
-            run_in_evaluation_mode=True,
-            res_alpha=res_alpha,
-            res_beta=res_beta,
-        )
-    config = config.unlock()
-    logging_fn(config.to_dict())
-
-    # Create output directories.
-    molecules_outputdir = os.path.join(
-        outputdir,
-        name,
-        f"fait={focus_and_atom_type_inverse_temperature}",
-        f"pit={position_inverse_temperature}",
-        f"step={step}",
-    )
-    if res_alpha is not None:
-        molecules_outputdir += f"_res_alpha={res_alpha}"
-    if res_beta is not None:
-        molecules_outputdir += f"_res_beta={res_beta}"
-    molecules_outputdir += "/molecules"
-    os.makedirs(molecules_outputdir, exist_ok=True)
-
     if visualize:
-        visualizations_dir = os.path.join(
-            outputdir,
-            name,
-            f"fait={focus_and_atom_type_inverse_temperature}",
-            f"pit={position_inverse_temperature}",
-            f"step={step}",
-            "visualizations",
-            "generated_molecules",
-        )
-        os.makedirs(visualizations_dir, exist_ok=True)
+        pass
 
     # Prepare initial fragments.
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
+            init_molecule, models.ATOMIC_NUMBERS, nn_cutoff
         )
         for init_molecule in init_molecules
     ]
@@ -242,7 +206,7 @@ def generate_molecules(
             init_fragments, rngs = init_fragments_and_rngs
             assert len(init_fragments.n_node) == len(rngs)
 
-            apply_fn = lambda padded_fragment, rng: model.apply(
+            apply_fn_wrapped = lambda padded_fragment, rng: apply_fn(
                 params,
                 rng,
                 padded_fragment,
@@ -250,10 +214,10 @@ def generate_molecules(
                 position_inverse_temperature,
             )
             generate_for_one_seed_fn = lambda rng, init_fragment: generate_for_one_seed(
-                apply_fn,
+                apply_fn_wrapped,
                 init_fragment,
                 max_num_atoms,
-                config.nn_cutoff,
+                nn_cutoff,
                 rng,
                 return_intermediates=visualize,
             )
@@ -382,38 +346,112 @@ def generate_molecules(
     return molecule_list, molecules_outputdir
 
 
+
+def generate_molecules_from_workdir(
+    workdir: str,
+    outputdir: str,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
+    step: Union[str, int],
+    steps_for_weight_averaging: Optional[Sequence[int]],
+    num_seeds: int,
+    num_seeds_per_chunk: int,
+    init_molecules: Sequence[Union[str, ase.Atoms]],
+    max_num_atoms: int,
+    visualize: bool = False,
+    res_alpha: Optional[int] = None,
+    res_beta: Optional[int] = None,
+    verbose: bool = False,    
+):
+    """Generates molecules from a trained model at the given workdir."""
+
+    # Load model.
+    workdir = os.path.abspath(workdir)
+    if steps_for_weight_averaging is not None:
+        logging.info("Loading model averaged from steps %s", steps_for_weight_averaging)
+        model, params, config = analysis.load_weighted_average_model_at_steps(
+            workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
+        )
+    else:
+        model, params, config = analysis.load_model_at_step(
+            workdir,
+            step,
+            run_in_evaluation_mode=True,
+        )
+
+    # Update resolution of sampling grid.
+    config = config.unlock()
+    if res_alpha is not None:
+        logging.info(f"Setting res_alpha to {res_alpha}")
+        config.target_position_predictor.res_alpha = res_alpha
+
+    if res_beta is not None:
+        logging.info(f"Setting res_beta to {res_beta}")
+        config.target_position_predictor.res_beta = res_beta
+    logging.info(config.to_dict())
+
+    # Create output directories.
+    name = analysis.name_from_workdir(workdir)
+    molecules_outputdir = os.path.join(
+        outputdir,
+        name,
+        f"fait={focus_and_atom_type_inverse_temperature}",
+        f"pit={position_inverse_temperature}",
+        f"step={step}",
+    )
+    molecules_outputdir += f"_res_alpha={config.target_position_predictor.res_alpha}"
+    molecules_outputdir += f"_res_beta={config.target_position_predictor.res_beta}"
+    molecules_outputdir += "/molecules"
+
+    if visualize:
+        visualizations_dir = os.path.join(
+            outputdir,
+            name,
+            f"fait={focus_and_atom_type_inverse_temperature}",
+            f"pit={position_inverse_temperature}",
+            f"step={step}",
+            "visualizations",
+            "generated_molecules",
+        )
+
+    return generate_molecules(
+            apply_fn=model.apply,
+            params=params,
+            molecules_outputdir=molecules_outputdir,
+            nn_cutoff=config.nn_cutoff,
+            focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
+            position_inverse_temperature=position_inverse_temperature,
+            num_seeds=num_seeds,
+            num_seeds_per_chunk=num_seeds_per_chunk,
+            init_molecules=init_molecules,
+            max_num_atoms=max_num_atoms,
+            visualize=visualize,
+            visualizations_dir=visualizations_dir,
+            verbose=verbose,
+        )
+
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
-    workdir = os.path.abspath(FLAGS.workdir)
-    outputdir = FLAGS.outputdir
-    focus_and_atom_type_inverse_temperature = (
-        FLAGS.focus_and_atom_type_inverse_temperature
+    generate_molecules_from_workdir(
+        FLAGS.workdir,
+        FLAGS.outputdir,
+        FLAGS.focus_and_atom_type_inverse_temperature,
+        FLAGS.position_inverse_temperature,
+        FLAGS.step,
+        FLAGS.steps_for_weight_averaging,
+        FLAGS.num_seeds,
+        FLAGS.num_seeds_per_chunk,
+        FLAGS.init,
+        FLAGS.max_num_atoms,
+        FLAGS.visualize,
+        FLAGS.res_alpha,
+        FLAGS.res_beta,
+        verbose=True,
     )
-    position_inverse_temperature = FLAGS.position_inverse_temperature
-    step = FLAGS.step
-    num_seeds = FLAGS.num_seeds
-    num_seeds_per_chunk = FLAGS.num_seeds_per_chunk
-    init_molecule = FLAGS.init
-    max_num_atoms = FLAGS.max_num_atoms
-    visualize = FLAGS.visualize
-    steps_for_weight_averaging = FLAGS.steps_for_weight_averaging
 
-    generate_molecules(
-        workdir,
-        outputdir,
-        focus_and_atom_type_inverse_temperature,
-        position_inverse_temperature,
-        step,
-        num_seeds,
-        num_seeds_per_chunk,
-        init_molecule,
-        max_num_atoms,
-        visualize,
-        steps_for_weight_averaging,
-        res_alpha=FLAGS.res_alpha,
-        res_beta=FLAGS.res_beta,
-    )
+
+
 
 
 if __name__ == "__main__":

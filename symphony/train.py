@@ -277,8 +277,6 @@ def train_and_evaluate(
     # We only support single-host training.
     assert jax.process_count() == 1
 
-    # Check the config file.
-
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
     writer.write_hparams(config.to_dict())
@@ -319,7 +317,7 @@ def train_and_evaluate(
     )
 
     # Create a corresponding evaluation state.
-    eval_net = models.create_model(config, run_in_evaluation_mode=False)
+    eval_net = models.create_model(config, run_in_evaluation_mode=True)
 
     # Set up checkpointing of the model.
     # We will record the best model seen during training.
@@ -356,8 +354,12 @@ def train_and_evaluate(
     generate_molecules_hook = hooks.GenerateMoleculesHook(
         workdir=workdir,
         writer=writer,
+        eval_apply_fn=jax.jit(eval_net.apply),
         focus_and_atom_type_inverse_temperature=config.generation.focus_and_atom_type_inverse_temperature,
         position_inverse_temperature=config.generation.position_inverse_temperature,
+        res_alpha=config.generation.res_alpha,
+        res_beta=config.generation.res_beta,
+        nn_cutoff=config.generation.nn_cutoff,
         num_seeds=config.generation.num_seeds,
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,
@@ -380,7 +382,7 @@ def train_and_evaluate(
 
         # Generate molecules, if required.
         if step % config.generate_every_steps == 0 or first_or_last_step:
-            generate_molecules_hook(step)
+            generate_molecules_hook(state)
 
         # Get a batch of graphs.
         try:
