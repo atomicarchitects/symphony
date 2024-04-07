@@ -26,6 +26,7 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 
 def plot_molecules_in_wandb(
     molecules: Sequence[Chem.Mol],
+    num_to_plot: int = 16,
     **plot_kwargs,
 ):
     """Plots molecules in the Weights & Biases UI."""
@@ -34,9 +35,11 @@ def plot_molecules_in_wandb(
         logging.info("No Weights & Biases run found. Skipping plotting of molecules.")
         return
 
-    view = graphics.plot_molecules_with_py3Dmol(molecules, **plot_kwargs)
+    # Limit the number of molecules to plot.
+    molecules = molecules[:num_to_plot]
 
-    # Save the view to a temporary HTML file.
+    # Plot and save the view to a temporary HTML file.
+    view = graphics.plot_molecules_with_py3Dmol(molecules, **plot_kwargs)
     temp_html_path = os.path.join(tempfile.gettempdir(), f"{wandb.run.name}.html")
     view.write_html(temp_html_path)
 
