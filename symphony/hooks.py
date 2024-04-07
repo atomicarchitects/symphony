@@ -26,6 +26,7 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 
 def plot_molecules_in_wandb(
     molecules: Sequence[Chem.Mol],
+    step: int,
     num_to_plot: int = 25,
     **plot_kwargs,
 ):
@@ -44,7 +45,7 @@ def plot_molecules_in_wandb(
     view.write_html(temp_html_path)
 
     # Log the HTML file to Weights & Biases.
-    wandb.run.log({"samples": wandb.Html(open(temp_html_path))})
+    wandb.run.log({"samples": wandb.Html(open(temp_html_path))}, step=step)
 
     # Delete the temporary HTML file, after a short delay.
     time.sleep(1)
@@ -100,7 +101,7 @@ class GenerateMoleculesHook:
         self.writer.flush()
 
         # Plot molecules.
-        plot_molecules_in_wandb(molecules)
+        plot_molecules_in_wandb(molecules, step)
 
 
 @dataclass
