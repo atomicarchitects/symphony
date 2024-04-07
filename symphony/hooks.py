@@ -45,7 +45,7 @@ def plot_molecules_in_wandb(
     view.write_html(temp_html_path)
 
     # Log the HTML file to Weights & Biases.
-    wandb.run.log({"samples": wandb.Html(open(temp_html_path))}, step=step)
+    wandb.run.log({"samples": wandb.Html(open(temp_html_path)), "global_step": step})
 
     # Delete the temporary HTML file, after a short delay.
     time.sleep(1)
