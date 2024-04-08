@@ -149,7 +149,7 @@ def generation_loss(
     num_radii = radial_bins.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
-    num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
+    num_nodes_for_multifocus = graphs.nodes.target_positions.shape[1]
     n_node = graphs.n_node
     max_targets_per_graph = graphs.nodes.target_positions.shape[1]
     segment_ids = models.get_segment_ids(n_node, num_nodes)
@@ -166,8 +166,10 @@ def generation_loss(
         stop_logits = preds.globals.stop_logits
         stop_targets = graphs.globals.stop.astype(jnp.float32)
 
-        assert species_logits.shape == (num_nodes_for_multifocus, species_logits.shape[-1])
-        assert species_targets.shape == (num_nodes_for_multifocus, species_logits.shape[-1])
+        # print(f"shape: {species_logits.shape}")
+        # print(f"shape: {species_targets.shape}")
+        assert species_logits.shape == (num_nodes, species_logits.shape[-1])
+        assert species_targets.shape == (num_nodes, species_logits.shape[-1])
         assert stop_logits.shape == (num_graphs,)
         assert stop_targets.shape == (num_graphs,)
 
@@ -236,12 +238,12 @@ def generation_loss(
         )(target_positions)
 
         assert true_radial_weights.shape == (
-            num_nodes_for_multifocus,
+            num_nodes,
             max_targets_per_graph,
             num_radii,
         )
         assert log_true_angular_coeffs.shape == (
-            num_nodes_for_multifocus,
+            num_nodes,
             max_targets_per_graph,
             log_true_angular_coeffs.irreps.dim,
         ), log_true_angular_coeffs.shape
@@ -257,36 +259,36 @@ def generation_loss(
         )
 
         assert true_dist.shape == (
-            num_nodes_for_multifocus,
+            num_nodes,
             max_targets_per_graph,
             num_radii,
             res_beta,
             res_alpha,
         )
-        assert target_position_mask.shape == (num_nodes_for_multifocus, max_targets_per_graph)
+        assert target_position_mask.shape == (num_nodes, max_targets_per_graph)
 
         target_position_mask = target_position_mask[:, :, None, None, None]
         num_valid_targets = jnp.sum(target_position_mask, axis=1, keepdims=False)
         num_valid_targets = jnp.maximum(num_valid_targets, 1.0)
         mean_true_dist = jnp.sum(true_dist.grid_values * target_position_mask, axis=1)
         mean_true_dist = mean_true_dist / num_valid_targets
-        assert mean_true_dist.shape == (num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
+        assert mean_true_dist.shape == (num_nodes, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,
-            (num_nodes_for_multifocus, num_radii, res_beta, res_alpha),
+            (num_nodes, num_radii, res_beta, res_alpha),
         )
 
         mean_true_dist = e3nn.SphericalSignal(
             grid_values=mean_true_dist, quadrature=true_dist.quadrature
         )
-        assert mean_true_dist.shape == (num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
+        assert mean_true_dist.shape == (num_nodes, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,
-            (num_nodes_for_multifocus, num_radii, res_beta, res_alpha),
+            (num_nodes, num_radii, res_beta, res_alpha),
         )
 
         log_predicted_dist = position_logits
 
         assert log_predicted_dist.grid_values.shape == (
-            num_nodes_for_multifocus,
+            num_nodes,
             num_radii,
             res_beta,
             res_alpha,
@@ -296,12 +298,11 @@ def generation_loss(
             mean_true_dist, log_predicted_dist
         )
 
-        ## TODO ??
         loss_position = jraph.segment_sum(
-            loss_position * graphs.globals.target_position_mask, segment_ids_multifocus, num_graphs
-        )
+            loss_position.reshape(-1, 1) * graphs.nodes.target_position_mask, segment_ids, num_graphs
+        ).sum(axis=-1)
 
-        assert loss_position.shape == (num_graphs,)
+        assert loss_position.shape == (num_graphs,), print(loss_position.shape)
 
         return loss_position
 

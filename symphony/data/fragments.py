@@ -189,17 +189,17 @@ def _make_first_fragment(
     target_positions = jax.random.permutation(k, target_positions)[
         :max_targets_per_graph
     ]
-    target_positions_reshaped = np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3))
+    target_positions_reshaped = np.zeros((n_nodes, max_targets_per_graph, 3))
     target_positions_reshaped[0, : len(target_positions)] = target_positions
-    target_mask = np.zeros((num_nodes_for_multifocus, max_targets_per_graph,))
-    target_mask[0, : len(target_positions)] = 1
+    target_mask = np.zeros((n_nodes, max_targets_per_graph,))
+    target_mask[first_node, : len(target_positions)] = 1
 
     sample = _into_fragment(
         graph,
         visited=np.array([first_node]),
         focus_mask=(np.arange(n_nodes) == first_node).astype(int),
         target_species_probability=species_probability,
-        target_species=(np.arange(num_nodes_for_multifocus) == first_node).astype(int) * target_species,
+        target_species=(np.arange(n_nodes) == first_node).astype(int) * target_species,
         target_dist=target_positions_reshaped,
         target_mask=target_mask,
         stop=False,
@@ -286,24 +286,23 @@ def _make_middle_fragment(
             best_num_targets = num_unique_targets
             best_target_ndxs = target_ndxs
 
-    target_ndxs = best_target_ndxs[focus_mask]
+    target_ndxs = best_target_ndxs#[focus_mask]
     target_nodes = receivers[target_ndxs]
-    target_dist = np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3))
-    target_mask = np.zeros((num_nodes_for_multifocus, max_targets_per_graph))
-    target_species = np.zeros((num_nodes_for_multifocus,))
-    target_species[:target_nodes.shape[0]] = graph.nodes.species[target_nodes]
+    target_dist = np.zeros((n_nodes, max_targets_per_graph, 3))
+    target_mask = np.zeros((n_nodes, max_targets_per_graph))
+    target_species = graph.nodes.species[target_nodes]
 
     # Pick neighboring nodes of the same type as the given target node, per focus.
     focus_per_target = senders[target_ndxs]
-    for i in range(target_ndxs.shape[0]):
+    for i in range(focus_mask.sum()):
         targets = receivers[(senders == focus_per_target[i]) & mask]
-        targets_of_same_species = targets[graph.nodes.species[targets] == target_species[i]][:max_targets_per_graph]
+        targets_of_same_species = targets[target_species[targets] == target_species[focus_nodes[i]]][:max_targets_per_graph]
         target_dist[
-            i, : len(targets_of_same_species)
+            focus_nodes[i], : len(targets_of_same_species)
         ] = graph.nodes.positions[targets_of_same_species] - graph.nodes.positions[focus_per_target[i]]
-        target_mask[i, : len(targets_of_same_species)] = 1
+        target_mask[focus_nodes[i], : len(targets_of_same_species)] = 1
 
-    new_visited = np.concatenate([visited, target_nodes])
+    new_visited = np.concatenate([visited, target_nodes[focus_mask]])
     new_visited = np.unique(new_visited)
 
     sample = _into_fragment(
@@ -327,9 +326,9 @@ def _make_last_fragment(graph, n_species, max_targets_per_graph: int = 1, num_no
         visited=np.arange(len(graph.nodes.positions)),
         focus_mask=np.zeros((n_nodes,)),
         target_species_probability=np.zeros((n_nodes, n_species)),
-        target_species=np.zeros((num_nodes_for_multifocus,)),
-        target_dist=np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3)),
-        target_mask=np.zeros((num_nodes_for_multifocus, max_targets_per_graph)),
+        target_species=np.zeros((n_nodes,)),
+        target_dist=np.zeros((n_nodes, max_targets_per_graph, 3)),
+        target_mask=np.zeros((n_nodes, max_targets_per_graph)),
         stop=True,
     )
 
@@ -344,27 +343,18 @@ def _into_fragment(
     target_mask,
     stop,
 ):
-    # n_nodes = graph.n_node[0]
-    # assert target_positions.shape[0] <= max_targets_per_graph
-    # # for batching purposes
-    # target_positions_padded = np.zeros((max_targets_per_graph, 3))
-    # target_positions_padded[: target_positions.shape[0]] = target_positions
-    # target_position_mask = np.zeros(
-    #     (target_positions_padded.shape[0],), dtype=np.bool_
-    # )
-    # target_position_mask[: target_positions.shape[0]] = True
 
     nodes = datatypes.FragmentsNodes(
         positions=graph.nodes.positions,
         species=graph.nodes.species,
         focus_and_target_species_probs=target_species_probability,
         focus_mask=focus_mask,
+        target_species=target_species,  # [n_node]
+        target_positions=target_dist,  # [n_node, max_targets_per_graph, 3]
+        target_position_mask=target_mask,  # [n_node, max_targets_per_graph]
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
-        target_species=np.expand_dims(target_species, axis=0),  # [1, num_nodes_for_multifocus]
-        target_positions=np.expand_dims(target_dist, axis=0),  # [1, num_nodes_for_multifocus, max_targets_per_graph, 3]
-        target_position_mask=np.expand_dims(target_mask, axis=0),  # [1, num_nodes_for_multifocus, max_targets_per_graph]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 

@@ -31,6 +31,7 @@ def generate_all_fragments(
     nn_tolerance: float,
     nn_cutoff: float,
     max_radius: float,
+    num_nodes_for_multifocus: int,
     max_targets_per_graph: int,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
@@ -60,18 +61,21 @@ def generate_all_fragments(
         "focus_and_target_species_probs": tf.TensorSpec(
             shape=(None, len(atomic_numbers)), dtype=tf.float32
         ),
+        "focus_mask": tf.TensorSpec(
+            shape=(None, ), dtype=tf.float32
+        ),
+        "target_positions": tf.TensorSpec(
+            shape=(None, max_targets_per_graph, 3), dtype=tf.float32
+        ),
+        "target_position_mask": tf.TensorSpec(
+            shape=(None, max_targets_per_graph), dtype=tf.float32
+        ),
+        "target_species": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
-        "target_positions": tf.TensorSpec(
-            shape=(1, max_targets_per_graph, 3), dtype=tf.float32
-        ),
-        "target_position_mask": tf.TensorSpec(
-            shape=(1, max_targets_per_graph), dtype=tf.float32
-        ),
-        "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -86,6 +90,7 @@ def generate_all_fragments(
                 nn_tolerance,
                 max_radius,
                 mode,
+                num_nodes_for_multifocus,
                 heavy_first,
                 beta_com,
                 max_targets_per_graph,
@@ -94,7 +99,7 @@ def generate_all_fragments(
 
             skip = False
             for frag in frags:
-                d = np.linalg.norm(frag.globals.target_positions, axis=-1)
+                d = np.linalg.norm(frag.nodes.target_positions, axis=-1)
                 if np.sum(d > max_radius) > 0:
                     logging.info(
                         f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
@@ -119,16 +124,17 @@ def generate_all_fragments(
                     "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
                         np.float32
                     ),
+                    "focus_mask": frag.nodes.focus_mask.astype(np.float32),
+                    "target_positions": frag.nodes.target_positions.astype(
+                        np.float32
+                    ),
+                    "target_position_mask": frag.nodes.target_position_mask.astype(
+                        np.float32
+                    ),
+                    "target_species": frag.nodes.target_species.astype(np.int32),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
                     "stop": frag.globals.stop.astype(np.bool_),
-                    "target_positions": frag.globals.target_positions.astype(
-                        np.float32
-                    ),
-                    "target_position_mask": frag.globals.target_position_mask.astype(
-                        np.float32
-                    ),
-                    "target_species": frag.globals.target_species.astype(np.int32),
                     "n_node": frag.n_node.astype(np.int32),
                     "n_edge": frag.n_edge.astype(np.int32),
                 }
@@ -162,6 +168,8 @@ def main(unused_argv) -> None:
         use_edm_splits=use_edm_splits,
         check_molecule_sanity=FLAGS.check_molecule_sanity,
     )
+    start_index = FLAGS.start_index
+    end_index = FLAGS.end_index if FLAGS.end_index != -1 else len(molecules)
     chunk_size = FLAGS.chunk
     output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     args_list = [
@@ -180,24 +188,27 @@ def main(unused_argv) -> None:
             FLAGS.nn_tolerance,
             FLAGS.nn_cutoff,
             FLAGS.max_radius,
+            FLAGS.num_nodes_for_multifocus,
             FLAGS.max_targets_per_graph,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
-        for start in range(0, len(molecules), chunk_size)
+        for start in range(start_index, end_index, chunk_size)
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
     tqdm.contrib.concurrent.process_map(
         _generate_all_fragments_wrapper, args_list, chunksize=128
     )
+    # for arg_list in args_list:
+    #     generate_all_fragments(*arg_list)
 
 
 if __name__ == "__main__":
     flags.DEFINE_integer("start_seed", 0, "Start random seed.")
     flags.DEFINE_integer("end_seed", 8, "End random seed.")
     flags.DEFINE_integer("chunk", 1000, "Number of molecules per fragment file.")
-    flags.DEFINE_integer("start", None, "Start index.")
-    flags.DEFINE_integer("end", None, "End index.")
+    flags.DEFINE_integer("start_index", 0, "Start index.")
+    flags.DEFINE_integer("end_index", -1, "End index.")
     flags.DEFINE_bool(
         "check_molecule_sanity",
         False,
@@ -215,6 +226,9 @@ if __name__ == "__main__":
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
+    )
+    flags.DEFINE_integer(
+        "num_nodes_for_multifocus", 1, "Max num of focus atoms chosen."
     )
 
     app.run(main)

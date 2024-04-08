@@ -60,7 +60,7 @@ class Predictor(hk.Module):
             radial_logits,
         ) = self.target_position_predictor(
             graphs,
-            graphs.globals.target_species,
+            graphs.nodes.target_species,
             inverse_temperature=1.0,
         )
 
@@ -258,12 +258,7 @@ class Predictor(hk.Module):
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-            ),
-            edges=None,
-            globals=datatypes.GlobalPredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
-                stop=stop,
+                focus_mask=None,  # TODO that's gonna change at some point
                 focus_indices=focus_indices,
                 target_species=target_species,
                 log_position_coeffs=log_position_coeffs,
@@ -273,6 +268,12 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=stop,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

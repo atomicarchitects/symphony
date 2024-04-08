@@ -9,14 +9,14 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
-    config.fragment_logic = "nn_edm"
+    config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
     config.train_molecules = (0, 100000)
     config.val_molecules = (100000, 120000)
     config.test_molecules = (120000, 135000)
     config.shuffle_datasets = True
-    config.max_targets_per_graph = 1
+    config.max_targets_per_graph = 4
 
     # Optimizer.
     config.optimizer = "adam"
@@ -33,11 +33,11 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.num_train_steps = 10_000_000
+    config.num_train_steps = 1_000_000
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
-    config.log_every_steps = 1000
-    config.eval_every_steps = 30000
+    config.log_every_steps = 3000
+    config.eval_every_steps = 10000
     config.nn_tolerance = 0.5
     config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
