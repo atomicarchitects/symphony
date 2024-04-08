@@ -6,7 +6,7 @@ from rdkit import Chem
 
 def plot_molecules_with_py3Dmol(
     molecules: List[Chem.Mol],
-    num_columns: int = 5,
+    num_columns: int = 4,
     window_size: Tuple[int, int] = (250, 250),
     show_atom_types: bool = True,
 ) -> py3Dmol.view:
