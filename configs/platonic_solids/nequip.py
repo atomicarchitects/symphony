@@ -9,9 +9,9 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
     config.model = "NequIP"
     config.num_channels = 64
-    config.r_max = 3.0
-    config.avg_num_neighbors = 400.0  # NequIP is not properly normalized.
-    config.num_interactions = 4
+    config.r_max = 5
+    config.avg_num_neighbors = 300.0  # NequIP is not properly normalized.
+    config.num_interactions = 3
     config.max_ell = 5
     config.even_activation = "swish"
     config.odd_activation = "tanh"
