@@ -342,10 +342,7 @@ def train_and_evaluate(
         evaluate_model_fn=lambda state, rng: evaluate_model(
             state,
             datasets,
-            [
-                "val_eval",
-                "test_eval",
-            ],
+            ["train_eval", "val_eval", "test_eval"],
             rng,
             config.loss_kwargs,
         ),
@@ -425,7 +422,7 @@ def train_and_evaluate(
         evaluate_model_fn=lambda state, rng: evaluate_model(
             state,
             datasets,
-            ["val_eval_final", "test_eval_final"],
+            ["train_eval_final", "val_eval_final", "test_eval_final"],
             rng,
             config.loss_kwargs,
         ),
