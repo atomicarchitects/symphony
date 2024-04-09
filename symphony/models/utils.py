@@ -286,6 +286,8 @@ def create_node_embedder(
     num_species: int,
     name_prefix: Optional[str] = None,
 ) -> hk.Module:
+    """Creates a node embedder as specified by the config."""
+
     if name_prefix is None:
         raise ValueError("name_prefix must be specified.")
 
@@ -395,32 +397,11 @@ def create_node_embedder(
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
-def create_position_updater(
-    config: ml_collections.ConfigDict,
-) -> hk.Transformed:
-    """Create a position updater as specified by the config."""
-    dataset = config.get("dataset", "qm9")
-    num_species = get_num_species_for_dataset(dataset)
-
-    def model_fn(graphs: datatypes.Fragments):
-        return PositionUpdater(
-            node_embedder=create_node_embedder(
-                config.position_updater.embedder_config,
-                num_species,
-                name_prefix="position_updater",
-            )
-        )(graphs)
-
-    return hk.transform(model_fn)
-
 
 def create_model(
     config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
 ) -> hk.Transformed:
     """Create a model as specified by the config."""
-
-    if config.get("position_updater"):
-        return create_position_updater(config)
 
     def model_fn(
         graphs: datatypes.Fragments,

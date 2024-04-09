@@ -2,17 +2,12 @@
 
 import ml_collections
 
-from configs.qm9 import default, nequip, e3schnet
+from configs.qm9 import allegro
 
 
 def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the E3SchNet + NequIP model."""
-    config = default.get_config()
-
-    config.focus_and_target_species_predictor.embedder_config = (
-        e3schnet.get_embedder_config()
-    )
-    config.target_position_predictor.embedder_config = nequip.get_embedder_config()
+    config = allegro.get_config()
 
     config.num_train_steps = 100
     config.num_eval_steps = 10

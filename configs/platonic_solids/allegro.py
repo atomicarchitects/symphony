@@ -1,29 +1,25 @@
-"""Defines the default hyperparameters and training configuration for the MarioNette model."""
+"""Defines the default hyperparameters and training configuration for the Allegro model."""
 
 import ml_collections
 
-from configs.qm9 import default
+from configs.platonic_solids import default
 
 
 def get_embedder_config() -> ml_collections.ConfigDict:
-    """Get the hyperparameter configuration for the MarioNette model."""
+    """Get the hyperparameter configuration for the Allegro model."""
     config = ml_collections.ConfigDict()
 
-    config.model = "MarioNette"
+    config.model = "Allegro"
     config.num_channels = 64
-    config.r_max = 5.0
-    config.avg_num_neighbors = 15.0
+    config.r_max = 5
+    config.avg_num_neighbors = 300.0  # Allegro is not properly normalized.
     config.num_interactions = 4
     config.max_ell = 5
-    config.even_activation = "gelu"
-    config.odd_activation = "tanh"
-    config.activation = "gelu"
-    config.mlp_n_layers = 3
+    config.mlp_activation = "swish"
+    config.activation = "softplus"
+    config.mlp_n_layers = 2
     config.num_basis_fns = 8
-    config.soft_normalization = 1e5
-    config.use_bessel = True
-    config.alpha = 1.0
-    config.alphal = 0.5
+    config.use_pseudoscalars_and_pseudovectors = False
 
     return config
 

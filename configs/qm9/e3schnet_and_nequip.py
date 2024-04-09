@@ -14,5 +14,4 @@ def get_config() -> ml_collections.ConfigDict:
     )
     config.target_position_predictor.embedder_config = nequip.get_embedder_config()
 
-    # NequIP hyperparameters.
     return config

@@ -2,8 +2,7 @@
 
 import functools
 import os
-import pickle
-from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Union
+from typing import Dict, Iterable, Iterator, Optional, Tuple, Union
 import chex
 import flax
 import jax
@@ -13,7 +12,6 @@ import ml_collections
 import optax
 import yaml
 from absl import logging
-import matplotlib.pyplot as plt
 
 from clu import (
     metric_writers,
@@ -23,10 +21,7 @@ from clu import (
 )
 
 from symphony import datatypes, hooks, models, loss, train_state
-from symphony.data import input_pipeline_tf
-from analyses import generate_molecules
-from analyses import metrics as analyses_metrics
-
+from symphony.data import input_pipeline_tf, input_pipeline
 
 @flax.struct.dataclass
 class Metrics(metrics.Collection):

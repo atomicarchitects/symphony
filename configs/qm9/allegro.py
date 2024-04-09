@@ -9,7 +9,6 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the Allegro model."""
     config = ml_collections.ConfigDict()
 
-    # NequIP hyperparameters.
     config.model = "Allegro"
     config.num_channels = 64
     config.r_max = 5
@@ -32,5 +31,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
     config.target_position_predictor.embedder_config = get_embedder_config()
 
-    # NequIP hyperparameters.
     return config
