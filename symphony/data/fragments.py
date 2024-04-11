@@ -1,4 +1,4 @@
-from typing import Iterator
+from typing import Iterator, Optional
 
 import jax
 import jraph
@@ -11,10 +11,10 @@ from symphony import datatypes
 def generate_fragments(
     rng: chex.PRNGKey,
     graph: jraph.GraphsTuple,
-    n_species: int,
-    nn_tolerance: float = 0.01,
-    max_radius: float = 2.03,
-    mode: str = "nn",
+    num_species: int,
+    nn_tolerance: Optional[float],
+    max_radius: Optional[float],
+    mode: str,
     heavy_first: bool = False,
     beta_com: float = 0.0,
 ) -> Iterator[datatypes.Fragments]:
@@ -23,7 +23,7 @@ def generate_fragments(
     Args:
         rng: The random number generator.
         graph: The molecular graph.
-        n_species: The number of different species considered.
+        num_species: The number of different species considered.
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
         mode: How to generate the fragments. Either "nn" or "radius".
@@ -33,9 +33,19 @@ def generate_fragments(
     Returns:
         A sequence of fragments.
     """
-    assert mode in ["nn", "radius"]
+    if mode not in ["nn", "radius"]:
+        raise ValueError("mode must be either 'nn' or 'radius'.")
+    if mode == "radius" and max_radius is None:
+        raise ValueError("max_radius must be specified for mode 'radius'.")
+    if mode != "radius" and max_radius is not None:
+        print(max_radius)
+        raise ValueError("max_radius specified, but mode is not 'radius'.")
+    if mode == "nn" and nn_tolerance is None:
+        raise ValueError("nn_tolerance must be specified for mode 'nn'.")
+    if mode != "nn" and nn_tolerance is not None:
+        raise ValueError("nn_tolerance specified, but mode is not 'nn'.")
+    
     n = len(graph.nodes.positions)
-
     assert (
         len(graph.n_edge) == 1 and len(graph.n_node) == 1
     ), "Only single graphs supported."
@@ -48,46 +58,42 @@ def generate_fragments(
     )  # [n_edge]
 
     # make fragments
-    try:
-        rng, visited_nodes, frag = _make_first_fragment(
+    rng, visited_nodes, frag = _make_first_fragment(
+        rng,
+        graph,
+        dist,
+        num_species,
+        nn_tolerance,
+        max_radius,
+        mode,
+        heavy_first,
+        beta_com,
+    )
+    yield frag
+
+    for _ in range(n - 2):
+        rng, visited_nodes, frag = _make_middle_fragment(
             rng,
+            visited_nodes,
             graph,
             dist,
-            n_species,
+            num_species,
             nn_tolerance,
             max_radius,
             mode,
             heavy_first,
-            beta_com,
         )
         yield frag
 
-        for _ in range(n - 2):
-            rng, visited_nodes, frag = _make_middle_fragment(
-                rng,
-                visited_nodes,
-                graph,
-                dist,
-                n_species,
-                nn_tolerance,
-                max_radius,
-                mode,
-                heavy_first,
-            )
-            yield frag
-    except ValueError:
-        pass
-    else:
-        assert len(visited_nodes) == n
-
-        yield _make_last_fragment(graph, n_species)
+    assert len(visited_nodes) == n
+    yield _make_last_fragment(graph, num_species)
 
 
 def _make_first_fragment(
     rng,
     graph,
     dist,
-    n_species,
+    num_species,
     nn_tolerance,
     max_radius,
     mode,
@@ -125,9 +131,9 @@ def _make_first_fragment(
     if len(targets) == 0:
         raise ValueError("No targets found.")
 
-    species_probability = np.zeros((graph.nodes.positions.shape[0], n_species))
+    species_probability = np.zeros((graph.nodes.positions.shape[0], num_species))
     species_probability[first_node] = _normalized_bitcount(
-        graph.nodes.species[targets], n_species
+        graph.nodes.species[targets], num_species
     )
 
     # pick a random target
@@ -152,7 +158,7 @@ def _make_middle_fragment(
     visited,
     graph,
     dist,
-    n_species,
+    num_species,
     nn_tolerance,
     max_radius,
     mode,
@@ -179,11 +185,11 @@ def _make_middle_fragment(
     if mode == "radius":
         mask = mask & (dist < max_radius)
 
-    counts = np.zeros((n_nodes, n_species))
+    counts = np.zeros((n_nodes, num_species))
     for focus_node in range(n_nodes):
         targets = receivers[(senders == focus_node) & mask]
         counts[focus_node] = np.bincount(
-            graph.nodes.species[targets], minlength=n_species
+            graph.nodes.species[targets], minlength=num_species
         )
 
     if np.sum(counts) == 0:
@@ -217,13 +223,13 @@ def _make_middle_fragment(
     return rng, new_visited, sample
 
 
-def _make_last_fragment(graph, n_species):
+def _make_last_fragment(graph, num_species):
     n_nodes = len(graph.nodes.positions)
     return _into_fragment(
         graph,
         visited=np.arange(len(graph.nodes.positions)),
         focus_node=0,
-        target_species_probability=np.zeros((n_nodes, n_species)),
+        target_species_probability=np.zeros((n_nodes, num_species)),
         target_node=0,
         stop=True,
     )

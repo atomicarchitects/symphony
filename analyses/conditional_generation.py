@@ -8,7 +8,7 @@ import numpy as np
 import sys
 
 import analyses.generate_molecules as generate_molecules
-from symphony.data import qm9
+from symphony.data.datasets import qm9
 
 
 

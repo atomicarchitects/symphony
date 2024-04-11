@@ -14,7 +14,7 @@ import tqdm
 
 from symphony.data import fragments
 from symphony.data import input_pipeline
-from symphony.data import qm9
+from symphony.data.datasets import qm9
 
 FLAGS = flags.FLAGS
 

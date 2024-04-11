@@ -2,7 +2,7 @@
 
 import functools
 import os
-from typing import Dict, Iterable, Iterator, Optional, Tuple, Union
+from typing import Dict, Iterable, Optional, Tuple, Union
 import chex
 import flax
 import jax
@@ -23,6 +23,7 @@ from clu import (
 from symphony import datatypes, hooks, models, loss, train_state
 from symphony.data import input_pipeline_tf, input_pipeline
 
+
 @flax.struct.dataclass
 class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
@@ -31,8 +32,8 @@ class Metrics(metrics.Collection):
 
 
 def device_batch(
-    graph_iterator: Iterator[datatypes.Fragments],
-) -> Iterator[datatypes.Fragments]:
+    graph_iterator: Iterable[datatypes.Fragments],
+) -> Iterable[datatypes.Fragments]:
     """Batches a set of graphs to the size of the number of devices."""
     num_devices = jax.local_device_count()
     batch = []
@@ -50,58 +51,12 @@ def device_batch(
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
-    # If a learning rate schedule is specified, use it.
-    if config.get("learning_rate_schedule") is not None:
-        if config.learning_rate_schedule == "constant":
-            learning_rate_or_schedule = optax.constant_schedule(config.learning_rate)
-        elif config.learning_rate_schedule == "sgdr":
-            num_cycles = (
-                1
-                + config.num_train_steps
-                // config.learning_rate_schedule_kwargs.decay_steps
-            )
-            learning_rate_or_schedule = optax.sgdr_schedule(
-                cosine_kwargs=(
-                    config.learning_rate_schedule_kwargs for _ in range(num_cycles)
-                )
-            )
-    else:
-        learning_rate_or_schedule = config.learning_rate
-
     if config.optimizer == "adam":
-        tx = optax.adam(learning_rate=learning_rate_or_schedule)
+        return optax.adam(learning_rate=config.learning_rate)
     elif config.optimizer == "sgd":
-        tx = optax.sgd(
-            learning_rate=learning_rate_or_schedule, momentum=config.momentum
+        return optax.sgd(
+            learning_rate=config.learning_rate, momentum=config.momentum
         )
-    else:
-        raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
-
-    if not config.get("freeze_node_embedders"):
-        return tx
-
-    # Freeze parameters of the node embedders, if required.
-    def flattened_traversal(fn):
-        """Returns function that is called with `(path, param)` instead of pytree."""
-
-        def mask(tree):
-            flat = flax.traverse_util.flatten_dict(tree)
-            return flax.traverse_util.unflatten_dict(
-                {k: fn(k, v) for k, v in flat.items()}
-            )
-
-        return mask
-
-    # Freezes the node embedders.
-    def label_fn(path, param):
-        del param
-        if path[0].startswith("node_embedder"):
-            return "no"
-        return "yes"
-
-    return optax.multi_transform(
-        {"yes": tx, "no": optax.set_to_zero()}, flattened_traversal(label_fn)
-    )
 
 
 @jax.profiler.annotate_function
@@ -114,12 +69,13 @@ def get_predictions(
     return state.apply_fn(state.params, rng, graphs)
 
 
-@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[2, 4, 5])
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3, 4, 5])
+@chex.assert_max_traces(n=2)
 def train_step(
     graphs: datatypes.Fragments,
     state: train_state.TrainState,
-    loss_kwargs: Dict[str, Union[float, int]],
     rng: chex.PRNGKey,
+    loss_kwargs: Dict[str, Union[float, int]],
     add_noise_to_positions: bool,
     noise_std: float,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
@@ -175,6 +131,7 @@ def train_step(
 
 
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3])
+@chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
     eval_state: train_state.TrainState,
@@ -202,8 +159,7 @@ def evaluate_step(
 
 def evaluate_model(
     eval_state: train_state.TrainState,
-    datasets: Dict[str, Iterator[datatypes.Fragments]],
-    splits: Iterable[str],
+    datasets: Dict[str, Iterable[datatypes.Fragments]],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> Dict[str, metrics.Collection]:
@@ -211,50 +167,20 @@ def evaluate_model(
 
     # Loop over each split independently.
     eval_metrics = {}
-    for split in splits:
+    for split, fragment_iterator in datasets.items():
         split_metrics = flax.jax_utils.replicate(Metrics.empty())
 
         # Loop over graphs.
-        for graphs in device_batch(datasets[split].as_numpy_iterator()):
+        for graphs in device_batch(fragment_iterator):
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             step_rngs = jax.random.split(step_rng, jax.local_device_count())
             batch_metrics = evaluate_step(graphs, eval_state, step_rngs, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
-
-        eval_metrics[split] = flax.jax_utils.unreplicate(split_metrics)
+            
+        eval_metrics[split + "_eval"] = flax.jax_utils.unreplicate(split_metrics)
 
     return eval_metrics
-
-
-@jax.jit
-def mask_atom_types(graphs: datatypes.Fragments) -> datatypes.Fragments:
-    """Mask atom types in graphs."""
-
-    def aggregate_sum(arr: jnp.ndarray) -> jnp.ndarray:
-        """Aggregates the sum of all elements upto the last in arr into the first element."""
-        # Set the first element of arr as the sum of all elements upto the last element.
-        # Keep the last element as is.
-        # Set all of the other elements to 0.
-        return jnp.concatenate(
-            [arr[:-1].sum(axis=0, keepdims=True), jnp.zeros_like(arr[:-1]), arr[-1:]],
-            axis=0,
-        )
-
-    focus_and_target_species_probs = graphs.nodes.focus_and_target_species_probs
-    focus_and_target_species_probs = jax.vmap(aggregate_sum)(
-        focus_and_target_species_probs
-    )
-    graphs = graphs._replace(
-        nodes=graphs.nodes._replace(
-            species=jnp.zeros_like(graphs.nodes.species),
-            focus_and_target_species_probs=focus_and_target_species_probs,
-        ),
-        globals=graphs.globals._replace(
-            target_species=jnp.zeros_like(graphs.globals.target_species)
-        ),
-    )
-    return graphs
 
 
 def train_and_evaluate(
@@ -285,12 +211,11 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-    datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
+    datasets = input_pipeline.get_datasets(dataset_rng, config)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    train_iter = datasets["train"].as_numpy_iterator()
-    init_graphs = next(train_iter)
+    init_graphs = next(datasets["train"])
     net = models.create_model(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
@@ -337,7 +262,6 @@ def train_and_evaluate(
         evaluate_model_fn=lambda state, rng: evaluate_model(
             state,
             datasets,
-            ["train_eval", "val_eval", "test_eval"],
             rng,
             config.loss_kwargs,
         ),
@@ -378,7 +302,7 @@ def train_and_evaluate(
 
         # Get a batch of graphs.
         try:
-            graphs = next(device_batch(train_iter))
+            graphs = next(device_batch(datasets["train"]))
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
@@ -391,8 +315,8 @@ def train_and_evaluate(
             state, batch_metrics = train_step(
                 graphs,
                 state,
-                config.loss_kwargs,
                 step_rngs,
+                config.loss_kwargs,
                 config.add_noise_to_positions,
                 config.position_noise_std,
             )
@@ -406,25 +330,5 @@ def train_and_evaluate(
         logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
         report_progress(step)
         profiler(step)
-
-    # Once training is complete, return the best state and corresponding metrics.
-    logging.info(
-        "Evaluating best state from step %d at the end of training.",
-        state.get_step(),
-    )
-    rng, eval_rng = jax.random.split(rng)
-    final_evaluate_model_hook = hooks.EvaluateModelHook(
-        evaluate_model_fn=lambda state, rng: evaluate_model(
-            state,
-            datasets,
-            ["train_eval_final", "val_eval_final", "test_eval_final"],
-            rng,
-            config.loss_kwargs,
-        ),
-        writer=writer,
-        update_state=False,
-    )
-    state = final_evaluate_model_hook(state, eval_rng)
-    checkpoint_hook(state)
 
     return state

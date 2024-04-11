@@ -1,7 +1,7 @@
 """Input pipeline for the datasets with the tf.data API."""
 
 import functools
-from typing import Dict, List, Sequence, Tuple, Iterator
+from typing import Dict, List, Sequence, Tuple, Iterator, Optional
 import re
 import itertools
 import os
@@ -36,7 +36,7 @@ def get_datasets(
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:
-        max_n_nodes, max_n_edges, max_n_graphs = estimate_padding_budget_for_num_graphs(
+        max_n_nodes, max_n_edges, max_n_graphs = input_pipeline.estimate_padding_budget(
             datasets["train"], config.max_n_graphs, num_estimation_graphs=1000
         )
 
@@ -98,55 +98,6 @@ def get_datasets(
     return datasets
 
 
-def estimate_padding_budget_for_num_graphs(
-    dataset: tf.data.Dataset, num_graphs: int, num_estimation_graphs: int
-) -> Tuple[int, int, int]:
-    """Estimates the padding budget for a dataset of unbatched GraphsTuples.
-    Args:
-        dataset: A dataset of unbatched GraphsTuples.
-        num_graphs: The intended number of graphs per batch. Note that no batching is performed by
-        this function.
-        num_estimation_graphs: How many graphs to take from the dataset to estimate
-        the distribution of number of nodes and edges per graph.
-    Returns:
-        padding_budget: The padding budget for batching and padding the graphs
-        in this dataset to the given batch size.
-    """
-
-    def get_graphs_tuple_size(graph: datatypes.Fragments) -> Tuple[int, int, int]:
-        """Returns the number of nodes, edges and graphs in a GraphsTuple."""
-        return (
-            np.shape(jax.tree_leaves(graph.nodes)[0])[0],
-            np.sum(graph.n_edge),
-            np.shape(graph.n_node)[0],
-        )
-
-    def next_multiple_of_64(val: float) -> int:
-        """Returns the next multiple of 64 after val."""
-        return 64 * (1 + int(val // 64))
-
-    if num_graphs <= 1:
-        raise ValueError("Batch size must be > 1 to account for padding graphs.")
-
-    total_num_nodes = 0
-    total_num_edges = 0
-    for graph in dataset.take(num_estimation_graphs).as_numpy_iterator():
-        n_node, n_edge, n_graph = get_graphs_tuple_size(graph)
-        if n_graph != 1:
-            raise ValueError("Dataset contains batched GraphTuples.")
-
-        total_num_nodes += n_node
-        total_num_edges += n_edge
-
-    num_nodes_per_graph_estimate = total_num_nodes / num_estimation_graphs
-    num_edges_per_graph_estimate = total_num_edges / num_estimation_graphs
-
-    n_node = next_multiple_of_64(num_nodes_per_graph_estimate * num_graphs)
-    n_edge = next_multiple_of_64(num_edges_per_graph_estimate * num_graphs)
-    n_graph = num_graphs
-    return n_node, n_edge, n_graph
-
-
 def get_pieces_for_tetris() -> List[List[Tuple[int, int, int]]]:
     """Returns the pieces for Tetris."""
     # Taken from e3nn Tetris example.
@@ -169,84 +120,6 @@ def get_unbatched_tetris_datasets(
     """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
     pieces = get_pieces_for_tetris()
     return pieces_to_unbatched_datasets(pieces, rng, config)
-
-
-def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
-    """Returns the pieces for the Platonic solids."""
-    # Taken from Wikipedia.
-    # https://en.wikipedia.org/wiki/Platonic_solid
-    phi = (1 + np.sqrt(5)) / 2
-    pieces = [
-        [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
-        [
-            (1, 0, 0),
-            (-1, 0, 0),
-            (0, 1, 0),
-            (0, -1, 0),
-            (0, 0, 1),
-            (0, 0, -1),
-        ],  # octahedron
-        [
-            (1, 1, 1),
-            (-1, 1, 1),
-            (1, -1, 1),
-            (1, 1, -1),
-            (-1, -1, 1),
-            (1, -1, -1),
-            (-1, 1, -1),
-            (-1, -1, -1),
-        ],  # cube
-        [
-            (0, 1, phi),
-            (0, -1, phi),
-            (0, 1, -phi),
-            (0, -1, -phi),
-            (1, phi, 0),
-            (-1, phi, 0),
-            (1, -phi, 0),
-            (-1, -phi, 0),
-            (phi, 0, 1),
-            (phi, 0, -1),
-            (-phi, 0, 1),
-            (-phi, 0, -1),
-        ],  # icosahedron
-        [
-            (1, 1, 1),
-            (-1, 1, 1),
-            (1, -1, 1),
-            (1, 1, -1),
-            (-1, -1, 1),
-            (1, -1, -1),
-            (-1, 1, -1),
-            (-1, -1, -1),
-            (0, 1 / phi, phi),
-            (0, -1 / phi, phi),
-            (0, 1 / phi, -phi),
-            (0, -1 / phi, -phi),
-            (1 / phi, phi, 0),
-            (-1 / phi, phi, 0),
-            (1 / phi, -phi, 0),
-            (-1 / phi, -phi, 0),
-            (phi, 0, 1 / phi),
-            (phi, 0, -1 / phi),
-            (-phi, 0, 1 / phi),
-            (-phi, 0, -1 / phi),
-        ],  # dodacahedron
-    ]
-    # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
-    pieces_as_arrays = [np.asarray(piece) for piece in pieces]
-
-    def compute_first_node_distance(piece):
-        return np.min(np.linalg.norm(piece[0] - piece[1:], axis=-1))
-
-    piece_factors = [
-        1 / np.min(compute_first_node_distance(piece)) for piece in pieces_as_arrays
-    ]
-    pieces = [
-        [tuple(np.asarray(v) * factor) for v in piece]
-        for factor, piece in zip(piece_factors, pieces)
-    ]
-    return pieces
 
 
 def get_unbatched_platonic_solids_datasets(

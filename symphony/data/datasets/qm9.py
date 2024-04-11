@@ -13,6 +13,17 @@ QM9_URL = (
     "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip"
 )
 
+class QM9Dataset:
+
+    def __init__(self, root: str, use_edm_splits: bool, check_molecule_sanity: bool):
+        self.mols = load_qm9(root, use_edm_splits, check_molecule_sanity)
+
+    def __len__(self):
+        return len(self.mols)
+
+    def __getitem__(self, idx):
+        return self.mols[idx]
+
 
 def download_url(url: str, root: str) -> str:
     """Download if file does not exist in root already. Returns path to file."""

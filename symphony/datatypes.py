@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 import e3nn_jax as e3nn
 import jax.numpy as jnp
@@ -41,6 +41,19 @@ class Fragments(jraph.GraphsTuple):
             n_node=graphs.n_node,
             n_edge=graphs.n_edge,
         )
+
+
+class Structures(jraph.GraphsTuple):
+    """Represents a collection of 3D structures, possibly with no edges given."""
+
+    nodes: NodesInfo
+    edges: None  # [n_edge] float array
+    receivers: Optional[jnp.ndarray]  # with integer dtype
+    senders: Optional[jnp.ndarray]  # with integer dtype
+    globals: None
+    n_node: jnp.ndarray  # with integer dtype
+    n_edge: Optional[jnp.ndarray]  # with integer dtype
+
 
 
 class NodePredictions(NamedTuple):
