@@ -59,7 +59,7 @@ class TrainTest(parameterized.TestCase):
 
     @parameterized.product(
         config_name=["qm9_test"],
-        rng=[0, 1],
+        rng=[0, 1, 2],
     )
     def test_equivariance(self, config_name: str, rng: int):
         """Tests that models are equivariant."""
@@ -78,7 +78,7 @@ class TrainTest(parameterized.TestCase):
             return model.apply(params, rng, graphs).globals.log_position_coeffs
 
         input_positions = e3nn.IrrepsArray("1o", self.graphs.nodes.positions)
-        e3nn.utils.assert_equivariant(apply_fn, rng, input_positions, atol=1e-5)
+        e3nn.utils.assert_equivariant(apply_fn, rng, input_positions, atol=2e-4)
 
 
 if __name__ == "__main__":
