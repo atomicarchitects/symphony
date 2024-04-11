@@ -11,10 +11,9 @@ def get_config() -> ml_collections.ConfigDict:
     # Modify the default configuration, just to test.
     config.num_train_steps = 100
     config.num_eval_steps = 10
-    config.num_eval_steps_at_end_of_training = 10
     config.eval_every_steps = 500
-    config.focus_and_target_species_predictor.max_ell = 5
-    config.use_pseudoscalars_and_pseudovectors = True
+    config.focus_and_target_species_predictor.embedder_config.max_ell = 1
+    config.target_position_predictor.embedder_config.max_ell = 1
     config.add_noise_to_positions = True
     config.position_noise_std = 0.1
 
