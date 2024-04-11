@@ -43,7 +43,7 @@ from symphony.models import utils
 
 
 def append_predictions(
-    fragments: datatypes.Fragments, preds: datatypes.Predictions, nn_cutoff: float
+    fragments: datatypes.Fragments, preds: datatypes.Predictions, radial_cutoff: float
 ) -> Iterable[Tuple[int, datatypes.Fragments]]:
     """Appends the predictions to the fragments."""
     # Bring back to CPU.
@@ -57,12 +57,12 @@ def append_predictions(
     ):
         if valid:
             yield *append_predictions_to_fragment(
-                fragment, pred, nn_cutoff
+                fragment, pred, radial_cutoff
             ), fragment, pred
 
 
 def append_predictions_to_fragment(
-    fragment: datatypes.Fragments, pred: datatypes.Predictions, nn_cutoff: float
+    fragment: datatypes.Fragments, pred: datatypes.Predictions, radial_cutoff: float
 ) -> Tuple[int, datatypes.Fragments]:
     """Appends the predictions to a single fragment."""
     target_relative_positions = pred.globals.position_vectors[0]
@@ -79,7 +79,7 @@ def append_predictions_to_fragment(
     new_fragment = input_pipeline.ase_atoms_to_jraph_graph(
         atoms=ase.Atoms(numbers=atomic_numbers[new_species], positions=new_positions),
         atomic_numbers=atomic_numbers,
-        nn_cutoff=nn_cutoff,
+        radial_cutoff=radial_cutoff,
     )
     new_fragment = new_fragment._replace(globals=fragment.globals)
     return stop, new_fragment
@@ -154,7 +154,7 @@ def generate_molecules(
 
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
+            init_molecule, models.ATOMIC_NUMBERS, config.radial_cutoff
         )
         for init_molecule in init_molecules
     ]
@@ -199,7 +199,7 @@ def generate_molecules(
             print("Computed all predictions.")
 
             for stop, new_fragment, fragment, pred in append_predictions(
-                fragments, preds, nn_cutoff=config.nn_cutoff
+                fragments, preds, radial_cutoff=config.radial_cutoff
             ):
                 num_atoms_in_fragment = len(new_fragment.nodes.species)
                 if stop or num_atoms_in_fragment >= max_num_atoms:

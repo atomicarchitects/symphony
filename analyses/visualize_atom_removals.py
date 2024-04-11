@@ -82,7 +82,7 @@ def visualize_atom_removals(
         fragment = input_pipeline.ase_atoms_to_jraph_graph(
             molecule_with_target_removed,
             ATOMIC_NUMBERS,
-            config.nn_cutoff,
+            config.radial_cutoff,
         )
 
         molecules_with_target_removed.append(molecule_with_target_removed)

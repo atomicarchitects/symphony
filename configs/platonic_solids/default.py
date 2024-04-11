@@ -15,6 +15,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_solids = None
     config.val_solids = None
     config.test_solids = None
+    config.infer_edges_with_radial_cutoff = True
+    config.radial_cutoff = 3.0
 
     # Optimizer.
     config.optimizer = "adam"
@@ -37,7 +39,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.eval_every_steps = 2000
     config.generate_every_steps = 2000
     config.nn_tolerance = 0.1
-    config.nn_cutoff = 3.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 32
     config.max_n_nodes = 15 * config.get_ref("max_n_graphs")
@@ -86,7 +87,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.position_inverse_temperature = 1.0
     config.generation.res_beta = config.target_position_predictor.get_ref("res_beta")
     config.generation.res_alpha = config.target_position_predictor.get_ref("res_alpha")
-    config.generation.nn_cutoff = config.get_ref("nn_cutoff")
+    config.generation.radial_cutoff = config.get_ref("radial_cutoff")
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"

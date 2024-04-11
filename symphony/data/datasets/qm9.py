@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Iterable, Dict, Set
 
-import logging
+import tqdm
+from absl import logging
 import os
 import zipfile
 import urllib
@@ -9,33 +10,97 @@ import ase
 import rdkit.Chem as Chem
 
 
+from symphony.data import datasets
+from symphony import datatypes
+
+
 QM9_URL = (
     "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip"
 )
 
-class QM9Dataset:
 
-    def __init__(self, root: str, use_edm_splits: bool, check_molecule_sanity: bool):
-        self.mols = load_qm9(root, use_edm_splits, check_molecule_sanity)
+def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
+    """Converts a molecule to a datatypes.Structures object."""
+    return datatypes.Structures(
+        nodes=datatypes.NodesInfo(
+            positions=np.asarray(molecule.positions),
+            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers)
+        ),
+        edges=None,
+        receivers=None,
+        senders=None,
+        globals=None,
+        n_node=np.asarray([len(molecule.numbers)]),
+        n_edge=None,
+    )
 
-    def __len__(self):
-        return len(self.mols)
 
-    def __getitem__(self, idx):
-        return self.mols[idx]
+class QM9Dataset(datasets.InMemoryDataset):
+    """QM9 dataset."""
 
+    def __init__(self, root_dir: str, check_molecule_sanity: bool, use_edm_splits: bool, 
+                 num_train_molecules: int, num_val_molecules: int, num_test_molecules: int):
+        super().__init__()
+        
+        if root_dir is None:
+            raise ValueError("root_dir must be provided.")
+
+        if use_edm_splits:
+            logging.info("Using EDM splits.")
+            if check_molecule_sanity:
+                raise ValueError("EDM splits are not compatible with molecule sanity checks.")
+            if num_train_molecules is not None or num_val_molecules is not None or num_test_molecules is not None:
+                raise ValueError("EDM splits are used, so num_train_molecules, num_val_molecules, and num_test_molecules must be None.")
+        else:
+            logging.info("Using random splits.")
+            if num_train_molecules is None or num_val_molecules is None or num_test_molecules is None:
+                raise ValueError("EDM splits are not used, so num_train_molecules, num_val_molecules, and num_test_molecules must be provided.")
+            
+        self.root_dir = root_dir
+        self.check_molecule_sanity = check_molecule_sanity
+        self.use_edm_splits = use_edm_splits
+        self.num_train_molecules = num_train_molecules
+        self.num_val_molecules = num_val_molecules
+        self.num_test_molecules = num_test_molecules
+
+        self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
+
+        if num_train_molecules + num_val_molecules + num_test_molecules > len(self.molecules):
+            raise ValueError("The sum of num_train_molecules, num_val_molecules, and num_test_molecules must be less than or equal to the number of molecules in the dataset.")
+
+        logging.info(f"Loaded {len(self.molecules)} molecules, of which {num_train_molecules} are used for training, {num_val_molecules} for valation, and {num_test_molecules} for testing.")
+
+    def structures(self) -> Iterable[datatypes.Structures]:
+        for molecule in self.molecules:
+            yield _molecule_to_structure(molecule) 
+
+    @staticmethod
+    def species_to_atom_types() -> Dict[int, str]:
+        return {
+            0: "H",
+            1: "C",
+            2: "N",
+            3: "O",
+            4: "F",
+        }
+
+    def split_indices(self) -> Dict[str, Set[int]]:
+        if self.use_edm_splits:
+            return get_edm_splits(self.root_dir)
+
+        # Create a random permutation of the indices.
+        indices = np.random.permutation(len(self.molecules))
+        permuted_indices = {
+            "train": indices[:self.num_train_molecules],
+            "val": indices[self.num_train_molecules:self.num_train_molecules + self.num_val_molecules],
+            "test": indices[self.num_train_molecules + self.num_val_molecules:self.num_train_molecules + self.num_val_molecules + self.num_test_molecules],
+        }
+        return permuted_indices
 
 def download_url(url: str, root: str) -> str:
     """Download if file does not exist in root already. Returns path to file."""
     filename = url.rpartition("/")[2]
     file_path = os.path.join(root, filename)
-
-    try:
-        from tqdm import tqdm
-
-        progress = True
-    except ImportError:
-        progress = False
 
     try:
         if os.path.exists(file_path):
@@ -48,7 +113,7 @@ def download_url(url: str, root: str) -> str:
             logging.info(f"No internet connection! Using downloaded file: {file_path}")
             return file_path
 
-        raise
+        raise ValueError(f"Could not download {url}")
 
     chunk_size = 1024
     total_size = int(data.info()["Content-Length"].strip())
@@ -61,20 +126,13 @@ def download_url(url: str, root: str) -> str:
     logging.info(f"Downloading {url} to {file_path}")
 
     with open(file_path, "wb") as f:
-        if progress:
-            with tqdm(total=total_size) as pbar:
-                while True:
-                    chunk = data.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    pbar.update(chunk_size)
-        else:
+        with tqdm.tqdm(total=total_size) as pbar:
             while True:
                 chunk = data.read(chunk_size)
                 if not chunk:
                     break
                 f.write(chunk)
+                pbar.update(chunk_size)
 
     return file_path
 
@@ -117,13 +175,10 @@ def molecule_sanity(mol: Chem.Mol) -> bool:
 
 
 def load_qm9(
-    root_dir: str, use_edm_splits: bool, check_molecule_sanity: bool
-) -> List[ase.Atoms]:
+    root_dir: str,
+    check_molecule_sanity: bool = True,
+) -> Iterable[ase.Atoms]:
     """Load the QM9 dataset."""
-    if use_edm_splits and check_molecule_sanity:
-        raise ValueError(
-            "EDM splits are not compatible with sanity checks. Set check_molecule_sanity as False."
-        )
 
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
@@ -134,7 +189,6 @@ def load_qm9(
     raw_mols_path = os.path.join(root_dir, "gdb9.sdf")
     supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=False)
 
-    mols_as_ase = []
     for mol in supplier:
         if mol is None:
             continue
@@ -150,26 +204,13 @@ def load_qm9(
             numbers=np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
             positions=np.asarray(mol.GetConformer(0).GetPositions()),
         )
-        mols_as_ase.append(mol_as_ase)
-
-    if use_edm_splits:
-        splits = get_edm_splits(root_dir)
-        mols_as_ase_train = [mols_as_ase[idx] for idx in splits["train"]]
-        mols_as_ase_valid = [mols_as_ase[idx] for idx in splits["valid"]]
-        mols_as_ase_test = [mols_as_ase[idx] for idx in splits["test"]]
-        # Combine splits in order.
-        mols_as_ase = [*mols_as_ase_train, *mols_as_ase_valid, *mols_as_ase_test]
-
-    logging.info(f"Loaded {len(mols_as_ase)} molecules.")
-    return mols_as_ase
+        yield mol_as_ase
 
 
-def get_edm_splits(root_dir: str):
-    """
-    Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py.
-    """
+def get_edm_splits(root_dir: str) -> Dict[str, np.ndarray]:
+    """Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py."""
 
-    def is_int(string):
+    def is_int(string: str) -> bool:
         try:
             int(string)
             return True
@@ -201,7 +242,7 @@ def get_edm_splits(root_dir: str):
 
     included_idxs = np.array(sorted(list(set(range(Ngdb9)) - set(excluded_idxs))))
 
-    # Now, generate random permutations to assign molecules to training/validation/test sets.
+    # Now, generate random permutations to assign molecules to training/valation/test sets.
     Nmols = Ngdb9 - Nexcluded
     assert Nmols == len(
         included_idxs
@@ -211,26 +252,25 @@ def get_edm_splits(root_dir: str):
 
     Ntrain = 100000
     Ntest = int(0.1 * Nmols)
-    Nvalid = Nmols - (Ntrain + Ntest)
+    Nval = Nmols - (Ntrain + Ntest)
 
     # Generate random permutation.
     np.random.seed(0)
     data_permutation = np.random.permutation(Nmols)
 
-    train, valid, test, extra = np.split(
-        data_permutation, [Ntrain, Ntrain + Nvalid, Ntrain + Nvalid + Ntest]
+    train, val, test, extra = np.split(
+        data_permutation, [Ntrain, Ntrain + Nval, Ntrain + Nval + Ntest]
     )
 
     assert len(extra) == 0, "Split was inexact {} {} {} {}".format(
-        len(train), len(valid), len(test), len(extra)
+        len(train), len(val), len(test), len(extra)
     )
 
     train = included_idxs[train]
-    valid = included_idxs[valid]
+    val = included_idxs[val]
     test = included_idxs[test]
 
-    splits = {"train": train, "valid": valid, "test": test}
-    np.savez(os.path.join(root_dir, "edm_splits.npz"), **splits)
+    splits = {"train": set(train), "val": set(val), "test": set(test)}
 
     # Cleanup file.
     try:

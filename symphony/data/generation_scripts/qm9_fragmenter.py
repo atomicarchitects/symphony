@@ -29,14 +29,14 @@ def generate_all_fragments(
     heavy_first: bool,
     beta_com: float,
     nn_tolerance: float,
-    nn_cutoff: float,
+    radial_cutoff: float,
     max_radius: float,
 ):
     logging.info(f"Generating fragments {start}:{end} using seed {seed}")
     logging.info(f"Saving to {output_dir}")
     logging.info(f"Mode: {mode}, heavy_first: {heavy_first}, beta_com: {beta_com}")
     logging.info(
-        f"NN tolerance: {nn_tolerance}, NN cutoff: {nn_cutoff}, max_radius: {max_radius}"
+        f"NN tolerance: {nn_tolerance}, NN cutoff: {radial_cutoff}, max_radius: {max_radius}"
     )
 
     seed = jax.random.PRNGKey(seed)
@@ -47,7 +47,7 @@ def generate_all_fragments(
     atomic_numbers = np.array([1, 6, 7, 8, 9])
     molecules_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            molecule, atomic_numbers, nn_cutoff=nn_cutoff
+            molecule, atomic_numbers, radial_cutoff=radial_cutoff
         )
         for molecule in molecules
     ]
@@ -157,7 +157,7 @@ def main(unused_argv) -> None:
             FLAGS.heavy_first,
             FLAGS.beta_com,
             FLAGS.nn_tolerance,
-            FLAGS.nn_cutoff,
+            FLAGS.radial_cutoff,
             FLAGS.max_radius,
         )
         for seed in range(FLAGS.start_seed, FLAGS.end_seed)
@@ -189,7 +189,7 @@ if __name__ == "__main__":
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
-    flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
+    flags.DEFINE_float("radial_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
 
     app.run(main)

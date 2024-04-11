@@ -43,7 +43,7 @@ def check_and_freeze_config(
     config: ml_collections.ConfigDict,
 ) -> ml_collections.FrozenConfigDict:
     # Update the root directory for the dataset.
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic)
+    config.root_dir = root_dirs.get_root_dir(config.dataset)
 
     # Generate only once the checkpoint is saved.
     if config.get("generate_every_steps") is None:

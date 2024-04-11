@@ -276,7 +276,7 @@ def train_and_evaluate(
         position_inverse_temperature=config.generation.position_inverse_temperature,
         res_alpha=config.generation.res_alpha,
         res_beta=config.generation.res_beta,
-        nn_cutoff=config.generation.nn_cutoff,
+        radial_cutoff=config.generation.radial_cutoff,
         num_seeds=config.generation.num_seeds,
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,

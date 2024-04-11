@@ -9,6 +9,11 @@ def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the E3SchNet + NequIP model."""
     config = allegro.get_config()
 
+    config.num_train_molecules = 1000
+    config.num_val_molecules = 100
+    config.num_test_molecules = 100
+    config.use_edm_splits = False
+
     config.num_train_steps = 100
     config.num_eval_steps = 10
     config.num_eval_steps_at_end_of_training = 10

@@ -14,6 +14,7 @@ import logging
 from symphony import models, train
 from . import loss_test
 
+from configs import root_dirs
 from configs.qm9 import test as qm9_test
 from configs.platonic_solids import test as platonic_solids_test
 
@@ -32,7 +33,7 @@ class TrainTest(parameterized.TestCase):
         self.preds, self.graphs = loss_test.create_dummy_data()
 
     @parameterized.product(
-        config_name=["platonic_solids_test"],
+        config_name=["qm9_test"],
     )
     def test_train_and_evaluate(
         self,
@@ -45,6 +46,7 @@ class TrainTest(parameterized.TestCase):
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
+        config.root_dir = root_dirs.get_root_dir(config.dataset)
         config = ml_collections.FrozenConfigDict(config)
     
         # Create a temporary directory where metrics are written.

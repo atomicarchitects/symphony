@@ -32,7 +32,7 @@ def append_predictions(
     preds: datatypes.Predictions,
     stop: chex.Array,
     padded_fragments: datatypes.Fragments,
-    nn_cutoff: float,
+    radial_cutoff: float,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     num_nodes = padded_fragments.nodes.positions.shape[0]
@@ -87,7 +87,7 @@ def append_predictions(
     node_indices = jnp.arange(num_nodes)
 
     # Avoid self-edges and linking across graphs.
-    valid_edges = (distance_matrix > 0) & (distance_matrix <= nn_cutoff)
+    valid_edges = (distance_matrix > 0) & (distance_matrix <= radial_cutoff)
     valid_edges = valid_edges & (segment_ids[None, :] == segment_ids[:, None])
     valid_edges = (
         valid_edges
@@ -116,7 +116,7 @@ def generate_one_step(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     padded_fragments: datatypes.Fragments,
     stop: bool,
-    nn_cutoff: float,
+    radial_cutoff: float,
     rng: chex.PRNGKey,
 ) -> Tuple[
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
@@ -124,7 +124,7 @@ def generate_one_step(
     """Generates the next fragment for a given seed."""
     preds = apply_fn(padded_fragments, rng)
     stop = preds.globals.stop[:-1] | stop
-    next_padded_fragments = append_predictions(preds, stop, padded_fragments, nn_cutoff)
+    next_padded_fragments = append_predictions(preds, stop, padded_fragments, radial_cutoff)
     return (next_padded_fragments, stop), (next_padded_fragments, preds)
 
 
@@ -206,7 +206,7 @@ def generate_molecules(
 
     # Prepare initial fragment.
     init_fragment = input_pipeline.ase_atoms_to_jraph_graph(
-        init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
+        init_molecule, models.ATOMIC_NUMBERS, config.radial_cutoff
     )
     init_fragments = jraph.batch([init_fragment] * num_seeds_per_chunk)
     init_fragments = jraph.pad_with_graphs(
@@ -239,7 +239,7 @@ def generate_molecules(
                 apply_fn,
                 init_fragments,
                 max_num_atoms,
-                config.nn_cutoff,
+                config.radial_cutoff,
                 rng,
                 return_intermediates=visualize,
             )

@@ -146,7 +146,7 @@ def pieces_to_unbatched_datasets(
             graph,
             n_species=1,
             nn_tolerance=config.nn_tolerance,
-            max_radius=config.nn_cutoff,
+            max_radius=config.radial_cutoff,
             mode=config.fragment_logic,
         )
 
@@ -157,7 +157,7 @@ def pieces_to_unbatched_datasets(
     ]
     pieces_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            molecule, [1], nn_cutoff=config.nn_cutoff
+            molecule, [1], radial_cutoff=config.radial_cutoff
         )
         for molecule in pieces_as_molecules
     ]

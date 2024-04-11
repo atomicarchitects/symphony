@@ -60,7 +60,7 @@ class GenerateMoleculesHook:
     position_inverse_temperature: float
     res_alpha: int
     res_beta: int
-    nn_cutoff: float
+    radial_cutoff: float
     num_seeds: int
     num_seeds_per_chunk: int
     init_molecules: str
@@ -74,7 +74,7 @@ class GenerateMoleculesHook:
             f"pit={self.position_inverse_temperature}",
             f"res_alpha={self.res_alpha}",
             f"res_beta={self.res_beta}",
-            f"nn_cutoff={self.nn_cutoff}",
+            f"radial_cutoff={self.radial_cutoff}",
             f"step={state.get_step()}",
         )
 
@@ -82,7 +82,7 @@ class GenerateMoleculesHook:
             apply_fn=state.eval_apply_fn,
             params=flax.jax_utils.unreplicate(state.params),
             molecules_outputdir=molecules_outputdir,
-            nn_cutoff=self.nn_cutoff,
+            radial_cutoff=self.radial_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=self.position_inverse_temperature,
             num_seeds=self.num_seeds,

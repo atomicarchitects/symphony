@@ -9,13 +9,16 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Dataset.
     config.dataset = "qm9"
-    config.fragment_logic = "nn_edm"
+    config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.train_molecules = (0, 100000)
-    config.val_molecules = (100000, 120000)
-    config.test_molecules = (120000, 135000)
+    config.use_edm_splits = True
+    config.num_train_molecules = None
+    config.num_val_molecules = None
+    config.num_test_molecules = None
     config.shuffle_datasets = True
+    config.infer_edges_with_radial_cutoff = True
+    config.radial_cutoff = 5.0
 
     # Optimizer.
     config.optimizer = "adam"
@@ -39,7 +42,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.eval_every_steps = 30000
     config.generate_every_steps = 30000
     config.nn_tolerance = 0.5
-    config.nn_cutoff = 5.0
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
@@ -83,7 +85,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.position_inverse_temperature = 1.0
     config.generation.res_beta = config.target_position_predictor.get_ref("res_beta")
     config.generation.res_alpha = config.target_position_predictor.get_ref("res_alpha")
-    config.generation.nn_cutoff = config.get_ref("nn_cutoff")
+    config.generation.radial_cutoff = config.get_ref("radial_cutoff")
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"

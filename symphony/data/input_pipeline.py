@@ -16,17 +16,38 @@ from symphony import datatypes
 from symphony.data import fragments, datasets 
 
 
+def infer_edges_with_radial_cutoff_on_positions(structure: datatypes.Structures, radial_cutoff: float) -> datatypes.Structures:
+    """Infer edges from node positions, using a radial cutoff."""
+    assert structure.n_node.shape[0] == 1, "Only one structure is supported."
+
+    receivers, senders = matscipy.neighbours.neighbour_list(
+        quantities="ij", positions=structure.nodes.positions, cutoff=radial_cutoff, cell=np.eye(3)
+    )
+
+    return structure._replace(
+        edges=np.ones(len(senders)),
+        senders=np.asarray(senders),
+        receivers=np.asarray(receivers),
+        n_edge=np.array([len(senders)]),
+    )
+
+
 def create_fragments_dataset(
     rng: chex.PRNGKey,
     structures: Sequence[datatypes.Structures],
     keep_indices: Sequence[int],
     num_species: int,
+    infer_edges_with_radial_cutoff: bool,
+    radial_cutoff: float,
     use_same_rng_across_structures: bool,
     fragment_logic: str,
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
+    if infer_edges_with_radial_cutoff and radial_cutoff is None:
+        raise ValueError("radial_cutoff must be provided if infer_edges is True.")
+
     # Make sure the indices are stored in a set for fast lookup.
     keep_indices = set(keep_indices)
 
@@ -46,6 +67,11 @@ def create_fragments_dataset(
                     structure_rng = original_rng
                 else:
                     rng, structure_rng = jax.random.split(rng)
+
+                if infer_edges_with_radial_cutoff:
+                    if structure.n_edge is not None:
+                        raise ValueError("Structure already has edges.")
+                    structure = infer_edges_with_radial_cutoff_on_positions(structure, radial_cutoff=radial_cutoff)
 
                 yield from fragments.generate_fragments(
                     rng=structure_rng,
@@ -159,6 +185,8 @@ def get_datasets(
             structures=dataset.structures(),
             keep_indices=dataset.split_indices()[split],
             num_species=dataset.num_species(),
+            infer_edges_with_radial_cutoff=config.infer_edges_with_radial_cutoff,
+            radial_cutoff=config.get("radial_cutoff", None),
             use_same_rng_across_structures=True,
             fragment_logic=config.fragment_logic,
             nn_tolerance=config.get("nn_tolerance", None),
@@ -182,11 +210,11 @@ def get_datasets(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, radial_cutoff: float
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=np.eye(3)
+        quantities="ij", positions=atoms.positions, cutoff=radial_cutoff, cell=np.eye(3)
     )
 
     # Get the species indices

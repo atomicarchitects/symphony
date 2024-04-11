@@ -32,7 +32,7 @@ FLAGS = flags.FLAGS
 def append_predictions(
     pred: datatypes.Predictions,
     padded_fragment: datatypes.Fragments,
-    nn_cutoff: float,
+    radial_cutoff: float,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -56,7 +56,7 @@ def append_predictions(
     node_indices = jnp.arange(num_nodes)
 
     # Avoid self-edges.
-    valid_edges = (distance_matrix > 0) & (distance_matrix < nn_cutoff)
+    valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
     valid_edges = (
         valid_edges
         & (node_indices[None, :] <= num_valid_nodes)
@@ -85,13 +85,13 @@ def generate_one_step(
     stop: bool,
     rng: chex.PRNGKey,
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
-    nn_cutoff: float,
+    radial_cutoff: float,
 ) -> Tuple[
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-    next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
+    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -125,7 +125,7 @@ def generate_molecules(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     params: optax.Params,
     molecules_outputdir: str,
-    nn_cutoff: float,
+    radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
     num_seeds: int,
@@ -175,7 +175,7 @@ def generate_molecules(
     # Prepare initial fragments.
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, nn_cutoff
+            init_molecule, models.ATOMIC_NUMBERS, radial_cutoff
         )
         for init_molecule in init_molecules
     ]
@@ -217,7 +217,7 @@ def generate_molecules(
                 apply_fn_wrapped,
                 init_fragment,
                 max_num_atoms,
-                nn_cutoff,
+                radial_cutoff,
                 rng,
                 return_intermediates=visualize,
             )
@@ -418,7 +418,7 @@ def generate_molecules_from_workdir(
             apply_fn=model.apply,
             params=params,
             molecules_outputdir=molecules_outputdir,
-            nn_cutoff=config.nn_cutoff,
+            radial_cutoff=config.radial_cutoff,
             focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=position_inverse_temperature,
             num_seeds=num_seeds,

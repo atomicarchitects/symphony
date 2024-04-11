@@ -11,9 +11,9 @@ def _compute_first_node_min_distance(solid: np.ndarray) -> float:
     return np.min(np.linalg.norm(solid[0] - solid[1:], axis=-1))
 
 
-def _solid_to_structure(solid: np.ndarray, nn_cutoff: float) -> datatypes.Structures:
+def _solid_to_structure(solid: np.ndarray) -> datatypes.Structures:
     """Converts a solid to a datatypes.Structures object."""
-    structure = datatypes.Structures(
+    return datatypes.Structures(
         nodes=datatypes.NodesInfo(
             positions=np.asarray(solid),
             species=np.zeros(len(solid), dtype=int)
@@ -25,13 +25,12 @@ def _solid_to_structure(solid: np.ndarray, nn_cutoff: float) -> datatypes.Struct
         n_node=np.asarray([len(solid)]),
         n_edge=None,
     )
-    return datasets.utils.infer_edges_from_positions(structure, nn_cutoff)
 
 
 class PlatonicSolidsDataset(datasets.InMemoryDataset):
     """Dataset of platonic solids."""
 
-    def __init__(self, train_solids: Optional[Sequence[int]], val_solids: Optional[Sequence[int]], test_solids: Optional[Sequence[int]], nn_cutoff: float):
+    def __init__(self, train_solids: Optional[Sequence[int]], val_solids: Optional[Sequence[int]], test_solids: Optional[Sequence[int]]):
         super().__init__()
         
         all_indices = range(5)
@@ -45,7 +44,6 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         self.train_solids = set(train_solids)
         self.val_solids = set(val_solids)
         self.test_solids = set(test_solids)
-        self.nn_cutoff = nn_cutoff
 
     @staticmethod
     def species_to_atom_types() -> Dict[int, str]:
@@ -127,7 +125,7 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         solids = [solid * factor for solid, factor in zip(solids_as_arrays, scale_factors)]
 
         # Convert to Structures.
-        structures = [_solid_to_structure(solid, self.nn_cutoff) for solid in solids]
+        structures = [_solid_to_structure(solid) for solid in solids]
         return structures
 
     def split_indices(self) -> Dict[str, Set[int]]:
