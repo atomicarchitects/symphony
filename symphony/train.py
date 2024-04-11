@@ -1,8 +1,10 @@
-"""Library file for executing the training and evaluation of generative models."""
+"""Library file for executing the training and evaluation of Symphony."""
 
 import functools
 import os
-from typing import Dict, Iterable, Optional, Tuple, Union
+from typing import Dict, Iterable, Tuple, Union
+import time
+
 import chex
 import flax
 import jax
@@ -32,21 +34,21 @@ class Metrics(metrics.Collection):
 
 
 def device_batch(
-    graph_iterator: Iterable[datatypes.Fragments],
+    fragment_iterator: Iterable[datatypes.Fragments],
 ) -> Iterable[datatypes.Fragments]:
     """Batches a set of graphs to the size of the number of devices."""
     num_devices = jax.local_device_count()
     batch = []
-    for idx, graph in enumerate(graph_iterator):
+    for idx, fragment in enumerate(fragment_iterator):
         if idx % num_devices == num_devices - 1:
-            batch.append(graph)
+            batch.append(fragment)
             batch = jax.tree_util.tree_map(lambda *x: jnp.stack(x, axis=0), *batch)
             batch = datatypes.Fragments.from_graphstuple(batch)
             yield batch
 
             batch = []
         else:
-            batch.append(graph)
+            batch.append(fragment)
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
@@ -59,14 +61,6 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         )
 
 
-@jax.profiler.annotate_function
-def get_predictions(
-    state: train_state.TrainState,
-    graphs: datatypes.Fragments,
-    rng: Optional[chex.Array],
-) -> datatypes.Predictions:
-    """Get predictions from the network for input graphs."""
-    return state.apply_fn(state.params, rng, graphs)
 
 
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3, 4, 5])
@@ -82,8 +76,7 @@ def train_step(
     """Performs one update step over the current batch of graphs."""
 
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
-        curr_state = state.replace(params=params)
-        preds = get_predictions(curr_state, graphs, rng=None)
+        preds = state.apply_fn(params, None, graphs)
         total_loss, (
             focus_and_atom_type_loss,
             position_loss,
@@ -134,13 +127,13 @@ def train_step(
 @chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
-    eval_state: train_state.TrainState,
+    state: train_state.TrainState,
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
     # Compute predictions and resulting loss.
-    preds = get_predictions(eval_state, graphs, rng)
+    preds = state.apply_fn(state.params, rng, graphs)
     total_loss, (
         focus_and_atom_type_loss,
         position_loss,
@@ -232,9 +225,13 @@ def train_and_evaluate(
     # Create the optimizer.
     tx = create_optimizer(config)
 
+    # Create a corresponding evaluation function for generation.
+    eval_net = models.create_model(config, run_in_evaluation_mode=True)
+
     # Create the training state.
     state = train_state.TrainState.create(
         apply_fn=jax.jit(net.apply),
+        eval_apply_fn=jax.jit(eval_net.apply),
         params=params,
         tx=tx,
         best_params=params,
@@ -242,9 +239,6 @@ def train_and_evaluate(
         metrics_for_best_params={},
         train_metrics=Metrics.empty(),
     )
-
-    # Create a corresponding evaluation state.
-    eval_net = models.create_model(config, run_in_evaluation_mode=True)
 
     # Set up checkpointing of the model.
     # We will record the best model seen during training.
@@ -278,7 +272,6 @@ def train_and_evaluate(
     generate_molecules_hook = hooks.GenerateMoleculesHook(
         workdir=workdir,
         writer=writer,
-        eval_apply_fn=jax.jit(eval_net.apply),
         focus_and_atom_type_inverse_temperature=config.generation.focus_and_atom_type_inverse_temperature,
         position_inverse_temperature=config.generation.position_inverse_temperature,
         res_alpha=config.generation.res_alpha,
@@ -300,18 +293,22 @@ def train_and_evaluate(
 
         # Evaluate model, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
+            logging.log_first_n(logging.INFO, "Evaluating model at initialization.", 1)
             rng, eval_rng = jax.random.split(rng)
             state = evaluate_model_hook(state, eval_rng)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
         if step % config.generate_every_steps == 0 or first_or_last_step:
+            logging.log_first_n(logging.INFO, "Generating molecules at initialization.", 1)
             generate_molecules_hook(state)
 
         # Get a batch of graphs.
         try:
+            start = time.perf_counter()
             graphs = next(device_batch(datasets["train"]))
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
+            logging.log_first_n(logging.INFO, "Time to get next batch of fragments: %0.4f seconds.", 10, time.perf_counter() - start)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")

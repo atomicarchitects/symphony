@@ -1,12 +1,12 @@
 
 import ml_collections
 
-from configs.platonic_solids import nequip
+from configs.platonic_solids import e3schnet_and_nequip
 
 
 def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the E3SchNet + NequIP model."""
-    config = nequip.get_config()
+    config = e3schnet_and_nequip.get_config()
 
     # Modify the default configuration, just to test.
     config.num_train_steps = 100

@@ -56,7 +56,6 @@ def plot_molecules_in_wandb(
 class GenerateMoleculesHook:
     workdir: str
     writer: metric_writers.SummaryWriter
-    eval_apply_fn: Callable
     focus_and_atom_type_inverse_temperature: float
     position_inverse_temperature: float
     res_alpha: int
@@ -80,7 +79,7 @@ class GenerateMoleculesHook:
         )
 
         molecules_ase, _ = generate_molecules.generate_molecules(
-            apply_fn=self.eval_apply_fn,
+            apply_fn=state.eval_apply_fn,
             params=flax.jax_utils.unreplicate(state.params),
             molecules_outputdir=molecules_outputdir,
             nn_cutoff=self.nn_cutoff,
