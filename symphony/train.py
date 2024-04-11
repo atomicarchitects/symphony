@@ -158,7 +158,7 @@ def evaluate_step(
 
 
 def evaluate_model(
-    eval_state: train_state.TrainState,
+    state: train_state.TrainState,
     datasets: Dict[str, Iterable[datatypes.Fragments]],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
@@ -175,7 +175,7 @@ def evaluate_model(
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             step_rngs = jax.random.split(step_rng, jax.local_device_count())
-            batch_metrics = evaluate_step(graphs, eval_state, step_rngs, loss_kwargs)
+            batch_metrics = evaluate_step(graphs, state, step_rngs, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
             
         eval_metrics[split + "_eval"] = flax.jax_utils.unreplicate(split_metrics)

@@ -51,30 +51,15 @@ def generate_fragments(
     ), "Only single graphs supported."
     assert n >= 2, "Graph must have at least two nodes."
 
-    # compute edge distances
+    # Compute edge distances.
     dist = np.linalg.norm(
         graph.nodes.positions[graph.receivers] - graph.nodes.positions[graph.senders],
         axis=1,
     )  # [n_edge]
 
-    # make fragments
-    rng, visited_nodes, frag = _make_first_fragment(
-        rng,
-        graph,
-        dist,
-        num_species,
-        nn_tolerance,
-        max_radius,
-        mode,
-        heavy_first,
-        beta_com,
-    )
-    yield frag
-
-    for _ in range(n - 2):
-        rng, visited_nodes, frag = _make_middle_fragment(
+    with jax.default_device(jax.devices("cpu")[0]):
+        rng, visited_nodes, frag = _make_first_fragment(
             rng,
-            visited_nodes,
             graph,
             dist,
             num_species,
@@ -82,11 +67,26 @@ def generate_fragments(
             max_radius,
             mode,
             heavy_first,
+            beta_com,
         )
         yield frag
 
-    assert len(visited_nodes) == n
-    yield _make_last_fragment(graph, num_species)
+        for _ in range(n - 2):
+            rng, visited_nodes, frag = _make_middle_fragment(
+                rng,
+                visited_nodes,
+                graph,
+                dist,
+                num_species,
+                nn_tolerance,
+                max_radius,
+                mode,
+                heavy_first,
+            )
+            yield frag
+
+        assert len(visited_nodes) == n
+        yield _make_last_fragment(graph, num_species)
 
 
 def _make_first_fragment(
