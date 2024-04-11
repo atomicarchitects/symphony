@@ -169,6 +169,7 @@ def evaluate_model(
             if eval_step >= num_eval_steps:
                 break
 
+            print(f"Step {eval_step} for split {split}")
             # Convert to JAX arrays.
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
 

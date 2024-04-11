@@ -46,7 +46,7 @@ class QM9Dataset(datasets.InMemoryDataset):
             raise ValueError("root_dir must be provided.")
 
         if use_edm_splits:
-            logging.info("Using EDM splits.")
+            logging.info("Using EDM splits for QM9.")
             if check_molecule_sanity:
                 raise ValueError("EDM splits are not compatible with molecule sanity checks.")
             if num_train_molecules is not None or num_val_molecules is not None or num_test_molecules is not None:
@@ -63,8 +63,15 @@ class QM9Dataset(datasets.InMemoryDataset):
         self.num_val_molecules = num_val_molecules
         self.num_test_molecules = num_test_molecules
 
+        self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
+
+        if num_train_molecules + num_val_molecules + num_test_molecules > len(self.molecules):
+            raise ValueError("The sum of num_train_molecules, num_val_molecules, and num_test_molecules must be less than or equal to the number of molecules in the dataset.")
+
+        logging.info(f"Loaded {len(self.molecules)} molecules, of which {num_train_molecules} are used for training, {num_val_molecules} for valation, and {num_test_molecules} for testing.")
+
     def structures(self) -> Iterable[datatypes.Structures]:
-        for molecule in load_qm9(self.root_dir, self.check_molecule_sanity):
+        for molecule in self.molecules:
             yield _molecule_to_structure(molecule) 
 
     @staticmethod
@@ -82,8 +89,7 @@ class QM9Dataset(datasets.InMemoryDataset):
             return get_edm_splits(self.root_dir)
 
         # Create a random permutation of the indices.
-        total = self.num_train_molecules + self.num_val_molecules + self.num_test_molecules
-        indices = np.random.permutation(total)
+        indices = np.random.permutation(len(self.molecules))
         permuted_indices = {
             "train": indices[:self.num_train_molecules],
             "val": indices[self.num_train_molecules:self.num_train_molecules + self.num_val_molecules],
@@ -171,7 +177,7 @@ def molecule_sanity(mol: Chem.Mol) -> bool:
 def load_qm9(
     root_dir: str,
     check_molecule_sanity: bool = True,
-) -> Iterable[ase.Atoms]:
+) -> List[ase.Atoms]:
     """Load the QM9 dataset."""
 
     if not os.path.exists(root_dir):
@@ -183,6 +189,7 @@ def load_qm9(
     raw_mols_path = os.path.join(root_dir, "gdb9.sdf")
     supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=False)
 
+    mols_as_ase = []
     for mol in supplier:
         if mol is None:
             continue
@@ -198,7 +205,9 @@ def load_qm9(
             numbers=np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
             positions=np.asarray(mol.GetConformer(0).GetPositions()),
         )
-        yield mol_as_ase
+        mols_as_ase.append(mol_as_ase)
+
+    return mols_as_ase
 
 
 def get_edm_splits(root_dir: str) -> Dict[str, np.ndarray]:
