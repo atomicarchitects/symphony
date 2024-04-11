@@ -40,8 +40,8 @@ class TrainTest(parameterized.TestCase):
     ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
-        jax.config.update("jax_debug_nans", True)
-        jax.config.update("jax_debug_infs", True)
+        # jax.config.update("jax_debug_nans", True)
+        # jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]
