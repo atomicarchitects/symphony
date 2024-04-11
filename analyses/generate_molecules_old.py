@@ -115,7 +115,7 @@ def generate_molecules(
         # Remove the batch dimension.
         pred = jraph.unpad_with_graphs(preds)
         pred = pred._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+            globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
         )
         return pred
 

@@ -47,8 +47,8 @@ def append_predictions(
 ) -> Iterable[Tuple[int, datatypes.Fragments]]:
     """Appends the predictions to the fragments."""
     # Bring back to CPU.
-    fragments = jax.tree_map(np.asarray, fragments)
-    preds = jax.tree_map(np.asarray, preds)
+    fragments = jax.tree_util.tree_map(np.asarray, fragments)
+    preds = jax.tree_util.tree_map(np.asarray, preds)
     valids = jraph.get_graph_padding_mask(fragments)
 
     # Process each fragment.

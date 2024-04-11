@@ -40,7 +40,7 @@ def device_batch(
     for idx, graph in enumerate(graph_iterator):
         if idx % num_devices == num_devices - 1:
             batch.append(graph)
-            batch = jax.tree_map(lambda *x: jnp.stack(x, axis=0), *batch)
+            batch = jax.tree_util.tree_map(lambda *x: jnp.stack(x, axis=0), *batch)
             batch = datatypes.Fragments.from_graphstuple(batch)
             yield batch
 
@@ -177,7 +177,7 @@ def evaluate_model(
                 break
 
             # Convert to JAX arrays.
-            graphs = jax.tree_map(jnp.asarray, graphs)
+            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
 
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
@@ -311,7 +311,7 @@ def train_and_evaluate(
         # Get a batch of graphs.
         try:
             graphs = next(device_batch(datasets["train"]))
-            graphs = jax.tree_map(jnp.asarray, graphs)
+            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")

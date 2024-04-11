@@ -215,8 +215,8 @@ def generate_molecules(
         n_edge=(max_num_atoms * num_seeds_per_chunk * 10),
         n_graph=num_seeds_per_chunk + 1,
     )
-    init_fragments = jax.tree_map(jnp.asarray, init_fragments)
-    (jax.tree_map(jnp.shape, init_fragments))
+    init_fragments = jax.tree_util.tree_map(jnp.asarray, init_fragments)
+    (jax.tree_util.tree_map(jnp.shape, init_fragments))
 
     @jax.jit
     def chunk_and_apply(
@@ -264,10 +264,10 @@ def generate_molecules(
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
-        final_padded_fragments_for_seed = jax.tree_map(
+        final_padded_fragments_for_seed = jax.tree_util.tree_map(
             lambda x: x[seed], final_padded_fragments
         )
-        stops_for_seed = jax.tree_map(lambda x: x[seed], stops)
+        stops_for_seed = jax.tree_util.tree_map(lambda x: x[seed], stops)
 
         for index, final_padded_fragment in enumerate(
             jraph.unbatch(jraph.unpad_with_graphs(final_padded_fragments_for_seed))

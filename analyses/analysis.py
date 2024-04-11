@@ -108,7 +108,7 @@ def load_model_at_step(
         config.dataset, config.get("fragment_logic", "nn")
     )
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
-    params = jax.tree_map(jnp.asarray, params)
+    params = jax.tree_util.tree_map(jnp.asarray, params)
     return model, params, config
 
 
@@ -124,8 +124,8 @@ def load_weighted_average_model_at_steps(
         if index == 0:
             params_avg = params
         else:
-            params_avg = jax.tree_map(lambda x, y: x + y, params_avg, params)
-    params_avg = jax.tree_map(lambda x: x / len(steps), params_avg)
+            params_avg = jax.tree_util.tree_map(lambda x, y: x + y, params_avg, params)
+    params_avg = jax.tree_util.tree_map(lambda x: x / len(steps), params_avg)
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
@@ -136,7 +136,7 @@ def load_weighted_average_model_at_steps(
     )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
-    params_avg = jax.tree_map(jnp.asarray, params_avg)
+    params_avg = jax.tree_util.tree_map(jnp.asarray, params_avg)
     return model, params_avg, config
 
 
@@ -156,7 +156,7 @@ def get_results_as_dataframe(basedir: str) -> pd.DataFrame:
             continue
 
         num_params = sum(
-            jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
+            jax.tree_util.tree_leaves(jax.tree_util.tree_map(jnp.size, best_state.params))
         )
         config_df = config_to_dataframe(config)
         other_df = pd.DataFrame.from_dict(
@@ -280,7 +280,7 @@ def load_from_workdir(
         )
 
         with open(pickled_params_file, "rb") as f:
-            params = jax.tree_map(np.array, pickle.load(f))
+            params = jax.tree_util.tree_map(np.array, pickle.load(f))
     else:
         if init_graphs is None:
             logging.info("Initializing dummy model with init_graphs from dataloader")
@@ -301,7 +301,7 @@ def load_from_workdir(
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
-    best_state = jax.tree_map(jnp.asarray, data["best_state"])
+    best_state = jax.tree_util.tree_map(jnp.asarray, data["best_state"])
     best_state_in_eval_mode = best_state.replace(apply_fn=eval_net.apply)
 
     return (

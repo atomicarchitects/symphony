@@ -188,9 +188,9 @@ def generate_molecules(
         )
         for init_fragment in init_fragments
     ]
-    init_fragments = jax.tree_map(lambda *err: np.stack(err), *init_fragments)
+    init_fragments = jax.tree_util.tree_map(lambda *err: np.stack(err), *init_fragments)
     init_fragments = jax.vmap(
-        lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment)
+        lambda init_fragment: jax.tree_util.tree_map(jnp.asarray, init_fragment)
     )(init_fragments)
 
     @jax.jit
@@ -224,7 +224,7 @@ def generate_molecules(
             return jax.vmap(generate_for_one_seed_fn)(rngs, init_fragments)
 
         # Chunk the seeds, apply the model, and unchunk the results.
-        init_fragments, rngs = jax.tree_map(
+        init_fragments, rngs = jax.tree_util.tree_map(
             lambda arr: jnp.reshape(
                 arr,
                 (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:]),
@@ -232,7 +232,7 @@ def generate_molecules(
             (init_fragments, rngs),
         )
         results = jax.lax.map(apply_on_chunk, (init_fragments, rngs))
-        results = jax.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
+        results = jax.tree_util.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
 
     # Generate molecules for all seeds.
@@ -253,36 +253,36 @@ def generate_molecules(
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
-        init_fragment = jax.tree_map(lambda x: x[seed], init_fragments)
+        init_fragment = jax.tree_util.tree_map(lambda x: x[seed], init_fragments)
         init_molecule_name = init_molecule_names[seed]
 
         if visualize:
             # Get the padded fragment and predictions for this seed.
-            padded_fragments_for_seed = jax.tree_map(
+            padded_fragments_for_seed = jax.tree_util.tree_map(
                 lambda x: x[seed], padded_fragments
             )
-            preds_for_seed = jax.tree_map(lambda x: x[seed], preds)
+            preds_for_seed = jax.tree_util.tree_map(lambda x: x[seed], preds)
 
             figs = []
             for step in range(max_num_atoms):
                 if step == 0:
                     padded_fragment = init_fragment
                 else:
-                    padded_fragment = jax.tree_map(
+                    padded_fragment = jax.tree_util.tree_map(
                         lambda x: x[step - 1], padded_fragments_for_seed
                     )
-                pred = jax.tree_map(lambda x: x[step], preds_for_seed)
+                pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
 
                 # Save visualization of generation process.
                 fragment = jraph.unpad_with_graphs(padded_fragment)
                 pred = jraph.unpad_with_graphs(pred)
                 fragment = fragment._replace(
-                    globals=jax.tree_map(
+                    globals=jax.tree_util.tree_map(
                         lambda x: np.squeeze(x, axis=0), fragment.globals
                     )
                 )
                 pred = pred._replace(
-                    globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+                    globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
                 )
                 fig = analysis.visualize_predictions(pred, fragment)
                 figs.append(fig)
@@ -313,10 +313,10 @@ def generate_molecules(
 
         else:
             # We already have the final padded fragment.
-            final_padded_fragment = jax.tree_map(
+            final_padded_fragment = jax.tree_util.tree_map(
                 lambda x: x[seed], final_padded_fragments
             )
-            stop = jax.tree_map(lambda x: x[seed], stops)
+            stop = jax.tree_util.tree_map(lambda x: x[seed], stops)
 
         num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
