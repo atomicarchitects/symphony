@@ -162,6 +162,7 @@ def evaluate_model(
     datasets: Dict[str, Iterable[datatypes.Fragments]],
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
+    num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
     """Evaluates the model on metrics over the specified splits."""
 
@@ -171,7 +172,13 @@ def evaluate_model(
         split_metrics = flax.jax_utils.replicate(Metrics.empty())
 
         # Loop over graphs.
-        for graphs in device_batch(fragment_iterator):
+        for eval_step, graphs in enumerate(device_batch(fragment_iterator)):
+            if eval_step >= num_eval_steps:
+                break
+
+            # Convert to JAX arrays.
+            graphs = jax.tree_map(jnp.asarray, graphs)
+
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             step_rngs = jax.random.split(step_rng, jax.local_device_count())
@@ -264,6 +271,7 @@ def train_and_evaluate(
             datasets,
             rng,
             config.loss_kwargs,
+            config.num_eval_steps,
         ),
         writer=writer,
     )
@@ -303,6 +311,7 @@ def train_and_evaluate(
         # Get a batch of graphs.
         try:
             graphs = next(device_batch(datasets["train"]))
+            graphs = jax.tree_map(jnp.asarray, graphs)
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
