@@ -188,7 +188,7 @@ def generate_molecules(
         )
         for init_fragment in init_fragments
     ]
-    init_fragments = jax.tree_util.tree_map(lambda *err: np.stack(err), *init_fragments)
+    init_fragments = jax.tree_util.tree_map(lambda *val: np.stack(val), *init_fragments)
     init_fragments = jax.vmap(
         lambda init_fragment: jax.tree_util.tree_map(jnp.asarray, init_fragment)
     )(init_fragments)
