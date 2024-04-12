@@ -96,11 +96,8 @@ def train_step(
         position_noise = (
             jax.random.normal(noise_rng, graphs.nodes.positions.shape) * noise_std
         )
-    else:
-        position_noise = jnp.zeros_like(graphs.nodes.positions)
-
-    noisy_positions = graphs.nodes.positions + position_noise
-    graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
+        noisy_positions = graphs.nodes.positions + position_noise
+        graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
 
     # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
