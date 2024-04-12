@@ -169,9 +169,6 @@ def evaluate_model(
             if eval_step >= num_eval_steps:
                 break
 
-            # Convert to JAX arrays.
-            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
-
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             step_rngs = jax.random.split(step_rng, jax.local_device_count())
@@ -307,7 +304,6 @@ def train_and_evaluate(
         try:
             start = time.perf_counter()
             graphs = next(device_batch(datasets["train"]))
-            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
             logging.log_first_n(logging.INFO, "Time to get next batch of fragments: %0.4f seconds.", 10, time.perf_counter() - start)
 
         except StopIteration:
