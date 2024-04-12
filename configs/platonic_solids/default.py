@@ -91,6 +91,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"
-    config.generation.max_num_atoms = 20
+    config.generation.max_num_atoms = 35
 
     return config

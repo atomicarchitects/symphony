@@ -1,6 +1,5 @@
 """Tests for the training loop."""
 
-from typing import Tuple
 import tempfile
 
 from absl.testing import absltest

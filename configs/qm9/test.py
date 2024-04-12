@@ -2,12 +2,12 @@
 
 import ml_collections
 
-from configs.qm9 import allegro
+from configs.qm9 import e3schnet_and_nequip
 
 
 def get_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the E3SchNet + NequIP model."""
-    config = allegro.get_config()
+    config = e3schnet_and_nequip.get_config()
 
     config.num_train_molecules = 1000
     config.num_val_molecules = 100
