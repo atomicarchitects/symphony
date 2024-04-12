@@ -65,11 +65,6 @@ class QM9Dataset(datasets.InMemoryDataset):
 
         self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
 
-        if num_train_molecules + num_val_molecules + num_test_molecules > len(self.molecules):
-            raise ValueError("The sum of num_train_molecules, num_val_molecules, and num_test_molecules must be less than or equal to the number of molecules in the dataset.")
-
-        logging.info(f"Loaded {len(self.molecules)} molecules, of which {num_train_molecules} are used for training, {num_val_molecules} for valation, and {num_test_molecules} for testing.")
-
     def structures(self) -> Iterable[datatypes.Structures]:
         for molecule in self.molecules:
             yield _molecule_to_structure(molecule) 
