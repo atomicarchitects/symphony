@@ -169,7 +169,6 @@ def evaluate_model(
             if eval_step >= num_eval_steps:
                 break
 
-            print(f"Step {eval_step} for split {split}")
             # Convert to JAX arrays.
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
 
@@ -194,7 +193,7 @@ def train_and_evaluate(
       workdir: Directory where the TensorBoard summaries are written to.
 
     Returns:
-      The train state (which includes the `.params`).
+      The final train state
     """
     # We only support single-host training.
     assert jax.process_count() == 1

@@ -52,7 +52,7 @@ class QM9Dataset(datasets.InMemoryDataset):
             if num_train_molecules is not None or num_val_molecules is not None or num_test_molecules is not None:
                 raise ValueError("EDM splits are used, so num_train_molecules, num_val_molecules, and num_test_molecules must be None.")
         else:
-            logging.info("Using random splits.")
+            logging.info("Using random (non-EDM) splits.")
             if num_train_molecules is None or num_val_molecules is None or num_test_molecules is None:
                 raise ValueError("EDM splits are not used, so num_train_molecules, num_val_molecules, and num_test_molecules must be provided.")
             
@@ -89,6 +89,7 @@ class QM9Dataset(datasets.InMemoryDataset):
             return get_edm_splits(self.root_dir)
 
         # Create a random permutation of the indices.
+        np.random.seed(0)
         indices = np.random.permutation(len(self.molecules))
         permuted_indices = {
             "train": indices[:self.num_train_molecules],

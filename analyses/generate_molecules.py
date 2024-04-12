@@ -1,8 +1,8 @@
 """Generates molecules from a trained model."""
 
 from typing import Sequence, Tuple, Callable, Optional, Union
-
 import os
+import time
 
 from absl import flags
 from absl import app
@@ -15,11 +15,11 @@ import ase.visualize
 import jax
 import jax.numpy as jnp
 import jraph
+import flax
 import numpy as np
 import tqdm
 import chex
 import optax
-import time
 
 import analyses.analysis as analysis
 from symphony import datatypes
@@ -134,7 +134,7 @@ def generate_molecules(
     max_num_atoms: int,
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
-    verbose: bool = False,
+    verbose: bool = True,
 ):
     """Generates molecules from a trained model at the given workdir."""
 
@@ -193,9 +193,12 @@ def generate_molecules(
         lambda init_fragment: jax.tree_util.tree_map(jnp.asarray, init_fragment)
     )(init_fragments)
 
+    # Ensure params are frozen.
+    params = flax.core.freeze(params)
+
     @jax.jit
     def chunk_and_apply(
-        params: optax.Params, init_fragments: datatypes.Fragments, rngs: chex.PRNGKey
+        init_fragments: datatypes.Fragments, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
         """Chunks the seeds and applies the model sequentially over all chunks."""
 
@@ -241,15 +244,15 @@ def generate_molecules(
 
     # Compute compilation time.
     start_time = time.time()
-    chunk_and_apply.lower(params, init_fragments, rngs).compile()
+    chunk_and_apply.lower(init_fragments, rngs).compile()
     compilation_time = time.time() - start_time
     logging_fn("Compilation time: %.2f s", compilation_time)
 
     # Generate molecules (and intermediate steps, if visualizing).
     if visualize:
-        padded_fragments, preds = chunk_and_apply(params, init_fragments, rngs)
+        padded_fragments, preds = chunk_and_apply(init_fragments, rngs)
     else:
-        final_padded_fragments, stops = chunk_and_apply(params, init_fragments, rngs)
+        final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
@@ -298,9 +301,8 @@ def generate_molecules(
             # Save the visualizations of the generation process.
             for index, fig in enumerate(figs):
                 # Update the title.
-                model_name = analysis.get_title_for_name(name)
                 fig.update_layout(
-                    title=f"{model_name}: Predictions for Seed {seed}",
+                    title=f"Predictions for Seed {seed}",
                     title_x=0.5,
                 )
 

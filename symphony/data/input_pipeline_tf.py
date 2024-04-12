@@ -85,15 +85,16 @@ def get_datasets(
             batching_fn, output_signature=padded_graphs_spec
         )
 
-        datasets[split] = dataset_split.prefetch(tf.data.AUTOTUNE)
+        datasets[split] = dataset_split.prefetch(tf.data.AUTOTUNE).as_numpy_iterator()
         datasets[split + "_eval"] = (
             dataset_split.take(config.num_eval_steps).cache().prefetch(tf.data.AUTOTUNE)
-        )
+        ).as_numpy_iterator()
         datasets[split + "_eval_final"] = (
             dataset_split.take(config.num_eval_steps_at_end_of_training)
             .cache()
             .prefetch(tf.data.AUTOTUNE)
-        )
+        ).as_numpy_iterator()
+
 
     return datasets
 
@@ -257,6 +258,13 @@ def get_unbatched_qm9_datasets(
     tf.random.set_seed(seed)
 
     # Root directory of the dataset.
+    config = ml_collections.ConfigDict(config)
+    config.root_dir = "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
+    config.train_molecules = (0, 10)
+    config.val_molecules = (100000, 110000)
+    config.test_molecules = (110000, 130000)
+    config.train_on_split_smaller_than_chunk = True
+
     filenames = sorted(os.listdir(config.root_dir))
     filenames = [
         os.path.join(config.root_dir, f)
