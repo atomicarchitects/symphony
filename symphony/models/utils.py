@@ -1,6 +1,6 @@
 """Definition of the generative models."""
 
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import chex
 import e3nn_jax as e3nn
@@ -18,7 +18,6 @@ from symphony.models.position_predictor import (
     TargetPositionPredictor,
     FactorizedTargetPositionPredictor,
 )
-from symphony.models.position_updater import PositionUpdater
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
