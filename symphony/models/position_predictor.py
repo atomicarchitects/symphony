@@ -42,10 +42,6 @@ class TargetPositionPredictor(hk.Module):
         """Creates the binned radii for the target positions."""
         return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
 
-    def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
-        """Computes the node embeddings for the target positions."""
-        return self.node_embedder(graphs)
-
     def __call__(
         self,
         graphs: datatypes.Fragments,
@@ -56,7 +52,7 @@ class TargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the focus node embeddings.
-        node_embeddings = self.compute_node_embeddings(graphs)
+        node_embeddings = self.node_embedder(graphs)
         focus_node_embeddings = node_embeddings[focus_indices]
 
         assert focus_node_embeddings.shape == (
@@ -98,9 +94,6 @@ class TargetPositionPredictor(hk.Module):
             s2_irreps.dim,
         )
 
-        # Not relevant for the unfactorized case.
-        angular_logits, radial_logits = None, None
-
         # Scale the coefficients of logits by the inverse temperature.
         log_position_coeffs = log_position_coeffs * inverse_temperature
 
@@ -117,7 +110,7 @@ class TargetPositionPredictor(hk.Module):
             self.res_alpha,
         )
 
-        return log_position_coeffs, position_logits, angular_logits, radial_logits
+        return log_position_coeffs, position_logits
 
 
 class FactorizedTargetPositionPredictor(hk.Module):
@@ -159,10 +152,6 @@ class FactorizedTargetPositionPredictor(hk.Module):
         """Creates the binned radii for the target positions."""
         return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
 
-    def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
-        """Computes the node embeddings for the target positions."""
-        return self.node_embedder(graphs)
-
     def __call__(
         self,
         graphs: datatypes.Fragments,
@@ -173,7 +162,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the focus node embeddings.
-        node_embeddings = self.compute_node_embeddings(graphs)
+        node_embeddings = self.node_embedder(graphs)
         focus_node_embeddings = node_embeddings[focus_indices]
 
         assert focus_node_embeddings.shape == (
@@ -233,35 +222,6 @@ class FactorizedTargetPositionPredictor(hk.Module):
             log_angular_coeffs[:, :, None, :]
         )  # only one radius
 
-        # Mix the radial components with each channel of the angular components.
-        log_position_coeffs = jax.vmap(
-            jax.vmap(
-                utils.compute_coefficients_of_logits_of_joint_distribution,
-                in_axes=(None, 0),
-            )
-        )(radial_logits, log_angular_coeffs)
-
-        assert log_position_coeffs.shape == (
-            num_graphs,
-            self.num_channels,
-            self.num_radii,
-            s2_irreps.dim,
-        )
-
-        # Scale the coefficients of logits by the inverse temperature.
-        log_position_coeffs = log_position_coeffs * inverse_temperature
-
-        # Convert the coefficients to a signal on the grid.
-        position_logits = jax.vmap(
-            lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, self.num_radii
-            )
-        )(log_position_coeffs)
-        assert position_logits.shape == (
-            num_graphs,
-            self.num_radii,
-            self.res_beta,
-            self.res_alpha,
-        )
-
-        return log_position_coeffs, position_logits, angular_logits, radial_logits
+        angular_logits *= jnp.sqrt(inverse_temperature)
+        radial_logits *= jnp.sqrt(inverse_temperature)
+        return angular_logits, radial_logits

@@ -23,11 +23,6 @@ from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegr
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 
 
-def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
-    """Returns the atomic numbers for the species."""
-    return jnp.asarray(ATOMIC_NUMBERS)[species]
-
-
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
     """Returns the indices of the focus nodes in each graph."""
     return jnp.concatenate((jnp.asarray([0]), jnp.cumsum(graphs.n_node)[:-1]))
