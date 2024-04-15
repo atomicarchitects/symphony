@@ -106,16 +106,12 @@ def _make_first_fragment(
         axis=0,
         weights=(graph.nodes.species > 0) if heavy_first else None,
     )
-    distances_com = np.linalg.norm(graph.nodes.positions - com, axis=1)
-    probs_com = jax.nn.softmax(-beta_com * distances_com**2)
     rng, k = jax.random.split(rng)
     if heavy_first and (graph.nodes.species != 0).sum() > 0:
         heavy_indices = np.argwhere(graph.nodes.species != 0).squeeze(-1)
-        first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices])
+        first_node = jax.random.choice(k, heavy_indices)
     else:
-        first_node = jax.random.choice(
-            k, np.arange(0, len(graph.nodes.positions)), p=probs_com
-        )
+        first_node = jax.random.choice(k, np.arange(0, len(graph.nodes.positions)))
     first_node = int(first_node)
 
     mask = graph.senders == first_node
@@ -227,7 +223,7 @@ def _make_last_fragment(graph, num_species):
     n_nodes = len(graph.nodes.positions)
     return _into_fragment(
         graph,
-        visited=np.arange(len(graph.nodes.positions)),
+        visited=np.arange(n_nodes),
         focus_node=0,
         target_species_probability=np.zeros((n_nodes, num_species)),
         target_node=0,
@@ -252,8 +248,10 @@ def _into_fragment(
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
         target_species=np.asarray([graph.nodes.species[target_node]]),  # [1]
-        target_positions=np.asarray([[pos[target_node] - pos[focus_node]]]),  # [1, 3]
-        target_positions_mask=np.array([[True]], dtype=bool),  # [1, 1]
+        target_positions=np.asarray(
+            [[pos[target_node] - pos[focus_node]]]
+        ),  # [1, 1, 3]
+        target_positions_mask=np.array([[not stop]], dtype=bool),  # [1, 1]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 

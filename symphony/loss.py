@@ -76,10 +76,38 @@ def generation_loss(
 
     def position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities."""
+        assert graphs.globals.target_positions.shape == (num_graphs, num_targets, 3), (
+            graphs.globals.target_positions.shape,
+            num_graphs,
+            num_targets,
+            3,
+        )
         position_logits = preds.globals.radial_logits + preds.globals.angular_logits
-        assert position_logits.shape == (num_graphs, num_targets)
+        assert position_logits.shape == (num_graphs, num_targets), (
+            position_logits.shape,
+            num_graphs,
+            num_targets,
+        )
 
-        return position_logits.mean(axis=-1) * graphs.globals.target_positions_mask
+        target_positions_mask = graphs.globals.target_positions_mask
+        assert target_positions_mask.shape == (num_graphs, num_targets)
+
+        loss_position = -position_logits
+        loss_position = jnp.where(target_positions_mask, loss_position, 0)
+        loss_position = loss_position.sum(axis=-1)
+        num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
+        loss_position /= num_valid_targets
+
+        # jax.debug.print("target_positions={x}", x=graphs.globals.target_positions)
+        # jax.debug.print("radial_logits={x}", x=preds.globals.radial_logits)
+        # jax.debug.print("angular_logits={x}", x=preds.globals.angular_logits)
+        # jax.debug.print("mask={x}", x=graphs.globals.target_positions_mask)
+        # jax.debug.print("loss_position={x}", x=loss_position)
+        # jax.debug.print("")
+
+        assert loss_position.shape == (num_graphs,)
+
+        return loss_position
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()

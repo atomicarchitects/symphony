@@ -40,7 +40,8 @@ class LinearAngularPredictor(AngularPredictor):
         self.sampling_num_steps = sampling_num_steps
         self.sampling_init_step_size = sampling_init_step_size
 
-    def coeffs(self, radius: float, conditioning: e3nn.IrrepsArray):
+    def coeffs(self, radius: float, conditioning: e3nn.IrrepsArray) -> e3nn.IrrepsArray:
+        """Computes the spherical harmonic coefficients at the given radius."""
         radial_embed = e3nn.bessel(
             radius, self.radial_mlp_latent_size, x_max=self.max_radius
         )
@@ -60,23 +61,10 @@ class LinearAngularPredictor(AngularPredictor):
 
         return coeffs
 
-    def logits(
-        self, position: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
-    ) -> float:
-        """Computes the logits for the given position."""
-        assert position.shape == (3,), position.shape
-
-        radius = jnp.linalg.norm(position.array)
-        coeffs = self.coeffs(radius, conditioning)
-        normalized_position = position / radius
-        return self.logits_with_coeffs(normalized_position, coeffs)
-
-    def logits_with_coeffs(
+    def unnormalized_logits(
         self, normalized_position: e3nn.IrrepsArray, coeffs: e3nn.IrrepsArray
     ) -> float:
-        """Computes the logits for the given normalized position and coefficients."""
-        assert normalized_position.shape == (3,), normalized_position.shape
-
+        """Computes the unnormalized logits for the given position."""
         vals = e3nn.to_s2point(coeffs, normalized_position)
         vals = vals.array.squeeze(-1)
         assert vals.shape == (self.num_channels,), vals.shape
@@ -85,11 +73,18 @@ class LinearAngularPredictor(AngularPredictor):
         assert logits.shape == (), logits.shape
         return logits
 
-    def log_partition_function(
-        self, radius: float, conditioning: e3nn.IrrepsArray
+    def log_prob(
+        self, position: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
     ) -> float:
-        """Computes the log partition function at this radius."""
-        coeffs = self.coeffs(radius, conditioning)
+        """Computes the logits for the given position and coefficients."""
+        # Normalize the position.
+        normalized_position = position / jnp.linalg.norm(position.array)
+        assert normalized_position.shape == (3,), normalized_position.shape
+
+        # Compute the coefficients at this radius.
+        coeffs = self.coeffs(jnp.linalg.norm(position.array), conditioning)
+
+        # We have to compute the log partition function, because the distribution is not normalized.
         prob_signal = e3nn.to_s2grid(
             coeffs,
             res_beta=self.res_beta,
@@ -101,8 +96,8 @@ class LinearAngularPredictor(AngularPredictor):
             self.res_beta,
             self.res_alpha,
         )
-
-        prob_signal = prob_signal.replace_values(prob_signal.grid_values)
+        factor = jnp.max(prob_signal.grid_values)
+        prob_signal = prob_signal.replace_values(prob_signal.grid_values - factor)
         prob_signal = prob_signal.replace_values(jnp.exp(prob_signal.grid_values))
         prob_signal = prob_signal.replace_values(
             jnp.sum(prob_signal.grid_values, axis=-3)
@@ -112,15 +107,23 @@ class LinearAngularPredictor(AngularPredictor):
         log_Z = jnp.log(prob_signal.integrate().array.sum())
         assert log_Z.shape == (), log_Z.shape
 
-        return log_Z
+        # We can compute the logits.
+        vals = e3nn.to_s2point(coeffs, normalized_position)
+        vals -= factor
+        vals = vals.array.squeeze(-1)
+        assert vals.shape == (self.num_channels,), vals.shape
 
-    def log_prob(
-        self, position: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
-    ) -> float:
-        """Computes the log probability of the given position."""
-        return self.logits(position, conditioning) - self.log_partition_function(
-            jnp.linalg.norm(position.array), conditioning
-        )
+        logits = jax.scipy.special.logsumexp(vals, axis=-1)
+        assert logits.shape == (), logits.shape
+
+        # jax.debug.print("grid_values_min={x}, grid_values_max={y}", x=jnp.min(prob_signal.grid_values), y=jnp.max(prob_signal.grid_values))
+        # jax.debug.print("integral={x}", x=prob_signal.integrate())
+        # jax.debug.print("normalized_position={x}", x=normalized_position)
+        # jax.debug.print("coeffs={x}", x=coeffs)
+        # jax.debug.print("vals={x}", x=vals)
+        # jax.debug.print("logits={x}", x=logits)
+
+        return logits - log_Z
 
     @staticmethod
     def coeffs_to_probability_distribution(
@@ -174,7 +177,7 @@ class LinearAngularPredictor(AngularPredictor):
 
         def score(sample: e3nn.IrrepsArray) -> float:
             """Computes the score at the given sample."""
-            return jax.grad(self.logits_with_coeffs, argnums=0)(sample, coeffs)
+            return jax.grad(self.unnormalized_logits, argnums=0)(sample, coeffs)
 
         def project_update_on_tangent_space(
             sample: e3nn.IrrepsArray, update: e3nn.IrrepsArray
@@ -205,9 +208,9 @@ class LinearAngularPredictor(AngularPredictor):
 
             # Apply Metropolis-Hastings correction.
             key, mh_key = jax.random.split(key)
-            log_acceptance_ratio = self.logits_with_coeffs(
+            log_acceptance_ratio = self.unnormalized_logits(
                 new_sample, coeffs
-            ) - self.logits_with_coeffs(sample, coeffs)
+            ) - self.unnormalized_logits(sample, coeffs)
             log_acceptance_ratio = jnp.minimum(0, log_acceptance_ratio)
             acceptance_ratio = jnp.exp(log_acceptance_ratio)
             acceptance = jax.random.bernoulli(mh_key, acceptance_ratio)

@@ -92,7 +92,7 @@ class TargetPositionPredictor(hk.Module):
             num_graphs,
             num_targets,
             3,
-        ), target_positions.shape
+        )
 
         def predict_logits_for_single_graph(
             target_positions: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray

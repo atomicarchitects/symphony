@@ -54,12 +54,23 @@ def device_batch(
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     if config.optimizer == "adam":
-        return optax.chain(
-            optax.adam(learning_rate=config.learning_rate),
-            optax.clip_by_global_norm(config.gradient_clip_norm),
-        )
+        return optax.adam(learning_rate=config.learning_rate)
     elif config.optimizer == "sgd":
         return optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
+
+
+def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments:
+    """Fill in the target positions with non-zero values for the graphs."""
+    # Ensure that the target positions are not all zeros.
+    return graphs._replace(
+        globals=graphs.globals._replace(
+            target_positions=jnp.where(
+                jnp.all(graphs.globals.target_positions == 0.0, axis=-1)[:, None],
+                jnp.ones_like(graphs.globals.target_positions) * 1e-3,
+                graphs.globals.target_positions,
+            )
+        )
+    )
 
 
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3, 4, 5])
@@ -73,6 +84,9 @@ def train_step(
     noise_std: float,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
+
+    # Ensure that the target positions are not all zeros.
+    graphs = fill_in_target_positions(graphs)
 
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         preds = state.apply_fn(params, None, graphs)
@@ -128,6 +142,10 @@ def evaluate_step(
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
+
+    # Ensure that the target positions are not all zeros.
+    graphs = fill_in_target_positions(graphs)
+
     # Compute predictions and resulting loss.
     preds = state.apply_fn(state.params, rng, graphs)
     total_loss, (
@@ -286,7 +304,7 @@ def train_and_evaluate(
 
         # Evaluate model, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
-            logging.log_first_n(logging.INFO, "Evaluating model at initialization.", 1)
+            logging.log_first_n(logging.INFO, "Evaluating model for the first time.", 1)
             rng, eval_rng = jax.random.split(rng)
             state = evaluate_model_hook(state, eval_rng)
             checkpoint_hook(state)
@@ -294,7 +312,7 @@ def train_and_evaluate(
         # Generate molecules, if required.
         if step % config.generate_every_steps == 0 or first_or_last_step:
             logging.log_first_n(
-                logging.INFO, "Generating molecules at initialization.", 1
+                logging.INFO, "Generating molecules for the first time.", 1
             )
             generate_molecules_hook(state)
 
