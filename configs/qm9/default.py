@@ -67,24 +67,30 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.res_beta = 180
-    config.target_position_predictor.res_alpha = 359
-    config.target_position_predictor.num_channels = 5
-    config.target_position_predictor.min_radius = 0.9
-    config.target_position_predictor.max_radius = 2.0
-    config.target_position_predictor.num_radii = 64
-    config.target_position_predictor.apply_gate = False
-    config.target_position_predictor.factorized = False
-    config.target_position_predictor.radial_mlp_latent_size = 128
-    config.target_position_predictor.radial_mlp_num_layers = 2
-    config.target_position_predictor.radial_mlp_activation = "swish"
+    config.target_position_predictor.angular_predictor = ml_collections.ConfigDict()
+    config.target_position_predictor.angular_predictor.num_channels = 2
+    config.target_position_predictor.angular_predictor.radial_mlp_num_layers = 2
+    config.target_position_predictor.angular_predictor.radial_mlp_latent_size = 8
+    config.target_position_predictor.angular_predictor.res_beta = 100
+    config.target_position_predictor.angular_predictor.res_alpha = 99
+    config.target_position_predictor.angular_predictor.quadrature = "gausslegendre"
+    config.target_position_predictor.angular_predictor.sampling_inverse_temperature_factor = 10.0
+    config.target_position_predictor.angular_predictor.sampling_num_steps = 1000
+    config.target_position_predictor.angular_predictor.sampling_init_step_size = 10.0
+
+    config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
+    config.target_position_predictor.radial_predictor.num_bins = 16
+    config.target_position_predictor.radial_predictor.num_param_mlp_layers = 2
+    config.target_position_predictor.radial_predictor.num_layers = 2
+    config.target_position_predictor.radial_predictor.min_radius = 0.0
+    config.target_position_predictor.radial_predictor.max_radius = 5.0
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
     config.generation.focus_and_atom_type_inverse_temperature = 1.0
     config.generation.position_inverse_temperature = 1.0
-    config.generation.res_beta = config.target_position_predictor.get_ref("res_beta")
-    config.generation.res_alpha = config.target_position_predictor.get_ref("res_alpha")
+    config.generation.res_beta = config.target_position_predictor.angular_predictor.get_ref("res_beta")
+    config.generation.res_alpha = config.target_position_predictor.angular_predictor.get_ref("res_alpha")
     config.generation.radial_cutoff = config.get_ref("radial_cutoff")
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
