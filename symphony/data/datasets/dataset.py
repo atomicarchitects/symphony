@@ -3,6 +3,7 @@ import abc
 
 from symphony import datatypes
 
+
 class InMemoryDataset(abc.ABC):
     """Abstract base class for in-memory datasets."""
 

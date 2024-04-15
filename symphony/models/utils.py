@@ -11,16 +11,23 @@ import jraph
 import ml_collections
 
 from symphony import datatypes
-from symphony.models.predictor import Predictor
-from symphony.models.embedders.global_embedder import GlobalEmbedder
-from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
-from symphony.models.position_predictor import (
-    TargetPositionPredictor,
-    FactorizedTargetPositionPredictor,
+from symphony.models.angular_predictors.linear_angular_predictor import (
+    LinearAngularPredictor,
 )
+from symphony.models.radius_predictors.rational_quadratic_spline import (
+    RationalQuadraticSplineRadialPredictor,
+)
+from symphony.models.continuous_position_predictor import TargetPositionPredictor
+from symphony.models.predictor import Predictor
+from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
+
+
+def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
+    """Returns the atomic numbers for the species."""
+    return jnp.asarray(ATOMIC_NUMBERS)[species]
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
@@ -278,12 +285,8 @@ def get_num_species_for_dataset(dataset: str) -> int:
 def create_node_embedder(
     config: ml_collections.ConfigDict,
     num_species: int,
-    name_prefix: Optional[str] = None,
 ) -> hk.Module:
     """Creates a node embedder as specified by the config."""
-
-    if name_prefix is None:
-        raise ValueError("name_prefix must be specified.")
 
     if config.model == "MACE":
         output_irreps = _irreps_from_lmax(
@@ -302,7 +305,6 @@ def create_node_embedder(
             max_ell=config.max_ell,
             num_basis_fns=config.num_basis_fns,
             soft_normalization=config.get("soft_normalization"),
-            name=f"node_embedder_{name_prefix}_mace",
         )
 
     if config.model == "NequIP":
@@ -326,7 +328,6 @@ def create_node_embedder(
             mlp_n_layers=config.mlp_n_layers,
             n_radial_basis=config.num_basis_fns,
             skip_connection=config.skip_connection,
-            name=f"node_embedder_{name_prefix}_nequip",
         )
 
     if config.model == "MarioNette":
@@ -352,7 +353,6 @@ def create_node_embedder(
             use_bessel=config.use_bessel,
             alpha=config.alpha,
             alphal=config.alphal,
-            name=f"node_embedder_{name_prefix}_marionette",
         )
 
     if config.model == "E3SchNet":
@@ -365,7 +365,6 @@ def create_node_embedder(
             cutoff=config.cutoff,
             max_ell=config.max_ell,
             num_species=num_species,
-            name=f"node_embedder_{name_prefix}_e3schnet",
         )
 
     if config.model == "Allegro":
@@ -385,11 +384,9 @@ def create_node_embedder(
             mlp_n_hidden=config.num_channels,
             mlp_n_layers=config.mlp_n_layers,
             n_radial_basis=config.num_basis_fns,
-            name=f"node_embedder_{name_prefix}_allegro",
         )
 
     raise ValueError(f"Unsupported model: {config.model}.")
-
 
 
 def create_model(
@@ -404,25 +401,12 @@ def create_model(
     ) -> datatypes.Predictions:
         """Defines the entire network."""
 
-        dataset = config.get("dataset", "qm9")
-        num_species = get_num_species_for_dataset(dataset)
-
-        if config.focus_and_target_species_predictor.get("compute_global_embedding"):
-            global_embedder = GlobalEmbedder(
-                num_channels=config.focus_and_target_species_predictor.global_embedder.num_channels,
-                pooling=config.focus_and_target_species_predictor.global_embedder.pooling,
-                num_attention_heads=config.focus_and_target_species_predictor.global_embedder.num_attention_heads,
-            )
-        else:
-            global_embedder = None
-
+        num_species = get_num_species_for_dataset(config.dataset)
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
-            node_embedder=create_node_embedder(
+            node_embedder_fn=lambda: create_node_embedder(
                 config.focus_and_target_species_predictor.embedder_config,
                 num_species,
-                name_prefix="focus_and_target_species_predictor",
             ),
-            global_embedder=global_embedder,
             latent_size=config.focus_and_target_species_predictor.latent_size,
             num_layers=config.focus_and_target_species_predictor.num_layers,
             activation=get_activation(
@@ -430,46 +414,37 @@ def create_model(
             ),
             num_species=num_species,
         )
-        if config.target_position_predictor.get("factorized"):
-            target_position_predictor = FactorizedTargetPositionPredictor(
-                node_embedder=create_node_embedder(
-                    config.target_position_predictor.embedder_config,
-                    num_species,
-                    name_prefix="target_position_predictor",
-                ),
-                position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
-                res_beta=config.target_position_predictor.res_beta,
-                res_alpha=config.target_position_predictor.res_alpha,
-                num_channels=config.target_position_predictor.num_channels,
-                num_species=num_species,
-                min_radius=config.target_position_predictor.min_radius,
-                max_radius=config.target_position_predictor.max_radius,
-                num_radii=config.target_position_predictor.num_radii,
-                radial_mlp_latent_size=config.target_position_predictor.radial_mlp_latent_size,
-                radial_mlp_num_layers=config.target_position_predictor.radial_mlp_num_layers,
-                radial_mlp_activation=get_activation(
-                    config.target_position_predictor.radial_mlp_activation
-                ),
-                apply_gate=config.target_position_predictor.get("apply_gate"),
-            )
-        else:
-            target_position_predictor = TargetPositionPredictor(
-                node_embedder=create_node_embedder(
-                    config.target_position_predictor.embedder_config,
-                    num_species,
-                    name_prefix="target_position_predictor",
-                ),
-                position_coeffs_lmax=config.target_position_predictor.embedder_config.max_ell,
-                res_beta=config.target_position_predictor.res_beta,
-                res_alpha=config.target_position_predictor.res_alpha,
-                num_channels=config.target_position_predictor.num_channels,
-                num_species=num_species,
-                min_radius=config.target_position_predictor.min_radius,
-                max_radius=config.target_position_predictor.max_radius,
-                num_radii=config.target_position_predictor.num_radii,
-                apply_gate=config.target_position_predictor.get("apply_gate"),
-            )
-
+        angular_predictor_config = config.target_position_predictor.angular_predictor
+        radial_predictor_config = config.target_position_predictor.radial_predictor
+        angular_predictor_fn = lambda: LinearAngularPredictor(
+            max_ell=config.target_position_predictor.embedder_config.max_ell,
+            num_channels=angular_predictor_config.num_channels,
+            radial_mlp_num_layers=angular_predictor_config.radial_mlp_num_layers,
+            radial_mlp_latent_size=angular_predictor_config.radial_mlp_latent_size,
+            max_radius=radial_predictor_config.max_radius,
+            res_beta=angular_predictor_config.res_beta,
+            res_alpha=angular_predictor_config.res_alpha,
+            quadrature=angular_predictor_config.quadrature,
+            sampling_inverse_temperature_factor=angular_predictor_config.sampling_inverse_temperature_factor,
+            sampling_num_steps=angular_predictor_config.sampling_num_steps,
+            sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
+        )
+        radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
+            num_bins=radial_predictor_config.num_bins,
+            min_radius=radial_predictor_config.min_radius,
+            max_radius=radial_predictor_config.max_radius,
+            num_layers=radial_predictor_config.num_layers,
+            num_param_mlp_layers=radial_predictor_config.num_param_mlp_layers,
+        )
+        target_position_predictor = TargetPositionPredictor(
+            node_embedder_fn=lambda: create_node_embedder(
+                config.target_position_predictor.embedder_config,
+                num_species,
+            ),
+            angular_predictor_fn=angular_predictor_fn,
+            radial_predictor_fn=radial_predictor_fn,
+            num_species=num_species,
+        )
         predictor = Predictor(
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,

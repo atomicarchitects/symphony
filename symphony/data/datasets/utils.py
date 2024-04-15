@@ -19,7 +19,7 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_val_molecules=config.get("num_val_molecules"),
             num_test_molecules=config.get("num_test_molecules"),
         )
-    
+
     if config.dataset == "platonic_solids":
         return platonic_solids.PlatonicSolidsDataset(
             train_solids=config.train_solids,

@@ -24,7 +24,7 @@ def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
     return datatypes.Structures(
         nodes=datatypes.NodesInfo(
             positions=np.asarray(molecule.positions),
-            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers)
+            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers),
         ),
         edges=None,
         receivers=None,
@@ -38,24 +38,45 @@ def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
 class QM9Dataset(datasets.InMemoryDataset):
     """QM9 dataset."""
 
-    def __init__(self, root_dir: str, check_molecule_sanity: bool, use_edm_splits: bool, 
-                 num_train_molecules: int, num_val_molecules: int, num_test_molecules: int):
+    def __init__(
+        self,
+        root_dir: str,
+        check_molecule_sanity: bool,
+        use_edm_splits: bool,
+        num_train_molecules: int,
+        num_val_molecules: int,
+        num_test_molecules: int,
+    ):
         super().__init__()
-        
+
         if root_dir is None:
             raise ValueError("root_dir must be provided.")
 
         if use_edm_splits:
             logging.info("Using EDM splits for QM9.")
             if check_molecule_sanity:
-                raise ValueError("EDM splits are not compatible with molecule sanity checks.")
-            if num_train_molecules is not None or num_val_molecules is not None or num_test_molecules is not None:
-                raise ValueError("EDM splits are used, so num_train_molecules, num_val_molecules, and num_test_molecules must be None.")
+                raise ValueError(
+                    "EDM splits are not compatible with molecule sanity checks."
+                )
+            if (
+                num_train_molecules is not None
+                or num_val_molecules is not None
+                or num_test_molecules is not None
+            ):
+                raise ValueError(
+                    "EDM splits are used, so num_train_molecules, num_val_molecules, and num_test_molecules must be None."
+                )
         else:
             logging.info("Using random (non-EDM) splits.")
-            if num_train_molecules is None or num_val_molecules is None or num_test_molecules is None:
-                raise ValueError("EDM splits are not used, so num_train_molecules, num_val_molecules, and num_test_molecules must be provided.")
-            
+            if (
+                num_train_molecules is None
+                or num_val_molecules is None
+                or num_test_molecules is None
+            ):
+                raise ValueError(
+                    "EDM splits are not used, so num_train_molecules, num_val_molecules, and num_test_molecules must be provided."
+                )
+
         self.root_dir = root_dir
         self.check_molecule_sanity = check_molecule_sanity
         self.use_edm_splits = use_edm_splits
@@ -67,7 +88,7 @@ class QM9Dataset(datasets.InMemoryDataset):
 
     def structures(self) -> Iterable[datatypes.Structures]:
         for molecule in self.molecules:
-            yield _molecule_to_structure(molecule) 
+            yield _molecule_to_structure(molecule)
 
     @staticmethod
     def species_to_atom_types() -> Dict[int, str]:
@@ -87,11 +108,20 @@ class QM9Dataset(datasets.InMemoryDataset):
         np.random.seed(0)
         indices = np.random.permutation(len(self.molecules))
         permuted_indices = {
-            "train": indices[:self.num_train_molecules],
-            "val": indices[self.num_train_molecules:self.num_train_molecules + self.num_val_molecules],
-            "test": indices[self.num_train_molecules + self.num_val_molecules:self.num_train_molecules + self.num_val_molecules + self.num_test_molecules],
+            "train": indices[: self.num_train_molecules],
+            "val": indices[
+                self.num_train_molecules : self.num_train_molecules
+                + self.num_val_molecules
+            ],
+            "test": indices[
+                self.num_train_molecules
+                + self.num_val_molecules : self.num_train_molecules
+                + self.num_val_molecules
+                + self.num_test_molecules
+            ],
         }
         return permuted_indices
+
 
 def download_url(url: str, root: str) -> str:
     """Download if file does not exist in root already. Returns path to file."""

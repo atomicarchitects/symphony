@@ -6,10 +6,7 @@ import jax.numpy as jnp
 
 from symphony import datatypes
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
-from symphony.models.position_predictor import (
-    FactorizedTargetPositionPredictor,
-    TargetPositionPredictor,
-)
+from symphony.models.continuous_position_predictor import TargetPositionPredictor
 from symphony.models import utils
 
 
@@ -19,9 +16,7 @@ class Predictor(hk.Module):
     def __init__(
         self,
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
-        target_position_predictor: Union[
-            TargetPositionPredictor, FactorizedTargetPositionPredictor
-        ],
+        target_position_predictor: TargetPositionPredictor,
         name: str = None,
     ):
         super().__init__(name=name)
@@ -35,6 +30,7 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
+        num_targets = graphs.globals.target_positions.shape[1]
         num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
@@ -49,31 +45,16 @@ class Predictor(hk.Module):
             focus_and_target_species_logits, stop_logits, segment_ids, num_graphs
         )
 
-        # Get the embeddings of the focus nodes.
-        # These are the first nodes in each graph during training.
+        # Get the focus node indices.
         focus_node_indices = utils.get_first_node_indices(graphs)
 
-        # Get the coefficients for the target positions.
+        # Get the logits at the target positions.
         (
-            log_position_coeffs,
-            position_logits,
-            angular_logits,
             radial_logits,
-        ) = self.target_position_predictor(
+            angular_logits,
+        ) = self.target_position_predictor.get_training_predictions(
             graphs,
-            focus_node_indices,
-            graphs.globals.target_species,
-            inverse_temperature=1.0,
         )
-
-        # Get the position probabilities.
-        position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
-            position_logits
-        )
-
-        # The radii bins used for the position prediction, repeated for each graph.
-        radii = self.target_position_predictor.create_radii()
-        radial_bins = jax.vmap(lambda _: radii)(jnp.arange(num_graphs))
 
         # Check the shapes.
         assert focus_and_target_species_logits.shape == (
@@ -84,27 +65,23 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert log_position_coeffs.shape == (
+        assert radial_logits.shape == (
             num_graphs,
-            self.target_position_predictor.num_channels,
-            self.target_position_predictor.num_radii,
-            log_position_coeffs.shape[-1],
+            num_targets,
         )
-        assert position_logits.shape == (
+        assert angular_logits.shape == (
             num_graphs,
-            self.target_position_predictor.num_radii,
-            self.target_position_predictor.res_beta,
-            self.target_position_predictor.res_alpha,
+            num_targets,
         )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
-                embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(
+                embeddings_for_focus=self.focus_and_target_species_predictor.node_embedder(
                     graphs
                 ),
-                embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
+                embeddings_for_positions=self.target_position_predictor.node_embedder(
                     graphs
                 ),
             ),
@@ -115,13 +92,9 @@ class Predictor(hk.Module):
                 stop=None,
                 focus_indices=focus_node_indices,
                 target_species=None,
-                log_position_coeffs=log_position_coeffs,
-                position_logits=position_logits,
-                position_probs=position_probs,
-                position_vectors=None,
-                radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
+                position_vectors=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -173,58 +146,24 @@ class Predictor(hk.Module):
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
         )
 
-        # Compute the position coefficients.
+        # Compute the radial and angular logits.
         (
-            log_position_coeffs,
-            position_logits,
-            angular_logits,
             radial_logits,
-        ) = self.target_position_predictor(
+            angular_logits,
+        ) = self.target_position_predictor.get_evaluation_predictions(
             graphs,
             focus_indices,
             target_species,
-            inverse_temperature=position_inverse_temperature,
+            position_inverse_temperature,
         )
 
-        # Integrate the position signal over each sphere to get the normalizing factors for the radii.
-        # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
-            position_logits
+        # Compute the position coefficients.
+        position_vectors = self.target_position_predictor.get_evaluation_predictions(
+            graphs,
+            focus_indices,
+            target_species,
+            position_inverse_temperature,
         )
-
-        # Sample the radius.
-        radii = self.target_position_predictor.create_radii()
-        radial_bins = jnp.tile(radii, (num_graphs, 1))
-        radial_probs = jax.vmap(utils.position_distribution_to_radial_distribution)(
-            position_probs
-        )
-        num_radii = radii.shape[0]
-        rng, radius_rng = jax.random.split(rng)
-        radius_rngs = jax.random.split(radius_rng, num_graphs)
-        radius_indices = jax.vmap(
-            lambda key, p: jax.random.choice(key, num_radii, p=p)
-        )(
-            radius_rngs, radial_probs
-        )  # [num_graphs]
-
-        # Get the angular probabilities.
-        angular_probs = jax.vmap(
-            lambda p, r_index: p[r_index] / p[r_index].integrate()
-        )(
-            position_probs, radius_indices
-        )  # [num_graphs, res_beta, res_alpha]
-
-        # Sample angles.
-        rng, angular_rng = jax.random.split(rng)
-        angular_rngs = jax.random.split(angular_rng, num_graphs)
-        beta_indices, alpha_indices = jax.vmap(lambda key, p: p.sample(key))(
-            angular_rngs, angular_probs
-        )
-
-        # Combine the radius and angles to get the position vectors.
-        position_vectors = jax.vmap(
-            lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
-        )(radius_indices, beta_indices, alpha_indices)
 
         assert stop.shape == (num_graphs,)
         assert focus_indices.shape == (num_graphs,)
@@ -236,28 +175,16 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert log_position_coeffs.shape == (
-            num_graphs,
-            self.target_position_predictor.num_channels,
-            self.target_position_predictor.num_radii,
-            log_position_coeffs.shape[-1],
-        )
-        assert position_logits.shape == (
-            num_graphs,
-            self.target_position_predictor.num_radii,
-            self.target_position_predictor.res_beta,
-            self.target_position_predictor.res_alpha,
-        )
         assert position_vectors.shape == (num_graphs, 3)
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
                 focus_and_target_species_logits=focus_and_target_species_logits,
                 focus_and_target_species_probs=focus_and_target_species_probs,
-                embeddings_for_focus=self.focus_and_target_species_predictor.compute_node_embeddings(
+                embeddings_for_focus=self.focus_and_target_species_predictor.node_embedder(
                     graphs
                 ),
-                embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
+                embeddings_for_positions=self.target_position_predictor.node_embedder(
                     graphs
                 ),
             ),
@@ -268,13 +195,9 @@ class Predictor(hk.Module):
                 stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
-                log_position_coeffs=log_position_coeffs,
-                position_logits=position_logits,
-                position_probs=position_probs,
+                radial_logits=None,
+                angular_logits=None,
                 position_vectors=position_vectors,
-                radial_bins=radial_bins,
-                radial_logits=radial_logits,
-                angular_logits=angular_logits,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

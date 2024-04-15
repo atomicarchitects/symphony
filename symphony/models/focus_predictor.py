@@ -13,35 +13,19 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
 
     def __init__(
         self,
-        node_embedder: hk.Module,
+        node_embedder_fn: Callable[[], hk.Module],
         latent_size: int,
         num_layers: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         num_species: int,
-        global_embedder: Optional[hk.Module] = None,
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.node_embedder = node_embedder
-        self.global_embedder = global_embedder
+        self.node_embedder = node_embedder_fn()
         self.latent_size = latent_size
         self.num_layers = num_layers
         self.activation = activation
         self.num_species = num_species
-
-    def compute_node_embeddings(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
-        """Computes the node embeddings for the target positions."""
-        node_embeddings = self.node_embedder(graphs)
-
-        # Concatenate global embeddings to node embeddings.
-        if self.global_embedder is not None:
-            graphs_with_node_embeddings = graphs._replace(nodes=node_embeddings)
-            global_embeddings = self.global_embedder(graphs_with_node_embeddings)
-            node_embeddings = e3nn.concatenate(
-                [node_embeddings, global_embeddings], axis=-1
-            )
-
-        return node_embeddings
 
     def __call__(
         self, graphs: datatypes.Fragments, inverse_temperature: float = 1.0
@@ -49,7 +33,7 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Get the node embeddings.
-        node_embeddings = self.compute_node_embeddings(graphs)
+        node_embeddings = self.node_embedder(graphs)
 
         num_nodes, _ = node_embeddings.shape
         node_embeddings = node_embeddings.filter(keep="0e")

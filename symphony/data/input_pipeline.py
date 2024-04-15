@@ -13,15 +13,20 @@ import ml_collections
 import numpy as np
 
 from symphony import datatypes
-from symphony.data import fragments, datasets 
+from symphony.data import fragments, datasets
 
 
-def infer_edges_with_radial_cutoff_on_positions(structure: datatypes.Structures, radial_cutoff: float) -> datatypes.Structures:
+def infer_edges_with_radial_cutoff_on_positions(
+    structure: datatypes.Structures, radial_cutoff: float
+) -> datatypes.Structures:
     """Infer edges from node positions, using a radial cutoff."""
     assert structure.n_node.shape[0] == 1, "Only one structure is supported."
 
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=structure.nodes.positions, cutoff=radial_cutoff, cell=np.eye(3)
+        quantities="ij",
+        positions=structure.nodes.positions,
+        cutoff=radial_cutoff,
+        cell=np.eye(3),
     )
 
     return structure._replace(
@@ -71,7 +76,9 @@ def create_fragments_dataset(
                 if infer_edges_with_radial_cutoff:
                     if structure.n_edge is not None:
                         raise ValueError("Structure already has edges.")
-                    structure = infer_edges_with_radial_cutoff_on_positions(structure, radial_cutoff=radial_cutoff)
+                    structure = infer_edges_with_radial_cutoff_on_positions(
+                        structure, radial_cutoff=radial_cutoff
+                    )
 
                 yield from fragments.generate_fragments(
                     rng=structure_rng,
@@ -86,7 +93,9 @@ def create_fragments_dataset(
 
 
 def estimate_padding_budget(
-    fragments_iterator: Iterator[datatypes.Fragments], num_graphs: int, num_estimation_graphs: int
+    fragments_iterator: Iterator[datatypes.Fragments],
+    num_graphs: int,
+    num_estimation_graphs: int,
 ) -> Tuple[int, int, int]:
     """Estimates the padding budget for a dataset of unbatched GraphsTuples.
     Args:
@@ -166,7 +175,7 @@ def pad_and_batch_fragments(
         n_node=max_n_nodes,
         n_edge=max_n_edges,
         n_graph=max_n_graphs,
-    )    
+    )
 
 
 def get_datasets(
@@ -174,7 +183,7 @@ def get_datasets(
     config: ml_collections.ConfigDict,
 ) -> Dict[str, Iterator[datatypes.Fragments]]:
     """Creates the datasets of fragments, as specified by the config."""
-    
+
     # Get the dataset of structures.
     dataset = datasets.utils.get_dataset(config)
 

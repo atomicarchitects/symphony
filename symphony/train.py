@@ -54,13 +54,12 @@ def device_batch(
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=config.learning_rate)
-    elif config.optimizer == "sgd":
-        return optax.sgd(
-            learning_rate=config.learning_rate, momentum=config.momentum
+        return optax.chain(
+            optax.adam(learning_rate=config.learning_rate),
+            optax.clip_by_global_norm(config.gradient_clip_norm),
         )
-
-
+    elif config.optimizer == "sgd":
+        return optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
 
 
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3, 4, 5])
@@ -171,7 +170,7 @@ def evaluate_model(
             step_rngs = jax.random.split(step_rng, jax.local_device_count())
             batch_metrics = evaluate_step(graphs, state, step_rngs, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
-            
+
         eval_metrics[split + "_eval"] = flax.jax_utils.unreplicate(split_metrics)
 
     return eval_metrics
@@ -294,14 +293,21 @@ def train_and_evaluate(
 
         # Generate molecules, if required.
         if step % config.generate_every_steps == 0 or first_or_last_step:
-            logging.log_first_n(logging.INFO, "Generating molecules at initialization.", 1)
+            logging.log_first_n(
+                logging.INFO, "Generating molecules at initialization.", 1
+            )
             generate_molecules_hook(state)
 
         # Get a batch of graphs.
         try:
             start = time.perf_counter()
             graphs = next(device_batch(datasets["train"]))
-            logging.log_first_n(logging.INFO, "Time to get next batch of fragments: %0.4f seconds.", 10, time.perf_counter() - start)
+            logging.log_first_n(
+                logging.INFO,
+                "Time to get next batch of fragments: %0.4f seconds.",
+                10,
+                time.perf_counter() - start,
+            )
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")

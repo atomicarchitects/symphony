@@ -44,7 +44,7 @@ def generate_fragments(
         raise ValueError("nn_tolerance must be specified for mode 'nn'.")
     if mode != "nn" and nn_tolerance is not None:
         raise ValueError("nn_tolerance specified, but mode is not 'nn'.")
-    
+
     n = len(graph.nodes.positions)
     assert (
         len(graph.n_edge) == 1 and len(graph.n_node) == 1
@@ -251,8 +251,9 @@ def _into_fragment(
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
-        target_species=graph.nodes.species[target_node][None],  # [1]
-        target_positions=(pos[target_node] - pos[focus_node])[None],  # [1, 3]
+        target_species=np.asarray([graph.nodes.species[target_node]]),  # [1]
+        target_positions=np.asarray([[pos[target_node] - pos[focus_node]]]),  # [1, 3]
+        target_positions_mask=np.array([[True]], dtype=bool),  # [1, 1]
     )
     graph = graph._replace(nodes=nodes, globals=globals)
 
