@@ -4,12 +4,28 @@ from typing import Optional
 import os
 
 
-def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int | None = None) -> Optional[str]:
+def get_root_dir(dataset: str) -> Optional[str]:
     """Get the root directory for the dataset."""
     hostname, username = os.uname()[1], os.environ.get("USER")
 
+    if hostname == "radish.mit.edu":
+        return f"/data/NFS/radish/symphony/root_dirs/{dataset}"
+    if hostname == "potato.mit.edu":
+        return f"/radish/symphony/root_dirs/{dataset}"
+    if username == "ameyad":
+        return f"/Users/ameyad/Documents/spherical-harmonic-net/root_dirs/{dataset}"
+    if username == "songk":
+        return "/Users/songk/atomicarchitects/spherical_harmonic_net/root_dirs/{dataset}"
+    
+    return None
+
+
+def get_root_dir_tf(dataset: str, fragment_logic: str) -> Optional[str]:
+    """Get the root directory for the TF datasets."""
+    hostname, username = os.uname()[1], os.environ.get("USER")
+
     if dataset == "qm9":
-        if hostname == "radish.mit.edu":
+        if hostname == "radish":
             return f"/data/NFS/radish/qm9_fragments/{fragment_logic}"
         if hostname == "potato.mit.edu":
             if max_targets_per_graph:
@@ -28,6 +44,8 @@ def get_root_dir(dataset: str, fragment_logic: str, max_targets_per_graph: int |
     if dataset == "platonic_solids":
         if hostname == "potato.mit.edu":
             return f"/radish/platonic_solids/{fragment_logic}"
+        if hostname == "radish":
+            return f"/home/ameyad/spherical-harmonic-net/temp/platonic_solids/{fragment_logic}"
         if username == "ameyad":
             return f"/Users/ameyad/Documents/spherical-harmonic-net/temp/platonic_solids/{fragment_logic}"
     if dataset == "tmqm":

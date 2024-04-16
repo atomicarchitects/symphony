@@ -67,7 +67,7 @@ def visualize_predictions_and_fragments(
         focus_and_atom_type_inverse_temperature,
         position_inverse_temperature,
     )
-    preds = jax.tree_map(np.asarray, preds)
+    preds = jax.tree_util.tree_map(np.asarray, preds)
 
     # Remove padding graphs.
     fragments = jraph.unpad_with_graphs(fragments)
@@ -81,10 +81,10 @@ def visualize_predictions_and_fragments(
         # Remove batch dimension.
         # Also, correct the focus indices.
         fragment = fragment._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), fragment.globals)
+            globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), fragment.globals)
         )
         pred = pred._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+            globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
         )
         corrected_focus_indices = (
             pred.globals.focus_indices - preds.n_node[:index].sum()

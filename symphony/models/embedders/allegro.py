@@ -49,7 +49,7 @@ class Allegro(hk.Module):
         relative_positions = e3nn.IrrepsArray("1o", relative_positions)
 
         node_feats = jax.nn.one_hot(graphs.nodes.species, self.num_species)
-        edge_feats = allegro_jax.Allegro(
+        edge_feats = allegro_jax.AllegroHaiku(
             avg_num_neighbors=self.avg_num_neighbors,
             max_ell=self.max_ell,
             irreps=self.output_irreps,
@@ -63,7 +63,6 @@ class Allegro(hk.Module):
         )(node_feats, relative_positions, graphs.senders, graphs.receivers)
 
         # Aggregate edge features to nodes
-        node_feats = jax.ops.segment_sum(
-            edge_feats, graphs.receivers
-        ) + jax.ops.segment_sum(edge_feats, graphs.senders)
+        node_feats = e3nn.scatter_sum(edge_feats, dst=graphs.receivers, output_size=node_feats.shape[-2])
+        node_feats += e3nn.scatter_sum(edge_feats, dst=graphs.senders, output_size=node_feats.shape[-2])
         return node_feats

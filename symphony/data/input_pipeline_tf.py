@@ -1,7 +1,7 @@
 """Input pipeline for the datasets with the tf.data API."""
 
 import functools
-from typing import Dict, List, Sequence, Tuple, Iterator
+from typing import Dict, List, Sequence, Tuple, Iterator, Optional
 import re
 import itertools
 import os
@@ -38,7 +38,7 @@ def get_datasets(
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:
-        max_n_nodes, max_n_edges, max_n_graphs = estimate_padding_budget_for_num_graphs(
+        max_n_nodes, max_n_edges, max_n_graphs = input_pipeline.estimate_padding_budget(
             datasets["train"], config.max_n_graphs, num_estimation_graphs=1000
         )
 
@@ -87,66 +87,18 @@ def get_datasets(
             batching_fn, output_signature=padded_graphs_spec
         )
 
-        datasets[split] = dataset_split.prefetch(tf.data.AUTOTUNE)
+        datasets[split] = dataset_split.prefetch(tf.data.AUTOTUNE).as_numpy_iterator()
         datasets[split + "_eval"] = (
             dataset_split.take(config.num_eval_steps).cache().prefetch(tf.data.AUTOTUNE)
-        )
+        ).as_numpy_iterator()
         datasets[split + "_eval_final"] = (
             dataset_split.take(config.num_eval_steps_at_end_of_training)
             .cache()
             .prefetch(tf.data.AUTOTUNE)
-        )
+        ).as_numpy_iterator()
+
 
     return datasets
-
-
-def estimate_padding_budget_for_num_graphs(
-    dataset: tf.data.Dataset, num_graphs: int, num_estimation_graphs: int
-) -> Tuple[int, int, int]:
-    """Estimates the padding budget for a dataset of unbatched GraphsTuples.
-    Args:
-        dataset: A dataset of unbatched GraphsTuples.
-        num_graphs: The intended number of graphs per batch. Note that no batching is performed by
-        this function.
-        num_estimation_graphs: How many graphs to take from the dataset to estimate
-        the distribution of number of nodes and edges per graph.
-    Returns:
-        padding_budget: The padding budget for batching and padding the graphs
-        in this dataset to the given batch size.
-    """
-
-    def get_graphs_tuple_size(graph: datatypes.Fragments) -> Tuple[int, int, int]:
-        """Returns the number of nodes, edges and graphs in a GraphsTuple."""
-        return (
-            np.shape(jax.tree_leaves(graph.nodes)[0])[0],
-            np.sum(graph.n_edge),
-            np.shape(graph.n_node)[0],
-        )
-
-    def next_multiple_of_64(val: float) -> int:
-        """Returns the next multiple of 64 after val."""
-        return 64 * (1 + int(val // 64))
-
-    if num_graphs <= 1:
-        raise ValueError("Batch size must be > 1 to account for padding graphs.")
-
-    total_num_nodes = 0
-    total_num_edges = 0
-    for graph in dataset.take(num_estimation_graphs).as_numpy_iterator():
-        n_node, n_edge, n_graph = get_graphs_tuple_size(graph)
-        if n_graph != 1:
-            raise ValueError("Dataset contains batched GraphTuples.")
-
-        total_num_nodes += n_node
-        total_num_edges += n_edge
-
-    num_nodes_per_graph_estimate = total_num_nodes / num_estimation_graphs
-    num_edges_per_graph_estimate = total_num_edges / num_estimation_graphs
-
-    n_node = next_multiple_of_64(num_nodes_per_graph_estimate * num_graphs)
-    n_edge = next_multiple_of_64(num_edges_per_graph_estimate * num_graphs)
-    n_graph = num_graphs
-    return n_node, n_edge, n_graph
 
 
 def get_pieces_for_tetris() -> List[List[Tuple[int, int, int]]]:
@@ -171,84 +123,6 @@ def get_unbatched_tetris_datasets(
     """Loads the raw Tetris dataset as a tf.data.Dataset for each split."""
     pieces = get_pieces_for_tetris()
     return pieces_to_unbatched_datasets(pieces, rng, config)
-
-
-def get_pieces_for_platonic_solids() -> List[List[Tuple[int, int, int]]]:
-    """Returns the pieces for the Platonic solids."""
-    # Taken from Wikipedia.
-    # https://en.wikipedia.org/wiki/Platonic_solid
-    phi = (1 + np.sqrt(5)) / 2
-    pieces = [
-        # [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
-        # [
-        #     (1, 0, 0),
-        #     (-1, 0, 0),
-        #     (0, 1, 0),
-        #     (0, -1, 0),
-        #     (0, 0, 1),
-        #     (0, 0, -1),
-        # ],  # octahedron
-        [
-            (1, 1, 1),
-            (-1, 1, 1),
-            (1, -1, 1),
-            (1, 1, -1),
-            (-1, -1, 1),
-            (1, -1, -1),
-            (-1, 1, -1),
-            (-1, -1, -1),
-        ],  # cube
-        # [
-        #     (0, 1, phi),
-        #     (0, -1, phi),
-        #     (0, 1, -phi),
-        #     (0, -1, -phi),
-        #     (1, phi, 0),
-        #     (-1, phi, 0),
-        #     (1, -phi, 0),
-        #     (-1, -phi, 0),
-        #     (phi, 0, 1),
-        #     (phi, 0, -1),
-        #     (-phi, 0, 1),
-        #     (-phi, 0, -1),
-        # ],  # icosahedron
-        # [
-        #     (1, 1, 1),
-        #     (-1, 1, 1),
-        #     (1, -1, 1),
-        #     (1, 1, -1),
-        #     (-1, -1, 1),
-        #     (1, -1, -1),
-        #     (-1, 1, -1),
-        #     (-1, -1, -1),
-        #     (0, 1 / phi, phi),
-        #     (0, -1 / phi, phi),
-        #     (0, 1 / phi, -phi),
-        #     (0, -1 / phi, -phi),
-        #     (1 / phi, phi, 0),
-        #     (-1 / phi, phi, 0),
-        #     (1 / phi, -phi, 0),
-        #     (-1 / phi, -phi, 0),
-        #     (phi, 0, 1 / phi),
-        #     (phi, 0, -1 / phi),
-        #     (-phi, 0, 1 / phi),
-        #     (-phi, 0, -1 / phi),
-        # ],  # dodacahedron
-    ]
-    # Scale the pieces to be unit size. We normalize the pieces by the smallest inter-node distance.
-    pieces_as_arrays = [np.asarray(piece) for piece in pieces]
-
-    def compute_first_node_distance(piece):
-        return np.min(np.linalg.norm(piece[0] - piece[1:], axis=-1))
-
-    piece_factors = [
-        1 / np.min(compute_first_node_distance(piece)) for piece in pieces_as_arrays
-    ]
-    pieces = [
-        [tuple(np.asarray(v) * factor) for v in piece]
-        for factor, piece in zip(piece_factors, pieces)
-    ]
-    return pieces
 
 
 def get_unbatched_platonic_solids_datasets(
@@ -276,7 +150,7 @@ def pieces_to_unbatched_datasets(
             graph,
             n_species=1,
             nn_tolerance=config.nn_tolerance,
-            max_radius=config.nn_cutoff,
+            max_radius=config.radial_cutoff,
             mode=config.fragment_logic,
             max_targets_per_graph=config.max_targets_per_graph,
         )
@@ -288,7 +162,7 @@ def pieces_to_unbatched_datasets(
     ]
     pieces_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            molecule, [1], nn_cutoff=config.nn_cutoff
+            molecule, [1], radial_cutoff=config.radial_cutoff
         )
         for molecule in pieces_as_molecules
     ]
@@ -384,6 +258,13 @@ def get_unbatched_datasets(
     tf.random.set_seed(seed)
 
     # Root directory of the dataset.
+    config = ml_collections.ConfigDict(config)
+    config.root_dir = "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
+    config.train_molecules = (0, 10)
+    config.val_molecules = (100000, 110000)
+    config.test_molecules = (110000, 130000)
+    config.train_on_split_smaller_than_chunk = True
+
     filenames = sorted(os.listdir(config.root_dir))
     filenames = [
         os.path.join(config.root_dir, f)
@@ -449,18 +330,12 @@ def get_unbatched_datasets(
             dataset_split = dataset_split.skip(num_steps_to_skip).take(
                 num_steps_to_take
             )
-            # for graph in dataset_split:
-            #     print(graph["species"], graph["target_species_probs"])
-            #     print(_convert_to_graphstuple(graph).globals.stop)
-            #     print(_convert_to_graphstuple(graph).nodes.stop)
-            #     print(_convert_to_graphstuple(graph).nodes.focus_and_target_species_probs)
-            #     print()
 
         # This is usually the case, when the split is larger than a single chunk.
         else:
             dataset_split = tf.data.Dataset.from_tensor_slices(files_split)
             dataset_split = dataset_split.interleave(
-                lambda x: tf.data.Dataset.load(x, element_spec=element_spec),
+                lambda path: tf.data.Dataset.load(path, element_spec=element_spec),
                 num_parallel_calls=tf.data.AUTOTUNE,
                 deterministic=True,
             )

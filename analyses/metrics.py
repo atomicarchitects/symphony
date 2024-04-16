@@ -1,13 +1,18 @@
 """Metrics for evaluating generative models for molecules."""
 from typing import Dict, Tuple, List, Optional, Sequence, Any
 
-import chex
+import os
+import io
+import glob
 import collections
 import functools
+
+from absl import logging
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
-import os
+import ase
 import tqdm
 from rdkit import RDLogger
 import rdkit.Chem as Chem
@@ -15,8 +20,6 @@ from rdkit.Chem import rdDetermineBonds
 import e3nn_jax as e3nn
 import posebusters
 import pandas as pd
-from absl import logging
-import glob
 
 try:
     # This requires Torch.
@@ -34,6 +37,21 @@ except ImportError:
 def xyz_to_rdkit_molecule(molecules_file: str) -> Chem.Mol:
     """Converts a molecule from xyz format to an RDKit molecule."""
     mol = Chem.MolFromXYZFile(molecules_file)
+    return Chem.Mol(mol)
+
+
+def ase_to_rdkit_molecules(ase_mol: Sequence[ase.Atoms]) -> List[Chem.Mol]:
+    """Converts molecules from ase format to RDKit molecules."""
+    return [ase_to_rdkit_molecule(mol) for mol in ase_mol]
+
+
+def ase_to_rdkit_molecule(ase_mol: ase.Atoms) -> Chem.Mol:
+    """Converts a molecule from ase format to an RDKit molecule."""
+    with io.StringIO() as f:
+        ase.io.write(f, ase_mol, format="xyz")
+        f.seek(0)
+        xyz = f.read()
+    mol = Chem.MolFromXYZBlock(xyz)
     return Chem.Mol(mol)
 
 
@@ -56,12 +74,20 @@ def get_all_valid_molecules(molecules: Sequence[Chem.Mol]) -> List[Chem.Mol]:
     return [mol for mol in molecules if check_molecule_validity(mol)]
 
 
-def get_all_valid_molecules_with_openbabel(molecules: Sequence[Tuple["openbabel.OBMol", "str"]]) -> List["openbabel.OBMol"]:
+def get_all_valid_molecules_with_openbabel(
+    molecules: Sequence[Tuple["openbabel.OBMol", "str"]]
+) -> List["openbabel.OBMol"]:
     """Returns all molecules in a directory."""
-    return [(mol, smiles) for mol, smiles in molecules if check_molecule_validity_with_openbabel(mol)]
+    return [
+        (mol, smiles)
+        for mol, smiles in molecules
+        if check_molecule_validity_with_openbabel(mol)
+    ]
 
 
-def get_all_molecules_with_openbabel(molecules_dir: str) -> List[Tuple["openbabel.OBMol", "str"]]:
+def get_all_molecules_with_openbabel(
+    molecules_dir: str,
+) -> List[Tuple["openbabel.OBMol", "str"]]:
     """Returns all molecules in a directory."""
     molecules = []
     for molecules_file in os.listdir(molecules_dir):
@@ -80,7 +106,9 @@ def compute_molecule_sizes(molecules: Sequence[Chem.Mol]) -> np.ndarray:
     return np.asarray([mol.GetNumAtoms() for mol in molecules])
 
 
-def count_atom_types(molecules: Sequence[Chem.Mol], normalize: bool = False) -> Dict[str, np.ndarray]:
+def count_atom_types(
+    molecules: Sequence[Chem.Mol], normalize: bool = False
+) -> Dict[str, np.ndarray]:
     """Computes the number of atoms of each kind in each valid molecule."""
     atom_counts = collections.defaultdict(lambda: 0)
     for mol in molecules:
@@ -90,7 +118,7 @@ def count_atom_types(molecules: Sequence[Chem.Mol], normalize: bool = False) -> 
     if normalize:
         total = sum(atom_counts.values())
         atom_counts = {atom: count / total for atom, count in atom_counts.items()}
-    
+
     return dict(atom_counts)
 
 
@@ -98,6 +126,7 @@ def compute_jensen_shannon_divergence(
     source_dist: Dict[str, float], target_dist: Dict[str, float]
 ) -> float:
     """Computes the Jensen-Shannon divergence between two distributions."""
+
     def kl_divergence(p: np.ndarray, q: np.ndarray) -> float:
         """Computes the KL divergence between two distributions."""
         log_p = np.where(p > 0, np.log(p), 0)
@@ -115,7 +144,9 @@ def compute_jensen_shannon_divergence(
     )
 
 
-@functools.partial(jax.jit, static_argnames=("batch_size", "num_batches", "num_kernels"))
+@functools.partial(
+    jax.jit, static_argnames=("batch_size", "num_batches", "num_kernels")
+)
 def compute_maximum_mean_discrepancy(
     source_samples: chex.Array,
     target_samples: chex.Array,
@@ -137,6 +168,7 @@ def compute_maximum_mean_discrepancy(
 
     def mmd_rbf(X: chex.Array, Y: chex.Array, gammas: chex.Array) -> float:
         """MMD using RBF (Gaussian) kernel."""
+
         def squared_mmd_rbf_kernel(gamma: float) -> float:
             XX = rbf_kernel(X, X, gamma).mean()
             YY = rbf_kernel(Y, Y, gamma).mean()
@@ -225,31 +257,40 @@ def check_molecule_validity_with_openbabel(
     return not invalid
 
 
-def compute_validity(molecules: Sequence[Chem.Mol], valid_molecules: Sequence[Chem.Mol]) -> float:
+def compute_validity(molecules: Sequence[Chem.Mol]) -> float:
     """Computes the fraction of molecules in a directory that are valid using xyz2mol ."""
+    valid_molecules = get_all_valid_molecules(molecules)
     return len(valid_molecules) / len(molecules)
 
 
 def compute_uniqueness(molecules: Sequence[Chem.Mol]) -> float:
-    """Computes the fraction of molecules that are unique using SMILES."""
+    """Computes the fraction of valid molecules that are unique using SMILES."""
     all_smiles = []
-    for mol in molecules:
+    for mol in get_all_valid_molecules(molecules):
         smiles = Chem.MolToSmiles(mol)
         all_smiles.append(smiles)
 
+    # If there are no valid molecules, return 0.
+    if len(all_smiles) == 0:
+        return 0.0
+
     return len(set(all_smiles)) / len(all_smiles)
 
 
-def compute_uniqueness_with_openbabel(molecules: Sequence[Tuple["openbabel.OBMol", "str"]]) -> float:
+def compute_uniqueness_with_openbabel(
+    molecules: Sequence[Tuple["openbabel.OBMol", "str"]]
+) -> float:
     """Computes the fraction of OpenBabel molecules that are unique using SMILES."""
     all_smiles = []
-    for _, smiles in molecules:
+    for _, smiles in get_all_valid_molecules_with_openbabel(molecules):
         all_smiles.append(smiles)
 
     return len(set(all_smiles)) / len(all_smiles)
 
 
-def compute_bond_lengths(molecules: Sequence[Chem.Mol]) -> Dict[Tuple[int, int, int], np.ndarray]:
+def compute_bond_lengths(
+    molecules: Sequence[Chem.Mol],
+) -> Dict[Tuple[int, int, int], np.ndarray]:
     """
     Collect the lengths for each type of chemical bond in given valid molecular geometries.
     Returns a dictionary where the key is the bond type, and the value is the list of all bond lengths of that bond.
@@ -257,7 +298,7 @@ def compute_bond_lengths(molecules: Sequence[Chem.Mol]) -> Dict[Tuple[int, int, 
     bond_dists = collections.defaultdict(list)
     for mol in molecules:
         distance_matrix = Chem.Get3DDistanceMatrix(mol)
-        
+
         if mol.GetNumBonds() == 0:
             raise ValueError("Molecule has no bonds.")
 
@@ -454,9 +495,13 @@ def compute_bond_lengths(
     }
 
 
-def get_posebusters_results(molecules: Sequence[Chem.Mol], full_report: bool = False) -> pd.DataFrame:
+def get_posebusters_results(
+    molecules: Sequence[Chem.Mol], full_report: bool = False
+) -> pd.DataFrame:
     """Returns the results from Posebusters (https://github.com/maabuu/posebusters)."""
-    return posebusters.PoseBusters(config="mol").bust(mol_pred=molecules, full_report=full_report)
+    return posebusters.PoseBusters(config="mol").bust(
+        mol_pred=molecules, full_report=full_report
+    )
 
 
 def get_all_edm_analyses_results(
@@ -528,12 +573,10 @@ def get_all_edm_analyses_results(
     return results
 
 
-def get_edm_analyses_results(
-    molecules_dir: str, read_as_sdf: bool
-) -> pd.DataFrame:
+def get_edm_analyses_results(molecules_dir: str, read_as_sdf: bool) -> pd.DataFrame:
     """Returns the EDM analyses results for the given directory as a pandas dataframe."""
     # Disable RDKit logging.
-    RDLogger.DisableLog('rdApp.info')
+    RDLogger.DisableLog("rdApp.info")
     logger = RDLogger.logger()
     logger.setLevel(RDLogger.CRITICAL)
 

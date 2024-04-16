@@ -82,7 +82,7 @@ def visualize_atom_removals(
         fragment = input_pipeline.ase_atoms_to_jraph_graph(
             molecule_with_target_removed,
             ATOMIC_NUMBERS,
-            config.nn_cutoff,
+            config.radial_cutoff,
         )
 
         molecules_with_target_removed.append(molecule_with_target_removed)
@@ -98,7 +98,7 @@ def visualize_atom_removals(
         focus_and_atom_type_inverse_temperature,
         position_inverse_temperature,
     )
-    preds = jax.tree_map(np.asarray, preds)
+    preds = jax.tree_util.tree_map(np.asarray, preds)
     preds = jraph.unbatch(preds)
     logging.info("Predictions computed.")
 
@@ -120,7 +120,7 @@ def visualize_atom_removals(
         # We have to remove the batch dimension.
         # Also, correct the focus indices due to batching.
         pred = preds[target]._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
+            globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), preds[target].globals)
         )
         corrected_focus_indices = pred.globals.focus_indices - sum(
             p.n_node.item() for i, p in enumerate(preds) if i < target

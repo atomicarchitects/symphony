@@ -8,6 +8,7 @@ from configs.qm9 import default
 def get_embedder_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the MarioNette model."""
     config = ml_collections.ConfigDict()
+
     config.model = "MarioNette"
     config.num_channels = 64
     config.r_max = 5.0
@@ -34,5 +35,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
     config.target_position_predictor.embedder_config = get_embedder_config()
 
-    # NequIP hyperparameters.
     return config

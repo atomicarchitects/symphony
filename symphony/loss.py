@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import jraph
-import ott
 
 from symphony import datatypes, models
 
@@ -106,26 +105,6 @@ def kl_divergence_for_radii(
         true_radial_weights
         * (models.safe_log(true_radial_weights) - predicted_radial_logits)
     ).sum()
-
-
-def earthmover_distance_for_radii(
-    true_radial_weights: jnp.ndarray,
-    predicted_radial_logits: jnp.ndarray,
-    radial_bins: jnp.ndarray,
-) -> jnp.ndarray:
-    """Compute the Earthmover's distance between the logits of two distributions on the radii."""
-    predicted_radial_weights = jax.nn.softmax(predicted_radial_logits, axis=-1)
-
-    geom = ott.geometry.grid.Grid(x=[radial_bins])
-    predicted_radial_weights = jnp.where(
-        predicted_radial_weights == 0, 1e-9, predicted_radial_weights
-    )
-    prob = ott.problems.linear.linear_problem.LinearProblem(
-        geom, a=predicted_radial_weights, b=true_radial_weights
-    )
-    solver = ott.solvers.linear.sinkhorn.Sinkhorn(lse_mode=True)
-    out = solver(prob)
-    return out.reg_ot_cost
 
 
 @jax.profiler.annotate_function

@@ -14,7 +14,7 @@ import tqdm
 
 from symphony.data import fragments
 from symphony.data import input_pipeline
-from symphony.data import qm9
+from symphony.data.datasets import qm9
 
 FLAGS = flags.FLAGS
 
@@ -29,7 +29,7 @@ def generate_all_fragments(
     heavy_first: bool,
     beta_com: float,
     nn_tolerance: float,
-    nn_cutoff: float,
+    radial_cutoff: float,
     max_radius: float,
     num_nodes_for_multifocus: int,
     max_targets_per_graph: int,
@@ -38,7 +38,7 @@ def generate_all_fragments(
     logging.info(f"Saving to {output_dir}")
     logging.info(f"Mode: {mode}, heavy_first: {heavy_first}, beta_com: {beta_com}")
     logging.info(
-        f"NN tolerance: {nn_tolerance}, NN cutoff: {nn_cutoff}, max_radius: {max_radius}"
+        f"NN tolerance: {nn_tolerance}, NN cutoff: {radial_cutoff}, max_radius: {max_radius}"
     )
 
     seed = jax.random.PRNGKey(seed)
@@ -49,7 +49,7 @@ def generate_all_fragments(
     atomic_numbers = np.array([1, 6, 7, 8, 9])
     molecules_as_graphs = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            molecule, atomic_numbers, nn_cutoff=nn_cutoff
+            molecule, atomic_numbers, radial_cutoff=radial_cutoff
         )
         for molecule in molecules
     ]
@@ -189,7 +189,7 @@ def main(unused_argv) -> None:
             FLAGS.heavy_first,
             FLAGS.beta_com,
             FLAGS.nn_tolerance,
-            FLAGS.nn_cutoff,
+            FLAGS.radial_cutoff,
             FLAGS.max_radius,
             FLAGS.num_nodes_for_multifocus,
             FLAGS.max_targets_per_graph,
@@ -199,11 +199,9 @@ def main(unused_argv) -> None:
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
-    # tqdm.contrib.concurrent.process_map(
-    #     _generate_all_fragments_wrapper, args_list, chunksize=128
-    # )
-    for arg_list in args_list:
-        generate_all_fragments(*arg_list)
+    tqdm.contrib.concurrent.process_map(
+        _generate_all_fragments_wrapper, args_list, chunksize=128
+    )
 
 
 if __name__ == "__main__":
@@ -219,13 +217,13 @@ if __name__ == "__main__":
     )
     flags.DEFINE_bool("use_edm_splits", True, "Whether to use splits from EDM.")
     flags.DEFINE_string(
-        "output_dir", "/radish/qm9_fragments_mad/", "Output directory."
+        "output_dir", "qm9_fragments_fixed/nn_edm/", "Output directory."
     )
-    flags.DEFINE_string("mode", "radius", "Fragmentation mode.")
+    flags.DEFINE_string("mode", "nn", "Fragmentation mode.")
     flags.DEFINE_bool("heavy_first", False, "Heavy atoms first.")
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
-    flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
+    flags.DEFINE_float("radial_cutoff", 5.0, "NN cutoff (in Angstrom).")
     flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
