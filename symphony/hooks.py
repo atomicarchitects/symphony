@@ -27,7 +27,7 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 def plot_molecules_in_wandb(
     molecules: Sequence[Chem.Mol],
     step: int,
-    num_to_plot: int = 20,
+    num_to_plot: int = 10,
     **plot_kwargs,
 ):
     """Plots molecules in the Weights & Biases UI."""
