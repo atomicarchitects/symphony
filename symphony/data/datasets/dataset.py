@@ -15,7 +15,7 @@ class InMemoryDataset(abc.ABC):
         return len(self.species_to_atom_types())
 
     @abc.abstractmethod
-    def structures(self) -> Iterable[datatypes.Fragments]:
+    def structures(self) -> Iterable[datatypes.Structures]:
         """Return a list of all completed structures."""
 
     @abc.abstractmethod

@@ -58,24 +58,8 @@ class QM9Dataset(datasets.InMemoryDataset):
                 raise ValueError(
                     "EDM splits are not compatible with molecule sanity checks."
                 )
-            if (
-                num_train_molecules is not None
-                or num_val_molecules is not None
-                or num_test_molecules is not None
-            ):
-                raise ValueError(
-                    "EDM splits are used, so num_train_molecules, num_val_molecules, and num_test_molecules must be None."
-                )
         else:
             logging.info("Using random (non-EDM) splits.")
-            if (
-                num_train_molecules is None
-                or num_val_molecules is None
-                or num_test_molecules is None
-            ):
-                raise ValueError(
-                    "EDM splits are not used, so num_train_molecules, num_val_molecules, and num_test_molecules must be provided."
-                )
 
         self.root_dir = root_dir
         self.check_molecule_sanity = check_molecule_sanity
@@ -83,10 +67,12 @@ class QM9Dataset(datasets.InMemoryDataset):
         self.num_train_molecules = num_train_molecules
         self.num_val_molecules = num_val_molecules
         self.num_test_molecules = num_test_molecules
-
-        self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
+        self.molecules = None
 
     def structures(self) -> Iterable[datatypes.Structures]:
+        if self.molecules is None:
+            self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
+
         for molecule in self.molecules:
             yield _molecule_to_structure(molecule)
 
@@ -101,8 +87,16 @@ class QM9Dataset(datasets.InMemoryDataset):
         }
 
     def split_indices(self) -> Dict[str, Set[int]]:
+        """Return a dictionary of indices for each split."""
+
+        # If EDM splits are used, return the splits.
         if self.use_edm_splits:
-            return get_edm_splits(self.root_dir)
+            return get_edm_splits(
+                self.root_dir,
+                self.num_train_molecules,
+                self.num_val_molecules,
+                self.num_test_molecules,
+            )
 
         # Create a random permutation of the indices.
         np.random.seed(0)
@@ -236,7 +230,12 @@ def load_qm9(
     return mols_as_ase
 
 
-def get_edm_splits(root_dir: str) -> Dict[str, np.ndarray]:
+def get_edm_splits(
+    root_dir: str,
+    num_train_molecules: int,
+    num_val_molecules: int,
+    num_test_molecules: int,
+) -> Dict[str, np.ndarray]:
     """Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py."""
 
     def is_int(string: str) -> bool:
@@ -298,6 +297,13 @@ def get_edm_splits(root_dir: str) -> Dict[str, np.ndarray]:
     train = included_idxs[train]
     val = included_idxs[val]
     test = included_idxs[test]
+
+    if num_train_molecules is not None:
+        train = train[:num_train_molecules]
+    if num_val_molecules is not None:
+        val = val[:num_val_molecules]
+    if num_test_molecules is not None:
+        test = test[:num_test_molecules]
 
     splits = {"train": set(train), "val": set(val), "test": set(test)}
 
