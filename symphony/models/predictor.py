@@ -35,6 +35,7 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
+        num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
         num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
@@ -60,14 +61,16 @@ class Predictor(hk.Module):
             radial_logits,
         ) = self.target_position_predictor(
             graphs,
-            graphs.nodes.target_species,
+            graphs.globals.target_species,
             inverse_temperature=1.0,
         )
 
         # Get the position probabilities.
-        position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
-            position_logits
-        )
+        position_probs = jax.vmap(
+            lambda logit_arr: jax.vmap(
+                utils.position_logits_to_position_distribution
+            )(logit_arr)
+        )(position_logits)
 
         # The radii bins used for the position prediction, repeated for each graph.
         radii = self.target_position_predictor.create_radii()
@@ -83,13 +86,15 @@ class Predictor(hk.Module):
             num_species,
         )
         assert log_position_coeffs.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             self.target_position_predictor.num_channels,
             self.target_position_predictor.num_radii,
             log_position_coeffs.shape[-1],
         )
         assert position_logits.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             self.target_position_predictor.num_radii,
             self.target_position_predictor.res_beta,
             self.target_position_predictor.res_alpha,
@@ -107,6 +112,13 @@ class Predictor(hk.Module):
                 ),
                 focus_mask=None,
                 target_species=None,
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                focus_indices=None,
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=None,
                 log_position_coeffs=log_position_coeffs,
                 position_logits=position_logits,
                 position_probs=position_probs,
@@ -114,12 +126,6 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
-            ),
-            edges=None,
-            globals=datatypes.GlobalPredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
-                stop=None,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -137,6 +143,7 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
+        num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
         num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
@@ -186,42 +193,54 @@ class Predictor(hk.Module):
 
         # Integrate the position signal over each sphere to get the normalizing factors for the radii.
         # For numerical stability, we subtract out the maximum value over all spheres before exponentiating.
-        position_probs = jax.vmap(utils.position_logits_to_position_distribution)(
-            position_logits
-        )
+        position_probs = jax.vmap(
+            jax.vmap(
+                utils.position_logits_to_position_distribution
+            )
+        )(position_logits)
 
         # Sample the radius.
         radii = self.target_position_predictor.create_radii()
         radial_bins = jnp.tile(radii, (num_graphs, 1))
-        radial_probs = jax.vmap(utils.position_distribution_to_radial_distribution)(
-            position_probs
-        )
+        radial_probs = jax.vmap(
+            jax.vmap(
+                utils.position_distribution_to_radial_distribution
+            )
+        )(position_probs)
         num_radii = radii.shape[0]
         rng, radius_rng = jax.random.split(rng)
-        radius_rngs = jax.random.split(radius_rng, num_graphs)
+        radius_rngs = jax.random.split(radius_rng, num_graphs * num_nodes_for_multifocus) \
+            .reshape(num_graphs, num_nodes_for_multifocus)
         radius_indices = jax.vmap(
-            lambda key, p: jax.random.choice(key, num_radii, p=p)
-        )(
-            radius_rngs, radial_probs
-        )  # [num_graphs]
+            jax.vmap(
+                lambda key, p: jax.random.choice(key, num_radii, p=p)
+            )
+        )(radius_rngs, radial_probs)  # [num_graphs, num_nodes_for_multifocus]
 
         # Get the angular probabilities.
         angular_probs = jax.vmap(
-            lambda p, r_index: p[r_index] / p[r_index].integrate()
+            jax.vmap(
+                lambda p, r_index: p[r_index] / p[r_index].integrate()
+            )
         )(
             position_probs, radius_indices
-        )  # [num_graphs, res_beta, res_alpha]
+        )  # [num_graphs, num_nodes_for_multifocus, res_beta, res_alpha]
 
         # Sample angles.
         rng, angular_rng = jax.random.split(rng)
-        angular_rngs = jax.random.split(angular_rng, num_graphs)
-        beta_indices, alpha_indices = jax.vmap(lambda key, p: p.sample(key))(
-            angular_rngs, angular_probs
-        )
+        angular_rngs = jax.random.split(angular_rng, num_graphs * num_nodes_for_multifocus) \
+            .reshape(num_graphs, num_nodes_for_multifocus)
+        beta_indices, alpha_indices = jax.vmap(
+            jax.vmap(
+                lambda key, p: jax.random.choice(key, num_radii, p=p)
+            )
+        )(angular_rngs, angular_probs)
 
         # Combine the radius and angles to get the position vectors.
         position_vectors = jax.vmap(
-            lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
+            jax.vmap(
+                lambda r, b, a: radii[r] * angular_probs.grid_vectors[b, a]
+            )
         )(radius_indices, beta_indices, alpha_indices)
 
         assert stop.shape == (num_graphs,)
@@ -236,17 +255,19 @@ class Predictor(hk.Module):
         )
         assert log_position_coeffs.shape == (
             num_graphs,
+            num_nodes_for_multifocus,
             self.target_position_predictor.num_channels,
             self.target_position_predictor.num_radii,
             log_position_coeffs.shape[-1],
         )
         assert position_logits.shape == (
             num_graphs,
+            num_nodes_for_multifocus,
             self.target_position_predictor.num_radii,
             self.target_position_predictor.res_beta,
             self.target_position_predictor.res_alpha,
         )
-        assert position_vectors.shape == (num_graphs, 3)
+        assert position_vectors.shape == (num_graphs, num_nodes_for_multifocus, 3)
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -258,7 +279,12 @@ class Predictor(hk.Module):
                 embeddings_for_positions=self.target_position_predictor.compute_node_embeddings(
                     graphs
                 ),
-                focus_mask=None,  # TODO that's gonna change at some point
+            ),
+            edges=None,
+            globals=datatypes.GlobalPredictions(
+                stop_logits=stop_logits,
+                stop_probs=stop_probs,
+                stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
                 log_position_coeffs=log_position_coeffs,
@@ -268,12 +294,6 @@ class Predictor(hk.Module):
                 radial_bins=radial_bins,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
-            ),
-            edges=None,
-            globals=datatypes.GlobalPredictions(
-                stop_logits=stop_logits,
-                stop_probs=stop_probs,
-                stop=stop,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

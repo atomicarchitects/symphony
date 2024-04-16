@@ -65,12 +65,12 @@ def generate_all_fragments(
             shape=(None, ), dtype=tf.float32
         ),
         "target_positions": tf.TensorSpec(
-            shape=(None, max_targets_per_graph, 3), dtype=tf.float32
+            shape=(1, num_nodes_for_multifocus, max_targets_per_graph, 3), dtype=tf.float32
         ),
         "target_position_mask": tf.TensorSpec(
-            shape=(None, max_targets_per_graph), dtype=tf.float32
+            shape=(1, num_nodes_for_multifocus, max_targets_per_graph), dtype=tf.float32
         ),
-        "target_species": tf.TensorSpec(shape=(None,), dtype=tf.int32),
+        "target_species": tf.TensorSpec(shape=(1, num_nodes_for_multifocus,), dtype=tf.int32),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
@@ -99,7 +99,7 @@ def generate_all_fragments(
 
             skip = False
             for frag in frags:
-                d = np.linalg.norm(frag.nodes.target_positions, axis=-1)
+                d = np.linalg.norm(frag.globals.target_positions, axis=-1)
                 if np.sum(d > max_radius) > 0:
                     logging.info(
                         f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
@@ -118,26 +118,29 @@ def generate_all_fragments(
                 continue
 
             for frag in frags:
-                yield {
+                frag_dict = {
                     "positions": frag.nodes.positions.astype(np.float32),
                     "species": frag.nodes.species.astype(np.int32),
                     "focus_and_target_species_probs": frag.nodes.focus_and_target_species_probs.astype(
                         np.float32
                     ),
                     "focus_mask": frag.nodes.focus_mask.astype(np.float32),
-                    "target_positions": frag.nodes.target_positions.astype(
+                    "target_positions": frag.globals.target_positions.astype(
                         np.float32
                     ),
-                    "target_position_mask": frag.nodes.target_position_mask.astype(
+                    "target_position_mask": frag.globals.target_position_mask.astype(
                         np.float32
                     ),
-                    "target_species": frag.nodes.target_species.astype(np.int32),
+                    "target_species": frag.globals.target_species.astype(np.int32),
                     "senders": frag.senders.astype(np.int32),
                     "receivers": frag.receivers.astype(np.int32),
                     "stop": frag.globals.stop.astype(np.bool_),
                     "n_node": frag.n_node.astype(np.int32),
                     "n_edge": frag.n_edge.astype(np.int32),
                 }
+                # print(frag_dict)
+                # print([v.shape for v in frag_dict.values()])
+                yield frag_dict
 
     dataset = tf.data.Dataset.from_generator(generator, output_signature=signature)
 
@@ -196,11 +199,11 @@ def main(unused_argv) -> None:
     ]
 
     # Create a pool of processes, and apply generate_all_fragments to each tuple of arguments.
-    tqdm.contrib.concurrent.process_map(
-        _generate_all_fragments_wrapper, args_list, chunksize=128
-    )
-    # for arg_list in args_list:
-    #     generate_all_fragments(*arg_list)
+    # tqdm.contrib.concurrent.process_map(
+    #     _generate_all_fragments_wrapper, args_list, chunksize=128
+    # )
+    for arg_list in args_list:
+        generate_all_fragments(*arg_list)
 
 
 if __name__ == "__main__":

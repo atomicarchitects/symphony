@@ -139,7 +139,6 @@ def generate_all_fragments(
                     "n_node": frag.n_node.astype(np.int32),
                     "n_edge": frag.n_edge.astype(np.int32),
                 }
-                print([x.shape for x in frag_to_yield.values()])
                 yield frag_to_yield
 
     dataset = tf.data.Dataset.from_generator(generator, output_signature=signature)

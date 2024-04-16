@@ -501,18 +501,18 @@ def _specs_from_graphs_tuple(
                 graph.nodes.focus_and_target_species_probs
             ),
             focus_mask=get_tensor_spec(graph.nodes.focus_mask),
-            target_position_mask=get_tensor_spec(
-                graph.nodes.target_position_mask, 
-            ),
-            target_species=get_tensor_spec(
-                graph.nodes.target_species, 
-            ),
-            target_positions=get_tensor_spec(
-                graph.nodes.target_positions, 
-            ),
         ),
         globals=datatypes.FragmentsGlobals(
             stop=get_tensor_spec(graph.globals.stop, is_global=True),
+            target_position_mask=get_tensor_spec(
+                graph.globals.target_position_mask, is_global=True
+            ),
+            target_species=get_tensor_spec(
+                graph.globals.target_species, is_global=True
+            ),
+            target_positions=get_tensor_spec(
+                graph.globals.target_positions, is_global=True
+            ),
         ),
         edges=get_tensor_spec(graph.edges),
         receivers=get_tensor_spec(graph.receivers),
@@ -551,15 +551,15 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
             species=species,
             focus_and_target_species_probs=focus_and_target_species_probs,
             focus_mask=focus_mask,
-            target_positions=target_positions,
-            target_position_mask=target_position_mask,
-            target_species=target_species,
         ),
         edges=edges,
         receivers=receivers,
         senders=senders,
         globals=datatypes.FragmentsGlobals(
             stop=stop,
+            target_positions=target_positions,
+            target_position_mask=target_position_mask,
+            target_species=target_species,
         ),
         n_node=n_node,
         n_edge=n_edge,

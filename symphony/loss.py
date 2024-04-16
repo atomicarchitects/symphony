@@ -145,17 +145,17 @@ def generation_loss(
         preds (datatypes.Predictions): the model predictions
         graphs (datatypes.Fragment): a batch of graphs representing the current molecules
     """
-    radial_bins = preds.nodes.radial_bins[0]  # Assume all radii are the same.
+    radial_bins = preds.globals.radial_bins[0]  # Assume all radii are the same.
     num_radii = radial_bins.shape[0]
     num_graphs = graphs.n_node.shape[0]
     num_nodes = graphs.nodes.positions.shape[0]
-    num_nodes_for_multifocus = graphs.nodes.target_positions.shape[1]
+    num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
     n_node = graphs.n_node
-    max_targets_per_graph = graphs.nodes.target_positions.shape[1]
+    max_targets_per_graph = graphs.globals.target_positions.shape[2]
     segment_ids = models.get_segment_ids(n_node, num_nodes)
     segment_ids_multifocus = jnp.repeat(jnp.arange(num_graphs), num_nodes_for_multifocus, axis=0)
     if target_position_lmax is None:
-        lmax = preds.nodes.log_position_coeffs.irreps.lmax
+        lmax = preds.globals.log_position_coeffs.irreps.lmax
     else:
         lmax = target_position_lmax
 
@@ -166,10 +166,8 @@ def generation_loss(
         stop_logits = preds.globals.stop_logits
         stop_targets = graphs.globals.stop.astype(jnp.float32)
 
-        # print(f"shape: {species_logits.shape}")
-        # print(f"shape: {species_targets.shape}")
-        assert species_logits.shape == (num_nodes, species_logits.shape[-1])
-        assert species_targets.shape == (num_nodes, species_logits.shape[-1])
+        assert species_logits.shape == (num_nodes, species_logits.shape[-1]), print(species_logits.shape)
+        assert species_targets.shape == (num_nodes, species_logits.shape[-1]), print(species_targets.shape)
         assert stop_logits.shape == (num_graphs,)
         assert stop_targets.shape == (num_graphs,)
 
@@ -213,37 +211,43 @@ def generation_loss(
     def position_loss_with_kl_divergence() -> jnp.ndarray:
         """Computes the loss over position probabilities using the KL divergence."""
 
-        position_logits = preds.nodes.position_logits
+        position_logits = preds.globals.position_logits
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
             position_logits.quadrature,
         )
 
-        target_positions = graphs.nodes.target_positions
-        target_position_mask = graphs.nodes.target_position_mask
+        target_positions = graphs.globals.target_positions
+        target_position_mask = graphs.globals.target_position_mask
         true_radial_weights = jax.vmap(
             jax.vmap(
-                lambda pos: target_position_to_radius_weights(
-                    pos, radius_rbf_variance, radial_bins
+                jax.vmap(
+                    lambda pos: target_position_to_radius_weights(
+                        pos, radius_rbf_variance, radial_bins
+                    )
                 )
             )
         )(target_positions)
         log_true_angular_coeffs = jax.vmap(
             jax.vmap(
-                lambda pos: target_position_to_log_angular_coeffs(
-                    pos, target_position_inverse_temperature, lmax
+                jax.vmap(
+                    lambda pos: target_position_to_log_angular_coeffs(
+                        pos, target_position_inverse_temperature, lmax
+                    )
                 )
             )
         )(target_positions)
 
         assert true_radial_weights.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             max_targets_per_graph,
             num_radii,
-        )
+        ), print(true_radial_weights.shape)
         assert log_true_angular_coeffs.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             max_targets_per_graph,
             log_true_angular_coeffs.irreps.dim,
         ), log_true_angular_coeffs.shape
@@ -254,64 +258,67 @@ def generation_loss(
             res_alpha=res_alpha,
             quadrature=quadrature,
         )
-        true_dist = jax.vmap(jax.vmap(compute_joint_distribution_fn))(
+        true_dist = jax.vmap(jax.vmap(jax.vmap(compute_joint_distribution_fn)))(
             true_radial_weights, log_true_angular_coeffs
         )
 
         assert true_dist.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             max_targets_per_graph,
             num_radii,
             res_beta,
             res_alpha,
         )
-        assert target_position_mask.shape == (num_nodes, max_targets_per_graph)
+        assert target_position_mask.shape == (num_graphs, num_nodes_for_multifocus, max_targets_per_graph)
 
-        target_position_mask = target_position_mask[:, :, None, None, None]
+        target_position_mask = target_position_mask[:, :, :, None, None, None]
         num_valid_targets = jnp.sum(target_position_mask, axis=1, keepdims=False)
         num_valid_targets = jnp.maximum(num_valid_targets, 1.0)
         mean_true_dist = jnp.sum(true_dist.grid_values * target_position_mask, axis=1)
         mean_true_dist = mean_true_dist / num_valid_targets
-        assert mean_true_dist.shape == (num_nodes, num_radii, res_beta, res_alpha), (
+        assert mean_true_dist.shape == (num_graphs, num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,
-            (num_nodes, num_radii, res_beta, res_alpha),
+            (num_graphs, num_nodes_for_multifocus, num_radii, res_beta, res_alpha),
         )
 
         mean_true_dist = e3nn.SphericalSignal(
             grid_values=mean_true_dist, quadrature=true_dist.quadrature
         )
-        assert mean_true_dist.shape == (num_nodes, num_radii, res_beta, res_alpha), (
+        assert mean_true_dist.shape == (num_graphs, num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,
-            (num_nodes, num_radii, res_beta, res_alpha),
+            (num_graphs, num_nodes_for_multifocus, num_radii, res_beta, res_alpha),
         )
 
         log_predicted_dist = position_logits
 
         assert log_predicted_dist.grid_values.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             num_radii,
             res_beta,
             res_alpha,
         )
 
-        loss_position = jax.vmap(kl_divergence_on_spheres)(
-            mean_true_dist, log_predicted_dist
-        )
+        loss_position = jax.vmap(
+            jax.vmap(kl_divergence_on_spheres)
+        )(mean_true_dist, log_predicted_dist)
 
-        loss_position = jraph.segment_sum(
-            loss_position.reshape(-1, 1) * graphs.nodes.target_position_mask, segment_ids, num_graphs
-        ).sum(axis=-1)
+        loss_position = loss_position.sum(axis=-1)
+        # loss_position = jraph.segment_sum(
+        #     loss_position * graphs.globals.target_position_mask, segment_ids_multifocus, num_graphs
+        # )
 
-        assert loss_position.shape == (num_graphs,), print(loss_position.shape)
+        assert loss_position.shape == (num_graphs,)
 
         return loss_position
 
     def position_loss_with_l2() -> jnp.ndarray:
         """Computes the loss over position probabilities using the L2 loss on the logits."""
 
-        log_position_coeffs = preds.nodes.log_position_coeffs
-        target_positions = graphs.nodes.target_positions
-        target_position_mask = graphs.nodes.target_position_mask
+        log_position_coeffs = preds.globals.log_position_coeffs
+        target_positions = graphs.globals.target_positions
+        target_position_mask = graphs.globals.target_position_mask
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -367,15 +374,15 @@ def generation_loss(
     def factorized_position_loss(position_loss_type: str) -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
 
-        position_logits = preds.nodes.position_logits
+        position_logits = preds.globals.position_logits
         res_beta, res_alpha, quadrature = (
             position_logits.res_beta,
             position_logits.res_alpha,
             position_logits.quadrature,
         )
 
-        target_positions = graphs.nodes.target_positions
-        target_position_mask = graphs.nodes.target_position_mask
+        target_positions = graphs.globals.target_positions
+        target_position_mask = graphs.globals.target_position_mask
         true_radial_weights = jax.vmap(
             lambda pos: target_position_to_radius_weights(
                 pos, radius_rbf_variance, radial_bins
@@ -436,9 +443,9 @@ def generation_loss(
             num_radii,
         ), mean_radial_weights.shape
 
-        predicted_radial_logits = preds.nodes.radial_logits
+        predicted_radial_logits = preds.globals.radial_logits
         if predicted_radial_logits is None:
-            position_logits = preds.nodes.position_logits
+            position_logits = preds.globals.position_logits
             position_probs = jax.vmap(models.position_logits_to_position_distribution)(
                 position_logits
             )
@@ -463,7 +470,7 @@ def generation_loss(
             )
         loss_radial = radial_loss_scaling_factor * loss_radial
 
-        predicted_angular_logits = preds.nodes.angular_logits
+        predicted_angular_logits = preds.globals.angular_logits
         if predicted_angular_logits is None:
             position_probs = jax.vmap(models.position_logits_to_position_distribution)(
                 position_logits

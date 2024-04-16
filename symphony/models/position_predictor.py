@@ -54,7 +54,7 @@ class TargetPositionPredictor(hk.Module):
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
         num_graphs = graphs.n_node.shape[0]
         num_nodes = graphs.nodes.positions.shape[0]
-        num_nodes_for_multifocus = graphs.nodes.target_positions.shape[1]
+        num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
 
         # Compute the focus node embeddings.
         node_embeddings = self.compute_node_embeddings(graphs)
@@ -68,7 +68,8 @@ class TargetPositionPredictor(hk.Module):
         )(target_species)
 
         assert target_species_embeddings.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             node_embeddings.irreps.num_irreps,
         ), print(target_species_embeddings.shape)
 
@@ -80,9 +81,10 @@ class TargetPositionPredictor(hk.Module):
         else:
             irreps = s2_irreps
 
+        focus_mask_2 = jnp.where(jnp.arange(num_nodes) * graphs.nodes.focus_mask != 0, size=num_nodes_for_multifocus)[0]
         log_position_coeffs = e3nn.haiku.Linear(
             self.num_radii * self.num_channels * irreps, force_irreps_out=True
-        )(target_species_embeddings * node_embeddings)
+        )(target_species_embeddings * node_embeddings[focus_mask_2])  # TODO
         log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
         log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
 
@@ -91,7 +93,8 @@ class TargetPositionPredictor(hk.Module):
             log_position_coeffs = e3nn.gate(log_position_coeffs)
 
         assert log_position_coeffs.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             self.num_channels,
             self.num_radii,
             s2_irreps.dim,
@@ -105,12 +108,15 @@ class TargetPositionPredictor(hk.Module):
 
         # Convert the coefficients to a signal on the grid.
         position_logits = jax.vmap(
-            lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, self.num_radii
-            )
+            lambda coeff_arr: jax.vmap(
+                lambda coeffs: utils.log_coeffs_to_logits(
+                    coeffs, self.res_beta, self.res_alpha, self.num_radii
+                )
+            )(coeff_arr)
         )(log_position_coeffs)
         assert position_logits.shape == (
-            num_nodes,
+            num_graphs,
+            num_nodes_for_multifocus,
             self.num_radii,
             self.res_beta,
             self.res_alpha,
@@ -170,7 +176,6 @@ class FactorizedTargetPositionPredictor(hk.Module):
         inverse_temperature: float = 1.0,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
         num_graphs = graphs.n_node.shape[0]
-        num_nodes = graphs.nodes.positions.shape[0]
 
         # Compute the focus node embeddings.
         node_embeddings = self.compute_node_embeddings(graphs)
@@ -186,7 +191,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(target_species)
 
         assert target_species_embeddings.shape == (
-            num_nodes,
+            num_graphs,
             focus_node_embeddings.irreps.num_irreps,
         )
 
@@ -201,7 +206,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
             act=self.radial_mlp_activation,
             output_activation=False,
         )(radial_logits).array
-        assert radial_logits.shape == (num_nodes, self.num_radii)
+        assert radial_logits.shape == (num_graphs, self.num_radii)
 
         # Predict the angular coefficients for the position signal.
         # These are actually describing the logits of the angular distribution.
@@ -220,7 +225,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
             log_angular_coeffs = e3nn.gate(log_angular_coeffs)
 
         assert log_angular_coeffs.shape == (
-            num_nodes,
+            num_graphs,
             self.num_channels,
             s2_irreps.dim,
         )
@@ -242,7 +247,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
         )(radial_logits, log_angular_coeffs)
 
         assert log_position_coeffs.shape == (
-            num_nodes,
+            num_graphs,
             self.num_channels,
             self.num_radii,
             s2_irreps.dim,
@@ -258,7 +263,7 @@ class FactorizedTargetPositionPredictor(hk.Module):
             )
         )(log_position_coeffs)
         assert position_logits.shape == (
-            num_nodes,
+            num_graphs,
             self.num_radii,
             self.res_beta,
             self.res_alpha,
