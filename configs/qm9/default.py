@@ -13,9 +13,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
     config.use_edm_splits = True
-    config.num_train_molecules = None
-    config.num_val_molecules = None
-    config.num_test_molecules = None
+    config.num_train_molecules = 100000
+    config.num_val_molecules = 17748
+    config.num_test_molecules = 13083
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
@@ -39,7 +39,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_eval_steps = 3000
     config.log_every_steps = 1000
     config.eval_every_steps = 30000
-    config.generate_every_steps = 100000
+    config.generate_every_steps = 30000
     config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
