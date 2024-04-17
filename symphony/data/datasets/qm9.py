@@ -299,13 +299,33 @@ def get_edm_splits(
     test = included_idxs[test]
 
     if num_train_molecules is not None:
-        logging.info(f"Using {num_train_molecules} training molecules out of {len(train)} in EDM split.")
+        if num_train_molecules > len(train):
+            raise ValueError(
+                f"num_train_molecules ({num_train_molecules}) is larger than the number of training molecules ({len(train)})."
+            )
+        logging.info(
+            f"Using {num_train_molecules} training molecules out of {len(train)} in EDM split."
+        )
         train = train[:num_train_molecules]
+
     if num_val_molecules is not None:
-        logging.info(f"Using {num_val_molecules} validation molecules out of {len(val)} in EDM split.")
+        if num_val_molecules > len(val):
+            raise ValueError(
+                f"num_val_molecules ({num_val_molecules}) is larger than the number of validation molecules ({len(val)})."
+            )
+        logging.info(
+            f"Using {num_val_molecules} validation molecules out of {len(val)} in EDM split."
+        )
         val = val[:num_val_molecules]
+
     if num_test_molecules is not None:
-        logging.info(f"Using {num_test_molecules} test molecules out of {len(test)} in EDM split.")
+        if num_test_molecules > len(test):
+            raise ValueError(
+                f"num_test_molecules ({num_test_molecules}) is larger than the number of test molecules ({len(test)})."
+            )
+        logging.info(
+            f"Using {num_test_molecules} test molecules out of {len(test)} in EDM split."
+        )
         test = test[:num_test_molecules]
 
     splits = {"train": train, "val": val, "test": test}
