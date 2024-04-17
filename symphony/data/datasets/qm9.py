@@ -299,13 +299,16 @@ def get_edm_splits(
     test = included_idxs[test]
 
     if num_train_molecules is not None:
+        logging.info(f"Using {num_train_molecules} training molecules out of {len(train)} in EDM split.")
         train = train[:num_train_molecules]
     if num_val_molecules is not None:
+        logging.info(f"Using {num_val_molecules} validation molecules out of {len(val)} in EDM split.")
         val = val[:num_val_molecules]
     if num_test_molecules is not None:
+        logging.info(f"Using {num_test_molecules} test molecules out of {len(test)} in EDM split.")
         test = test[:num_test_molecules]
 
-    splits = {"train": set(train), "val": set(val), "test": set(test)}
+    splits = {"train": train, "val": val, "test": test}
 
     # Cleanup file.
     try:
