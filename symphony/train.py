@@ -137,12 +137,11 @@ def train_step(
     return state, batch_metrics
 
 
-@functools.partial(jax.jit, static_argnums=(3,))
+@functools.partial(jax.jit, static_argnums=(2,))
 @chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
     state: train_state.TrainState,
-    rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
@@ -195,9 +194,8 @@ def evaluate_model(
                 break
 
             # Compute metrics for this batch.
-            step_rng, rng = jax.random.split(rng)
-            step_rngs = jax.random.split(step_rng, jax.local_device_count())
-            batch_metrics = evaluate_step(graphs, state, step_rngs, loss_kwargs)
+            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
+            batch_metrics = evaluate_step(graphs, state, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
 
         # split_metrics = flax.jax_utils.unreplicate(split_metrics)
@@ -332,6 +330,7 @@ def train_and_evaluate(
         try:
             start = time.perf_counter()
             graphs = next(datasets["train"])
+            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
             logging.log_first_n(
                 logging.INFO,
                 "Time to get next batch of fragments: %0.2f ms.",

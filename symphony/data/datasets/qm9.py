@@ -19,22 +19,6 @@ QM9_URL = (
 )
 
 
-def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
-    """Converts a molecule to a datatypes.Structures object."""
-    return datatypes.Structures(
-        nodes=datatypes.NodesInfo(
-            positions=np.asarray(molecule.positions),
-            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers),
-        ),
-        edges=None,
-        receivers=None,
-        senders=None,
-        globals=None,
-        n_node=np.asarray([len(molecule.numbers)]),
-        n_edge=None,
-    )
-
-
 class QM9Dataset(datasets.InMemoryDataset):
     """QM9 dataset."""
 
@@ -67,14 +51,16 @@ class QM9Dataset(datasets.InMemoryDataset):
         self.num_train_molecules = num_train_molecules
         self.num_val_molecules = num_val_molecules
         self.num_test_molecules = num_test_molecules
-        self.molecules = None
+        self.all_structures = None
 
     def structures(self) -> Iterable[datatypes.Structures]:
-        if self.molecules is None:
-            self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
+        if self.all_structures is None:
+            self.all_structures = [
+                _molecule_to_structure(mol)
+                for mol in load_qm9(self.root_dir, self.check_molecule_sanity)
+            ]
 
-        for molecule in self.molecules:
-            yield _molecule_to_structure(molecule)
+        yield from self.all_structures
 
     @staticmethod
     def species_to_atom_types() -> Dict[int, str]:
@@ -115,6 +101,22 @@ class QM9Dataset(datasets.InMemoryDataset):
             ],
         }
         return permuted_indices
+
+
+def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
+    """Converts a molecule to a datatypes.Structures object."""
+    return datatypes.Structures(
+        nodes=datatypes.NodesInfo(
+            positions=np.asarray(molecule.positions),
+            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers),
+        ),
+        edges=None,
+        receivers=None,
+        senders=None,
+        globals=None,
+        n_node=np.asarray([len(molecule.numbers)]),
+        n_edge=None,
+    )
 
 
 def download_url(url: str, root: str) -> str:
