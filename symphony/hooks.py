@@ -80,7 +80,7 @@ class GenerateMoleculesHook:
 
         molecules_ase, _ = generate_molecules.generate_molecules(
             apply_fn=state.eval_apply_fn,
-            params=flax.jax_utils.unreplicate(state.params),
+            params=state.params,
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=self.radial_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
@@ -125,7 +125,8 @@ class LogTrainMetricsHook:
     is_empty: bool = True
 
     def __call__(self, state: train_state.TrainState) -> None:
-        train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
+        # train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
+        train_metrics = state.train_metrics
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
@@ -135,7 +136,8 @@ class LogTrainMetricsHook:
                 add_prefix_to_keys(train_metrics.compute(), "train"),
             )
             state = state.replace(
-                train_metrics=flax.jax_utils.replicate(train.Metrics.empty())
+                # train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
+                train_metrics=train.Metrics.empty(),
             )
             self.is_empty = True
 
@@ -177,7 +179,8 @@ class EvaluateModelHook:
         if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
             state = state.replace(
                 best_params=state.params,
-                metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
+                metrics_for_best_params=eval_metrics,
+                # metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
                 step_for_best_params=state.step,
             )
             logging.info("New best state found at step %d.", state.get_step())
@@ -209,18 +212,20 @@ class CheckpointHook:
         return state
 
     def __call__(self, state: train_state.TrainState) -> Any:
+        # state = flax.jax_utils.unreplicate(state)
+
         # Save the current and best params.
         with open(
             os.path.join(self.checkpoint_dir, f"params_{state.get_step()}.pkl"), "wb"
         ) as f:
-            pickle.dump(flax.jax_utils.unreplicate(state.params), f)
+            pickle.dump(state.params, f)
 
         with open(os.path.join(self.checkpoint_dir, "params_best.pkl"), "wb") as f:
-            pickle.dump(flax.jax_utils.unreplicate(state.best_params), f)
+            pickle.dump(state.best_params, f)
 
         # Save the whole training state.
         self.ckpt.save(
             {
-                "state": flax.jax_utils.unreplicate(state),
+                "state": state,
             }
         )

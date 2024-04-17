@@ -100,7 +100,7 @@ class QM9Dataset(datasets.InMemoryDataset):
 
         # Create a random permutation of the indices.
         np.random.seed(0)
-        indices = np.random.permutation(len(self.molecules))
+        indices = np.random.permutation(133885)
         permuted_indices = {
             "train": indices[: self.num_train_molecules],
             "val": indices[
