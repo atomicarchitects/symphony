@@ -1,3 +1,5 @@
+from typing import Dict
+
 import ase
 import matscipy.neighbours
 import numpy as np

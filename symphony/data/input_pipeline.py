@@ -53,21 +53,14 @@ def create_fragments_dataset(
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
         raise ValueError("radial_cutoff must be provided if infer_edges is True.")
 
-    # Make sure the indices are stored in a set for fast lookup.
-    keep_indices = set(keep_indices)
-
     def fragment_generator(rng: chex.PRNGKey):
         """Generates fragments for a split."""
         original_rng = rng
 
         # Loop indefinitely.
         while True:
-            for index, structure in enumerate(structures):
-                # Skip if the index is not in the split.
-                # This way we don't have to materialize the entire dataset.
-                if index not in keep_indices:
-                    continue
-
+            for index in keep_indices:
+                structure = structures[index]
                 if use_same_rng_across_structures:
                     structure_rng = original_rng
                 else:

@@ -53,70 +53,37 @@ class QM9Dataset(datasets.InMemoryDataset):
         self.num_test_molecules = num_test_molecules
         self.all_structures = None
 
+    @staticmethod
+    def get_atomic_numbers() -> np.ndarray:
+        return np.asarray([1, 6, 7, 8, 9])
+
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:
-            self.all_structures = [
-                _molecule_to_structure(mol)
-                for mol in load_qm9(self.root_dir, self.check_molecule_sanity)
-            ]
+            self.all_structures = load_qm9(self.root_dir, self.check_molecule_sanity)
 
-        yield from self.all_structures
+        return self.all_structures
 
-    @staticmethod
-    def species_to_atom_types() -> Dict[int, str]:
-        return {
-            0: "H",
-            1: "C",
-            2: "N",
-            3: "O",
-            4: "F",
-        }
-
-    def split_indices(self) -> Dict[str, Set[int]]:
+    def split_indices(self) -> Dict[str, np.ndarray]:
         """Return a dictionary of indices for each split."""
-
-        # If EDM splits are used, return the splits.
-        if self.use_edm_splits:
-            return get_edm_splits(
-                self.root_dir,
-                self.num_train_molecules,
-                self.num_val_molecules,
-                self.num_test_molecules,
-            )
-
-        # Create a random permutation of the indices.
-        np.random.seed(0)
-        indices = np.random.permutation(133885)
-        permuted_indices = {
-            "train": indices[: self.num_train_molecules],
-            "val": indices[
-                self.num_train_molecules : self.num_train_molecules
-                + self.num_val_molecules
-            ],
-            "test": indices[
-                self.num_train_molecules
-                + self.num_val_molecules : self.num_train_molecules
-                + self.num_val_molecules
-                + self.num_test_molecules
-            ],
+        splits = get_edm_splits(self.root_dir)
+        requested_splits = {
+            "train": self.num_train_molecules,
+            "val": self.num_val_molecules,
+            "test": self.num_test_molecules,
         }
-        return permuted_indices
-
-
-def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
-    """Converts a molecule to a datatypes.Structures object."""
-    return datatypes.Structures(
-        nodes=datatypes.NodesInfo(
-            positions=np.asarray(molecule.positions),
-            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers),
-        ),
-        edges=None,
-        receivers=None,
-        senders=None,
-        globals=None,
-        n_node=np.asarray([len(molecule.numbers)]),
-        n_edge=None,
-    )
+        for split_name, num_molecules in requested_splits.items():
+            original_split_size = len(splits[split_name])
+            if num_molecules > original_split_size:
+                raise ValueError(
+                    f"Requested {num_molecules} molecules for split {split_name}, but only {original_split_size} are available."
+                )
+            logging.log_first_n(
+                logging.INFO,
+                f"Using {num_molecules} molecules out of {original_split_size} in split {split_name}.",
+                1
+            )
+            splits[split_name] = splits[split_name][:num_molecules]
+        return splits
 
 
 def download_url(url: str, root: str) -> str:
@@ -211,7 +178,8 @@ def load_qm9(
     raw_mols_path = os.path.join(root_dir, "gdb9.sdf")
     supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=False)
 
-    mols_as_ase = []
+    atomic_numbers = QM9Dataset.get_atomic_numbers()
+    all_structures = []
     for mol in supplier:
         if mol is None:
             continue
@@ -222,21 +190,29 @@ def load_qm9(
             if not sane:
                 continue
 
-        # Convert to ASE.
-        mol_as_ase = ase.Atoms(
-            numbers=np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
-            positions=np.asarray(mol.GetConformer(0).GetPositions()),
+        # Convert to Structure.
+        structure = datatypes.Structures(
+            nodes=datatypes.NodesInfo(
+                positions=np.asarray(mol.GetConformer().GetPositions()),
+                species=np.searchsorted(
+                    atomic_numbers,
+                    np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
+                ),
+            ),
+            edges=None,
+            receivers=None,
+            senders=None,
+            globals=None,
+            n_node=np.asarray([mol.GetNumAtoms()]),
+            n_edge=None,
         )
-        mols_as_ase.append(mol_as_ase)
+        all_structures.append(structure)
 
-    return mols_as_ase
+    return all_structures
 
 
 def get_edm_splits(
     root_dir: str,
-    num_train_molecules: int,
-    num_val_molecules: int,
-    num_test_molecules: int,
 ) -> Dict[str, np.ndarray]:
     """Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py."""
 
@@ -299,36 +275,6 @@ def get_edm_splits(
     train = included_idxs[train]
     val = included_idxs[val]
     test = included_idxs[test]
-
-    if num_train_molecules is not None:
-        if num_train_molecules > len(train):
-            raise ValueError(
-                f"num_train_molecules ({num_train_molecules}) is larger than the number of training molecules ({len(train)})."
-            )
-        logging.info(
-            f"Using {num_train_molecules} training molecules out of {len(train)} in EDM split."
-        )
-        train = train[:num_train_molecules]
-
-    if num_val_molecules is not None:
-        if num_val_molecules > len(val):
-            raise ValueError(
-                f"num_val_molecules ({num_val_molecules}) is larger than the number of validation molecules ({len(val)})."
-            )
-        logging.info(
-            f"Using {num_val_molecules} validation molecules out of {len(val)} in EDM split."
-        )
-        val = val[:num_val_molecules]
-
-    if num_test_molecules is not None:
-        if num_test_molecules > len(test):
-            raise ValueError(
-                f"num_test_molecules ({num_test_molecules}) is larger than the number of test molecules ({len(test)})."
-            )
-        logging.info(
-            f"Using {num_test_molecules} test molecules out of {len(test)} in EDM split."
-        )
-        test = test[:num_test_molecules]
 
     splits = {"train": train, "val": val, "test": test}
 
