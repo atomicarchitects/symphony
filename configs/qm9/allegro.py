@@ -13,8 +13,8 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config.num_channels = 64
     config.r_max = 5
     config.avg_num_neighbors = 300.0  # Allegro is not properly normalized.
-    config.num_interactions = 4
-    config.max_ell = 5
+    config.num_interactions = 2
+    config.max_ell = 4
     config.mlp_activation = "swish"
     config.activation = "softplus"
     config.mlp_n_layers = 2

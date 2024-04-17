@@ -7,12 +7,13 @@ from symphony import datatypes
 class InMemoryDataset(abc.ABC):
     """Abstract base class for in-memory datasets."""
 
+    def num_species(self) -> int:
+        """Return the number of atom types."""
+        return len(self.species_to_atom_types())
+
     @abc.abstractmethod
     def species_to_atom_types() -> Dict[int, str]:
         """Return the mapping from (integer) species to atom types."""
-
-    def num_species(self) -> int:
-        return len(self.species_to_atom_types())
 
     @abc.abstractmethod
     def structures(self) -> Iterable[datatypes.Structures]:
