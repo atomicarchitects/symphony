@@ -312,13 +312,13 @@ def train_and_evaluate(
             state = train_metrics_hook(state)
 
         # Evaluate model, if required.
-        if step % config.eval_every_steps == 0 or first_or_last_step:
+        if config.eval and step % config.eval_every_steps == 0 or first_or_last_step:
             logging.log_first_n(logging.INFO, "Evaluating model for the first time.", 1)
             state = evaluate_model_hook(state)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
-        if step % config.generate_every_steps == 0 or first_or_last_step:
+        if config.generate and step % config.generate_every_steps == 0 or first_or_last_step:
             logging.log_first_n(
                 logging.INFO, "Generating molecules for the first time.", 1
             )
