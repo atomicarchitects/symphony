@@ -36,8 +36,10 @@ class GEOMDrugsDataset(datasets.InMemoryDataset):
 
     def split_indices(self) -> Dict[str, np.ndarray[int]]:
         """Returns the indices for the train, val, and test splits."""
-        splits = get_gcdm_splits(self.root_dir)
+        if not self.use_gcdm_splits:
+            raise NotImplementedError("Only GCDM splits are supported for QM9.")
 
+        splits = get_gcdm_splits(self.root_dir)
         requested_splits = {
             "train": self.num_train_molecules,
             "val": self.num_val_molecules,

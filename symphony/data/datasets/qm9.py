@@ -34,15 +34,6 @@ class QM9Dataset(datasets.InMemoryDataset):
         if root_dir is None:
             raise ValueError("root_dir must be provided.")
 
-        if use_edm_splits:
-            logging.info("Using EDM splits for QM9.")
-            if check_molecule_sanity:
-                raise ValueError(
-                    "EDM splits are not compatible with molecule sanity checks."
-                )
-        else:
-            logging.info("Using random (non-EDM) splits.")
-
         self.root_dir = root_dir
         self.check_molecule_sanity = check_molecule_sanity
         self.use_edm_splits = use_edm_splits
@@ -63,6 +54,9 @@ class QM9Dataset(datasets.InMemoryDataset):
 
     def split_indices(self) -> Dict[str, np.ndarray]:
         """Return a dictionary of indices for each split."""
+        if not self.use_edm_splits:
+            raise NotImplementedError("Only EDM splits are supported for QM9.")
+
         splits = get_edm_splits(self.root_dir)
         requested_splits = {
             "train": self.num_train_molecules,
