@@ -196,7 +196,7 @@ def evaluate_model(
 
             # Compute metrics for this batch.
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
-            logging.info("Evaluating model on %s split, step %d.", split, eval_step)
+            # logging.info("Evaluating model on %s split, step %d.", split, eval_step)
             batch_metrics = evaluate_step(graphs, state, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
 
