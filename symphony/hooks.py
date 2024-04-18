@@ -124,7 +124,7 @@ class LogTrainMetricsHook:
     writer: metric_writers.SummaryWriter
     is_empty: bool = True
 
-    def __call__(self, state: train_state.TrainState) -> None:
+    def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
         # train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
         train_metrics = state.train_metrics
 
@@ -141,6 +141,8 @@ class LogTrainMetricsHook:
             )
             self.is_empty = True
 
+        return state
+
 
 @dataclass
 class EvaluateModelHook:
@@ -149,12 +151,11 @@ class EvaluateModelHook:
     update_state: bool = True
 
     def __call__(
-        self, state: train_state.TrainState, rng: chex.PRNGKey
+        self, state: train_state.TrainState,
     ) -> train_state.TrainState:
         # Evaluate the model.
         eval_metrics = self.evaluate_model_fn(
             state,
-            rng,
         )
 
         # Compute and write metrics.

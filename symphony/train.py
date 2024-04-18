@@ -176,7 +176,6 @@ def evaluate_step(
 def evaluate_model(
     state: train_state.TrainState,
     datasets: Dict[str, Iterable[datatypes.Fragments]],
-    rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
     num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
@@ -195,6 +194,7 @@ def evaluate_model(
 
             # Compute metrics for this batch.
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
+            logging.info("Evaluating model on %s split, step %d.", split, eval_step)
             batch_metrics = evaluate_step(graphs, state, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
 
@@ -281,10 +281,9 @@ def train_and_evaluate(
     )
     train_metrics_hook = hooks.LogTrainMetricsHook(writer)
     evaluate_model_hook = hooks.EvaluateModelHook(
-        evaluate_model_fn=lambda state, rng: evaluate_model(
+        evaluate_model_fn=lambda state: evaluate_model(
             state,
             datasets,
-            rng,
             config.loss_kwargs,
             config.num_eval_steps,
         ),
@@ -310,13 +309,12 @@ def train_and_evaluate(
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
         if step % config.log_every_steps == 0 or first_or_last_step:
-            train_metrics_hook(state)
+            state = train_metrics_hook(state)
 
         # Evaluate model, if required.
         if step % config.eval_every_steps == 0 or first_or_last_step:
             logging.log_first_n(logging.INFO, "Evaluating model for the first time.", 1)
-            rng, eval_rng = jax.random.split(rng)
-            state = evaluate_model_hook(state, eval_rng)
+            state = evaluate_model_hook(state)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
