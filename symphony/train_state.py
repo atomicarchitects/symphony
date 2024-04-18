@@ -24,7 +24,8 @@ class TrainState(train_state.TrainState):
     train_metrics: metrics.Collection = flax.struct.field(pytree_node=True)
 
     def get_step(self) -> int:
-        print(self.step, len(self.step))
-        if len(self.step) > 1:
+        try:
+            return int(self.step)
+        except TypeError:
             return int(self.step[0])
-        return int(self.step)
+
