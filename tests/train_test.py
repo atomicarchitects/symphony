@@ -16,6 +16,7 @@ from . import loss_test
 from configs import root_dirs
 from configs.qm9 import test as qm9_test
 from configs.platonic_solids import test as platonic_solids_test
+from configs.geom_drugs import test as geom_drugs_test
 
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
@@ -23,13 +24,13 @@ logging.getLogger().setLevel(logging.INFO)
 _ALL_CONFIGS = {
     "qm9_test": qm9_test.get_config(),
     "platonic_solids_test": platonic_solids_test.get_config(),
+    "geom_drugs_test": geom_drugs_test.get_config(),
 }
-
 
 
 class TrainTest(parameterized.TestCase):
     @parameterized.product(
-        config_name=["qm9_test"],
+        config_name=["qm9_test"]
     )
     def test_train_and_evaluate(
         self,
