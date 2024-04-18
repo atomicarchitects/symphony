@@ -75,10 +75,8 @@ class QM9Dataset(datasets.InMemoryDataset):
                 raise ValueError(
                     f"Requested {num_molecules} molecules for split {split_name}, but only {original_split_size} are available."
                 )
-            logging.log_first_n(
-                logging.INFO,
+            logging.info(
                 f"Using {num_molecules} molecules out of {original_split_size} in split {split_name}.",
-                1
             )
             splits[split_name] = splits[split_name][:num_molecules]
         return splits

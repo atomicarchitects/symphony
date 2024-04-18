@@ -179,13 +179,15 @@ def get_datasets(
 
     # Get the dataset of structures.
     dataset = datasets.utils.get_dataset(config)
+    structures = dataset.structures()
+    split_indices = dataset.split_indices()
 
     # Create the fragments datasets.
     fragments_iterators = {
         split: create_fragments_dataset(
             rng=rng,
-            structures=dataset.structures(),
-            keep_indices=dataset.split_indices()[split],
+            structures=structures,
+            keep_indices=split_indices[split],
             num_species=dataset.num_species(),
             infer_edges_with_radial_cutoff=config.infer_edges_with_radial_cutoff,
             radial_cutoff=config.get("radial_cutoff", None),
