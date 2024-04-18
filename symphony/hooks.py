@@ -148,7 +148,7 @@ class LogTrainMetricsHook:
 class EvaluateModelHook:
     evaluate_model_fn: Callable
     writer: metric_writers.SummaryWriter
-    update_state: bool = True
+    update_state_with_eval_metrics: bool = True
 
     def __call__(
         self, state: train_state.TrainState,
@@ -166,7 +166,7 @@ class EvaluateModelHook:
             )
         self.writer.flush()
 
-        if not self.update_state:
+        if not self.update_state_with_eval_metrics:
             return state
 
         # Note best state seen so far.

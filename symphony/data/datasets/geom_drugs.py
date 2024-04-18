@@ -1,14 +1,8 @@
 from typing import Dict, Iterable, List
 
-import tqdm
 from absl import logging
 import os
-import zipfile
-import urllib
 import numpy as np
-import ase
-import rdkit.Chem as Chem
-
 
 from symphony.data import datasets
 from symphony import datatypes
