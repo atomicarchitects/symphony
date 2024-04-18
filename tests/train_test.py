@@ -29,7 +29,7 @@ _ALL_CONFIGS = {
 
 class TrainTest(parameterized.TestCase):
     @parameterized.product(
-        config_name=["platonic_solids_test"],
+        config_name=["qm9_test"],
     )
     def test_train_and_evaluate(
         self,
@@ -37,8 +37,8 @@ class TrainTest(parameterized.TestCase):
     ):
         """Tests that training and evaluation runs without errors."""
         # Ensure NaNs and Infs are detected.
-        # jax.config.update("jax_debug_nans", True)
-        # jax.config.update("jax_debug_infs", True)
+        jax.config.update("jax_debug_nans", True)
+        jax.config.update("jax_debug_infs", True)
 
         # Load config for dummy dataset.
         config = _ALL_CONFIGS[config_name]

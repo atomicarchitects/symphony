@@ -44,13 +44,9 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         if test_solids is None:
             test_solids = all_indices
 
-        self.train_solids = set(train_solids)
-        self.val_solids = set(val_solids)
-        self.test_solids = set(test_solids)
-
     @staticmethod
-    def species_to_atom_types() -> Dict[int, str]:
-        return {0: "H"}
+    def get_atomic_numbers() -> np.ndarray:
+        return np.asarray([0])
 
     def structures(self) -> List[datatypes.Structures]:
         """Returns the structures for the Platonic solids."""
