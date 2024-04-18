@@ -427,6 +427,7 @@ def create_model(
             max_radius=radial_predictor_config.max_radius,
             num_layers=radial_predictor_config.num_layers,
             num_param_mlp_layers=radial_predictor_config.num_param_mlp_layers,
+            boundary_error=radial_predictor_config.boundary_error,
         )
         target_position_predictor = TargetPositionPredictor(
             node_embedder_fn=lambda: create_node_embedder(

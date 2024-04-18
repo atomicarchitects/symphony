@@ -303,6 +303,7 @@ def train_and_evaluate(
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,
         max_num_atoms=config.generation.max_num_atoms,
+        avg_neighbors_per_atom=config.avg_neighbors_per_atom,
     )
 
     # Begin training loop.

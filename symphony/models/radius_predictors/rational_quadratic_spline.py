@@ -1,5 +1,6 @@
 import distrax
 import haiku as hk
+import jax
 import jax.numpy as jnp
 import e3nn_jax as e3nn
 
@@ -16,6 +17,7 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         max_radius: float,
         num_layers: int,
         num_param_mlp_layers: int,
+        boundary_error: float,
     ):
         super().__init__()
         self.num_bins = num_bins
@@ -23,6 +25,8 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         self.max_radius = max_radius
         self.num_layers = num_layers
         self.num_param_mlp_layers = num_param_mlp_layers
+        self.boundary_error = boundary_error
+        self.boundary_error_max_tries = 3
 
     def create_flow(self, conditioning: e3nn.IrrepsArray) -> distrax.Bijector:
         """Creates a flow with the given conditioning."""
@@ -74,6 +78,13 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         self,
         conditioning: e3nn.IrrepsArray,
     ) -> jnp.ndarray:
-        """Samples from the learned distribution."""
+        """Samples from the learned distribution, ignoring samples near the boundaries."""
         dist = self.create_distribution(conditioning)
-        return dist.sample(seed=hk.next_rng_key())
+        rng, sample_rng = jax.random.split(hk.next_rng_key())
+        sample_rngs = jax.random.split(sample_rng, self.boundary_error_max_tries)
+        samples = jax.vmap(lambda rng: dist.sample(seed=rng))(sample_rngs)
+
+        valid_range = (samples >= self.min_radius + self.boundary_error)
+        valid_range = jnp.logical_and(valid_range, samples <= self.max_radius - self.boundary_error)
+
+        return jax.random.choice(rng, samples, p=valid_range)

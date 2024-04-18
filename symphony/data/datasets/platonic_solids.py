@@ -44,6 +44,10 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         if test_solids is None:
             test_solids = all_indices
 
+        self.train_solids = train_solids
+        self.val_solids = val_solids
+        self.test_solids = test_solids
+
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.asarray([1])

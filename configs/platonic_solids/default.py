@@ -81,6 +81,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.num_layers = 2
     config.target_position_predictor.radial_predictor.min_radius = 0.0
     config.target_position_predictor.radial_predictor.max_radius = 5.0
+    config.target_position_predictor.radial_predictor.boundary_error = 0.35
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
@@ -93,5 +94,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"
     config.generation.max_num_atoms = 35
+    config.generation.avg_neighbors_per_atom = 10
 
     return config

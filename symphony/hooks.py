@@ -27,7 +27,7 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 def plot_molecules_in_wandb(
     molecules: Sequence[Chem.Mol],
     step: int,
-    num_to_plot: int = 10,
+    num_to_plot: int = 8,
     **plot_kwargs,
 ):
     """Plots molecules in the Weights & Biases UI."""
@@ -65,6 +65,7 @@ class GenerateMoleculesHook:
     num_seeds_per_chunk: int
     init_molecules: str
     max_num_atoms: int
+    avg_neighbors_per_atom: int
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -89,6 +90,7 @@ class GenerateMoleculesHook:
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,
             max_num_atoms=self.max_num_atoms,
+            avg_neighbors_per_atom=self.avg_neighbors_per_atom,
             visualize=False,
             verbose=False,
         )

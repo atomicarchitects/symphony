@@ -132,6 +132,7 @@ def generate_molecules(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
+    avg_neighbors_per_atom: int,
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
     verbose: bool = True,
@@ -183,7 +184,7 @@ def generate_molecules(
         jraph.pad_with_graphs(
             init_fragment,
             n_node=(max_num_atoms + 1),
-            n_edge=(max_num_atoms + 1) ** 2,
+            n_edge=(max_num_atoms + 1) * avg_neighbors_per_atom,
             n_graph=2,
         )
         for init_fragment in init_fragments
@@ -359,6 +360,7 @@ def generate_molecules_from_workdir(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
+    avg_neighbors_per_atom: int,
     visualize: bool = False,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
@@ -416,7 +418,7 @@ def generate_molecules_from_workdir(
         )
 
     return generate_molecules(
-            apply_fn=model.apply,
+            apply_fn=jax.jit(model.apply),
             params=params,
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=config.radial_cutoff,
@@ -426,6 +428,7 @@ def generate_molecules_from_workdir(
             num_seeds_per_chunk=num_seeds_per_chunk,
             init_molecules=init_molecules,
             max_num_atoms=max_num_atoms,
+            avg_neighbors_per_atom=avg_neighbors_per_atom,
             visualize=visualize,
             visualizations_dir=visualizations_dir,
             verbose=verbose,
@@ -445,6 +448,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.num_seeds_per_chunk,
         FLAGS.init,
         FLAGS.max_num_atoms,
+        FLAGS.avg_neighbors_per_atom,
         FLAGS.visualize,
         FLAGS.res_alpha,
         FLAGS.res_beta,
@@ -508,6 +512,11 @@ if __name__ == "__main__":
         "max_num_atoms",
         30,
         "Maximum number of atoms to generate per molecule.",
+    )
+    flags.DEFINE_integer(
+        "avg_neighbors_per_atom",
+        10,
+        "Average number of neighbors per atom.",
     )
     flags.DEFINE_bool(
         "visualize",
