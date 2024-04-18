@@ -315,15 +315,13 @@ def train_and_evaluate(
 
         # Evaluate model, if required.
         if config.eval and (step % config.eval_every_steps == 0 or first_or_last_step):
-            logging.log_first_n(logging.INFO, "Evaluating model for the first time.", 1)
+            logging.info("Evaluating model.")
             state = evaluate_model_hook(state)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
         if config.generate and (step % config.generate_every_steps == 0 or first_or_last_step):
-            logging.log_first_n(
-                logging.INFO, "Generating molecules for the first time.", 1
-            )
+            logging.info("Generating molecules.")
             generate_molecules_hook(state)
 
         # Get a batch of graphs.
