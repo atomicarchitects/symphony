@@ -11,6 +11,7 @@ import jraph
 import ml_collections
 
 from symphony import datatypes
+from symphony.data import datasets
 from symphony.models.angular_predictors.linear_angular_predictor import (
     LinearAngularPredictor,
 )
@@ -273,15 +274,6 @@ def _irreps_from_lmax(
     return (num_channels * irreps).regroup()
 
 
-def get_num_species_for_dataset(dataset: str) -> int:
-    """Returns the number of species for a given dataset."""
-    if dataset == "qm9":
-        return len(ATOMIC_NUMBERS)
-    if dataset in ["tetris", "platonic_solids"]:
-        return 1
-    raise ValueError(f"Unsupported dataset: {dataset}.")
-
-
 def create_node_embedder(
     config: ml_collections.ConfigDict,
     num_species: int,
@@ -401,7 +393,7 @@ def create_model(
     ) -> datatypes.Predictions:
         """Defines the entire network."""
 
-        num_species = get_num_species_for_dataset(config.dataset)
+        num_species = datasets.utils.get_dataset(config).num_species()
         focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
             node_embedder_fn=lambda: create_node_embedder(
                 config.focus_and_target_species_predictor.embedder_config,

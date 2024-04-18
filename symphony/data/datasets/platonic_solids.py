@@ -46,7 +46,7 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
-        return np.asarray([0])
+        return np.asarray([1])
 
     def structures(self) -> List[datatypes.Structures]:
         """Returns the structures for the Platonic solids."""

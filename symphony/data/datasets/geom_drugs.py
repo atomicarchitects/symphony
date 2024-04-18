@@ -8,7 +8,7 @@ from symphony.data import datasets
 from symphony import datatypes
 
 
-class GEOMDrugs(datasets.InMemoryDataset):
+class GEOMDrugsDataset(datasets.InMemoryDataset):
     def __init__(
         self,
         root_dir: str,
@@ -25,6 +25,7 @@ class GEOMDrugs(datasets.InMemoryDataset):
         self.num_test_molecules = num_test_molecules
         self.all_structures = None
 
+    @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.asarray([1, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 33, 35, 53, 80, 83])
 
@@ -65,7 +66,7 @@ def load_geom_drugs(root_dir: str) -> List[datatypes.Structures]:
     conformers = all_data[:, 1:]
     split_indices = np.nonzero(mol_id[:-1] - mol_id[1:])[0] + 1
     data_list = np.split(conformers, split_indices)
-    atomic_numbers = np.asarray(GEOMDrugs.get_atomic_numbers())
+    atomic_numbers = np.asarray(GEOMDrugsDataset.get_atomic_numbers())
 
     all_structures = []
     for datum in data_list:
@@ -80,6 +81,7 @@ def load_geom_drugs(root_dir: str) -> List[datatypes.Structures]:
             receivers=None,
             n_edge=None,
             n_node=np.array([len(atom_types)]),
+            globals=None,
         )
         all_structures.append(structure)
 

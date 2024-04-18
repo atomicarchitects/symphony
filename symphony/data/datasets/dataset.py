@@ -12,7 +12,7 @@ class InMemoryDataset(abc.ABC):
         return len(self.get_atomic_numbers())
 
     @abc.abstractmethod
-    def get_atomic_numbers() -> Sequence[int]:
+    def get_atomic_numbers(self) -> Sequence[int]:
         """Returns a sorted list of the atomic numbers observed in the dataset."""
 
     @abc.abstractmethod

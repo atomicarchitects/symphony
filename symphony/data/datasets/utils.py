@@ -7,7 +7,7 @@ import zipfile
 import urllib
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9
+from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs
 
 
 def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
@@ -17,10 +17,10 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
         return qm9.QM9Dataset(
             root_dir=config.root_dir,
             check_molecule_sanity=config.get("check_molecule_sanity", False),
-            use_edm_splits=config.get("use_edm_splits", False),
-            num_train_molecules=config.get("num_train_molecules"),
-            num_val_molecules=config.get("num_val_molecules"),
-            num_test_molecules=config.get("num_test_molecules"),
+            use_edm_splits=config.use_edm_splits,
+            num_train_molecules=config.num_train_molecules,
+            num_val_molecules=config.num_val_molecules,
+            num_test_molecules=config.num_test_molecules,
         )
 
     if config.dataset == "platonic_solids":
@@ -30,7 +30,16 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             test_solids=config.test_solids,
         )
 
-    raise ValueError(f"Unknown dataset: {config.dataset}")
+    if config.dataset == "geom_drugs":
+        return geom_drugs.GEOMDrugsDataset(
+            root_dir=config.root_dir,
+            use_gcdm_splits=config.use_gcdm_splits,
+            num_train_molecules=config.num_train_molecules,
+            num_val_molecules=config.num_val_molecules,
+            num_test_molecules=config.num_test_molecules,
+        )
+
+    raise ValueError(f"Unknown dataset: {config.dataset}. Available datasets: qm9, platonic_solids, geom_drugs")
 
 
 def download_url(url: str, root: str) -> str:
