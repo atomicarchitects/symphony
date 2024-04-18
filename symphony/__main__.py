@@ -82,13 +82,22 @@ def main(argv):
     if FLAGS.use_wandb:
         os.makedirs(os.path.join(FLAGS.workdir, "wandb"), exist_ok=True)
 
+        # Add dataset and model name as tags.
+        wandb_tags = FLAGS.wandb_tags
+        wandb_tags.append(config.dataset)
+        try:
+            wandb_tags.append(f"focus:{config.focus_and_target_species_predictor.embedder_config.name}")
+            wandb_tags.append(f"target:{config.target_position_predictor.embedder_config.name}")
+        except AttributeError:
+            pass
+
         wandb.login()
         wandb.init(
             project="symphony",
             config=config.to_dict(),
             dir=FLAGS.workdir,
             sync_tensorboard=True,
-            tags=FLAGS.wandb_tags,
+            tags=wandb_tags,
             name=FLAGS.wandb_name,
             notes=FLAGS.wandb_notes,
         )
