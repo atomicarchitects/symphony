@@ -44,14 +44,6 @@ def check_and_freeze_config(
 ) -> ml_collections.FrozenConfigDict:
     # Update the root directory for the dataset.
     config.root_dir = root_dirs.get_root_dir(config.dataset)
-
-    # Generate only once the checkpoint is saved.
-    if config.get("generate_every_steps") is None:
-        config.generate_every_steps = config.eval_every_steps
-    if not config.generate_every_steps % config.eval_every_steps == 0:
-        raise ValueError(
-            "config.generate_every_steps must be a multiple of config.eval_every_steps."
-        )
     config = ml_collections.FrozenConfigDict(config)
     return config
 
