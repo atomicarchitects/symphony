@@ -349,7 +349,7 @@ def train_and_evaluate(
             state, batch_metrics = train_step(
                 graphs,
                 state,
-                step_rng,
+                step_rngs,
                 config.loss_kwargs,
                 config.add_noise_to_positions,
                 config.position_noise_std,
