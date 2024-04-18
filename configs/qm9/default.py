@@ -41,7 +41,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_eval_steps = 100
     config.eval_every_steps = 30000
     config.generate = True
-    config.generate_every_steps = 30000
+    config.generate_every_steps = 100000
     config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
