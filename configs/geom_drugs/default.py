@@ -22,19 +22,11 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Optimizer.
     config.optimizer = "adam"
-    config.momentum = None
     config.learning_rate = 1e-3
-    config.learning_rate_schedule = "constant"
-    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
-    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
-    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
-        "learning_rate"
-    )
-    config.learning_rate_schedule_kwargs.warmup_steps = 2000
-    config.learning_rate_schedule_kwargs.decay_steps = 50000
 
     # Training.
     config.rng_seed = 0
+    config.use_same_rng_across_structures = False
     config.num_train_steps = 2_000_000
     config.log_every_steps = 1000
     config.eval = True
