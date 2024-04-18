@@ -84,7 +84,7 @@ def download_url(url: str, root: str) -> str:
 
 def extract_zip(path: str, root: str):
     """Extract zip if content does not exist in root already."""
-    logging.info(f"Extracting {path} to {root}...")
+    logging.info(f"Extracting {path} to {root}")
     with zipfile.ZipFile(path, "r") as f:
         for name in f.namelist():
             if name.endswith("/"):
@@ -95,5 +95,5 @@ def extract_zip(path: str, root: str):
             if os.path.exists(out_path) and os.path.getsize(out_path) == file_size:
                 logging.info(f"Skip existing file {name}")
                 continue
-            logging.info(f"Extracting {name} to {root}...")
+            logging.info(f"Extracting {name} to {root}")
             f.extract(name, root)

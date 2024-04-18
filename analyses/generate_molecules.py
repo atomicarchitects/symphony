@@ -39,6 +39,7 @@ def append_predictions(
     positions = padded_fragment.nodes.positions
     num_valid_nodes = padded_fragment.n_node[0]
     num_nodes = padded_fragment.nodes.positions.shape[0]
+    num_edges = padded_fragment.receivers.shape[0]
     focus = pred.globals.focus_indices[0]
     focus_position = positions[focus]
     target_position = pred.globals.position_vectors[0] + focus_position
@@ -63,7 +64,7 @@ def append_predictions(
         & (node_indices[:, None] <= num_valid_nodes)
     )
     senders, receivers = jnp.nonzero(
-        valid_edges, size=num_nodes * num_nodes, fill_value=-1
+        valid_edges, size=num_edges, fill_value=-1
     )
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
@@ -74,7 +75,7 @@ def append_predictions(
             species=new_species,
         ),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
-        n_edge=jnp.asarray([num_valid_edges, num_nodes * num_nodes - num_valid_edges]),
+        n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
         senders=senders,
         receivers=receivers,
     )
