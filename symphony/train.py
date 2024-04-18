@@ -71,7 +71,8 @@ def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments
     )
 
 
-@functools.partial(jax.jit, static_argnums=(3, 4, 5))
+# @functools.partial(jax.jit, static_argnums=(3, 4, 5))
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(3, 4, 5))
 @chex.assert_max_traces(n=2)
 def train_step(
     graphs: datatypes.Fragments,
@@ -118,7 +119,7 @@ def train_step(
     ), grads = grad_fn(state.params, graphs)
 
     # Average gradients across devices.
-    # grads = jax.lax.pmean(grads, axis_name="device")
+    grads = jax.lax.pmean(grads, axis_name="device")
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -137,7 +138,8 @@ def train_step(
     return state, batch_metrics
 
 
-@functools.partial(jax.jit, static_argnums=(2,))
+# @functools.partial(jax.jit, static_argnums=(2,))
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(2,))
 @chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
@@ -185,10 +187,10 @@ def evaluate_model(
     eval_metrics = {}
     for split, fragment_iterator in datasets.items():
         split_metrics = Metrics.empty()
-        # split_metrics = flax.jax_utils.replicate(split_metrics)
+        split_metrics = flax.jax_utils.replicate(split_metrics)
 
         # Loop over graphs.
-        for eval_step, graphs in enumerate(fragment_iterator):
+        for eval_step, graphs in enumerate(device_batch(fragment_iterator)):
             if eval_step >= num_eval_steps:
                 break
 
@@ -198,7 +200,7 @@ def evaluate_model(
             batch_metrics = evaluate_step(graphs, state, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
 
-        # split_metrics = flax.jax_utils.unreplicate(split_metrics)
+        split_metrics = flax.jax_utils.unreplicate(split_metrics)
         eval_metrics[split + "_eval"] = split_metrics
 
     return eval_metrics
@@ -269,7 +271,7 @@ def train_and_evaluate(
     initial_step = state.step
 
     # Replicate the training and evaluation state across devices.
-    # state = flax.jax_utils.replicate(state)
+    state = flax.jax_utils.replicate(state)
 
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
@@ -327,7 +329,7 @@ def train_and_evaluate(
         # Get a batch of graphs.
         try:
             start = time.perf_counter()
-            graphs = next(datasets["train"])
+            graphs = next(device_batch(datasets["train"]))
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
             logging.log_first_n(
                 logging.INFO,
@@ -343,7 +345,7 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             step_rng, rng = jax.random.split(rng)
-            # step_rngs = jax.random.split(step_rng, jax.local_device_count())
+            step_rngs = jax.random.split(step_rng, jax.local_device_count())
             state, batch_metrics = train_step(
                 graphs,
                 state,

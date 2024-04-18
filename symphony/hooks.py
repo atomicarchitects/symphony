@@ -125,19 +125,19 @@ class LogTrainMetricsHook:
     is_empty: bool = True
 
     def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
-        # train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
-        train_metrics = state.train_metrics
+        # train_metrics = state.train_metrics
+        train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
         if not self.is_empty:
             self.writer.write_scalars(
-                int(state.get_step()),
+                state.get_step(),
                 add_prefix_to_keys(train_metrics.compute(), "train"),
             )
             state = state.replace(
-                # train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
-                train_metrics=train.Metrics.empty(),
+                train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
+                # train_metrics=train.Metrics.empty(),
             )
             self.is_empty = True
 
@@ -180,8 +180,8 @@ class EvaluateModelHook:
         if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
             state = state.replace(
                 best_params=state.params,
-                metrics_for_best_params=eval_metrics,
-                # metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
+                # metrics_for_best_params=eval_metrics,
+                metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
                 step_for_best_params=state.step,
             )
             logging.info("New best state found at step %d.", state.get_step())
@@ -213,7 +213,7 @@ class CheckpointHook:
         return state
 
     def __call__(self, state: train_state.TrainState) -> Any:
-        # state = flax.jax_utils.unreplicate(state)
+        state = flax.jax_utils.unreplicate(state)
 
         # Save the current and best params.
         with open(
