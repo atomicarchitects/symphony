@@ -69,6 +69,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.num_layers = 2
     config.target_position_predictor.radial_predictor.min_radius = 0.0
     config.target_position_predictor.radial_predictor.max_radius = 5.0
+    config.target_position_predictor.radial_predictor.boundary_error = 0.35
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
