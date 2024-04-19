@@ -52,9 +52,17 @@ def device_batch(
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=config.learning_rate)
+        tx = optax.adam(learning_rate=config.learning_rate)
     elif config.optimizer == "sgd":
-        return optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
+        tx = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
+
+    if not config.get("gradient_clip_norm"):
+        return tx
+
+    return optax.chain(
+        optax.clip_by_global_norm(config.gradient_clip_norm),
+        tx,
+    )
 
 
 def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments:
