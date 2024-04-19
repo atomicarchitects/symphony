@@ -23,6 +23,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Optimizer.
     config.optimizer = "adam"
     config.learning_rate = 1e-3
+    config.gradient_clip_norm = 1.0
 
     # Training.
     config.rng_seed = 0
