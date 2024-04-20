@@ -59,6 +59,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     if not config.get("gradient_clip_norm"):
         return tx
 
+    logging.info("Applying gradient clipping with norm %0.2f.", config.gradient_clip_norm)
     return optax.chain(
         optax.clip_by_global_norm(config.gradient_clip_norm),
         tx,
