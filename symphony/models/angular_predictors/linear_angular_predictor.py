@@ -158,6 +158,28 @@ class LinearAngularPredictor(AngularPredictor):
     def sample(
         self, radius: float, conditioning: e3nn.IrrepsArray, inverse_temperature: float
     ) -> e3nn.IrrepsArray:
+        """Samples from the learned distribution using the discretized grid."""
+        # Compute the coefficients at this radius.
+        coeffs = self.coeffs(radius, conditioning)
+
+        # We have to compute the log partition function, because the distribution is not normalized.
+        prob_signal = self.coeffs_to_probability_distribution(
+            coeffs, self.res_beta, self.res_alpha, self.quadrature
+        )
+
+        # Sample from the distribution.
+        key = hk.next_rng_key()
+        key, sample_key = jax.random.split(key)
+        beta_index, alpha_index = prob_signal.sample(sample_key, inverse_temperature)
+        sample = prob_signal.grid_vectors[beta_index, alpha_index]
+        assert sample.shape == (3,), sample.shape
+
+        # Scale by the radius.
+        return sample * radius
+
+    def langevin_sample(
+        self, radius: float, conditioning: e3nn.IrrepsArray, inverse_temperature: float
+    ) -> e3nn.IrrepsArray:
         """Samples from the learned distribution using Langevin dynamics."""
 
         # Compute the coefficients at this radius.
