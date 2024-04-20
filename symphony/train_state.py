@@ -28,4 +28,3 @@ class TrainState(train_state.TrainState):
             return int(self.step)
         except TypeError:
             return int(self.step[0])
-

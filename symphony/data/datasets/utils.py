@@ -39,7 +39,9 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_test_molecules=config.num_test_molecules,
         )
 
-    raise ValueError(f"Unknown dataset: {config.dataset}. Available datasets: qm9, platonic_solids, geom_drugs")
+    raise ValueError(
+        f"Unknown dataset: {config.dataset}. Available datasets: qm9, platonic_solids, geom_drugs"
+    )
 
 
 def download_url(url: str, root: str) -> str:

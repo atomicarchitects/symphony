@@ -59,7 +59,9 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
     if not config.get("gradient_clip_norm"):
         return tx
 
-    logging.info("Applying gradient clipping with norm %0.2f.", config.gradient_clip_norm)
+    logging.info(
+        "Applying gradient clipping with norm %0.2f.", config.gradient_clip_norm
+    )
     return optax.chain(
         optax.clip_by_global_norm(config.gradient_clip_norm),
         tx,
@@ -330,7 +332,9 @@ def train_and_evaluate(
             checkpoint_hook(state)
 
         # Generate molecules, if required.
-        if config.generate and (step % config.generate_every_steps == 0 or first_or_last_step):
+        if config.generate and (
+            step % config.generate_every_steps == 0 or first_or_last_step
+        ):
             logging.info("Generating molecules.")
             generate_molecules_hook(state)
 

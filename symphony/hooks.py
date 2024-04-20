@@ -153,7 +153,8 @@ class EvaluateModelHook:
     update_state_with_eval_metrics: bool = True
 
     def __call__(
-        self, state: train_state.TrainState,
+        self,
+        state: train_state.TrainState,
     ) -> train_state.TrainState:
         # Evaluate the model.
         eval_metrics = self.evaluate_model_fn(

@@ -86,8 +86,12 @@ def main(argv):
         wandb_tags = FLAGS.wandb_tags
         wandb_tags.append(config.dataset)
         try:
-            wandb_tags.append(f"focus-predictor:{config.focus_and_target_species_predictor.embedder_config.model}")
-            wandb_tags.append(f"position-predictor:{config.target_position_predictor.embedder_config.model}")
+            wandb_tags.append(
+                f"focus-predictor:{config.focus_and_target_species_predictor.embedder_config.model}"
+            )
+            wandb_tags.append(
+                f"position-predictor:{config.target_position_predictor.embedder_config.model}"
+            )
         except AttributeError:
             pass
 

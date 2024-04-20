@@ -66,7 +66,7 @@ def generate_fragments(
             max_radius,
             mode,
             heavy_first,
-            max_targets_per_graph
+            max_targets_per_graph,
         )
         yield frag
 
@@ -81,7 +81,7 @@ def generate_fragments(
                 max_radius,
                 mode,
                 heavy_first,
-                max_targets_per_graph
+                max_targets_per_graph,
             )
             yield frag
 
@@ -89,10 +89,20 @@ def generate_fragments(
         yield _make_last_fragment(graph, num_species, max_targets_per_graph)
 
 
-def pick_targets(rng, targets, node_species, target_species_probability_for_focus, max_targets_per_graph):
+def pick_targets(
+    rng,
+    targets,
+    node_species,
+    target_species_probability_for_focus,
+    max_targets_per_graph,
+):
     # Pick a random target species.
     rng, k = jax.random.split(rng)
-    target_species = jax.random.choice(k, len(target_species_probability_for_focus), p=target_species_probability_for_focus)
+    target_species = jax.random.choice(
+        k,
+        len(target_species_probability_for_focus),
+        p=target_species_probability_for_focus,
+    )
 
     # Pick up to max_targets_per_graph targets of the target species.
     targets_of_this_species = targets[node_species[targets] == target_species]
@@ -120,7 +130,7 @@ def _make_first_fragment(
         first_node = jax.random.choice(k, np.arange(0, len(graph.nodes.positions)))
     first_node = int(first_node)
 
-    mask = (graph.senders == first_node)
+    mask = graph.senders == first_node
     if heavy_first and (mask & graph.nodes.species[graph.receivers] > 0).sum() > 0:
         mask = mask & (graph.nodes.species[graph.receivers] > 0)
     if mode == "nn":
@@ -147,7 +157,7 @@ def _make_first_fragment(
         target_species_probability[first_node],
         max_targets_per_graph,
     )
-    
+
     sample = _into_fragment(
         graph,
         visited=np.array([first_node]),
@@ -272,9 +282,11 @@ def _into_fragment(
     target_species = species[target_nodes]
     assert np.all(target_species == target_species[0])
 
-    padded_target_nodes = np.pad(target_nodes, (0, max_targets_per_graph - len(target_nodes)))
+    padded_target_nodes = np.pad(
+        target_nodes, (0, max_targets_per_graph - len(target_nodes))
+    )
     target_positions_mask = np.zeros(max_targets_per_graph, dtype=bool)
-    target_positions_mask[: len(target_nodes)] = (not stop)
+    target_positions_mask[: len(target_nodes)] = not stop
     nodes = datatypes.FragmentsNodes(
         positions=pos,
         species=species,
