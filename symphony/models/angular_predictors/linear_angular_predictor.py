@@ -162,6 +162,10 @@ class LinearAngularPredictor(AngularPredictor):
         # Compute the coefficients at this radius.
         coeffs = self.coeffs(radius, conditioning)
 
+        # Scale coefficients by the inverse temperature.
+        beta = self.sampling_inverse_temperature_factor * inverse_temperature
+        coeffs *= beta
+
         # We have to compute the log partition function, because the distribution is not normalized.
         prob_signal = self.coeffs_to_probability_distribution(
             coeffs, self.res_beta, self.res_alpha, self.quadrature
@@ -170,7 +174,7 @@ class LinearAngularPredictor(AngularPredictor):
         # Sample from the distribution.
         key = hk.next_rng_key()
         key, sample_key = jax.random.split(key)
-        beta_index, alpha_index = prob_signal.sample(sample_key, inverse_temperature)
+        beta_index, alpha_index = prob_signal.sample(sample_key)
         sample = prob_signal.grid_vectors[beta_index, alpha_index]
         assert sample.shape == (3,), sample.shape
 
