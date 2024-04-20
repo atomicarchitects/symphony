@@ -10,7 +10,8 @@ def get_config() -> ml_collections.ConfigDict:
     # Dataset.
     config.dataset = "qm9"
     config.fragment_logic = "nn"
-    config.train_on_split_smaller_than_chunk = False
+    config.heavy_first = False
+    config.max_targets_per_graph = 1
     config.root_dir = None
     config.use_edm_splits = True
     config.num_train_molecules = 100000
