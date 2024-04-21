@@ -197,3 +197,5 @@ analyses/platonic_solids
 slurm_scripts
 slurm_logs
 slurm-*
+
+notebooks/
