@@ -16,6 +16,7 @@ from . import loss_test
 from configs import root_dirs
 from configs.qm9 import test as qm9_test
 from configs.platonic_solids import test as platonic_solids_test
+from configs.geom_drugs import test as geom_drugs_test
 
 # Important to see the logging messages!
 logging.getLogger().setLevel(logging.INFO)
@@ -23,16 +24,13 @@ logging.getLogger().setLevel(logging.INFO)
 _ALL_CONFIGS = {
     "qm9_test": qm9_test.get_config(),
     "platonic_solids_test": platonic_solids_test.get_config(),
+    "geom_drugs_test": geom_drugs_test.get_config(),
 }
 
 
-
 class TrainTest(parameterized.TestCase):
-    def setUp(self):
-        self.preds, self.graphs = loss_test.create_dummy_data()
-
     @parameterized.product(
-        config_name=["qm9_test"],
+        config_name=["qm9_test"]
     )
     def test_train_and_evaluate(
         self,
@@ -68,18 +66,20 @@ class TrainTest(parameterized.TestCase):
         config = _ALL_CONFIGS[config_name]
         config = ml_collections.FrozenConfigDict(config)
 
+        graphs, _ = loss_test.create_dummy_data()
+
         rng = jax.random.PRNGKey(rng)
         model = models.create_model(config, run_in_evaluation_mode=False)
-        params = model.init(rng, self.graphs)
+        params = model.init(rng, graphs)
 
         def apply_fn(positions: e3nn.IrrepsArray) -> e3nn.IrrepsArray:
             """Wraps the model's apply function."""
-            graphs = self.graphs._replace(
-                nodes=self.graphs.nodes._replace(positions=positions.array)
+            graphs = graphs._replace(
+                nodes=graphs.nodes._replace(positions=positions.array)
             )
             return model.apply(params, rng, graphs).globals.log_position_coeffs
 
-        input_positions = e3nn.IrrepsArray("1o", self.graphs.nodes.positions)
+        input_positions = e3nn.IrrepsArray("1o", graphs.nodes.positions)
         e3nn.utils.assert_equivariant(apply_fn, rng, input_positions, atol=2e-4)
 
 

@@ -1,4 +1,3 @@
-
 from typing import List, Set, Dict, Sequence, Optional
 import numpy as np
 
@@ -15,8 +14,7 @@ def _solid_to_structure(solid: np.ndarray) -> datatypes.Structures:
     """Converts a solid to a datatypes.Structures object."""
     return datatypes.Structures(
         nodes=datatypes.NodesInfo(
-            positions=np.asarray(solid),
-            species=np.zeros(len(solid), dtype=int)
+            positions=np.asarray(solid), species=np.zeros(len(solid), dtype=int)
         ),
         edges=None,
         receivers=None,
@@ -30,9 +28,14 @@ def _solid_to_structure(solid: np.ndarray) -> datatypes.Structures:
 class PlatonicSolidsDataset(datasets.InMemoryDataset):
     """Dataset of platonic solids."""
 
-    def __init__(self, train_solids: Optional[Sequence[int]], val_solids: Optional[Sequence[int]], test_solids: Optional[Sequence[int]]):
+    def __init__(
+        self,
+        train_solids: Optional[Sequence[int]],
+        val_solids: Optional[Sequence[int]],
+        test_solids: Optional[Sequence[int]],
+    ):
         super().__init__()
-        
+
         all_indices = range(5)
         if train_solids is None:
             train_solids = all_indices
@@ -41,13 +44,13 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         if test_solids is None:
             test_solids = all_indices
 
-        self.train_solids = set(train_solids)
-        self.val_solids = set(val_solids)
-        self.test_solids = set(test_solids)
+        self.train_solids = train_solids
+        self.val_solids = val_solids
+        self.test_solids = test_solids
 
     @staticmethod
-    def species_to_atom_types() -> Dict[int, str]:
-        return {0: "H"}
+    def get_atomic_numbers() -> np.ndarray:
+        return np.asarray([1])
 
     def structures(self) -> List[datatypes.Structures]:
         """Returns the structures for the Platonic solids."""
@@ -55,12 +58,7 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         # https://en.wikipedia.org/wiki/Platonic_solid
         PHI = (1 + np.sqrt(5)) / 2
         solids = [
-            [
-                (1, 1, 1),
-                (1, -1, -1),
-                (-1, 1, -1),
-                (-1, -1, 1)
-            ],  # tetrahedron
+            [(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)],  # tetrahedron
             [
                 (1, 0, 0),
                 (-1, 0, 0),
@@ -120,9 +118,12 @@ class PlatonicSolidsDataset(datasets.InMemoryDataset):
         # Normalize the solids, so that the smallest inter-node distance is 1.
         solids_as_arrays = [np.asarray(solid) for solid in solids]
         scale_factors = [
-            1 / np.min(_compute_first_node_min_distance(solid)) for solid in solids_as_arrays
+            1 / np.min(_compute_first_node_min_distance(solid))
+            for solid in solids_as_arrays
         ]
-        solids = [solid * factor for solid, factor in zip(solids_as_arrays, scale_factors)]
+        solids = [
+            solid * factor for solid, factor in zip(solids_as_arrays, scale_factors)
+        ]
 
         # Convert to Structures.
         structures = [_solid_to_structure(solid) for solid in solids]

@@ -95,7 +95,6 @@ def get_datasets(
             .prefetch(tf.data.AUTOTUNE)
         ).as_numpy_iterator()
 
-
     return datasets
 
 
@@ -259,7 +258,9 @@ def get_unbatched_qm9_datasets(
 
     # Root directory of the dataset.
     config = ml_collections.ConfigDict(config)
-    config.root_dir = "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
+    config.root_dir = (
+        "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
+    )
     config.train_molecules = (0, 10)
     config.val_molecules = (100000, 110000)
     config.test_molecules = (110000, 130000)

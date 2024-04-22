@@ -39,6 +39,7 @@ def append_predictions(
     positions = padded_fragment.nodes.positions
     num_valid_nodes = padded_fragment.n_node[0]
     num_nodes = padded_fragment.nodes.positions.shape[0]
+    num_edges = padded_fragment.receivers.shape[0]
     focus = pred.globals.focus_indices[0]
     focus_position = positions[focus]
     target_position = pred.globals.position_vectors[0] + focus_position
@@ -63,7 +64,7 @@ def append_predictions(
         & (node_indices[:, None] <= num_valid_nodes)
     )
     senders, receivers = jnp.nonzero(
-        valid_edges, size=num_nodes * num_nodes, fill_value=-1
+        valid_edges, size=num_edges, fill_value=-1
     )
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
@@ -74,7 +75,7 @@ def append_predictions(
             species=new_species,
         ),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
-        n_edge=jnp.asarray([num_valid_edges, num_nodes * num_nodes - num_valid_edges]),
+        n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
         senders=senders,
         receivers=receivers,
     )
@@ -132,6 +133,7 @@ def generate_molecules(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
+    avg_neighbors_per_atom: int,
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
     verbose: bool = True,
@@ -183,7 +185,7 @@ def generate_molecules(
         jraph.pad_with_graphs(
             init_fragment,
             n_node=(max_num_atoms + 1),
-            n_edge=(max_num_atoms + 1) ** 2,
+            n_edge=(max_num_atoms + 1) * avg_neighbors_per_atom,
             n_graph=2,
         )
         for init_fragment in init_fragments
@@ -238,7 +240,6 @@ def generate_molecules(
         results = jax.tree_util.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
 
-    # Generate molecules for all seeds.
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
 
@@ -360,6 +361,7 @@ def generate_molecules_from_workdir(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
+    avg_neighbors_per_atom: int,
     visualize: bool = False,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
@@ -417,7 +419,7 @@ def generate_molecules_from_workdir(
         )
 
     return generate_molecules(
-            apply_fn=model.apply,
+            apply_fn=jax.jit(model.apply),
             params=params,
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=config.radial_cutoff,
@@ -427,6 +429,7 @@ def generate_molecules_from_workdir(
             num_seeds_per_chunk=num_seeds_per_chunk,
             init_molecules=init_molecules,
             max_num_atoms=max_num_atoms,
+            avg_neighbors_per_atom=avg_neighbors_per_atom,
             visualize=visualize,
             visualizations_dir=visualizations_dir,
             verbose=verbose,
@@ -446,6 +449,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.num_seeds_per_chunk,
         FLAGS.init,
         FLAGS.max_num_atoms,
+        FLAGS.avg_neighbors_per_atom,
         FLAGS.visualize,
         FLAGS.res_alpha,
         FLAGS.res_beta,
@@ -509,6 +513,11 @@ if __name__ == "__main__":
         "max_num_atoms",
         30,
         "Maximum number of atoms to generate per molecule.",
+    )
+    flags.DEFINE_integer(
+        "avg_neighbors_per_atom",
+        10,
+        "Average number of neighbors per atom.",
     )
     flags.DEFINE_bool(
         "visualize",

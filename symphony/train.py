@@ -40,30 +40,50 @@ def device_batch(
     num_devices = jax.local_device_count()
     batch = []
     for idx, fragment in enumerate(fragment_iterator):
+        batch.append(fragment)
+
         if idx % num_devices == num_devices - 1:
-            batch.append(fragment)
             batch = jax.tree_util.tree_map(lambda *x: jnp.stack(x, axis=0), *batch)
             batch = datatypes.Fragments.from_graphstuple(batch)
             yield batch
-
             batch = []
-        else:
-            batch.append(fragment)
 
 
 def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
     """Create an optimizer as specified by the config."""
     if config.optimizer == "adam":
-        return optax.adam(learning_rate=config.learning_rate)
+        tx = optax.adam(learning_rate=config.learning_rate)
     elif config.optimizer == "sgd":
-        return optax.sgd(
-            learning_rate=config.learning_rate, momentum=config.momentum
+        tx = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
+
+    if not config.get("gradient_clip_norm"):
+        return tx
+
+    logging.info(
+        "Applying gradient clipping with norm %0.2f.", config.gradient_clip_norm
+    )
+    return optax.chain(
+        optax.clip_by_global_norm(config.gradient_clip_norm),
+        tx,
+    )
+
+
+def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments:
+    """Fill in the target positions with non-zero values for the graphs."""
+    # Ensure that the target positions are not all zeros.
+    return graphs._replace(
+        globals=graphs.globals._replace(
+            target_positions=jnp.where(
+                jnp.all(graphs.globals.target_positions == 0.0, axis=-1)[:, None],
+                jnp.ones_like(graphs.globals.target_positions) * 1e-3,
+                graphs.globals.target_positions,
+            )
         )
+    )
 
 
-
-
-@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3, 4, 5])
+# @functools.partial(jax.jit, static_argnums=(3, 4, 5))
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(3, 4, 5))
 @chex.assert_max_traces(n=2)
 def train_step(
     graphs: datatypes.Fragments,
@@ -74,6 +94,9 @@ def train_step(
     noise_std: float,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
+
+    # Ensure that the target positions are not all zeros.
+    graphs = fill_in_target_positions(graphs)
 
     def loss_fn(params: optax.Params, graphs: datatypes.Fragments) -> float:
         preds = state.apply_fn(params, None, graphs)
@@ -110,27 +133,37 @@ def train_step(
     grads = jax.lax.pmean(grads, axis_name="device")
     state = state.apply_gradients(grads=grads)
 
-    batch_metrics = Metrics.gather_from_model_output(
-        axis_name="device",
+    batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
         mask=mask,
     )
+    # batch_metrics = Metrics.gather_from_model_output(
+    #     axis_name="device",
+    #     total_loss=total_loss,
+    #     focus_and_atom_type_loss=focus_and_atom_type_loss,
+    #     position_loss=position_loss,
+    #     mask=mask,
+    # )
     return state, batch_metrics
 
 
-@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=[3])
+# @functools.partial(jax.jit, static_argnums=(2,))
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(2,))
 @chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
     state: train_state.TrainState,
-    rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
+
+    # Ensure that the target positions are not all zeros.
+    graphs = fill_in_target_positions(graphs)
+
     # Compute predictions and resulting loss.
-    preds = state.apply_fn(state.params, rng, graphs)
+    preds = state.apply_fn(state.params, None, graphs)
     total_loss, (
         focus_and_atom_type_loss,
         position_loss,
@@ -138,19 +171,24 @@ def evaluate_step(
 
     # Consider only valid graphs.
     mask = jraph.get_graph_padding_mask(graphs)
-    return Metrics.gather_from_model_output(
-        axis_name="device",
+    return Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
         position_loss=position_loss,
         mask=mask,
     )
+    # return Metrics.gather_from_model_output(
+    #     axis_name="device",
+    #     total_loss=total_loss,
+    #     focus_and_atom_type_loss=focus_and_atom_type_loss,
+    #     position_loss=position_loss,
+    #     mask=mask,
+    # )
 
 
 def evaluate_model(
     state: train_state.TrainState,
     datasets: Dict[str, Iterable[datatypes.Fragments]],
-    rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
     num_eval_steps: int,
 ) -> Dict[str, metrics.Collection]:
@@ -159,7 +197,8 @@ def evaluate_model(
     # Loop over each split independently.
     eval_metrics = {}
     for split, fragment_iterator in datasets.items():
-        split_metrics = flax.jax_utils.replicate(Metrics.empty())
+        split_metrics = Metrics.empty()
+        split_metrics = flax.jax_utils.replicate(split_metrics)
 
         # Loop over graphs.
         for eval_step, graphs in enumerate(device_batch(fragment_iterator)):
@@ -167,12 +206,13 @@ def evaluate_model(
                 break
 
             # Compute metrics for this batch.
-            step_rng, rng = jax.random.split(rng)
-            step_rngs = jax.random.split(step_rng, jax.local_device_count())
-            batch_metrics = evaluate_step(graphs, state, step_rngs, loss_kwargs)
+            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
+            # logging.info("Evaluating model on %s split, step %d.", split, eval_step)
+            batch_metrics = evaluate_step(graphs, state, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
-            
-        eval_metrics[split + "_eval"] = flax.jax_utils.unreplicate(split_metrics)
+
+        split_metrics = flax.jax_utils.unreplicate(split_metrics)
+        eval_metrics[split + "_eval"] = split_metrics
 
     return eval_metrics
 
@@ -254,10 +294,9 @@ def train_and_evaluate(
     )
     train_metrics_hook = hooks.LogTrainMetricsHook(writer)
     evaluate_model_hook = hooks.EvaluateModelHook(
-        evaluate_model_fn=lambda state, rng: evaluate_model(
+        evaluate_model_fn=lambda state: evaluate_model(
             state,
             datasets,
-            rng,
             config.loss_kwargs,
             config.num_eval_steps,
         ),
@@ -275,6 +314,7 @@ def train_and_evaluate(
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,
         max_num_atoms=config.generation.max_num_atoms,
+        avg_neighbors_per_atom=config.generation.avg_neighbors_per_atom,
     )
 
     # Begin training loop.
@@ -283,25 +323,32 @@ def train_and_evaluate(
         # Log, if required.
         first_or_last_step = step in [initial_step, config.num_train_steps]
         if step % config.log_every_steps == 0 or first_or_last_step:
-            train_metrics_hook(state)
+            state = train_metrics_hook(state)
 
         # Evaluate model, if required.
-        if step % config.eval_every_steps == 0 or first_or_last_step:
-            logging.log_first_n(logging.INFO, "Evaluating model at initialization.", 1)
-            rng, eval_rng = jax.random.split(rng)
-            state = evaluate_model_hook(state, eval_rng)
+        if config.eval and (step % config.eval_every_steps == 0 or first_or_last_step):
+            logging.info("Evaluating model.")
+            state = evaluate_model_hook(state)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
-        if step % config.generate_every_steps == 0 or first_or_last_step:
-            logging.log_first_n(logging.INFO, "Generating molecules at initialization.", 1)
+        if config.generate and (
+            step % config.generate_every_steps == 0 or first_or_last_step
+        ):
+            logging.info("Generating molecules.")
             generate_molecules_hook(state)
 
         # Get a batch of graphs.
         try:
             start = time.perf_counter()
             graphs = next(device_batch(datasets["train"]))
-            logging.log_first_n(logging.INFO, "Time to get next batch of fragments: %0.4f seconds.", 10, time.perf_counter() - start)
+            graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
+            logging.log_first_n(
+                logging.INFO,
+                "Time to get next batch of fragments: %0.2f ms.",
+                10,
+                (time.perf_counter() - start) * 1e3,
+            )
 
         except StopIteration:
             logging.info("No more training data. Continuing with final evaluation.")
