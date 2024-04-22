@@ -13,7 +13,7 @@ import jax
 import ml_collections
 from ml_collections import config_flags
 import tensorflow as tf
-
+import wandb
 
 from symphony import train
 from configs import root_dirs
@@ -30,12 +30,30 @@ flags.DEFINE_string(
     "Name of the Weights & Biases run. Uses the Weights & Biases default if not specified.",
 )
 flags.DEFINE_string("wandb_notes", None, "Notes for the Weights & Biases run.")
+
 config_flags.DEFINE_config_file(
     "config",
     None,
     "File path to the training hyperparameter configuration.",
     lock_config=True,
 )
+
+
+def check_and_freeze_config(
+    config: ml_collections.ConfigDict,
+) -> ml_collections.FrozenConfigDict:
+    # Update the root directory for the dataset.
+    config.root_dir = root_dirs.get_root_dir(config.dataset)
+
+    # Generate only once the checkpoint is saved.
+    if config.get("generate_every_steps") is None:
+        config.generate_every_steps = config.eval_every_steps
+    if not config.generate_every_steps % config.eval_every_steps == 0:
+        raise ValueError(
+            "config.generate_every_steps must be a multiple of config.eval_every_steps."
+        )
+    config = ml_collections.FrozenConfigDict(config)
+    return config
 
 
 def main(argv):
@@ -64,17 +82,15 @@ def main(argv):
         platform.ArtifactType.DIRECTORY, FLAGS.workdir, "workdir"
     )
 
-    # Freeze config.
+    # Check and freeze config.
     config = FLAGS.config
-    config.root_dir = root_dirs.get_root_dir(config.dataset, config.fragment_logic, config.max_targets_per_graph)
-    config = ml_collections.FrozenConfigDict(config)
+    config = check_and_freeze_config(config)
 
     # Initialize wandb.
     if FLAGS.use_wandb:
-        import wandb
+        os.makedirs(os.path.join(FLAGS.workdir, "wandb"), exist_ok=True)
+
         wandb.login()
-        wandb_dir = os.path.join(FLAGS.workdir, "wandb")
-        os.makedirs(wandb_dir, exist_ok=True)
         wandb.init(
             project="symphony",
             config=config.to_dict(),

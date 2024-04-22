@@ -14,13 +14,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_cutoff = 1.01
     config.root_dir = None
     config.shuffle_datasets = True
-    config.train_pieces = (None, None)
-    config.val_pieces = (None, None)
-    config.test_pieces = (None, None)
-    config.train_seeds = tuple(range(10))
-    config.val_seeds = tuple(range(10))
-    config.test_seeds = tuple(range(10))
-    config.max_targets_per_graph = 1
+    config.train_solids = None
+    config.val_solids = None
+    config.test_solids = None
+    config.infer_edges_with_radial_cutoff = True
+    config.radial_cutoff = 3.0
 
     # Optimizer.
     config.optimizer = "adam"
@@ -40,7 +38,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_eval_steps = 3000
     config.num_eval_steps_at_end_of_training = 5000
     config.log_every_steps = 1000
-    config.eval_every_steps = 30000
+    config.eval_every_steps = 2000
+    config.generate_every_steps = 2000
+    config.nn_tolerance = 0.1
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 15 * config.get_ref("max_n_graphs")
@@ -56,7 +56,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.1
-    config.freeze_node_embedders = False
 
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
@@ -74,4 +73,20 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.num_radii = 20
     config.target_position_predictor.apply_gate = False
     config.target_position_predictor.factorized = False
+    config.target_position_predictor.radial_mlp_latent_size = 128
+    config.target_position_predictor.radial_mlp_num_layers = 2
+    config.target_position_predictor.radial_mlp_activation = "swish"
+
+    # Generation.
+    config.generation = ml_collections.ConfigDict()
+    config.generation.focus_and_atom_type_inverse_temperature = 1.0
+    config.generation.position_inverse_temperature = 1.0
+    config.generation.res_beta = config.target_position_predictor.get_ref("res_beta")
+    config.generation.res_alpha = config.target_position_predictor.get_ref("res_alpha")
+    config.generation.radial_cutoff = config.get_ref("radial_cutoff")
+    config.generation.num_seeds = 100
+    config.generation.num_seeds_per_chunk = 20
+    config.generation.init_molecules = "H"
+    config.generation.max_num_atoms = 35
+
     return config

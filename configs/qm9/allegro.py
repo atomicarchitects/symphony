@@ -9,13 +9,12 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the Allegro model."""
     config = ml_collections.ConfigDict()
 
-    # NequIP hyperparameters.
     config.model = "Allegro"
     config.num_channels = 64
     config.r_max = 5
     config.avg_num_neighbors = 300.0  # Allegro is not properly normalized.
-    config.num_interactions = 4
-    config.max_ell = 5
+    config.num_interactions = 2
+    config.max_ell = 4
     config.mlp_activation = "swish"
     config.activation = "softplus"
     config.mlp_n_layers = 2
@@ -32,5 +31,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
     config.target_position_predictor.embedder_config = get_embedder_config()
 
-    # NequIP hyperparameters.
     return config

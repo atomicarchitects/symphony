@@ -115,7 +115,7 @@ def generate_molecules(
         # Remove the batch dimension.
         pred = jraph.unpad_with_graphs(preds)
         pred = pred._replace(
-            globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+            globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
         )
         return pred
 
@@ -149,7 +149,7 @@ def generate_molecules(
         for step in range(MAX_NUM_ATOMS):
             step_rng, rng = jax.random.split(rng)
             fragment = input_pipeline.ase_atoms_to_jraph_graph(
-                molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
+                molecule, models.ATOMIC_NUMBERS, config.radial_cutoff
             )
 
             # Run the model on the current molecule.

@@ -11,7 +11,23 @@ import tensorflow as tf
 
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
-from symphony.data import tmqm
+from symphony.data.datasets import qm9
+
+
+
+workdir = "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64"
+outputdir = "conditional_generation"
+beta_species = 1.0
+beta_position = 1.0
+step = "7530000"
+num_seeds_per_chunk = 25
+max_num_atoms = 35
+visualize = False
+num_mols = 1000
+
+all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
+test_mols = all_mols[-num_mols:]
+train_mols = all_mols[:num_mols]
 
 
 def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):

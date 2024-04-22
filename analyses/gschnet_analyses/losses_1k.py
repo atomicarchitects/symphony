@@ -69,7 +69,7 @@ def get_losses(mol):
 for i in tqdm.tqdm(range(1000)):
     graph = next(datasets["test"].as_numpy_iterator())
     frag = datatypes.Fragments.from_graphstuple(graph)
-    frag = jax.tree_map(jnp.asarray, frag)
+    frag = jax.tree_util.tree_map(jnp.asarray, frag)
 
     frag_unpadded = jraph.unpad_with_graphs(frag)
     molecules = jraph.unbatch(frag_unpadded)

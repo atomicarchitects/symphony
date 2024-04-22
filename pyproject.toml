@@ -16,7 +16,6 @@ requires-python = ">=3.7"
 keywords = ["generative", "equivariant", "molecules"]
 license = {text = "BSD-3-Clause"}
 classifiers = [
-    "Framework :: Django",
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
@@ -26,11 +25,16 @@ dependencies = [
     "flax",
     "dm-haiku",
     "jraph",
-    "clu",
+    "clu==0.0.9",
     "absl-py",
     "chex",
     "optax",
     "scipy",
+    "tensorflow==2.13.0",
+    "rdkit",
+    "wandb",
+    "py3dmol",
+    "posebusters",
     "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
     "allegro-jax @ git+https://github.com/mariogeiger/allegro-jax",

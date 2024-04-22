@@ -24,7 +24,7 @@ from flax.training import train_state
 
 sys.path.append("..")
 
-from symphony.data import qm9
+from symphony.data.datasets import qm9
 from symphony import models
 from symphony import train
 from configs import root_dirs
@@ -58,6 +58,8 @@ def cast_keys_as_int(dictionary: Dict[Any, Any]) -> Dict[Any, Any]:
 
 def name_from_workdir(workdir: str) -> str:
     """Returns the full name of the model from the workdir."""
+    if "workdirs" not in workdir:
+        return ""
     index = workdir.find("workdirs") + len("workdirs/")
     return workdir[index:]
 
@@ -89,7 +91,6 @@ def config_to_dataframe(config: ml_collections.ConfigDict) -> Dict[str, Any]:
 
 def load_model_at_step(
     workdir: str, step: str, run_in_evaluation_mode: bool,
-    res_alpha: Optional[float] = None, res_beta: Optional[float] = None
 ) -> Tuple[hk.Transformed, optax.Params, ml_collections.ConfigDict]:
     """Loads the model at a given step.
 
@@ -99,35 +100,16 @@ def load_model_at_step(
     with open(params_file, "rb") as f:
         params = pickle.load(f)
 
-    # # Remove the batch dimension, if it exists.
-    # if "attempt6" in workdir and int(step) < 5000000:
-    #     params = jax.tree_map(lambda x: x[0], params)
-
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    if 'max_targets_per_graph' in config:
-        config.root_dir = root_dirs.get_root_dir(
-            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
-        )
-    else:
-        config.root_dir = root_dirs.get_root_dir(
-            config.dataset, config.get("fragment_logic", "nn")
-        )
+    config.root_dir = root_dirs.get_root_dir(
+        config.dataset
+    )
 
-    # Update config.
-    if res_alpha is not None:
-        logging.info(f"Setting res_alpha to {res_alpha}")
-        config.target_position_predictor.res_alpha = res_alpha
-
-    if res_beta is not None:
-        logging.info(f"Setting res_beta to {res_beta}")
-        config.target_position_predictor.res_beta = res_beta
-
-    # model = models.create_coord_model(config)
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
-    params = jax.tree_map(jnp.asarray, params)
+    params = jax.tree_util.tree_map(jnp.asarray, params)
     return model, params, config
 
 
@@ -143,8 +125,8 @@ def load_weighted_average_model_at_steps(
         if index == 0:
             params_avg = params
         else:
-            params_avg = jax.tree_map(lambda x, y: x + y, params_avg, params)
-    params_avg = jax.tree_map(lambda x: x / len(steps), params_avg)
+            params_avg = jax.tree_util.tree_map(lambda x, y: x + y, params_avg, params)
+    params_avg = jax.tree_util.tree_map(lambda x: x / len(steps), params_avg)
 
     with open(workdir + "/config.yml", "rt") as config_file:
         config = yaml.unsafe_load(config_file)
@@ -160,7 +142,7 @@ def load_weighted_average_model_at_steps(
         )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
-    params_avg = jax.tree_map(jnp.asarray, params_avg)
+    params_avg = jax.tree_util.tree_map(jnp.asarray, params_avg)
     return model, params_avg, config
 
 
@@ -180,7 +162,7 @@ def get_results_as_dataframe(basedir: str) -> pd.DataFrame:
             continue
 
         num_params = sum(
-            jax.tree_util.tree_leaves(jax.tree_map(jnp.size, best_state.params))
+            jax.tree_util.tree_leaves(jax.tree_util.tree_map(jnp.size, best_state.params))
         )
         config_df = config_to_dataframe(config)
         other_df = pd.DataFrame.from_dict(
@@ -309,7 +291,7 @@ def load_from_workdir(
         )
 
         with open(pickled_params_file, "rb") as f:
-            params = jax.tree_map(np.array, pickle.load(f))
+            params = jax.tree_util.tree_map(np.array, pickle.load(f))
     else:
         if init_graphs is None:
             logging.info("Initializing dummy model with init_graphs from dataloader")
@@ -330,7 +312,7 @@ def load_from_workdir(
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
     data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
-    best_state = jax.tree_map(jnp.asarray, data["best_state"])
+    best_state = jax.tree_util.tree_map(jnp.asarray, data["best_state"])
     best_state_in_eval_mode = best_state.replace(apply_fn=eval_net.apply)
 
     return (

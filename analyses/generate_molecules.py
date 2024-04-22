@@ -1,8 +1,8 @@
 """Generates molecules from a trained model."""
 
 from typing import Sequence, Tuple, Callable, Optional, Union
-
 import os
+import time
 
 from absl import flags
 from absl import app
@@ -15,11 +15,11 @@ import ase.visualize
 import jax
 import jax.numpy as jnp
 import jraph
+import flax
 import numpy as np
 import tqdm
 import chex
 import optax
-import time
 
 import analyses.analysis as analysis
 from symphony import datatypes
@@ -30,7 +30,9 @@ FLAGS = flags.FLAGS
 
 
 def append_predictions(
-    pred: datatypes.Predictions, padded_fragment: datatypes.Fragments, nn_cutoff: float,
+    pred: datatypes.Predictions,
+    padded_fragment: datatypes.Fragments,
+    radial_cutoff: float,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -54,7 +56,7 @@ def append_predictions(
     node_indices = jnp.arange(num_nodes)
 
     # Avoid self-edges.
-    valid_edges = (distance_matrix > 0) & (distance_matrix < nn_cutoff)
+    valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
     valid_edges = (
         valid_edges
         & (node_indices[None, :] <= num_valid_nodes)
@@ -83,13 +85,13 @@ def generate_one_step(
     stop: bool,
     rng: chex.PRNGKey,
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
-    nn_cutoff: float,
+    radial_cutoff: float,
 ) -> Tuple[
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-    next_padded_fragment = append_predictions(pred, padded_fragment, nn_cutoff)
+    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -120,22 +122,34 @@ def generate_for_one_seed(
 
 
 def generate_molecules(
-    workdir: str,
-    outputdir: str,
+    apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    params: optax.Params,
+    molecules_outputdir: str,
+    radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
-    step: str,
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
-    max_num_steps: int,
     visualize: bool,
     steps_for_weight_averaging: Optional[Sequence[int]] = None,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
 ):
     """Generates molecules from a trained model at the given workdir."""
+
+    if verbose:
+        logging_fn = logging.info
+    else:
+        logging_fn = lambda *args: None
+
+    # Create output directories.
+    os.makedirs(molecules_outputdir, exist_ok=True)
+    if visualize:
+        assert visualizations_dir is not None
+        os.makedirs(visualizations_dir, exist_ok=True)
+
     # Check that we can divide the seeds into chunks properly.
     if num_seeds % num_seeds_per_chunk != 0:
         raise ValueError(
@@ -145,76 +159,47 @@ def generate_molecules(
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
         init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
-        logging.info(
+        logging_fn(
             f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
         )
         init_molecules = [init_molecule] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
     else:
         assert len(init_molecules) == num_seeds
-        init_molecule_names = [init_molecule.get_chemical_formula() for init_molecule in init_molecules]
-
-    # Load model.
-    name = analysis.name_from_workdir(workdir)
-    if steps_for_weight_averaging is not None:
-        logging.info("Loading model averaged from steps %s", steps_for_weight_averaging)
-        model, params, config = analysis.load_weighted_average_model_at_steps(
-            workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
-        )
-    else:
-        model, params, config = analysis.load_model_at_step(
-            workdir, step, run_in_evaluation_mode=True,
-            res_alpha=res_alpha,
-            res_beta=res_beta,
-        )
-    config = config.unlock()
-    logging.info(config.to_dict())
-
-
-    # Create output directories.
-    molecules_outputdir = os.path.join(
-        outputdir,
-        name,
-        f"fait={focus_and_atom_type_inverse_temperature}",
-        f"pit={position_inverse_temperature}",
-        f"step={step}",
-    )
-    if res_alpha is not None:
-        molecules_outputdir += f"_res_alpha={res_alpha}"
-    if res_beta is not None:
-        molecules_outputdir += f"_res_beta={res_beta}"
-    molecules_outputdir += "/molecules"
-    os.makedirs(molecules_outputdir, exist_ok=True)
+        init_molecule_names = [
+            init_molecule.get_chemical_formula() for init_molecule in init_molecules
+        ]
 
     if visualize:
-        visualizations_dir = os.path.join(
-            outputdir,
-            name,
-            f"fait={focus_and_atom_type_inverse_temperature}",
-            f"pit={position_inverse_temperature}",
-            f"step={step}",
-            "visualizations",
-            "generated_molecules",
-        )
-        os.makedirs(visualizations_dir, exist_ok=True)
+        pass
 
     # Prepare initial fragments.
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, config.nn_cutoff
-        ) for init_molecule in init_molecules]
-    init_fragments = [jraph.pad_with_graphs(
-        init_fragment,
-        n_node=(max_num_atoms + 1),
-        n_edge=(max_num_atoms + 1) ** 2,
-        n_graph=2,
-    ) for init_fragment in init_fragments]
-    init_fragments = jax.tree_map(lambda *err: np.stack(err), *init_fragments)
-    init_fragments = jax.vmap(lambda init_fragment: jax.tree_map(jnp.asarray, init_fragment))(init_fragments)
+            init_molecule, models.ATOMIC_NUMBERS, radial_cutoff
+        )
+        for init_molecule in init_molecules
+    ]
+    init_fragments = [
+        jraph.pad_with_graphs(
+            init_fragment,
+            n_node=(max_num_atoms + 1),
+            n_edge=(max_num_atoms + 1) ** 2,
+            n_graph=2,
+        )
+        for init_fragment in init_fragments
+    ]
+    init_fragments = jax.tree_util.tree_map(lambda *val: np.stack(val), *init_fragments)
+    init_fragments = jax.vmap(
+        lambda init_fragment: jax.tree_util.tree_map(jnp.asarray, init_fragment)
+    )(init_fragments)
+
+    # Ensure params are frozen.
+    params = flax.core.freeze(params)
 
     @jax.jit
     def chunk_and_apply(
-        params: optax.Params, init_fragments: datatypes.Fragments, rngs: chex.PRNGKey
+        init_fragments: datatypes.Fragments, rngs: chex.PRNGKey
     ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
         """Chunks the seeds and applies the model sequentially over all chunks."""
 
@@ -225,7 +210,7 @@ def generate_molecules(
             init_fragments, rngs = init_fragments_and_rngs
             assert len(init_fragments.n_node) == len(rngs)
 
-            apply_fn = lambda padded_fragment, rng: model.apply(
+            apply_fn_wrapped = lambda padded_fragment, rng: apply_fn(
                 params,
                 rng,
                 padded_fragment,
@@ -233,9 +218,9 @@ def generate_molecules(
                 position_inverse_temperature,
             )
             generate_for_one_seed_fn = lambda rng, init_fragment: generate_for_one_seed(
-                apply_fn,
+                apply_fn_wrapped,
                 init_fragment,
-                max_num_steps,
+                max_num_atoms,
                 config.nn_cutoff,
                 rng,
                 return_intermediates=visualize,
@@ -243,9 +228,15 @@ def generate_molecules(
             return jax.vmap(generate_for_one_seed_fn)(rngs, init_fragments)
 
         # Chunk the seeds, apply the model, and unchunk the results.
-        init_fragments, rngs = jax.tree_map(lambda arr: jnp.reshape(arr, (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:])), (init_fragments, rngs))
+        init_fragments, rngs = jax.tree_util.tree_map(
+            lambda arr: jnp.reshape(
+                arr,
+                (num_seeds // num_seeds_per_chunk, num_seeds_per_chunk, *arr.shape[1:]),
+            ),
+            (init_fragments, rngs),
+        )
         results = jax.lax.map(apply_on_chunk, (init_fragments, rngs))
-        results = jax.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
+        results = jax.tree_util.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
 
     # Generate molecules for all seeds.
@@ -254,48 +245,48 @@ def generate_molecules(
 
     # Compute compilation time.
     start_time = time.time()
-    chunk_and_apply.lower(params, init_fragments, rngs).compile()
+    chunk_and_apply.lower(init_fragments, rngs).compile()
     compilation_time = time.time() - start_time
-    logging.info("Compilation time: %.2f s", compilation_time)
+    logging_fn("Compilation time: %.2f s", compilation_time)
 
     # Generate molecules (and intermediate steps, if visualizing).
     if visualize:
-        padded_fragments, preds = chunk_and_apply(params, init_fragments, rngs)
+        padded_fragments, preds = chunk_and_apply(init_fragments, rngs)
     else:
-        final_padded_fragments, stops = chunk_and_apply(params, init_fragments, rngs)
+        final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
 
     molecule_list = []
     for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
-        init_fragment = jax.tree_map(lambda x: x[seed], init_fragments)
+        init_fragment = jax.tree_util.tree_map(lambda x: x[seed], init_fragments)
         init_molecule_name = init_molecule_names[seed]
 
         if visualize:
             # Get the padded fragment and predictions for this seed.
-            padded_fragments_for_seed = jax.tree_map(
+            padded_fragments_for_seed = jax.tree_util.tree_map(
                 lambda x: x[seed], padded_fragments
             )
-            preds_for_seed = jax.tree_map(lambda x: x[seed], preds)
+            preds_for_seed = jax.tree_util.tree_map(lambda x: x[seed], preds)
 
             figs = []
             for step in range(max_num_atoms):
                 if step == 0:
                     padded_fragment = init_fragment
                 else:
-                    padded_fragment = jax.tree_map(
+                    padded_fragment = jax.tree_util.tree_map(
                         lambda x: x[step - 1], padded_fragments_for_seed
                     )
-                pred = jax.tree_map(lambda x: x[step], preds_for_seed)
+                pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
 
                 # Save visualization of generation process.
                 fragment = jraph.unpad_with_graphs(padded_fragment)
                 pred = jraph.unpad_with_graphs(pred)
                 fragment = fragment._replace(
-                    globals=jax.tree_map(
+                    globals=jax.tree_util.tree_map(
                         lambda x: np.squeeze(x, axis=0), fragment.globals
                     )
                 )
                 pred = pred._replace(
-                    globals=jax.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+                    globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
                 )
                 fig = analysis.visualize_predictions(pred, fragment)
                 figs.append(fig)
@@ -311,9 +302,8 @@ def generate_molecules(
             # Save the visualizations of the generation process.
             for index, fig in enumerate(figs):
                 # Update the title.
-                model_name = analysis.get_title_for_name(name)
                 fig.update_layout(
-                    title=f"{model_name}: Predictions for Seed {seed}",
+                    title=f"Predictions for Seed {seed}",
                     title_x=0.5,
                 )
 
@@ -326,10 +316,10 @@ def generate_molecules(
 
         else:
             # We already have the final padded fragment.
-            final_padded_fragment = jax.tree_map(
+            final_padded_fragment = jax.tree_util.tree_map(
                 lambda x: x[seed], final_padded_fragments
             )
-            stop = jax.tree_map(lambda x: x[seed], stops)
+            stop = jax.tree_util.tree_map(lambda x: x[seed], stops)
 
         num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
@@ -339,10 +329,10 @@ def generate_molecules(
             ),
         )
         if stop:
-            logging.info("Generated %s", generated_molecule.get_chemical_formula())
+            logging_fn("Generated %s", generated_molecule.get_chemical_formula())
             outputfile = f"{init_molecule_name}_seed={seed}.xyz"
         else:
-            logging.info("STOP was not produced. Discarding...")
+            logging_fn("STOP was not produced. Discarding...")
             outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
 
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
@@ -356,6 +346,92 @@ def generate_molecules(
         for mol in molecule_list:
             conn.write(mol)
 
+    return molecule_list, molecules_outputdir
+
+
+
+def generate_molecules_from_workdir(
+    workdir: str,
+    outputdir: str,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
+    step: Union[str, int],
+    steps_for_weight_averaging: Optional[Sequence[int]],
+    num_seeds: int,
+    num_seeds_per_chunk: int,
+    init_molecules: Sequence[Union[str, ase.Atoms]],
+    max_num_atoms: int,
+    visualize: bool = False,
+    res_alpha: Optional[int] = None,
+    res_beta: Optional[int] = None,
+    verbose: bool = False,    
+):
+    """Generates molecules from a trained model at the given workdir."""
+
+    # Load model.
+    workdir = os.path.abspath(workdir)
+    if steps_for_weight_averaging is not None:
+        logging.info("Loading model averaged from steps %s", steps_for_weight_averaging)
+        model, params, config = analysis.load_weighted_average_model_at_steps(
+            workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
+        )
+    else:
+        model, params, config = analysis.load_model_at_step(
+            workdir,
+            step,
+            run_in_evaluation_mode=True,
+        )
+
+    # Update resolution of sampling grid.
+    config = config.unlock()
+    if res_alpha is not None:
+        logging.info(f"Setting res_alpha to {res_alpha}")
+        config.target_position_predictor.res_alpha = res_alpha
+
+    if res_beta is not None:
+        logging.info(f"Setting res_beta to {res_beta}")
+        config.target_position_predictor.res_beta = res_beta
+    logging.info(config.to_dict())
+
+    # Create output directories.
+    name = analysis.name_from_workdir(workdir)
+    molecules_outputdir = os.path.join(
+        outputdir,
+        name,
+        f"fait={focus_and_atom_type_inverse_temperature}",
+        f"pit={position_inverse_temperature}",
+        f"step={step}",
+    )
+    molecules_outputdir += f"_res_alpha={config.target_position_predictor.res_alpha}"
+    molecules_outputdir += f"_res_beta={config.target_position_predictor.res_beta}"
+    molecules_outputdir += "/molecules"
+
+    if visualize:
+        visualizations_dir = os.path.join(
+            outputdir,
+            name,
+            f"fait={focus_and_atom_type_inverse_temperature}",
+            f"pit={position_inverse_temperature}",
+            f"step={step}",
+            "visualizations",
+            "generated_molecules",
+        )
+
+    return generate_molecules(
+            apply_fn=model.apply,
+            params=params,
+            molecules_outputdir=molecules_outputdir,
+            radial_cutoff=config.radial_cutoff,
+            focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
+            position_inverse_temperature=position_inverse_temperature,
+            num_seeds=num_seeds,
+            num_seeds_per_chunk=num_seeds_per_chunk,
+            init_molecules=init_molecules,
+            max_num_atoms=max_num_atoms,
+            visualize=visualize,
+            visualizations_dir=visualizations_dir,
+            verbose=verbose,
+        )
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
@@ -384,12 +460,14 @@ def main(unused_argv: Sequence[str]) -> None:
         num_seeds_per_chunk,
         init_molecule,
         max_num_atoms,
-        FLAGS.max_steps,
         visualize,
         steps_for_weight_averaging,
         res_alpha=FLAGS.res_alpha,
         res_beta=FLAGS.res_beta,
     )
+
+
+
 
 
 if __name__ == "__main__":
@@ -420,7 +498,7 @@ if __name__ == "__main__":
         "res_alpha",
         None,
         "Angular resolution of alpha.",
-    )   
+    )
     flags.DEFINE_integer(
         "res_beta",
         None,
