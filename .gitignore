@@ -198,4 +198,4 @@ slurm_scripts
 slurm_logs
 slurm-*
 
-notebooks/
+notebooks
