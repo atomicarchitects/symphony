@@ -152,7 +152,9 @@ def pieces_to_unbatched_datasets(
             nn_tolerance=config.nn_tolerance,
             max_radius=config.radial_cutoff,
             mode=config.fragment_logic,
+            num_nodes_for_multifocus=config.num_nodes_for_multifocus,
             max_targets_per_graph=config.max_targets_per_graph,
+            tmqm=config.dataset=='tmqm',
         )
 
     # Convert to molecules, and then jraph.GraphsTuples.

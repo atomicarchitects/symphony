@@ -230,6 +230,9 @@ def check_molecule_validity(mol: Chem.Mol) -> bool:
     return True
 
 
+def check_ligand_validity(mol: Chem.Mol) -> bool
+
+
 def check_molecule_validity_with_openbabel(
     mol: "openbabel.OBMol",
 ) -> bool:

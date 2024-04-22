@@ -3,7 +3,7 @@ import matscipy.neighbours
 import numpy as np
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9
+from symphony.data.datasets import dataset, platonic_solids, qm9, tmqm
 from symphony import datatypes
 
 
@@ -25,6 +25,14 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             train_solids=config.train_solids,
             val_solids=config.val_solids,
             test_solids=config.test_solids,
+        )
+    
+    if config.dataset == "tmqm":
+        return tmqm.TMQMDataset(
+            root_dir=config.root_dir,
+            num_train_molecules=config.get("num_train_molecules"),
+            num_val_molecules=config.get("num_val_molecules"),
+            num_test_molecules=config.get("num_test_molecules"),
         )
 
     raise ValueError(f"Unknown dataset: {config.dataset}")

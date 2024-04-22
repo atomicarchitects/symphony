@@ -252,9 +252,9 @@ def generation_loss(
         assert target_position_mask.shape == (num_graphs, num_nodes_for_multifocus, max_targets_per_graph)
 
         target_position_mask = target_position_mask[:, :, :, None, None, None]
-        num_valid_targets = jnp.sum(target_position_mask, axis=1, keepdims=False)
+        num_valid_targets = jnp.sum(target_position_mask, axis=2, keepdims=False)
         num_valid_targets = jnp.maximum(num_valid_targets, 1.0)
-        mean_true_dist = jnp.sum(true_dist.grid_values * target_position_mask, axis=1)
+        mean_true_dist = jnp.sum(true_dist.grid_values * target_position_mask, axis=2)
         mean_true_dist = mean_true_dist / num_valid_targets
         assert mean_true_dist.shape == (num_graphs, num_nodes_for_multifocus, num_radii, res_beta, res_alpha), (
             mean_true_dist.shape,

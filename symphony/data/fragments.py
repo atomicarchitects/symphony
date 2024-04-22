@@ -24,6 +24,7 @@ def generate_fragments(
     heavy_first: bool = False,
     beta_com: float = 0.0,
     max_targets_per_graph: int = 1,
+    tmqm: bool = False,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -77,6 +78,7 @@ def generate_fragments(
             heavy_first,
             beta_com,
             max_targets_per_graph,
+            tmqm,
         )
         yield frag
 
@@ -113,11 +115,11 @@ def _make_first_fragment(
     heavy_first=False,
     beta_com=0.0,
     max_targets_per_graph: int = 1,
-        tmqm: bool = False,
-    ):
+    tmqm: bool = False,
+):
+    n_nodes = len(graph.nodes.positions)
     if tmqm:
         # get distances from central transition metal - assume all atoms have the same mass
-        n_nodes = len(graph.nodes.positions)
         bound1 = ptable.groups[graph.nodes.species] >= 2
         bound2 = ptable.groups[graph.nodes.species] <= 11
         com = np.average(graph.nodes.positions[bound1 & bound2], axis=0)
@@ -339,7 +341,7 @@ def _into_fragment(
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
-        target_species=np.expand_dims(target_species, axis=0),  # [1, num_nodes_for_multifocus]
+        target_species=np.expand_dims(target_species, axis=0).astype(int),  # [1, num_nodes_for_multifocus]
         target_positions=np.expand_dims(target_dist, axis=0),  # [1, num_nodes_for_multifocus, max_targets_per_graph, 3]
         target_position_mask=np.expand_dims(target_mask, axis=0),  # [1, num_nodes_for_multifocus, max_targets_per_graph]
     )

@@ -25,8 +25,8 @@ from symphony.models.embedders import e3schnet
 # from symphony.models.embedders import e3schnet_el as e3schnet  # TODO temporary, just want to see what this does
 
 # ATOMIC_NUMBERS = list(range(1, 84))  # QCD
-# ATOMIC_NUMBERS = list(range(1, 81))  # TMQM
-ATOMIC_NUMBERS = [1, 6, 7, 8, 9]  # QM9
+ATOMIC_NUMBERS = list(range(1, 81))  # TMQM
+# ATOMIC_NUMBERS = [1, 6, 7, 8, 9]  # QM9
 
 
 def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:

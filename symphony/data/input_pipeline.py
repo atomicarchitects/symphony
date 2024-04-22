@@ -43,6 +43,8 @@ def create_fragments_dataset(
     fragment_logic: str,
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
+    num_nodes_for_multifocus: Optional[int] = 1,
+    max_targets_per_graph: Optional[int] = 1,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
@@ -80,6 +82,8 @@ def create_fragments_dataset(
                     nn_tolerance=nn_tolerance,
                     max_radius=max_radius,
                     mode=fragment_logic,
+                    num_nodes_for_multifocus=num_nodes_for_multifocus,
+                    max_targets_per_graph=max_targets_per_graph,
                 )
 
     return fragment_generator(rng)
@@ -191,6 +195,8 @@ def get_datasets(
             fragment_logic=config.fragment_logic,
             nn_tolerance=config.get("nn_tolerance", None),
             max_radius=config.get("max_radius", None),
+            num_nodes_for_multifocus=config.get("num_nodes_for_multifocus", 1),
+            max_targets_per_graph=config.get("max_targets_per_graph", 1),
         )
         for split in ["train", "val", "test"]
     }

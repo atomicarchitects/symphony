@@ -169,6 +169,7 @@ def evaluate_model(
             # Compute metrics for this batch.
             step_rng, rng = jax.random.split(rng)
             step_rngs = jax.random.split(step_rng, jax.local_device_count())
+            jax.debug.print("shape: {shape}", shape=jax.tree_map(lambda x: x.shape, graphs))
             batch_metrics = evaluate_step(graphs, state, step_rngs, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
             

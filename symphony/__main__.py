@@ -101,22 +101,6 @@ def main(argv):
             notes=FLAGS.wandb_notes,
         )
 
-    # Initialize wandb.
-    if FLAGS.use_wandb:
-        import wandb
-        wandb.login()
-        wandb_dir = os.path.join(FLAGS.workdir, "wandb")
-        os.makedirs(wandb_dir, exist_ok=True)
-        wandb.init(
-            project="symphony",
-            config=config.to_dict(),
-            dir=FLAGS.workdir,
-            sync_tensorboard=True,
-            tags=FLAGS.wandb_tags,
-            name=FLAGS.wandb_name,
-            notes=FLAGS.wandb_notes,
-        )
-
     # Start training!
     train.train_and_evaluate(config, FLAGS.workdir)
 

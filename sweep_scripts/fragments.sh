@@ -13,17 +13,17 @@ mode=nn
 max_targets_per_graph=4
 cuda=0
 
-python -m symphony.data.generation_scripts.qm9_fragmenter \
-   --mode=nn --max_targets_per_graph=4 --num_nodes_for_multifocus=4 \
-   --output_dir=/data/NFS/potato/songk/qm9_fragments_multifocus --end_seed=4 &
-python -m symphony.data.generation_scripts.qm9_fragmenter \
-   --mode=nn --max_targets_per_graph=4 --num_nodes_for_multifocus=4 \
-   --output_dir=/data/NFS/potato/songk/qm9_fragments_multifocus --start_seed=4 &
+# python -m symphony.data.generation_scripts.qm9_fragmenter \
+#    --mode=nn --max_targets_per_graph=4 --num_nodes_for_multifocus=4 --end_seed=1 \
+#    --output_dir=/data/NFS/potato/songk/qm9_fragments_multifocus_mini --end_index=10 --chunk=10
+# python -m symphony.data.generation_scripts.qm9_fragmenter \
+#    --mode=nn --max_targets_per_graph=4 --num_nodes_for_multifocus=4 \
+#    --output_dir=/data/NFS/potato/songk/qm9_fragments_multifocus --start_seed=4 &
 
-# python -m symphony.data.generation_scripts.tmqm_fragmenter \
-#    --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.5 --num_nodes_for_multifocus=4 \
-#    --output_dir=/data/NFS/potato/songk/tmqm_fragments_multifocus --end_seed=1 \
-#    --start_index=0 --end_index=10 --chunk=10
+python -m symphony.data.generation_scripts.tmqm_fragmenter \
+   --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.5 --num_nodes_for_multifocus=4 \
+   --output_dir=/data/NFS/potato/songk/tmqm_fragments_multifocus --end_seed=1 \
+   --start_index=0 --end_index=10 --chunk=10
    # --start_index=0 --end_index=1000
 
 # CUDA_VISIBLE_DEVICES=0 python -m symphony.data.generation_scripts.tmqm_ni_fragmenter \
