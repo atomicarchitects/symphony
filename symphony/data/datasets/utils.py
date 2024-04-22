@@ -7,7 +7,7 @@ import zipfile
 import urllib
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs
+from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm
 
 
 def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
@@ -18,6 +18,14 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             root_dir=config.root_dir,
             check_molecule_sanity=config.get("check_molecule_sanity", False),
             use_edm_splits=config.use_edm_splits,
+            num_train_molecules=config.num_train_molecules,
+            num_val_molecules=config.num_val_molecules,
+            num_test_molecules=config.num_test_molecules,
+        )
+    
+    if config.dataset == "tmqm":
+        return tmqm.TMQMDataset(
+            root_dir=config.root_dir,
             num_train_molecules=config.num_train_molecules,
             num_val_molecules=config.num_val_molecules,
             num_test_molecules=config.num_test_molecules,
