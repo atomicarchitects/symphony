@@ -13,11 +13,11 @@
 
 mode=nn
 max_targets_per_graph=4
-cuda=0
+cuda=4
+dataset=qm9
 #workdir=/pool001/songk/workdirs/tmqmg_coord/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 #workdir=/pool001/songk/workdirs/tmqmg_feb26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/tmqm_ni_mar26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-#workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/tmqmg_feb28/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/$dataset_apr22/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # python -m symphony.data.generation_scripts.tmqm_fragmenter \
 #    --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.5 \
@@ -28,19 +28,13 @@ workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/tmqm_ni_mar26/e3s
 #    --output_dir=/data/NFS/potato/songk/tmqm_ni_fragments --end_seed=1 \
 #     --end_index=1 --chunk=1
 
-# CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
-#     --config=configs/tmqm/e3schnet_and_nequip.py \
-#     --config.fragment_logic=$mode \
-#     --config.max_targets_per_graph=$max_targets_per_graph \
-#     --config.num_train_steps=100000 \
-#     --config.train_molecules="(0, 8)" \
-#     --config.val_molecules="(0, 8)" \
-#     --config.test_molecules="(0, 8)" \
-#     --workdir=$workdir
+CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
+    --config=configs/$dataset/e3schnet_and_nequip.py \
+    --workdir=$workdir
 
-CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules_intermediates \
-    --workdir=$workdir \
-    --max_num_steps=200 \
-    --num_seeds=5 \
-    --init=analyses/molecules/downloaded/Ni.xyz
+# CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules_intermediates \
+#     --workdir=$workdir \
+#     --max_num_steps=200 \
+#     --num_seeds=5 \
+#     --init=analyses/molecules/downloaded/Ni.xyz
 #python -m analyses.evaluate_coord_num --workdir=$workdir

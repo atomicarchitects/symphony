@@ -20,7 +20,7 @@ from symphony.models import ptable
 from symphony import datatypes
 
 
-TMQM_URL = "https://github.com/bbskjelstad/tmqm.git"
+PEROV_URL = "https://github.com/txie-93/cdvae.git"
 
 
 def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
@@ -39,7 +39,7 @@ def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
     )
 
 
-class TMQMDataset(datasets.InMemoryDataset):
+class PerovDataset(datasets.InMemoryDataset):
     """TMQM dataset."""
 
     def __init__(self, root_dir: str, num_train_molecules: int, 
@@ -58,12 +58,18 @@ class TMQMDataset(datasets.InMemoryDataset):
         self.num_val_molecules = num_val_molecules
         self.num_test_molecules = num_test_molecules
 
-        self.molecules = load_tmqm(self.root_dir)
-        logging.info("Loaded TMQM dataset.")
+        self.molecules = load_perov(self.root_dir)
+        logging.info("Loaded perov dataset.")
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
-        return np.arange(1, 81)
+        return np.array([
+            3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 19, 20,
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
+            32, 33, 37, 38, 39, 40, 41, 42, 44, 45, 46, 
+            47, 48, 49, 50, 51, 52, 55, 56, 57, 72, 73, 
+            74, 75, 76, 77, 78, 79, 80, 81, 82, 83
+        ])
 
     def structures(self) -> Iterable[datatypes.Structures]:
         return self.molecules 
@@ -180,42 +186,42 @@ def extract_tar(path: str, root: str):
         f.extractall(path=root)
 
 
-def load_tmqm(root_dir: str) -> List[ase.Atoms]:
-    """Load the TMQM dataset."""
-    mols = []
-    data_path = root_dir
-    xyzs_path = os.path.join(data_path, "xyz")
-    if os.path.exists(xyzs_path):
-        logging.info(f"Using downloaded data: {xyzs_path}")
-    else:
-        if not os.path.exists(root_dir):
-            os.makedirs(root_dir)
-        logging.info(f"Cloning TMQM repository to {root_dir}...")
-        _ = clone_url(TMQM_URL, root_dir)
-        if not os.path.exists(xyzs_path):
-            os.makedirs(xyzs_path)
+def load_perov(root_dir: str) -> List[ase.Atoms]:
+    """Load the perov dataset."""
+    # mols = []
+    # data_path = root_dir
+    # xyzs_path = os.path.join(data_path, "xyz")
+    # if os.path.exists(xyzs_path):
+    #     logging.info(f"Using downloaded data: {xyzs_path}")
+    # else:
+    #     if not os.path.exists(root_dir):
+    #         os.makedirs(root_dir)
+    #     logging.info(f"Cloning perov repository to {root_dir}...")
+    #     _ = clone_url(PEROV_URL, root_dir)
+    #     if not os.path.exists(xyzs_path):
+    #         os.makedirs(xyzs_path)
 
-        for i in range(1, 3):
-            gz_path = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz.gz")
-            logging.info(f"Unzipping {gz_path}...")
-            gunzip(gz_path)
+    #     for i in range(1, 3):
+    #         gz_path = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz.gz")
+    #         logging.info(f"Unzipping {gz_path}...")
+    #         gunzip(gz_path)
 
-            mol_file = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz")
-            with open(mol_file, "r") as f:
-                all_xyzs = f.read().split("\n\n")
-                for xyz_n, xyz in enumerate(all_xyzs):
-                    if xyz == "":
-                        continue
-                    xyz_lines = xyz.split("\n")
-                    assert len(xyz_lines) == int(xyz_lines[0]) + 2
-                    with open(os.path.join(xyzs_path, f"X{i}_{xyz_n}.xyz"), "w") as f:
-                        f.write(xyz)
+    #         mol_file = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz")
+    #         with open(mol_file, "r") as f:
+    #             all_xyzs = f.read().split("\n\n")
+    #             for xyz_n, xyz in enumerate(all_xyzs):
+    #                 if xyz == "":
+    #                     continue
+    #                 xyz_lines = xyz.split("\n")
+    #                 assert len(xyz_lines) == int(xyz_lines[0]) + 2
+    #                 with open(os.path.join(xyzs_path, f"X{i}_{xyz_n}.xyz"), "w") as f:
+    #                     f.write(xyz)
 
-    for mol_file in tqdm.tqdm(os.listdir(xyzs_path)):
-        mol_as_ase = ase.io.read(os.path.join(xyzs_path, mol_file), format="xyz")
-        if mol_as_ase is None:
-            continue
-        mols.append(_molecule_to_structure(mol_as_ase))
+    # for mol_file in tqdm.tqdm(os.listdir(xyzs_path)):
+    #     mol_as_ase = ase.io.read(os.path.join(xyzs_path, mol_file), format="xyz")
+    #     if mol_as_ase is None:
+    #         continue
+    #     mols.append(_molecule_to_structure(mol_as_ase))
 
-    logging.info(f"Loaded {len(mols)} molecules.")
-    return mols
+    # logging.info(f"Loaded {len(mols)} molecules.")
+    # return mols

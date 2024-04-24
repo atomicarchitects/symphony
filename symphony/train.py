@@ -71,6 +71,7 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments:
     """Fill in the target positions with non-zero values for the graphs."""
     # Ensure that the target positions are not all zeros.
+    print(jax.tree_map(lambda x: x.shape, graphs))
     return graphs._replace(
         globals=graphs.globals._replace(
             target_positions=jnp.where(

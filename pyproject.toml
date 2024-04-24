@@ -37,6 +37,7 @@ dependencies = [
     "posebusters",
     "sh",
     "distrax",
+    "tensorflow-probability==0.21.0",
     "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
     "allegro-jax @ git+https://github.com/mariogeiger/allegro-jax",

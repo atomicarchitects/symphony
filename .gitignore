@@ -199,3 +199,5 @@ slurm_logs
 slurm-*
 
 notebooks
+
+*.out
