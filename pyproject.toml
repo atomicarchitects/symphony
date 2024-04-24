@@ -12,7 +12,7 @@ authors = [
 ]
 description = "Symphony"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 keywords = ["generative", "equivariant", "molecules"]
 license = {text = "BSD-3-Clause"}
 classifiers = [
@@ -35,6 +35,8 @@ dependencies = [
     "wandb",
     "py3dmol",
     "posebusters",
+    "sh",
+    "distrax",
     "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
     "allegro-jax @ git+https://github.com/mariogeiger/allegro-jax",
