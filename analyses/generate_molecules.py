@@ -39,6 +39,7 @@ def append_predictions(
     positions = padded_fragment.nodes.positions
     num_valid_nodes = padded_fragment.n_node[0]
     num_nodes = padded_fragment.nodes.positions.shape[0]
+    num_edges = padded_fragment.receivers.shape[0]
     focus = pred.globals.focus_indices[0]
     focus_position = positions[focus]
     target_position = pred.globals.position_vectors[0] + focus_position
@@ -63,7 +64,7 @@ def append_predictions(
         & (node_indices[:, None] <= num_valid_nodes)
     )
     senders, receivers = jnp.nonzero(
-        valid_edges, size=num_nodes * num_nodes, fill_value=-1
+        valid_edges, size=num_edges, fill_value=-1
     )
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
@@ -74,7 +75,7 @@ def append_predictions(
             species=new_species,
         ),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
-        n_edge=jnp.asarray([num_valid_edges, num_nodes * num_nodes - num_valid_edges]),
+        n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
         senders=senders,
         receivers=receivers,
     )
@@ -103,13 +104,13 @@ def generate_one_step(
 def generate_for_one_seed(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     init_fragment: datatypes.Fragments,
-    max_num_steps: int,
+    max_num_atoms: int,
     cutoff: float,
     rng: chex.PRNGKey,
     return_intermediates: bool = False,
 ) -> Tuple[datatypes.Fragments, datatypes.Predictions]:
     """Generates a single molecule for a given seed."""
-    step_rngs = jax.random.split(rng, num=max_num_steps)
+    step_rngs = jax.random.split(rng, num=max_num_atoms)
     (final_padded_fragment, stop), (padded_fragments, preds) = jax.lax.scan(
         lambda args, rng: generate_one_step(*args, rng, apply_fn, cutoff),
         (init_fragment, False),
@@ -132,10 +133,11 @@ def generate_molecules(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
-    visualize: bool,
-    steps_for_weight_averaging: Optional[Sequence[int]] = None,
-    res_alpha: Optional[int] = None,
-    res_beta: Optional[int] = None,
+    avg_neighbors_per_atom: int,
+    species: np.ndarray = np.array([1, 6, 7, 8, 9]),
+    visualize: bool = False,
+    visualizations_dir: Optional[str] = None,
+    verbose: bool = True,
 ):
     """Generates molecules from a trained model at the given workdir."""
 
@@ -176,7 +178,7 @@ def generate_molecules(
     # Prepare initial fragments.
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, radial_cutoff
+            init_molecule, species, radial_cutoff
         )
         for init_molecule in init_molecules
     ]
@@ -184,7 +186,7 @@ def generate_molecules(
         jraph.pad_with_graphs(
             init_fragment,
             n_node=(max_num_atoms + 1),
-            n_edge=(max_num_atoms + 1) ** 2,
+            n_edge=(max_num_atoms + 1) * avg_neighbors_per_atom,
             n_graph=2,
         )
         for init_fragment in init_fragments
@@ -221,7 +223,7 @@ def generate_molecules(
                 apply_fn_wrapped,
                 init_fragment,
                 max_num_atoms,
-                config.nn_cutoff,
+                radial_cutoff,
                 rng,
                 return_intermediates=visualize,
             )
@@ -239,7 +241,6 @@ def generate_molecules(
         results = jax.tree_util.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
 
-    # Generate molecules for all seeds.
     seeds = jnp.arange(num_seeds)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
 
@@ -325,7 +326,8 @@ def generate_molecules(
         generated_molecule = ase.Atoms(
             positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
             numbers=models.get_atomic_numbers(
-                final_padded_fragment.nodes.species[:num_valid_nodes]
+                final_padded_fragment.nodes.species[:num_valid_nodes],
+                species
             ),
         )
         if stop:
@@ -361,6 +363,8 @@ def generate_molecules_from_workdir(
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
+    avg_neighbors_per_atom: int,
+    species: np.ndarray,
     visualize: bool = False,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
@@ -418,7 +422,7 @@ def generate_molecules_from_workdir(
         )
 
     return generate_molecules(
-            apply_fn=model.apply,
+            apply_fn=jax.jit(model.apply),
             params=params,
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=config.radial_cutoff,
@@ -428,6 +432,8 @@ def generate_molecules_from_workdir(
             num_seeds_per_chunk=num_seeds_per_chunk,
             init_molecules=init_molecules,
             max_num_atoms=max_num_atoms,
+            avg_neighbors_per_atom=avg_neighbors_per_atom,
+            species=species,
             visualize=visualize,
             visualizations_dir=visualizations_dir,
             verbose=verbose,
@@ -436,34 +442,22 @@ def generate_molecules_from_workdir(
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
-    workdir = os.path.abspath(FLAGS.workdir)
-    outputdir = FLAGS.outputdir
-    focus_and_atom_type_inverse_temperature = (
-        FLAGS.focus_and_atom_type_inverse_temperature
-    )
-    position_inverse_temperature = FLAGS.position_inverse_temperature
-    step = FLAGS.step
-    num_seeds = FLAGS.num_seeds
-    num_seeds_per_chunk = FLAGS.num_seeds_per_chunk
-    init_molecule = FLAGS.init
-    max_num_atoms = FLAGS.max_num_atoms
-    visualize = FLAGS.visualize
-    steps_for_weight_averaging = FLAGS.steps_for_weight_averaging
-
-    generate_molecules(
-        workdir,
-        outputdir,
-        focus_and_atom_type_inverse_temperature,
-        position_inverse_temperature,
-        step,
-        num_seeds,
-        num_seeds_per_chunk,
-        init_molecule,
-        max_num_atoms,
-        visualize,
-        steps_for_weight_averaging,
-        res_alpha=FLAGS.res_alpha,
-        res_beta=FLAGS.res_beta,
+    generate_molecules_from_workdir(
+        FLAGS.workdir,
+        FLAGS.outputdir,
+        FLAGS.focus_and_atom_type_inverse_temperature,
+        FLAGS.position_inverse_temperature,
+        FLAGS.step,
+        FLAGS.steps_for_weight_averaging,
+        FLAGS.num_seeds,
+        FLAGS.num_seeds_per_chunk,
+        FLAGS.init,
+        FLAGS.max_num_atoms,
+        FLAGS.avg_neighbors_per_atom,
+        FLAGS.visualize,
+        FLAGS.res_alpha,
+        FLAGS.res_beta,
+        verbose=True,
     )
 
 
@@ -522,12 +516,12 @@ if __name__ == "__main__":
     flags.DEFINE_integer(
         "max_num_atoms",
         30,
-        "Maximum number of atoms per molecule.",
+        "Maximum number of atoms to generate per molecule.",
     )
     flags.DEFINE_integer(
-        "max_steps",
-        200,
-        "Maximum number of atoms to add.",
+        "avg_neighbors_per_atom",
+        10,
+        "Average number of neighbors per atom.",
     )
     flags.DEFINE_bool(
         "visualize",

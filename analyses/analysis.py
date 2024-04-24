@@ -342,5 +342,8 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
         return molecule, f"qm9_index={molecule_str}"
 
     # If the string is a valid molecule name, try to build it.
-    molecule = ase.build.molecule(molecule_str)
+    try:
+        molecule = ase.build.molecule(molecule_str)
+    except:
+        molecule = ase.Atoms(molecule_str)
     return molecule, molecule.get_chemical_formula()

@@ -52,13 +52,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
-    config.loss_kwargs.radius_rbf_variance = 1e-5
-    config.loss_kwargs.target_position_inverse_temperature = 20.0
-    config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
-    config.loss_kwargs.position_loss_type = "kl_divergence"
-    config.loss_kwargs.radial_loss_scaling_factor = 1.0
-    config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
@@ -104,5 +98,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.init_molecules = "H"
     config.generation.max_num_atoms = 35
     config.generation.avg_neighbors_per_atom = 5
+    config.generation.species = [1, 6, 7, 8, 9]
 
     return config

@@ -51,13 +51,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
     config.max_n_edges = 720 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
-    config.loss_kwargs.radius_rbf_variance = 1e-5
-    config.loss_kwargs.target_position_inverse_temperature = 20.0
-    config.loss_kwargs.target_position_lmax = 5
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
-    config.loss_kwargs.position_loss_type = "kl_divergence"
-    config.loss_kwargs.radial_loss_scaling_factor = 1.0
-    config.loss_kwargs.mask_atom_types = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
@@ -98,10 +92,11 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.res_beta = config.target_position_predictor.angular_predictor.get_ref("res_beta")
     config.generation.res_alpha = config.target_position_predictor.angular_predictor.get_ref("res_alpha")
     config.generation.radial_cutoff = config.get_ref("radial_cutoff")
-    config.generation.num_seeds = 100
+    config.generation.num_seeds = 10
     config.generation.num_seeds_per_chunk = 1
     config.generation.init_molecules = "Ni"
     config.generation.max_num_atoms = 200
     config.generation.avg_neighbors_per_atom = 10
+    config.generation.species = list(range(1, 81))
 
     return config

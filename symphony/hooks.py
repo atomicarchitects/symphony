@@ -12,6 +12,7 @@ import flax.struct
 from rdkit import Chem
 import wandb
 from clu import metric_writers, checkpoint
+import jax.numpy as jnp
 
 
 from symphony import train, train_state
@@ -45,6 +46,7 @@ def plot_molecules_in_wandb(
     view.write_html(temp_html_path)
 
     # Log the HTML file to Weights & Biases.
+    logging.info("Logging generated molecules to wandb...")
     wandb.run.log({"samples": wandb.Html(open(temp_html_path)), "global_step": step})
 
     # Delete the temporary HTML file, after a short delay.
@@ -66,6 +68,7 @@ class GenerateMoleculesHook:
     init_molecules: str
     max_num_atoms: int
     avg_neighbors_per_atom: int
+    species: jnp.ndarray
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -91,6 +94,7 @@ class GenerateMoleculesHook:
             init_molecules=self.init_molecules,
             max_num_atoms=self.max_num_atoms,
             avg_neighbors_per_atom=self.avg_neighbors_per_atom,
+            species=self.species,
             visualize=False,
             verbose=False,
         )

@@ -71,11 +71,10 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
 def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments:
     """Fill in the target positions with non-zero values for the graphs."""
     # Ensure that the target positions are not all zeros.
-    print(jax.tree_map(lambda x: x.shape, graphs))
     return graphs._replace(
         globals=graphs.globals._replace(
             target_positions=jnp.where(
-                jnp.all(graphs.globals.target_positions == 0.0, axis=-1)[:, None],
+                jnp.all(graphs.globals.target_positions == 0.0, axis=-1)[:, :, None],
                 jnp.ones_like(graphs.globals.target_positions) * 1e-3,
                 graphs.globals.target_positions,
             )
@@ -316,6 +315,7 @@ def train_and_evaluate(
         init_molecules=config.generation.init_molecules,
         max_num_atoms=config.generation.max_num_atoms,
         avg_neighbors_per_atom=config.generation.avg_neighbors_per_atom,
+        species=jnp.asarray(config.generation.species),
     )
 
     # Begin training loop.

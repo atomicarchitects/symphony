@@ -49,7 +49,6 @@ class TMQMDataset(datasets.InMemoryDataset):
         if root_dir is None:
             raise ValueError("root_dir must be provided.")
 
-        logging.info("Using random splits.")
         if num_train_molecules is None or num_val_molecules is None or num_test_molecules is None:
             raise ValueError("num_train_molecules, num_val_molecules, and num_test_molecules must be provided.")
             
@@ -58,15 +57,17 @@ class TMQMDataset(datasets.InMemoryDataset):
         self.num_val_molecules = num_val_molecules
         self.num_test_molecules = num_test_molecules
 
-        self.molecules = load_tmqm(self.root_dir)
-        logging.info("Loaded TMQM dataset.")
+        self.all_structures = None
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.arange(1, 81)
 
     def structures(self) -> Iterable[datatypes.Structures]:
-        return self.molecules 
+        if self.all_structures == None:
+            self.all_structures = load_tmqm(self.root_dir)
+            logging.info("Loaded TMQM dataset.")
+        return self.all_structures 
 
     @staticmethod
     def species_to_atom_types() -> Dict[int, str]:
@@ -77,7 +78,7 @@ class TMQMDataset(datasets.InMemoryDataset):
     def split_indices(self) -> Dict[str, Set[int]]:
         # Create a random permutation of the indices.
         np.random.seed(0)
-        indices = np.random.permutation(len(self.molecules))
+        indices = np.random.permutation(86665)
         permuted_indices = {
             "train": indices[:self.num_train_molecules],
             "val": indices[self.num_train_molecules:self.num_train_molecules + self.num_val_molecules],
