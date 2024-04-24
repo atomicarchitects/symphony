@@ -179,7 +179,7 @@ data_tf2
 grun
 grid_main.py
 
-notebooks/gen
+notebooks
 loss_outputs
 *.html
 cached/
