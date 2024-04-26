@@ -21,6 +21,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_targets_per_graph = 4
     config.continuous = False
     config.heavy_first = False
+    config.transition_first = True
 
     # Optimizer.
     config.optimizer = "adam"
