@@ -10,53 +10,41 @@ def get_config() -> ml_collections.ConfigDict:
     # Dataset.
     config.dataset = "qm9"
     config.fragment_logic = "nn"
-    config.train_on_split_smaller_than_chunk = False
+    config.heavy_first = False
+    config.max_targets_per_graph = 1
     config.root_dir = None
     config.use_edm_splits = True
     config.num_train_molecules = 100000
-    config.num_val_molecules = 10000
+    config.num_val_molecules = 17748
     config.num_test_molecules = 13083
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
-    config.max_targets_per_graph = 4
-    config.heavy_first = False
-    config.continuous = False
 
     # Optimizer.
     config.optimizer = "adam"
-    config.momentum = None
-    config.learning_rate = 5e-4
-    config.learning_rate_schedule = "constant"
-    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
-    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
-    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
-        "learning_rate"
-    )
-    config.learning_rate_schedule_kwargs.warmup_steps = 2000
-    config.learning_rate_schedule_kwargs.decay_steps = 50000
+    config.learning_rate = 1e-3
+    config.gradient_clip_norm = 1.0
 
     # Training.
     config.rng_seed = 0
     config.use_same_rng_across_structures = False
-    config.num_train_steps = 1_000_000
-    config.log_every_steps = 1000
+    config.num_train_steps = 2_000_000
+    config.log_every_steps = 1_000
     config.eval = True
     config.num_eval_steps = 100
-    config.eval_every_steps = 30000
+    config.eval_every_steps = 30_000
     config.generate = True
-    config.generate_every_steps = 120000
-    config.nn_tolerance = 0.5
+    config.generate_every_steps = 30_000
+    config.nn_tolerance = 0.1
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
-    config.mask_atom_types = False
     config.add_noise_to_positions = True
-    config.position_noise_std = 0.05
-    config.freeze_node_embedders = False
+    config.position_noise_std = 0.1
 
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
@@ -84,7 +72,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.min_radius = 0.0
     config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
-    config.target_position_predictor.radial_predictor.latent_size = 128
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
@@ -97,7 +84,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"
     config.generation.max_num_atoms = 35
-    config.generation.avg_neighbors_per_atom = 5
-    config.generation.species = [1, 6, 7, 8, 9]
+    config.generation.avg_neighbors_per_atom = 10
 
     return config

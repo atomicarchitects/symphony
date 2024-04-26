@@ -10,31 +10,32 @@ import os
 import time
 
 from PIL import ImageFile
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-import importlib.resources
 
 from symphony import models
 from symphony import datatypes
 
-ATOMIC_NUMBERS = []
-ELEMENTS = []
-NUMBER_TO_SYMBOL = {}
-ATOMIC_COLORS = {}
-ATOMIC_SIZES = {}
+ATOMIC_NUMBERS = models.ATOMIC_NUMBERS
+ELEMENTS = ["H", "C", "N", "O", "F"]
+NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
-with importlib.resources.open_text("analyses", 'elements.ini') as f:  # taken from VESTA
-    for line in f:
-        z, symbol, radius, _, _, r, g, b = line.strip().split()
-        z = int(z)
-        ATOMIC_NUMBERS.append(z)
-        ELEMENTS.append(symbol)
-        NUMBER_TO_SYMBOL[z] = symbol
-        r = float(r)
-        g = float(g)
-        b = float(b)
-        ATOMIC_COLORS[z] = f"rgb({255 * r}, {255 * g}, {255 * b})"
-        ATOMIC_SIZES[z] = float(radius) * 20
+# Colors and sizes for the atoms.
+ATOMIC_COLORS = {
+    1: "rgb(150, 150, 150)",  # H
+    6: "rgb(50, 50, 50)",  # C
+    7: "rgb(0, 100, 255)",  # N
+    8: "rgb(255, 0, 0)",  # O
+    9: "rgb(255, 0, 255)",  # F
+}
+ATOMIC_SIZES = {
+    1: 10,  # H
+    6: 30,  # C
+    7: 30,  # N
+    8: 30,  # O
+    9: 30,  # F
+}
 
 
 def get_title_for_name(name: str) -> str:
@@ -187,11 +188,12 @@ def get_plotly_traces_for_fragment(
             target_positions = (
                 fragment.globals.target_positions + fragment.nodes.positions[0]
             )
+            target_positions = target_positions.reshape(3)
             molecule_traces.append(
                 go.Scatter3d(
-                    x=[target_positions[:, 0]],
-                    y=[target_positions[:, 1]],
-                    z=[target_positions[:, 2]],
+                    x=[target_positions[0]],
+                    y=[target_positions[1]],
+                    z=[target_positions[2]],
                     mode="markers",
                     marker=dict(
                         size=[
@@ -205,7 +207,7 @@ def get_plotly_traces_for_fragment(
                         color=["green"],
                     ),
                     opacity=0.5,
-                    name="Target Atoms",
+                    name="Target Atom",
                 )
             )
 
