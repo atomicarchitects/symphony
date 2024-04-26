@@ -315,7 +315,7 @@ def train_and_evaluate(
         init_molecules=config.generation.init_molecules,
         max_num_atoms=config.generation.max_num_atoms,
         avg_neighbors_per_atom=config.generation.avg_neighbors_per_atom,
-        species=jnp.asarray(config.generation.species),
+        atomic_numbers=datasets.utils.get_dataset(config).get_atomic_numbers(),
     )
 
     # Begin training loop.
