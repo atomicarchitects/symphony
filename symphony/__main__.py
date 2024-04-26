@@ -44,14 +44,6 @@ def check_and_freeze_config(
 ) -> ml_collections.FrozenConfigDict:
     # Update the root directory for the dataset.
     config.root_dir = root_dirs.get_root_dir(config.dataset)
-
-    # Generate only once the checkpoint is saved.
-    if config.get("generate_every_steps") is None:
-        config.generate_every_steps = config.eval_every_steps
-    if not config.generate_every_steps % config.eval_every_steps == 0:
-        raise ValueError(
-            "config.generate_every_steps must be a multiple of config.eval_every_steps."
-        )
     config = ml_collections.FrozenConfigDict(config)
     return config
 
@@ -90,13 +82,27 @@ def main(argv):
     if FLAGS.use_wandb:
         os.makedirs(os.path.join(FLAGS.workdir, "wandb"), exist_ok=True)
 
+        # Add dataset and model name as tags.
+        wandb_tags = FLAGS.wandb_tags
+        wandb_tags.append(f"dataset:{config.dataset}")
+        wandb_tags.append(f"workdir:{FLAGS.workdir}")
+        try:
+            wandb_tags.append(
+                f"focus-predictor:{config.focus_and_target_species_predictor.embedder_config.model}"
+            )
+            wandb_tags.append(
+                f"position-predictor:{config.target_position_predictor.embedder_config.model}"
+            )
+        except AttributeError:
+            pass
+
         wandb.login()
         wandb.init(
             project="symphony",
             config=config.to_dict(),
             dir=FLAGS.workdir,
             sync_tensorboard=True,
-            tags=FLAGS.wandb_tags,
+            tags=wandb_tags,
             name=FLAGS.wandb_name,
             notes=FLAGS.wandb_notes,
         )
