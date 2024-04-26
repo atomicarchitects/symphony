@@ -38,7 +38,10 @@ class Predictor(hk.Module):
         (
             focus_and_target_species_logits,
             stop_logits,
-        ) = self.focus_and_target_species_predictor(graphs)
+        ) = self.focus_and_target_species_predictor(
+            graphs,
+            inverse_temperature=1.0
+        )
 
         # Get the species and stop probabilities.
         focus_and_target_species_probs, stop_probs = utils.segment_softmax_2D_with_stop(
