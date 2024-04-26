@@ -74,7 +74,7 @@ def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments
     return graphs._replace(
         globals=graphs.globals._replace(
             target_positions=jnp.where(
-                jnp.all(graphs.globals.target_positions == 0.0, axis=-1)[:, None],
+                jnp.all(graphs.globals.target_positions == 0.0, axis=-1)[:, :, None],
                 jnp.ones_like(graphs.globals.target_positions) * 1e-3,
                 graphs.globals.target_positions,
             )
@@ -315,6 +315,7 @@ def train_and_evaluate(
         init_molecules=config.generation.init_molecules,
         max_num_atoms=config.generation.max_num_atoms,
         avg_neighbors_per_atom=config.generation.avg_neighbors_per_atom,
+        atomic_numbers=datasets.utils.get_dataset(config).get_atomic_numbers(),
     )
 
     # Begin training loop.

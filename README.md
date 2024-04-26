@@ -29,6 +29,11 @@ Install pip dependencies with:
 pip install --upgrade pip && pip install -r requirements.txt
 ```
 
+For GPU support, install JAX with CUDA support afterwards:
+```shell
+pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
+
 Some of the analysis scripts require `openbabel==3.1.1`.
 This can be installed through conda.
 

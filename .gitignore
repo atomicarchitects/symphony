@@ -167,6 +167,10 @@ graphmlp
 graphnet
 qm9_data
 qm9_data_tf
+qm9_fragments_fixed
+tmqm_data
+tmqmg_data
+qcd_data
 data_tf2
 *.pb
 *.metadata
@@ -175,7 +179,7 @@ data_tf2
 grun
 grid_main.py
 
-notebooks/gen
+notebooks
 loss_outputs
 *.html
 cached/
@@ -188,3 +192,10 @@ cached/
 *.mol_dict
 
 analyses/molecules
+analyses/platonic_solids
+
+slurm_scripts
+slurm_logs
+slurm-*
+
+*.out

@@ -6,6 +6,7 @@ import numpy as np
 import chex
 
 from symphony import datatypes
+from symphony.models import ptable
 
 
 def generate_fragments(
@@ -17,6 +18,7 @@ def generate_fragments(
     mode: str,
     heavy_first: bool,
     max_targets_per_graph: int,
+    transition_first: bool,  # TODO currently only handles structures w 1 transition metal
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -67,6 +69,7 @@ def generate_fragments(
             mode,
             heavy_first,
             max_targets_per_graph,
+            transition_first
         )
         yield frag
 
@@ -121,9 +124,18 @@ def _make_first_fragment(
     mode,
     heavy_first,
     max_targets_per_graph,
+    transition_first
 ):
     rng, k = jax.random.split(rng)
-    if heavy_first and (graph.nodes.species != 0).sum() > 0:
+    if transition_first:
+        bound1 = ptable.groups[graph.nodes.species] >= 2
+        bound2 = ptable.groups[graph.nodes.species] <= 11
+        transition_metals = (bound1 & bound2).astype(np.float32)
+        transition_metals /= transition_metals.sum()
+        first_node = jax.random.choice(
+            k, np.arange(0, len(graph.nodes.positions)), p=transition_metals
+        )
+    elif heavy_first and (graph.nodes.species != 0).sum() > 0:
         heavy_indices = np.argwhere(graph.nodes.species != 0).squeeze(-1)
         first_node = jax.random.choice(k, heavy_indices)
     else:
