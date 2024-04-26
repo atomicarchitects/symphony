@@ -35,7 +35,7 @@ class DiscretizedRadialPredictor(RadiusPredictor):
         logits = hk.nets.MLP(
             [self.latent_size] * (self.num_layers - 1) + [self.num_bins],
             activate_final=False,
-        )(conditioning.array)
+        )(conditioning)
         return logits
 
     def create_distribution(
