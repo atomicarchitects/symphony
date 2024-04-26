@@ -26,8 +26,6 @@ from symphony.models.predictor import Predictor
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
-# ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
-
 
 def get_atomic_numbers(species: jnp.ndarray, atomic_numbers: jnp.ndarray) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
