@@ -19,7 +19,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
     config.max_targets_per_graph = 4
-    config.continuous = False
     config.heavy_first = False
     config.transition_first = True
 
@@ -76,6 +75,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.angular_predictor.sampling_inverse_temperature_factor = 10.0
     config.target_position_predictor.angular_predictor.sampling_num_steps = 1000
     config.target_position_predictor.angular_predictor.sampling_init_step_size = 10.0
+    config.target_position_predictor.continuous_radius = False
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.radial_predictor.num_bins = 16

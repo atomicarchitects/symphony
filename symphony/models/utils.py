@@ -358,6 +358,7 @@ def create_node_embedder(
             cutoff=config.cutoff,
             max_ell=config.max_ell,
             num_species=num_species,
+            simple_embedding=config.simple_embedding,
         )
 
     if config.model == "Allegro":
@@ -422,7 +423,7 @@ def create_model(
             sampling_num_steps=angular_predictor_config.sampling_num_steps,
             sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
         )
-        if config.continuous:
+        if config.target_position_predictor.continuous_radius:
             radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
                 num_bins=radial_predictor_config.num_bins,
                 min_radius=radial_predictor_config.min_radius,
