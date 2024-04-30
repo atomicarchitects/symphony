@@ -68,7 +68,7 @@ class GenerateMoleculesHook:
     init_molecules: str
     max_num_atoms: int
     avg_neighbors_per_atom: int
-    species: jnp.ndarray
+    atomic_numbers: jnp.ndarray
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -94,7 +94,7 @@ class GenerateMoleculesHook:
             init_molecules=self.init_molecules,
             max_num_atoms=self.max_num_atoms,
             avg_neighbors_per_atom=self.avg_neighbors_per_atom,
-            species=self.species,
+            atomic_numbers=self.atomic_numbers,
             visualize=False,
             verbose=False,
         )

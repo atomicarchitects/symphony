@@ -1,6 +1,6 @@
 #!/bin/sh
 
-workdir="qm9_bessel_embedding_attempt6_edm_splits_iclr_submission"
+workdir="qm9_bessel_embedding_attempt6_edm_splits"
 
 for model in "e3schnet_and_nequip"
 do

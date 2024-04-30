@@ -18,7 +18,6 @@ dataset=tmqm
 #workdir=/pool001/songk/workdirs/tmqmg_coord/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 #workdir=/pool001/songk/workdirs/tmqmg_feb26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_multifocus_apr30/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-# workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/tmqm_multifocus_apr5/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # python -m symphony.data.generation_scripts.tmqm_fragmenter \
 #    --mode=nn --max_targets_per_graph=4 --nn_cutoff=3.5 \

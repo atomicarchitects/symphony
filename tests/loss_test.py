@@ -88,8 +88,7 @@ def create_dummy_data() -> Tuple[datatypes.Predictions, datatypes.Fragments]:
         globals=datatypes.FragmentsGlobals(
             stop=jnp.asarray([0, 0]),
             target_species=jnp.zeros((num_graphs,), dtype=jnp.int32),
-            target_positions=jnp.ones((num_graphs, 1, 3)),
-            target_position_mask=jnp.ones((num_graphs, 1), dtype=jnp.bool_),
+            target_positions=jnp.ones((num_graphs, 3)),
         ),
         edges=None,
         senders=jnp.asarray([0, 1, 2, 3, 2]),

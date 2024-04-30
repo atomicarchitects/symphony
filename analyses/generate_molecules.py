@@ -134,7 +134,7 @@ def generate_molecules(
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
     avg_neighbors_per_atom: int,
-    species: np.ndarray = np.array([1, 6, 7, 8, 9]),
+    atomic_numbers: np.ndarray = np.array([1, 6, 7, 8, 9]),
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
     verbose: bool = True,
@@ -178,7 +178,7 @@ def generate_molecules(
     # Prepare initial fragments.
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, species, radial_cutoff
+            init_molecule, atomic_numbers, radial_cutoff
         )
         for init_molecule in init_molecules
     ]
@@ -327,7 +327,7 @@ def generate_molecules(
             positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
             numbers=models.get_atomic_numbers(
                 final_padded_fragment.nodes.species[:num_valid_nodes],
-                species
+                atomic_numbers
             ),
         )
         if stop:
@@ -364,7 +364,7 @@ def generate_molecules_from_workdir(
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
     avg_neighbors_per_atom: int,
-    species: np.ndarray,
+    atomic_numbers: np.ndarray,
     visualize: bool = False,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
@@ -433,7 +433,7 @@ def generate_molecules_from_workdir(
             init_molecules=init_molecules,
             max_num_atoms=max_num_atoms,
             avg_neighbors_per_atom=avg_neighbors_per_atom,
-            species=species,
+            atomic_numbers=atomic_numbers,
             visualize=visualize,
             visualizations_dir=visualizations_dir,
             verbose=verbose,

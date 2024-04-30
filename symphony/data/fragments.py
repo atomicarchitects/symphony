@@ -9,7 +9,7 @@ import collections
 
 
 from symphony import datatypes
-from symphony.models import ptable
+from symphony.models.ptable import PeriodicTableEmbedder
 
 
 def generate_fragments(
@@ -19,10 +19,10 @@ def generate_fragments(
     nn_tolerance: Optional[float],
     max_radius: Optional[float],
     mode: str,
-    num_nodes_for_multifocus: int = 1,
-    heavy_first: bool = False,
-    max_targets_per_graph: int = 1,
-    dataset: str="qm9",
+    num_nodes_for_multifocus: int,
+    heavy_first: bool,
+    max_targets_per_graph: int,
+    transition_first: bool,  # TODO currently only handles structures w 1 transition metal
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -74,7 +74,7 @@ def generate_fragments(
             num_nodes_for_multifocus,
             heavy_first,
             max_targets_per_graph,
-            dataset
+            transition_first
         )
         yield frag
 
@@ -132,12 +132,13 @@ def _make_first_fragment(
     num_nodes_for_multifocus,
     heavy_first,
     max_targets_per_graph,
-    dataset="qm9"
+    transition_first
 ):
     rng, k = jax.random.split(rng)
-    if dataset == "tmqm":
-        bound1 = ptable.groups[graph.nodes.species] >= 2
-        bound2 = ptable.groups[graph.nodes.species] <= 11
+    if transition_first:
+        ptable = PeriodicTableEmbedder()
+        bound1 = ptable.get_group(graph.nodes.species+1) >= 2
+        bound2 = ptable.get_group(graph.nodes.species+1) <= 11
         transition_metals = (bound1 & bound2).astype(np.float32)
         transition_metals /= transition_metals.sum()
         first_node = jax.random.choice(

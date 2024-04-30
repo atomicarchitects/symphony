@@ -3,7 +3,9 @@ import os
 
 from absl import logging
 import tqdm
+from git import Repo
 import zipfile
+import tarfile
 import urllib
 import ml_collections
 
@@ -115,3 +117,41 @@ def extract_zip(path: str, root: str):
                 continue
             logging.info(f"Extracting {name} to {root}")
             f.extract(name, root)
+
+
+def clone_url(url: str, root: str) -> str:
+    """Clone if repo does not exist in root already. Returns path to repo."""
+    repo_path = os.path.join(root, url.rpartition("/")[-1].rpartition(".")[0])
+
+    if os.path.exists(repo_path):
+        logging.info(f"Using cloned repo: {repo_path}")
+        return repo_path
+
+    logging.info(f"Cloning {url} to {repo_path}")
+    Repo.clone_from(url, repo_path)
+
+    return repo_path
+
+
+def extract_zip(path: str, root: str):
+    """Extract zip if content does not exist in root already."""
+    logging.info(f"Extracting {path} to {root}...")
+    with zipfile.ZipFile(path, "r") as f:
+        for name in f.namelist():
+            if name.endswith("/"):
+                logging.info(f"Skip directory {name}")
+                continue
+            out_path = os.path.join(root, name)
+            file_size = f.getinfo(name).file_size
+            if os.path.exists(out_path) and os.path.getsize(out_path) == file_size:
+                logging.info(f"Skip existing file {name}")
+                continue
+            logging.info(f"Extracting {name} to {root}...")
+            f.extract(name, root)
+
+
+def extract_tar(path: str, root: str):
+    """Extract tar."""
+    logging.info(f"Extracting {path} to {root}...")
+    with tarfile.TarFile(path, "r") as f:
+        f.extractall(path=root)
