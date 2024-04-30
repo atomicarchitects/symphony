@@ -1,9 +1,7 @@
 from typing import List, Iterable, Dict, Set
 
-import tqdm
 from absl import logging
 import os
-import zipfile
 import urllib
 import numpy as np
 import ase
@@ -19,135 +17,63 @@ QM9_URL = (
 )
 
 
-def _molecule_to_structure(molecule: ase.Atoms) -> datatypes.Structures:
-    """Converts a molecule to a datatypes.Structures object."""
-    return datatypes.Structures(
-        nodes=datatypes.NodesInfo(
-            positions=np.asarray(molecule.positions),
-            species=np.searchsorted(np.asarray([1, 6, 7, 8, 9]), molecule.numbers)
-        ),
-        edges=None,
-        receivers=None,
-        senders=None,
-        globals=None,
-        n_node=np.asarray([len(molecule.numbers)]),
-        n_edge=None,
-    )
-
-
 class QM9Dataset(datasets.InMemoryDataset):
     """QM9 dataset."""
 
-    def __init__(self, root_dir: str, check_molecule_sanity: bool, use_edm_splits: bool, 
-                 num_train_molecules: int, num_val_molecules: int, num_test_molecules: int):
+    def __init__(
+        self,
+        root_dir: str,
+        check_molecule_sanity: bool,
+        use_edm_splits: bool,
+        num_train_molecules: int,
+        num_val_molecules: int,
+        num_test_molecules: int,
+    ):
         super().__init__()
-        
+
         if root_dir is None:
             raise ValueError("root_dir must be provided.")
 
-        if use_edm_splits:
-            logging.info("Using EDM splits for QM9.")
-            if check_molecule_sanity:
-                raise ValueError("EDM splits are not compatible with molecule sanity checks.")
-            if num_train_molecules is not None or num_val_molecules is not None or num_test_molecules is not None:
-                raise ValueError("EDM splits are used, so num_train_molecules, num_val_molecules, and num_test_molecules must be None.")
-        else:
-            logging.info("Using random (non-EDM) splits.")
-            if num_train_molecules is None or num_val_molecules is None or num_test_molecules is None:
-                raise ValueError("EDM splits are not used, so num_train_molecules, num_val_molecules, and num_test_molecules must be provided.")
-            
         self.root_dir = root_dir
         self.check_molecule_sanity = check_molecule_sanity
         self.use_edm_splits = use_edm_splits
         self.num_train_molecules = num_train_molecules
         self.num_val_molecules = num_val_molecules
         self.num_test_molecules = num_test_molecules
-
-        self.molecules = load_qm9(self.root_dir, self.check_molecule_sanity)
-
-    def structures(self) -> Iterable[datatypes.Structures]:
-        for molecule in self.molecules:
-            yield _molecule_to_structure(molecule) 
+        self.all_structures = None
 
     @staticmethod
-    def species_to_atom_types() -> Dict[int, str]:
-        return {
-            0: "H",
-            1: "C",
-            2: "N",
-            3: "O",
-            4: "F",
+    def get_atomic_numbers() -> np.ndarray:
+        return np.asarray([1, 6, 7, 8, 9])
+
+    def structures(self) -> Iterable[datatypes.Structures]:
+        if self.all_structures is None:
+            self.all_structures = load_qm9(self.root_dir, self.check_molecule_sanity)
+
+        return self.all_structures
+
+    def split_indices(self) -> Dict[str, np.ndarray]:
+        """Return a dictionary of indices for each split."""
+        if not self.use_edm_splits:
+            raise NotImplementedError("Only EDM splits are supported for QM9.")
+
+        splits = get_edm_splits(self.root_dir)
+        requested_splits = {
+            "train": self.num_train_molecules,
+            "val": self.num_val_molecules,
+            "test": self.num_test_molecules,
         }
-
-    def split_indices(self) -> Dict[str, Set[int]]:
-        if self.use_edm_splits:
-            return get_edm_splits(self.root_dir)
-
-        # Create a random permutation of the indices.
-        np.random.seed(0)
-        indices = np.random.permutation(len(self.molecules))
-        permuted_indices = {
-            "train": indices[:self.num_train_molecules],
-            "val": indices[self.num_train_molecules:self.num_train_molecules + self.num_val_molecules],
-            "test": indices[self.num_train_molecules + self.num_val_molecules:self.num_train_molecules + self.num_val_molecules + self.num_test_molecules],
-        }
-        return permuted_indices
-
-def download_url(url: str, root: str) -> str:
-    """Download if file does not exist in root already. Returns path to file."""
-    filename = url.rpartition("/")[2]
-    file_path = os.path.join(root, filename)
-
-    try:
-        if os.path.exists(file_path):
-            logging.info(f"Using downloaded file: {file_path}")
-            return file_path
-        data = urllib.request.urlopen(url)
-    except urllib.error.URLError:
-        # No internet connection
-        if os.path.exists(file_path):
-            logging.info(f"No internet connection! Using downloaded file: {file_path}")
-            return file_path
-
-        raise ValueError(f"Could not download {url}")
-
-    chunk_size = 1024
-    total_size = int(data.info()["Content-Length"].strip())
-
-    if os.path.exists(file_path):
-        if os.path.getsize(file_path) == total_size:
-            logging.info(f"Using downloaded and verified file: {file_path}")
-            return file_path
-
-    logging.info(f"Downloading {url} to {file_path}")
-
-    with open(file_path, "wb") as f:
-        with tqdm.tqdm(total=total_size) as pbar:
-            while True:
-                chunk = data.read(chunk_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                pbar.update(chunk_size)
-
-    return file_path
-
-
-def extract_zip(path: str, root: str):
-    """Extract zip if content does not exist in root already."""
-    logging.info(f"Extracting {path} to {root}...")
-    with zipfile.ZipFile(path, "r") as f:
-        for name in f.namelist():
-            if name.endswith("/"):
-                logging.info(f"Skip directory {name}")
-                continue
-            out_path = os.path.join(root, name)
-            file_size = f.getinfo(name).file_size
-            if os.path.exists(out_path) and os.path.getsize(out_path) == file_size:
-                logging.info(f"Skip existing file {name}")
-                continue
-            logging.info(f"Extracting {name} to {root}...")
-            f.extract(name, root)
+        for split_name, num_molecules in requested_splits.items():
+            original_split_size = len(splits[split_name])
+            if num_molecules > original_split_size:
+                raise ValueError(
+                    f"Requested {num_molecules} molecules for split {split_name}, but only {original_split_size} are available."
+                )
+            logging.info(
+                f"Using {num_molecules} molecules out of {original_split_size} in split {split_name}.",
+            )
+            splits[split_name] = splits[split_name][:num_molecules]
+        return splits
 
 
 def molecule_sanity(mol: Chem.Mol) -> bool:
@@ -179,13 +105,14 @@ def load_qm9(
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
 
-    path = download_url(QM9_URL, root_dir)
-    extract_zip(path, root_dir)
+    path = datasets.utils.download_url(QM9_URL, root_dir)
+    datasets.utils.extract_zip(path, root_dir)
 
     raw_mols_path = os.path.join(root_dir, "gdb9.sdf")
     supplier = Chem.SDMolSupplier(raw_mols_path, removeHs=False, sanitize=False)
 
-    mols_as_ase = []
+    atomic_numbers = QM9Dataset.get_atomic_numbers()
+    all_structures = []
     for mol in supplier:
         if mol is None:
             continue
@@ -196,17 +123,30 @@ def load_qm9(
             if not sane:
                 continue
 
-        # Convert to ASE.
-        mol_as_ase = ase.Atoms(
-            numbers=np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
-            positions=np.asarray(mol.GetConformer(0).GetPositions()),
+        # Convert to Structure.
+        structure = datatypes.Structures(
+            nodes=datatypes.NodesInfo(
+                positions=np.asarray(mol.GetConformer().GetPositions()),
+                species=np.searchsorted(
+                    atomic_numbers,
+                    np.asarray([atom.GetAtomicNum() for atom in mol.GetAtoms()]),
+                ),
+            ),
+            edges=None,
+            receivers=None,
+            senders=None,
+            globals=None,
+            n_node=np.asarray([mol.GetNumAtoms()]),
+            n_edge=None,
         )
-        mols_as_ase.append(mol_as_ase)
+        all_structures.append(structure)
 
-    return mols_as_ase
+    return all_structures
 
 
-def get_edm_splits(root_dir: str) -> Dict[str, np.ndarray]:
+def get_edm_splits(
+    root_dir: str,
+) -> Dict[str, np.ndarray]:
     """Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py."""
 
     def is_int(string: str) -> bool:
@@ -269,7 +209,7 @@ def get_edm_splits(root_dir: str) -> Dict[str, np.ndarray]:
     val = included_idxs[val]
     test = included_idxs[test]
 
-    splits = {"train": set(train), "val": set(val), "test": set(test)}
+    splits = {"train": train, "val": val, "test": test}
 
     # Cleanup file.
     try:

@@ -8,38 +8,26 @@ def get_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     # Dataset.
-    config.dataset = "tmqm"
+    config.dataset = "geom_drugs"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.num_train_molecules = 69000
-    config.num_val_molecules = 9000
-    config.num_test_molecules = 8665
+    config.use_gcdm_splits = True
+    config.num_train_molecules = 5538014
+    config.num_val_molecules = 692251
+    config.num_test_molecules = 692251
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
-    config.max_targets_per_graph = 4
-    config.num_nodes_for_multifocus = 4
-    config.continuous = False
-    config.heavy_first = False
 
     # Optimizer.
     config.optimizer = "adam"
-    config.momentum = None
-    config.learning_rate = 5e-4
-    config.learning_rate_schedule = "constant"
-    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
-    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
-    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
-        "learning_rate"
-    )
-    config.learning_rate_schedule_kwargs.warmup_steps = 2000
-    config.learning_rate_schedule_kwargs.decay_steps = 50000
+    config.learning_rate = 1e-3
 
     # Training.
     config.rng_seed = 0
     config.use_same_rng_across_structures = False
-    config.num_train_steps = 1_000_000
+    config.num_train_steps = 2_000_000
     config.log_every_steps = 1000
     config.eval = True
     config.num_eval_steps = 100
@@ -53,10 +41,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 720 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
-    config.mask_atom_types = False
     config.add_noise_to_positions = True
-    config.position_noise_std = 0.05
-    config.freeze_node_embedders = False
+    config.position_noise_std = 0.1
 
     # Prediction heads.
     config.focus_and_target_species_predictor = ml_collections.ConfigDict()
@@ -84,7 +70,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.min_radius = 0.0
     config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
-    config.target_position_predictor.radial_predictor.latent_size = 128
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
@@ -93,11 +78,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.res_beta = config.target_position_predictor.angular_predictor.get_ref("res_beta")
     config.generation.res_alpha = config.target_position_predictor.angular_predictor.get_ref("res_alpha")
     config.generation.radial_cutoff = config.get_ref("radial_cutoff")
-    config.generation.num_seeds = 10
-    config.generation.num_seeds_per_chunk = 1
-    config.generation.init_molecules = "Ni"
-    config.generation.max_num_atoms = 200
+    config.generation.num_seeds = 20
+    config.generation.num_seeds_per_chunk = 20
+    config.generation.init_molecules = "H"
+    config.generation.max_num_atoms = 100
     config.generation.avg_neighbors_per_atom = 10
-    config.generation.species = list(range(1, 81))
 
     return config

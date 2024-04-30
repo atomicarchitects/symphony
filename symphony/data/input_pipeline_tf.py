@@ -28,13 +28,11 @@ def get_datasets(
     # Get the raw datasets.
     if config.dataset == "qm9":
         del rng
-        datasets = get_unbatched_datasets(config)
+        datasets = get_unbatched_qm9_datasets(config)
     elif config.dataset == "tetris":
         datasets = get_unbatched_tetris_datasets(rng, config)
     elif config.dataset == "platonic_solids":
         datasets = get_unbatched_platonic_solids_datasets(rng, config)
-    elif config.dataset == "tmqm":
-        datasets = get_unbatched_datasets(config)
 
     # Estimate the padding budget.
     if config.compute_padding_dynamically:
@@ -97,7 +95,6 @@ def get_datasets(
             .prefetch(tf.data.AUTOTUNE)
         ).as_numpy_iterator()
 
-
     return datasets
 
 
@@ -141,12 +138,11 @@ def pieces_to_unbatched_datasets(
     """Converts a sequence of pieces to a tf.data.Dataset for each split."""
 
     def generate_fragments_helper(
-        split_seed: int, graph: jraph.GraphsTuple
+        rng: chex.PRNGKey, graph: jraph.GraphsTuple
     ) -> Iterator[datatypes.Fragments]:
         """Helper function to generate fragments from a graph."""
-        split_rng = jax.random.fold_in(rng, split_seed)
         return fragments.generate_fragments(
-            split_rng,
+            rng,
             graph,
             n_species=1,
             nn_tolerance=config.nn_tolerance,
@@ -171,13 +167,18 @@ def pieces_to_unbatched_datasets(
 
     # Create an example graph to get the specs.
     # This is a bit ugly but I don't want to consume the generator.
+    example_rng, rng = jax.random.split(rng)
     example_graph = next(
-        iter(generate_fragments_helper(0, pieces_as_graphs[0]))
+        iter(generate_fragments_helper(example_rng, pieces_as_graphs[0]))
     )
     element_spec = _specs_from_graphs_tuple(example_graph, unknown_first_dimension=True)
 
+    # We will save our datasets to a temporary directory.
     datasets = {}
+
     for split in ["train", "val", "test"]:
+        split_rng, rng = jax.random.split(rng)
+
         split_pieces = config.get(f"{split}_pieces")
         if None not in [split_pieces, split_pieces[0], split_pieces[1]]:
             split_pieces_as_graphs = pieces_as_graphs[split_pieces[0] : split_pieces[1]]
@@ -185,9 +186,8 @@ def pieces_to_unbatched_datasets(
             split_pieces_as_graphs = pieces_as_graphs
 
         fragments_for_pieces = itertools.chain.from_iterable(
-            generate_fragments_helper(split_seed, graph)
+            generate_fragments_helper(split_rng, graph)
             for graph in split_pieces_as_graphs
-            for split_seed in config.get(f"{split}_seeds")
         )
 
         def fragment_yielder():
@@ -251,17 +251,19 @@ def _deprecated_get_unbatched_qm9_datasets(
     return datasets
 
 
-def get_unbatched_datasets(
+def get_unbatched_qm9_datasets(
     config: ml_collections.ConfigDict,
     seed: int = 0,
 ) -> Dict[str, tf.data.Dataset]:
-    """Loads a raw dataset as tf.data.Datasets for each split."""
+    """Loads the raw QM9 dataset as tf.data.Datasets for each split."""
     # Set the seed for reproducibility.
     tf.random.set_seed(seed)
 
     # Root directory of the dataset.
     config = ml_collections.ConfigDict(config)
-    config.root_dir = "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
+    config.root_dir = (
+        "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
+    )
     config.train_molecules = (0, 10)
     config.val_molecules = (100000, 110000)
     config.test_molecules = (110000, 130000)
@@ -419,7 +421,6 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
     edges = tf.ones((tf.shape(senders)[0], 1))
     focus_mask = graph["focus_mask"]
     target_positions = graph["target_positions"]
-    target_position_mask = graph["target_position_mask"]
     target_species = graph["target_species"]
 
     return jraph.GraphsTuple(
@@ -435,7 +436,6 @@ def _convert_to_graphstuple(graph: Dict[str, tf.Tensor]) -> jraph.GraphsTuple:
         globals=datatypes.FragmentsGlobals(
             stop=stop,
             target_positions=target_positions,
-            target_position_mask=target_position_mask,
             target_species=target_species,
         ),
         n_node=n_node,

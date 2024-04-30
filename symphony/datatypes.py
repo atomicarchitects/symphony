@@ -56,7 +56,6 @@ class Structures(jraph.GraphsTuple):
     n_edge: Optional[jnp.ndarray]  # with integer dtype
 
 
-
 class NodePredictions(NamedTuple):
     embeddings_for_focus: e3nn.IrrepsArray  # [n_node, irreps] float array
     embeddings_for_positions: e3nn.IrrepsArray  # [n_node, irreps] float array
@@ -71,13 +70,11 @@ class GlobalPredictions(NamedTuple):
     stop_logits: jnp.ndarray  # [n_graph] float array
     stop_probs: jnp.ndarray  # [n_graph] float array
     stop: jnp.ndarray  # [n_graph] bool array
-    position_logits: e3nn.SphericalSignal  # [num_nodes_for_multifocus, n_radii, beta, alpha] float array
-    log_position_coeffs: e3nn.IrrepsArray  # [num_nodes_for_multifocus, n_radii, ...] float array
-    position_probs: e3nn.SphericalSignal  # [num_nodes_for_multifocus, n_radii, beta, alpha] float array
-    position_vectors: jnp.ndarray  # [num_nodes_for_multifocus, 3] float array
-    radial_bins: jnp.ndarray  # [n_graph, n_radii] float array
-    radial_logits: jnp.ndarray  # [num_nodes_for_multifocus, n_radii] float array
-    angular_logits: e3nn.SphericalSignal  # [num_nodes_for_multifocus, n_radii, n_angular] float array
+    focus_indices: jnp.ndarray  # [n_graph] int array
+    target_species: jnp.ndarray  # [n_graph] int array
+    radial_logits: jnp.ndarray  # [n_graph, n_targets] float array
+    angular_logits: jnp.ndarray  # [n_graph, n_targets] float array
+    position_vectors: jnp.ndarray  # [n_graph, 3] float array
 
 
 class Predictions(jraph.GraphsTuple):

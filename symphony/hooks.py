@@ -12,6 +12,7 @@ import flax.struct
 from rdkit import Chem
 import wandb
 from clu import metric_writers, checkpoint
+import jax.numpy as jnp
 
 
 from symphony import train, train_state
@@ -27,7 +28,7 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 def plot_molecules_in_wandb(
     molecules: Sequence[Chem.Mol],
     step: int,
-    num_to_plot: int = 20,
+    num_to_plot: int = 8,
     **plot_kwargs,
 ):
     """Plots molecules in the Weights & Biases UI."""
@@ -45,6 +46,7 @@ def plot_molecules_in_wandb(
     view.write_html(temp_html_path)
 
     # Log the HTML file to Weights & Biases.
+    logging.info("Logging generated molecules to wandb...")
     wandb.run.log({"samples": wandb.Html(open(temp_html_path)), "global_step": step})
 
     # Delete the temporary HTML file, after a short delay.
@@ -65,6 +67,8 @@ class GenerateMoleculesHook:
     num_seeds_per_chunk: int
     init_molecules: str
     max_num_atoms: int
+    avg_neighbors_per_atom: int
+    species: jnp.ndarray
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -89,6 +93,8 @@ class GenerateMoleculesHook:
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,
             max_num_atoms=self.max_num_atoms,
+            avg_neighbors_per_atom=self.avg_neighbors_per_atom,
+            species=self.species,
             visualize=False,
             verbose=False,
         )
@@ -124,35 +130,39 @@ class LogTrainMetricsHook:
     writer: metric_writers.SummaryWriter
     is_empty: bool = True
 
-    def __call__(self, state: train_state.TrainState) -> None:
+    def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
+        # train_metrics = state.train_metrics
         train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
         if not self.is_empty:
             self.writer.write_scalars(
-                int(state.get_step()),
+                state.get_step(),
                 add_prefix_to_keys(train_metrics.compute(), "train"),
             )
             state = state.replace(
-                train_metrics=flax.jax_utils.replicate(train.Metrics.empty())
+                train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
+                # train_metrics=train.Metrics.empty(),
             )
             self.is_empty = True
+
+        return state
 
 
 @dataclass
 class EvaluateModelHook:
     evaluate_model_fn: Callable
     writer: metric_writers.SummaryWriter
-    update_state: bool = True
+    update_state_with_eval_metrics: bool = True
 
     def __call__(
-        self, state: train_state.TrainState, rng: chex.PRNGKey
+        self,
+        state: train_state.TrainState,
     ) -> train_state.TrainState:
         # Evaluate the model.
         eval_metrics = self.evaluate_model_fn(
             state,
-            rng,
         )
 
         # Compute and write metrics.
@@ -163,7 +173,7 @@ class EvaluateModelHook:
             )
         self.writer.flush()
 
-        if not self.update_state:
+        if not self.update_state_with_eval_metrics:
             return state
 
         # Note best state seen so far.
@@ -177,6 +187,7 @@ class EvaluateModelHook:
         if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
             state = state.replace(
                 best_params=state.params,
+                # metrics_for_best_params=eval_metrics,
                 metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
                 step_for_best_params=state.step,
             )
@@ -209,18 +220,20 @@ class CheckpointHook:
         return state
 
     def __call__(self, state: train_state.TrainState) -> Any:
+        state = flax.jax_utils.unreplicate(state)
+
         # Save the current and best params.
         with open(
             os.path.join(self.checkpoint_dir, f"params_{state.get_step()}.pkl"), "wb"
         ) as f:
-            pickle.dump(flax.jax_utils.unreplicate(state.params), f)
+            pickle.dump(state.params, f)
 
         with open(os.path.join(self.checkpoint_dir, "params_best.pkl"), "wb") as f:
-            pickle.dump(flax.jax_utils.unreplicate(state.best_params), f)
+            pickle.dump(state.best_params, f)
 
         # Save the whole training state.
         self.ckpt.save(
             {
-                "state": flax.jax_utils.unreplicate(state),
+                "state": state,
             }
         )

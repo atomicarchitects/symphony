@@ -440,6 +440,35 @@ def compute_bispectra_of_local_environments(
     }
 
 
+# def _cutoff(mol, site_index, cutoff=3.):
+#     return mol.get_neighbors(mol[site_index], cutoff)
+
+# def _cutoff_constructor(c):
+#     return functools.partial(_cutoff, cutoff=c)
+
+# def _get_chemical_symbols(mol):
+#     return [el.label for el in mol]
+
+# def _get_neighbors(mol, site_index, cutoff=3.):
+#     return [x.label for x in mol.get_neighbors(mol[site_index], cutoff)]
+
+# def get_bispectrum_by_el(mol, el, cutoff=3.):
+#     spectra_comp = pyspectra.spectra.Spectra()
+#     spectra_comp.set_cutoff(_cutoff_constructor(cutoff))
+#     spectra_comp.load_structure(mol)
+#     bispectrum = spectra_comp.compute_element_spectra(el)
+#     return jnp.array(list(bispectrum.values())), list(bispectrum.keys())
+
+# def get_bispectra_by_el_pair(mols, center_el, neighbor_el, cutoff=3.):
+#     bispectra = []
+#     for mol in tqdm.tqdm(mols):
+#         if center_el in _get_chemical_symbols(mol):
+#             spectra, sites = get_bispectrum_by_el(mol, center_el, cutoff)
+#             for s, i in zip(spectra, sites):
+#                 if neighbor_el in _get_neighbors(mol, i, cutoff):
+#                     bispectra.append(s)
+#     return jnp.array(bispectra)
+
 def compute_maximum_mean_discrepancies(
     source_samples_dict: Dict[Any, jnp.ndarray],
     target_samples_dict: Dict[Any, jnp.ndarray],

@@ -13,15 +13,20 @@ import ml_collections
 import numpy as np
 
 from symphony import datatypes
-from symphony.data import fragments, datasets 
+from symphony.data import fragments, datasets
 
 
-def infer_edges_with_radial_cutoff_on_positions(structure: datatypes.Structures, radial_cutoff: float) -> datatypes.Structures:
+def infer_edges_with_radial_cutoff_on_positions(
+    structure: datatypes.Structures, radial_cutoff: float
+) -> datatypes.Structures:
     """Infer edges from node positions, using a radial cutoff."""
     assert structure.n_node.shape[0] == 1, "Only one structure is supported."
 
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=structure.nodes.positions, cutoff=radial_cutoff, cell=np.eye(3)
+        quantities="ij",
+        positions=structure.nodes.positions,
+        cutoff=radial_cutoff,
+        cell=np.eye(3),
     )
 
     return structure._replace(
@@ -41,17 +46,16 @@ def create_fragments_dataset(
     radial_cutoff: float,
     use_same_rng_across_structures: bool,
     fragment_logic: str,
+    heavy_first: bool,
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
     num_nodes_for_multifocus: Optional[int] = 1,
     max_targets_per_graph: Optional[int] = 1,
+    dataset: Optional[str] = None,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
         raise ValueError("radial_cutoff must be provided if infer_edges is True.")
-
-    # Make sure the indices are stored in a set for fast lookup.
-    keep_indices = set(keep_indices)
 
     def fragment_generator(rng: chex.PRNGKey):
         """Generates fragments for a split."""
@@ -59,12 +63,8 @@ def create_fragments_dataset(
 
         # Loop indefinitely.
         while True:
-            for index, structure in enumerate(structures):
-                # Skip if the index is not in the split.
-                # This way we don't have to materialize the entire dataset.
-                if index not in keep_indices:
-                    continue
-
+            for index in keep_indices:
+                structure = structures[index]
                 if use_same_rng_across_structures:
                     structure_rng = original_rng
                 else:
@@ -73,7 +73,9 @@ def create_fragments_dataset(
                 if infer_edges_with_radial_cutoff:
                     if structure.n_edge is not None:
                         raise ValueError("Structure already has edges.")
-                    structure = infer_edges_with_radial_cutoff_on_positions(structure, radial_cutoff=radial_cutoff)
+                    structure = infer_edges_with_radial_cutoff_on_positions(
+                        structure, radial_cutoff=radial_cutoff
+                    )
 
                 yield from fragments.generate_fragments(
                     rng=structure_rng,
@@ -83,14 +85,18 @@ def create_fragments_dataset(
                     max_radius=max_radius,
                     mode=fragment_logic,
                     num_nodes_for_multifocus=num_nodes_for_multifocus,
+                    heavy_first=heavy_first,
                     max_targets_per_graph=max_targets_per_graph,
+                    dataset=dataset,
                 )
 
     return fragment_generator(rng)
 
 
 def estimate_padding_budget(
-    fragments_iterator: Iterator[datatypes.Fragments], num_graphs: int, num_estimation_graphs: int
+    fragments_iterator: Iterator[datatypes.Fragments],
+    num_graphs: int,
+    num_estimation_graphs: int,
 ) -> Tuple[int, int, int]:
     """Estimates the padding budget for a dataset of unbatched GraphsTuples.
     Args:
@@ -170,7 +176,7 @@ def pad_and_batch_fragments(
         n_node=max_n_nodes,
         n_edge=max_n_edges,
         n_graph=max_n_graphs,
-    )    
+    )
 
 
 def get_datasets(
@@ -178,25 +184,29 @@ def get_datasets(
     config: ml_collections.ConfigDict,
 ) -> Dict[str, Iterator[datatypes.Fragments]]:
     """Creates the datasets of fragments, as specified by the config."""
-    
+
     # Get the dataset of structures.
     dataset = datasets.utils.get_dataset(config)
+    structures = dataset.structures()
+    split_indices = dataset.split_indices()
 
     # Create the fragments datasets.
     fragments_iterators = {
         split: create_fragments_dataset(
             rng=rng,
-            structures=dataset.structures(),
-            keep_indices=dataset.split_indices()[split],
+            structures=structures,
+            keep_indices=split_indices[split],
             num_species=dataset.num_species(),
             infer_edges_with_radial_cutoff=config.infer_edges_with_radial_cutoff,
-            radial_cutoff=config.get("radial_cutoff", None),
-            use_same_rng_across_structures=True,
+            radial_cutoff=config.radial_cutoff,
+            use_same_rng_across_structures=config.use_same_rng_across_structures,
             fragment_logic=config.fragment_logic,
             nn_tolerance=config.get("nn_tolerance", None),
             max_radius=config.get("max_radius", None),
             num_nodes_for_multifocus=config.get("num_nodes_for_multifocus", 1),
-            max_targets_per_graph=config.get("max_targets_per_graph", 1),
+            heavy_first=config.heavy_first,
+            max_targets_per_graph=config.max_targets_per_graph,
+            dataset=config.dataset,
         )
         for split in ["train", "val", "test"]
     }

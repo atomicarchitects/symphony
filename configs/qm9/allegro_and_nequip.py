@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.tmqm import default, nequip, e3schnet
+from configs.qm9 import default, nequip, allegro
 
 
 def get_config() -> ml_collections.ConfigDict:
@@ -10,9 +10,8 @@ def get_config() -> ml_collections.ConfigDict:
     config = default.get_config()
 
     config.focus_and_target_species_predictor.embedder_config = (
-        e3schnet.get_embedder_config()
+        allegro.get_embedder_config()
     )
     config.target_position_predictor.embedder_config = nequip.get_embedder_config()
 
-    # NequIP hyperparameters.
     return config

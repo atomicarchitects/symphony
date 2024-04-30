@@ -63,6 +63,10 @@ class Allegro(hk.Module):
         )(node_feats, relative_positions, graphs.senders, graphs.receivers)
 
         # Aggregate edge features to nodes
-        node_feats = e3nn.scatter_sum(edge_feats, dst=graphs.receivers, output_size=node_feats.shape[-2])
-        node_feats += e3nn.scatter_sum(edge_feats, dst=graphs.senders, output_size=node_feats.shape[-2])
+        node_feats = e3nn.scatter_sum(
+            edge_feats, dst=graphs.receivers, output_size=node_feats.shape[-2]
+        )
+        node_feats += e3nn.scatter_sum(
+            edge_feats, dst=graphs.senders, output_size=node_feats.shape[-2]
+        )
         return node_feats

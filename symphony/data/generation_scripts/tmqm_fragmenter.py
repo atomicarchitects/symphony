@@ -62,7 +62,7 @@ def generate_all_fragments(
             shape=(None, len(atomic_numbers)), dtype=tf.float32
         ),
         "focus_mask": tf.TensorSpec(
-            shape=(None, ), dtype=tf.float32
+            shape=(None, ), dtype=tf.int32
         ),
         # edges
         "senders": tf.TensorSpec(shape=(None,), dtype=tf.int32),

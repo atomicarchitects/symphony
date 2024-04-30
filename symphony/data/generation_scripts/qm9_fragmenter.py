@@ -76,6 +76,8 @@ def generate_all_fragments(
         "receivers": tf.TensorSpec(shape=(None,), dtype=tf.int32),
         # globals
         "stop": tf.TensorSpec(shape=(1,), dtype=tf.bool),
+        "target_positions": tf.TensorSpec(shape=(1, 3), dtype=tf.float32),
+        "target_species": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         # n_node and n_edge
         "n_node": tf.TensorSpec(shape=(1,), dtype=tf.int32),
         "n_edge": tf.TensorSpec(shape=(1,), dtype=tf.int32),
@@ -93,24 +95,19 @@ def generate_all_fragments(
                 num_nodes_for_multifocus,
                 heavy_first,
                 beta_com,
-                max_targets_per_graph,
             )
             frags = list(frags)
 
             skip = False
             for frag in frags:
-                d = np.linalg.norm(frag.globals.target_positions, axis=-1)
-                if np.sum(d > max_radius) > 0:
+                d = np.linalg.norm(frag.globals.target_positions)
+                if d > max_radius:
                     logging.info(
                         f"Target position is too far away from the rest of the molecule. d={d} > max_radius={max_radius}",
                     )
                     skip = True
 
-            if len(frags) == 0:
-                logging.info("No fragments were generated.")
-                skip = True
-
-            if not frags[-1].globals.stop:
+            if len(frags) == 0 or not frags[-1].globals.stop:
                 logging.info("The last fragment is not a stop fragment.")
                 skip = True
 
@@ -126,9 +123,6 @@ def generate_all_fragments(
                     ),
                     "focus_mask": frag.nodes.focus_mask.astype(np.float32),
                     "target_positions": frag.globals.target_positions.astype(
-                        np.float32
-                    ),
-                    "target_position_mask": frag.globals.target_position_mask.astype(
                         np.float32
                     ),
                     "target_species": frag.globals.target_species.astype(np.int32),
@@ -159,22 +153,15 @@ def main(unused_argv) -> None:
     logging.set_verbosity(logging.INFO)
     logging.set_stderrthreshold(logging.INFO)
 
-    use_edm_splits = FLAGS.use_edm_splits
-    mode = FLAGS.mode
-    if mode == "nn_edm":
-        use_edm_splits = True
-        mode = "nn"
-
     # Create a list of arguments to pass to generate_all_fragments
     molecules = qm9.load_qm9(
         "qm9_data",
-        use_edm_splits=use_edm_splits,
+        use_edm_splits=FLAGS.use_edm_splits,
         check_molecule_sanity=FLAGS.check_molecule_sanity,
     )
     start_index = FLAGS.start_index
     end_index = FLAGS.end_index if FLAGS.end_index != -1 else len(molecules)
     chunk_size = FLAGS.chunk
-    output_dir = os.path.join(FLAGS.output_dir, FLAGS.mode, f"max_targets_{FLAGS.max_targets_per_graph}")
     args_list = [
         (
             molecules,
@@ -182,10 +169,10 @@ def main(unused_argv) -> None:
             start,
             start + chunk_size,
             os.path.join(
-                output_dir,
+                FLAGS.output_dir,
                 f"fragments_{seed:02d}_{start:06d}_{start + chunk_size:06d}",
             ),
-            mode,
+            FLAGS.mode,
             FLAGS.heavy_first,
             FLAGS.beta_com,
             FLAGS.nn_tolerance,

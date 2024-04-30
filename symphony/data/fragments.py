@@ -1,7 +1,6 @@
-from typing import Iterator, Optional, List
+from typing import Iterator, Optional
 
 import jax
-import jax.numpy as jnp
 import jraph
 import numpy as np
 import chex
@@ -22,9 +21,8 @@ def generate_fragments(
     mode: str,
     num_nodes_for_multifocus: int = 1,
     heavy_first: bool = False,
-    beta_com: float = 0.0,
     max_targets_per_graph: int = 1,
-    tmqm: bool = False,
+    dataset: str="qm9",
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -36,7 +34,7 @@ def generate_fragments(
         max_radius: The maximum distance of the focus-target
         mode: How to generate the fragments. Either "nn" or "radius".
         heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
-        beta_com: Inverse temperature value for the center of mass.
+        max_targets_per_graph: The maximum number of targets per graph.
 
     Returns:
         A sequence of fragments.
@@ -46,13 +44,12 @@ def generate_fragments(
     if mode == "radius" and max_radius is None:
         raise ValueError("max_radius must be specified for mode 'radius'.")
     if mode != "radius" and max_radius is not None:
-        print(max_radius)
         raise ValueError("max_radius specified, but mode is not 'radius'.")
     if mode == "nn" and nn_tolerance is None:
         raise ValueError("nn_tolerance must be specified for mode 'nn'.")
     if mode != "nn" and nn_tolerance is not None:
         raise ValueError("nn_tolerance specified, but mode is not 'nn'.")
-    
+
     n = len(graph.nodes.positions)
     assert (
         len(graph.n_edge) == 1 and len(graph.n_node) == 1
@@ -76,9 +73,8 @@ def generate_fragments(
             mode,
             num_nodes_for_multifocus,
             heavy_first,
-            beta_com,
             max_targets_per_graph,
-            tmqm,
+            dataset
         )
         yield frag
 
@@ -95,12 +91,34 @@ def generate_fragments(
                 mode,
                 num_nodes_for_multifocus,
                 heavy_first,
-                max_targets_per_graph=max_targets_per_graph,
+                max_targets_per_graph,
             )
             yield frag
             counter += 1
         assert len(visited_nodes) == n
         yield _make_last_fragment(graph, num_species, max_targets_per_graph, num_nodes_for_multifocus)
+
+
+def pick_targets(
+    rng,
+    targets,
+    node_species,
+    target_species_probability_for_focus,
+    max_targets_per_graph,
+):
+    # Pick a random target species.
+    rng, k = jax.random.split(rng)
+    target_species = jax.random.choice(
+        k,
+        len(target_species_probability_for_focus),
+        p=target_species_probability_for_focus,
+    )
+
+    # Pick up to max_targets_per_graph targets of the target species.
+    targets_of_this_species = targets[node_species[targets] == target_species]
+    targets_of_this_species = targets_of_this_species[:max_targets_per_graph]
+
+    return targets_of_this_species
 
 
 def _make_first_fragment(
@@ -112,37 +130,24 @@ def _make_first_fragment(
     max_radius,
     mode,
     num_nodes_for_multifocus,
-    heavy_first=False,
-    beta_com=0.0,
-    max_targets_per_graph: int = 1,
-    tmqm: bool = False,
+    heavy_first,
+    max_targets_per_graph,
+    dataset="qm9"
 ):
-    n_nodes = len(graph.nodes.positions)
-    if tmqm:
-        # get distances from central transition metal - assume all atoms have the same mass
+    rng, k = jax.random.split(rng)
+    if dataset == "tmqm":
         bound1 = ptable.groups[graph.nodes.species] >= 2
         bound2 = ptable.groups[graph.nodes.species] <= 11
-        com = np.average(graph.nodes.positions[bound1 & bound2], axis=0)
-    else:
-        # get distances from (approximate) center of mass - assume all atoms have the same mass
-        com = np.average(
-            graph.nodes.positions,
-            axis=0,
-            weights=(graph.nodes.species > 0) if heavy_first else None,
-        )
-    distances_com = np.linalg.norm(graph.nodes.positions - com, axis=1)
-    probs_com = jax.nn.softmax(-beta_com * distances_com**2)
-    if tmqm:
-        probs_com = np.where(bound1 & bound2, probs_com, 0.0)
-        probs_com = probs_com / jnp.sum(probs_com)
-    rng, k = jax.random.split(rng)
-    if heavy_first and (graph.nodes.species != 0).sum() > 0:
-        heavy_indices = np.argwhere(graph.nodes.species != 0).squeeze(-1)
-        first_node = jax.random.choice(k, heavy_indices, p=probs_com[heavy_indices])
-    else:
+        transition_metals = (bound1 & bound2).astype(np.float32)
+        transition_metals /= transition_metals.sum()
         first_node = jax.random.choice(
-            k, np.arange(0, len(graph.nodes.positions)), p=probs_com
+            k, np.arange(0, len(graph.nodes.positions)), p=transition_metals
         )
+    elif heavy_first and (graph.nodes.species != 0).sum() > 0:
+        heavy_indices = np.argwhere(graph.nodes.species != 0).squeeze(-1)
+        first_node = jax.random.choice(k, heavy_indices)
+    else:
+        first_node = jax.random.choice(k, np.arange(0, len(graph.nodes.positions)))
     first_node = int(first_node)
 
     mask = graph.senders == first_node
@@ -158,43 +163,39 @@ def _make_first_fragment(
     if len(targets) == 0:
         raise ValueError("No targets found.")
 
-    species_probability = np.zeros((graph.nodes.positions.shape[0], num_species))
-    species_probability[first_node] = _normalized_bitcount(
+    num_nodes = graph.nodes.positions.shape[0]
+    target_species_probability = np.zeros((num_nodes, num_species))
+    target_species_probability[first_node] = _normalized_bitcount(
         graph.nodes.species[targets], num_species
     )
 
-    # pick a random target species
-    rng, species_rng = jax.random.split(rng)
-    target_species = jax.random.choice(species_rng, graph.nodes.species[targets]).reshape((1,))
-    targets_of_same_species = targets[graph.nodes.species[targets] == target_species]
-    # get all potential positions for that species
-    rng, target_rng = jax.random.split(rng)
-    target = jax.random.choice(target_rng, targets_of_same_species)
-    target_positions = (
-        graph.nodes.positions[targets_of_same_species]
-        - graph.nodes.positions[first_node]
-    )
     rng, k = jax.random.split(rng)
-    target_positions = jax.random.permutation(k, target_positions)[
-        :max_targets_per_graph
-    ]
-    target_positions_reshaped = np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3))
-    target_positions_reshaped[0, : len(target_positions)] = target_positions
+    target_nodes = pick_targets(
+        k,
+        targets,
+        graph.nodes.species,
+        target_species_probability[first_node],
+        max_targets_per_graph,
+    )
     target_mask = np.zeros((num_nodes_for_multifocus, max_targets_per_graph,))
-    target_mask[0, : len(target_positions)] = 1
+    target_mask[0, : len(target_nodes)] = 1
+    target_nodes = np.pad(target_nodes, (0, max_targets_per_graph - len(target_nodes)))
 
     sample = _into_fragment(
         graph,
         visited=np.array([first_node]),
-        focus_mask=(np.arange(n_nodes) == first_node).astype(int),
-        target_species_probability=species_probability,
-        target_species=(np.arange(num_nodes_for_multifocus) == first_node).astype(int) * target_species,
-        target_dist=target_positions_reshaped,
+        focus_mask=(np.arange(num_nodes) == first_node).astype(int),
+        target_species_probability=target_species_probability,
+        target_nodes=np.expand_dims(target_nodes, axis=0),
         target_mask=target_mask,
         stop=False,
+        max_targets_per_graph=max_targets_per_graph,
+        num_nodes_for_multifocus=num_nodes_for_multifocus,
     )
 
-    visited = np.array([first_node, target])
+    rng, k = jax.random.split(rng)
+    next_node = jax.random.choice(k, target_nodes)
+    visited = np.array([first_node, next_node])
     return rng, visited, sample
 
 
@@ -208,8 +209,8 @@ def _make_middle_fragment(
     max_radius,
     mode,
     num_nodes_for_multifocus,
-    heavy_first=False,
-    max_targets_per_graph: int = 1,
+    heavy_first,
+    max_targets_per_graph,
 ):
     n_nodes = len(graph.nodes.positions)
     senders, receivers = graph.senders, graph.receivers
@@ -274,22 +275,21 @@ def _make_middle_fragment(
             best_num_targets = num_unique_targets
             best_target_ndxs = target_ndxs
 
-    target_ndxs = best_target_ndxs[focus_mask]
+    target_ndxs = best_target_ndxs[focus_nodes]
     target_nodes = receivers[target_ndxs]
-    target_dist = np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3))
     target_mask = np.zeros((num_nodes_for_multifocus, max_targets_per_graph))
     target_species = np.zeros((num_nodes_for_multifocus,))
     target_species[:target_nodes.shape[0]] = graph.nodes.species[target_nodes]
 
     # Pick neighboring nodes of the same type as the given target node, per focus.
     focus_per_target = senders[target_ndxs]
+    target_nodes_all = []
     for i in range(target_ndxs.shape[0]):
         targets = receivers[(senders == focus_per_target[i]) & mask]
         targets_of_same_species = targets[graph.nodes.species[targets] == target_species[i]][:max_targets_per_graph]
-        target_dist[
-            i, : len(targets_of_same_species)
-        ] = graph.nodes.positions[targets_of_same_species] - graph.nodes.positions[focus_per_target[i]]
         target_mask[i, : len(targets_of_same_species)] = 1
+        target_nodes_all.append(np.pad(targets_of_same_species, (0, max_targets_per_graph - len(targets_of_same_species))))
+    target_nodes_all = np.asarray(target_nodes_all)
 
     new_visited = np.concatenate([visited, target_nodes])
     new_visited = np.unique(new_visited)
@@ -299,26 +299,31 @@ def _make_middle_fragment(
         visited,
         focus_mask,
         target_species_probability,
-        target_species,
-        target_dist,
+        target_nodes_all,
         target_mask,
         stop=False,
+        max_targets_per_graph=max_targets_per_graph,
+        num_nodes_for_multifocus=num_nodes_for_multifocus,
     )
 
-    return rng, new_visited, sample
+    rng, k = jax.random.split(rng)
+    next_node = jax.random.choice(k, target_nodes)
+    visited = np.concatenate([visited, [next_node]])
+    return rng, visited, sample
 
 
-def _make_last_fragment(graph, num_species, max_targets_per_graph: int = 1, num_nodes_for_multifocus: int = 1):
+def _make_last_fragment(graph, num_species, max_targets_per_graph, num_nodes_for_multifocus):
     n_nodes = len(graph.nodes.positions)
     return _into_fragment(
         graph,
-        visited=np.arange(len(graph.nodes.positions)),
+        visited=np.arange(n_nodes),
         focus_mask=np.zeros((n_nodes,)),
         target_species_probability=np.zeros((n_nodes, num_species)),
-        target_species=np.zeros((num_nodes_for_multifocus,)),
-        target_dist=np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3)),
+        target_nodes=np.zeros((num_nodes_for_multifocus, max_targets_per_graph)),
         target_mask=np.zeros((num_nodes_for_multifocus, max_targets_per_graph)),
         stop=True,
+        max_targets_per_graph=max_targets_per_graph,
+        num_nodes_for_multifocus=num_nodes_for_multifocus,
     )
 
 
@@ -327,28 +332,54 @@ def _into_fragment(
     visited,
     focus_mask,
     target_species_probability,
-    target_species,
-    target_dist,
+    target_nodes,
     target_mask,
     stop,
+    max_targets_per_graph,
+    num_nodes_for_multifocus,
 ):
+    pos = graph.nodes.positions
+    species = graph.nodes.species
+
+    target_nodes_reshaped = np.pad(target_nodes, (
+        (0, num_nodes_for_multifocus - target_nodes.shape[0]),
+        (0, max_targets_per_graph - target_nodes.shape[1])))
+    target_nodes_reshaped = target_nodes_reshaped.astype(int)
+    target_mask = target_mask.astype(bool)
+    target_species = np.zeros((num_nodes_for_multifocus), dtype=int)
+
+    # Check that all target species are the same.
+    for i in range(num_nodes_for_multifocus):
+        species_i = species[target_nodes_reshaped[i]]
+        if target_mask[i].sum() == 0:
+            assert len(species_i[target_mask[i]]) == 0
+        else:
+            assert np.all(species_i[target_mask[i]] == species_i[0])
+        target_species[i, ] = species_i[0]
+
+    target_positions = np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3))
+    for i, (nodes, mask) in enumerate(zip(target_nodes, target_mask)):
+        nodes = nodes[mask]
+        if len(nodes):
+            target_positions[i, :nodes.shape[0]] = graph.nodes.positions[nodes]
 
     nodes = datatypes.FragmentsNodes(
-        positions=graph.nodes.positions,
-        species=graph.nodes.species,
+        positions=pos,
+        species=species,
         focus_and_target_species_probs=target_species_probability,
         focus_mask=focus_mask,
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.array([stop], dtype=bool),  # [1]
-        target_species=np.expand_dims(target_species, axis=0).astype(int),  # [1, num_nodes_for_multifocus]
-        target_positions=np.expand_dims(target_dist, axis=0),  # [1, num_nodes_for_multifocus, max_targets_per_graph, 3]
-        target_position_mask=np.expand_dims(target_mask, axis=0),  # [1, num_nodes_for_multifocus, max_targets_per_graph]
+        target_species=target_species.astype(int),  # [num_nodes_for_multifocus, max_targets_per_graph]
+        target_positions=target_positions,  # [num_nodes_for_multifocus, max_targets_per_graph, 3]
+        target_position_mask=target_mask,  # [num_nodes_for_multifocus, max_targets_per_graph]
     )
+    globals = jax.tree_map(lambda x: np.expand_dims(x, axis=0), globals)
     graph = graph._replace(nodes=nodes, globals=globals)
 
     if stop:
-        assert len(visited) == len(graph.nodes.positions)
+        assert len(visited) == len(pos)
         return graph
     else:
         # # put focus node at the beginning
@@ -363,7 +394,7 @@ def _move_first(xs, x):
     return np.roll(xs, -np.where(xs == x)[0][0])
 
 
-def _normalized_bitcount(xs, n: int):
+def _normalized_bitcount(xs: np.ndarray, n: int) -> np.ndarray:
     assert xs.ndim == 1
     return np.bincount(xs, minlength=n) / len(xs)
 

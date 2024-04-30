@@ -17,7 +17,7 @@ cuda=4
 dataset=tmqm
 #workdir=/pool001/songk/workdirs/tmqmg_coord/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 #workdir=/pool001/songk/workdirs/tmqmg_feb26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_multifocus_apr17/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_multifocus_apr30/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 # workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/tmqm_multifocus_apr5/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # python -m symphony.data.generation_scripts.tmqm_fragmenter \
@@ -31,7 +31,8 @@ workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_multif
 
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config=configs/$dataset/e3schnet_and_nequip.py \
-    --workdir=$workdir
+    --workdir=$workdir \
+    --use_wandb=False  # temporary
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules_intermediates \
 #     --workdir=$workdir \
