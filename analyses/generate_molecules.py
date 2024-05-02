@@ -9,7 +9,7 @@ from absl import app
 from absl import logging
 import ase
 import ase.data
-from ase.db import connect
+#from ase.db import connect
 import ase.io
 import ase.visualize
 import jax
@@ -341,12 +341,12 @@ def generate_molecules(
         molecule_list.append(generated_molecule)
 
     # Save the generated molecules as an ASE database.
-    output_db = os.path.join(
-        molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
-    )
-    with connect(output_db) as conn:
-        for mol in molecule_list:
-            conn.write(mol)
+    #output_db = os.path.join(
+    #    molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
+    #)
+    #with connect(output_db) as conn:
+    #    for mol in molecule_list:
+    #        conn.write(mol)
 
     return molecule_list, molecules_outputdir
 
