@@ -7,6 +7,7 @@ import zipfile
 from sh import gunzip
 import urllib.error
 import urllib.request
+import pickle
 import numpy as np
 import ase
 import rdkit.Chem as Chem
@@ -90,6 +91,12 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
     mols = []
     data_path = root_dir
     xyzs_path = os.path.join(data_path, "xyz")
+    mol_path = os.path.join(data_path, "molecules.pkl")
+    if os.path.exists(mol_path):
+        logging.info(f"Using saved molecules: {mol_path}")
+        with open(mol_path, "rb") as f:
+            mols = pickle.load(f)
+        return mols
     if os.path.exists(xyzs_path):
         logging.info(f"Using downloaded data: {xyzs_path}")
     else:
@@ -121,6 +128,10 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
         if mol_as_ase is None:
             continue
         mols.append(_molecule_to_structure(mol_as_ase))
+    if not os.path.exists(mol_path):
+        logging.info(f"Saving molecules to {mol_path}...")
+        with open(mol_path, "wb") as f:
+            pickle.dump(mols, f)
 
     logging.info(f"Loaded {len(mols)} molecules.")
     return mols
