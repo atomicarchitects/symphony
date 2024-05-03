@@ -184,6 +184,8 @@ class EvaluateModelHook:
             logging.info("No best state found yet.")
             min_val_loss = float("inf")
 
+        logging.info(f"loss: {eval_metrics['val_eval']['total_loss']}")
+
         if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
             state = state.replace(
                 best_params=state.params,

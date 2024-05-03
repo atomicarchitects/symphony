@@ -134,7 +134,7 @@ def generate_molecules(
     init_molecules: Sequence[Union[str, ase.Atoms]],
     max_num_atoms: int,
     avg_neighbors_per_atom: int,
-    atomic_numbers: np.ndarray = np.array([1, 6, 7, 8, 9]),
+    atomic_numbers: np.ndarray = np.arange(1, 81),
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
     verbose: bool = True,
@@ -406,8 +406,8 @@ def generate_molecules_from_workdir(
         f"pit={position_inverse_temperature}",
         f"step={step}",
     )
-    molecules_outputdir += f"_res_alpha={config.target_position_predictor.res_alpha}"
-    molecules_outputdir += f"_res_beta={config.target_position_predictor.res_beta}"
+    molecules_outputdir += f"_res_alpha={config.generation.res_alpha}"
+    molecules_outputdir += f"_res_beta={config.generation.res_beta}"
     molecules_outputdir += "/molecules"
 
     if visualize:
@@ -420,6 +420,8 @@ def generate_molecules_from_workdir(
             "visualizations",
             "generated_molecules",
         )
+    else:
+        visualizations_dir = None
 
     return generate_molecules(
             apply_fn=jax.jit(model.apply),
@@ -441,6 +443,7 @@ def generate_molecules_from_workdir(
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
+    atomic_numbers = np.arange(1, 81)  # TODO make this no longer hard-coded
 
     generate_molecules_from_workdir(
         FLAGS.workdir,
@@ -454,6 +457,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.init,
         FLAGS.max_num_atoms,
         FLAGS.avg_neighbors_per_atom,
+        atomic_numbers,
         FLAGS.visualize,
         FLAGS.res_alpha,
         FLAGS.res_beta,

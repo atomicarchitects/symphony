@@ -230,6 +230,8 @@ def ase_atoms_to_jraph_graph(
         quantities="ij", positions=atoms.positions, cutoff=radial_cutoff, cell=np.eye(3)
     )
 
+    print(atomic_numbers)
+    print(atoms.numbers)
     # Get the species indices
     species = np.searchsorted(atomic_numbers, atoms.numbers)
 
