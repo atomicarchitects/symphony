@@ -246,7 +246,7 @@ def _make_middle_fragment(
 
     target_species_probability = counts / np.sum(counts)
 
-    # pick a random focus node
+    # pick random focus nodes
     focus_probability = _normalized_bitcount(senders[mask], n_nodes)
     if visited.sum() >= num_nodes_for_multifocus:
         focus_nodes = np.where(focus_probability > 0)[0]

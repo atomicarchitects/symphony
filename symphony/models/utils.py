@@ -85,6 +85,7 @@ def segment_sample_2D(
     segment_ids: jnp.ndarray,
     num_segments: int,
     rng: chex.PRNGKey,
+    num_nodes_for_multifocus: int
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Sample indices from a categorical distribution across each segment.
     Args:
@@ -96,6 +97,9 @@ def segment_sample_2D(
         A 1D array of sampled indices, one for each segment.
     """
     num_nodes, num_species = species_probabilities.shape
+    cum_num_nodes = jnp.concatenate([jnp.array([0]), jnp.cumsum(jraph.segment_sum(
+        jnp.ones(num_nodes), segment_ids, num_segments
+    ))])
 
     # Normalize the probabilities to sum up for 1 over all nodes in each graph.
     species_probabilities_summed = jraph.segment_sum(
@@ -105,7 +109,7 @@ def segment_sample_2D(
         species_probabilities / species_probabilities_summed[segment_ids, None]
     )
 
-    def sample_for_segment(rng: chex.PRNGKey, segment_id: int) -> Tuple[float, float]:
+    def sample_for_segment(rng: chex.PRNGKey, segment_id: int) -> Tuple[int, int, int]:
         """Samples a node and species index for a single segment."""
         node_rng, logit_rng, rng = jax.random.split(rng, num=3)
         node_index = jax.random.choice(
@@ -121,15 +125,63 @@ def segment_sample_2D(
         species_index = jax.random.choice(
             logit_rng, jnp.arange(num_species), p=normalized_probs_for_index
         )
-        return node_index, species_index
+        mask = jnp.arange(num_nodes_for_multifocus) == 0
+        full_mask = jnp.where(jnp.arange(num_nodes) == node_index + cum_num_nodes[segment_id], 1, 0)
+        return (
+            mask * node_index,
+            mask * 1,
+            full_mask,
+            species_index,
+        )
+    
+    def sample_for_segment_multi(rng: chex.PRNGKey, segment_id: int) -> Tuple[int, int, int]:
+        """Samples a node and species index for a single segment."""
+        node_rng, logit_rng, rng = jax.random.split(rng, num=3)
+        node_index = jax.random.choice(
+            node_rng,
+            jnp.arange(num_nodes),
+            p=jnp.where(
+                segment_id == segment_ids, species_probabilities.sum(axis=-1), 0.0
+            ),
+            shape=(num_nodes_for_multifocus,),
+            replace=False
+        )
+        normalized_probs_for_index = species_probabilities[node_index] / jnp.sum(
+            species_probabilities[node_index], axis=-1
+        )
+        species_index = jax.vmap(
+            lambda probs: jax.random.choice(
+                logit_rng, jnp.arange(num_species), p=probs
+            )
+        )(normalized_probs_for_index)
+        full_mask = jnp.where(jnp.isin(jnp.arange(num_nodes), node_index + cum_num_nodes[segment_id]), 1, 0)
+        return (
+            node_index,
+            jnp.ones(num_nodes_for_multifocus),
+            full_mask,  # TODO might not actually need this, now that I know jnp.where adds padding
+            species_index,
+        )
+    
+    def f(rng: chex.PRNGKey, segment_id: int) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        nodes_in_segment = jnp.where(segment_id == segment_ids, 1, 0).sum()
+        return jax.lax.cond(
+            nodes_in_segment < num_nodes_for_multifocus,
+            sample_for_segment,
+            sample_for_segment_multi,
+            rng,
+            segment_id,
+        )
 
     rngs = jax.random.split(rng, num_segments)
-    node_indices, species_indices = jax.vmap(sample_for_segment)(
+    node_indices, focus_mask, focus_mask_all, species_indices = jax.vmap(f)(
         rngs, jnp.arange(num_segments)
     )
-    assert node_indices.shape == (num_segments,)
-    assert species_indices.shape == (num_segments,)
-    return node_indices, species_indices
+    focus_mask_all = jnp.sum(focus_mask_all, axis=0)
+    assert node_indices.shape == (num_segments, num_nodes_for_multifocus)
+    assert focus_mask.shape == (num_segments, num_nodes_for_multifocus)
+    assert focus_mask_all.shape == (num_nodes,)
+    assert species_indices.shape == (num_segments, num_nodes_for_multifocus)
+    return node_indices, focus_mask, focus_mask_all, species_indices
 
 
 def log_coeffs_to_logits(
@@ -452,6 +504,7 @@ def create_model(
         predictor = Predictor(
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,
+            num_nodes_for_multifocus=config.num_nodes_for_multifocus,
         )
 
         if run_in_evaluation_mode:

@@ -151,8 +151,8 @@ def train_step(
 
 
 # @functools.partial(jax.jit, static_argnums=(2,))
+# @chex.assert_max_traces(n=2)
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(2,))
-@chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
     state: train_state.TrainState,
