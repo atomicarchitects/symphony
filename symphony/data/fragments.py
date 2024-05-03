@@ -69,7 +69,7 @@ def generate_fragments(
             mode,
             heavy_first,
             max_targets_per_graph,
-            transition_first
+            transition_first,
         )
         yield frag
 
@@ -124,7 +124,8 @@ def _make_first_fragment(
     mode,
     heavy_first,
     max_targets_per_graph,
-    transition_first
+    transition_first,
+    periodic,
 ):
     rng, k = jax.random.split(rng)
     if transition_first:
@@ -179,6 +180,7 @@ def _make_first_fragment(
         target_nodes=target_nodes,
         stop=False,
         max_targets_per_graph=max_targets_per_graph,
+        periodic=periodic,
     )
 
     rng, k = jax.random.split(rng)
@@ -310,6 +312,7 @@ def _into_fragment(
         target_species=target_species[0],
         target_positions=pos[padded_target_nodes] - pos[focus_node],
         target_positions_mask=target_positions_mask,
+        cell=graph.globals.cell,
     )
     globals = jax.tree_map(lambda x: np.expand_dims(x, axis=0), globals)
     graph = graph._replace(nodes=nodes, globals=globals)

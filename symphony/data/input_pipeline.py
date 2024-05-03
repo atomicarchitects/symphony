@@ -11,13 +11,27 @@ import jraph
 import matscipy.neighbours
 import ml_collections
 import numpy as np
+import itertools
 
 from symphony import datatypes
 from symphony.data import fragments, datasets
 
 
+def get_relative_positions(positions, senders, receivers, cell, periodic):
+    relative_positions = positions[receivers] - positions[senders]
+    if periodic: return relative_positions
+    # for periodic structures, re-center the target positions and recompute relative positions if necessary
+    for d in itertools.product(range(-1, 2), repeat=3):
+        shifted_rel_pos = positions[receivers] - positions[senders] + np.array(d) @ cell
+        relative_positions = np.where(
+            np.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < np.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+            shifted_rel_pos,
+            relative_positions)
+    return relative_positions
+
+
 def infer_edges_with_radial_cutoff_on_positions(
-    structure: datatypes.Structures, radial_cutoff: float
+    structure: datatypes.Structures, radial_cutoff: float, periodic: bool
 ) -> datatypes.Structures:
     """Infer edges from node positions, using a radial cutoff."""
     assert structure.n_node.shape[0] == 1, "Only one structure is supported."
@@ -30,7 +44,9 @@ def infer_edges_with_radial_cutoff_on_positions(
     )
 
     return structure._replace(
-        edges=np.ones(len(senders)),
+        edges=datatypes.EdgesInfo(relative_positions=get_relative_positions(
+            structure.nodes.positions, senders, receivers, structure.globals.cell, periodic=periodic,
+        )),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_edge=np.array([len(senders)]),
@@ -51,6 +67,7 @@ def create_fragments_dataset(
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
     transition_first: Optional[bool] = False,
+    periodic: Optional[bool] = False,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
@@ -73,7 +90,7 @@ def create_fragments_dataset(
                     if structure.n_edge is not None:
                         raise ValueError("Structure already has edges.")
                     structure = infer_edges_with_radial_cutoff_on_positions(
-                        structure, radial_cutoff=radial_cutoff
+                        structure, radial_cutoff=radial_cutoff, periodic=periodic
                     )
 
                 yield from fragments.generate_fragments(
@@ -204,6 +221,7 @@ def get_datasets(
             heavy_first=config.heavy_first,
             max_targets_per_graph=config.max_targets_per_graph,
             transition_first=config.transition_first,
+            periodic=config.periodic,
         )
         for split in ["train", "val", "test"]
     }

@@ -48,10 +48,7 @@ class NequIP(hk.Module):
         self,
         graphs: datatypes.Fragments,
     ):
-        relative_positions = (
-            graphs.nodes.positions[graphs.receivers]
-            - graphs.nodes.positions[graphs.senders]
-        )
+        relative_positions = graphs.edges.relative_positions
         relative_positions = relative_positions / self.r_max
         relative_positions = e3nn.IrrepsArray("1o", relative_positions)
 
