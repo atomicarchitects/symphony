@@ -74,11 +74,22 @@ class GlobalPredictions(NamedTuple):
     position_vectors: jnp.ndarray  # [n_graph, 3] float array
 
 
+class OldGlobalPredictions(NamedTuple):
+    stop_logits: jnp.ndarray  # [n_graph] float array
+    stop_probs: jnp.ndarray  # [n_graph] float array
+    stop: jnp.ndarray  # [n_graph] bool array
+    focus_indices: jnp.ndarray  # [n_graph] int array
+    target_species: jnp.ndarray  # [n_graph] int array
+    position_logits: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
+    position_probs: e3nn.SphericalSignal  # [n_graph, n_radii, beta, alpha] float array
+    position_vectors: jnp.ndarray  # [n_graph, 3] float array
+
+
 class Predictions(jraph.GraphsTuple):
     nodes: NodePredictions
     edges: None
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
-    globals: GlobalPredictions
+    globals: GlobalPredictions | OldGlobalPredictions
     n_node: jnp.ndarray  # with integer dtype
     n_edge: jnp.ndarray  # with integer dtype
