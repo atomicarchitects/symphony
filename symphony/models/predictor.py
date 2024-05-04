@@ -147,17 +147,6 @@ class Predictor(hk.Module):
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
         )
 
-        # Compute the radial and angular logits.
-        (
-            radial_logits,
-            angular_logits,
-        ) = self.target_position_predictor.get_evaluation_predictions(
-            graphs,
-            focus_indices,
-            target_species,
-            position_inverse_temperature,
-        )
-
         # Compute the position coefficients.
         position_vectors = self.target_position_predictor.get_evaluation_predictions(
             graphs,

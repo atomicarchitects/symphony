@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.tmqm import default
+from configs.perov5 import default
 
 
 def get_embedder_config() -> ml_collections.ConfigDict:

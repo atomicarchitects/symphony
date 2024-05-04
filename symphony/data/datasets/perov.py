@@ -72,7 +72,7 @@ class PerovDataset(datasets.InMemoryDataset):
         self.num_train_molecules = len(splits['train'])
         self.num_val_molecules = len(splits['val'])
         self.num_test_molecules = len(splits['test'])
-        self.molecules = splits['train'] + splits['val'] + self.splits['test']
+        self.molecules = splits['train'] + splits['val'] + splits['test']
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
@@ -161,10 +161,18 @@ def clone_url(url: str, root: str) -> str:
 
 def load_perov(root_dir: str, supercell: bool) -> List[ase.Atoms]:
     """Load the perov dataset."""
-    datasets = {}
+    dataset_splits = {}
     data_path = root_dir
     repo_path = os.path.join(data_path, "cdvae")
     cif_path = os.path.join(data_path, "cdvae", "data", "perov_5", "cif")
+    mol_path = os.path.join(data_path, "cdvae", "data", "perov_5", "molecules.pkl")
+
+    if os.path.exists(mol_path):
+        logging.info(f"Using saved molecules: {mol_path}")
+        with open(mol_path, "rb") as f:
+            mols = pickle.load(f)
+        return mols
+
     splits = ['train', 'val', 'test']
 
     if os.path.exists(cif_path):
@@ -188,11 +196,17 @@ def load_perov(root_dir: str, supercell: bool) -> List[ase.Atoms]:
     for split in splits:
         mols = []
         for mol_file in tqdm.tqdm(os.listdir(os.path.join(cif_path, split))):
-            mol_as_ase = ase.io.read(os.path.join(repo_path, mol_file), format="cif")
+            mol_as_ase = ase.io.read(os.path.join(cif_path, split, mol_file), format="cif")
             if mol_as_ase is None:
                 continue
             mols.append(_molecule_to_structure(mol_as_ase, supercell))
+        dataset_splits[split] = mols
 
-    logging.info(f"Loaded {sum([len[v] for _, v in datasets])} molecules.")
-    return datasets
+    if not os.path.exists(mol_path):
+        logging.info(f"Saving molecules to {mol_path}...")
+        with open(mol_path, "wb") as f:
+            pickle.dump(dataset_splits, f)
+
+    logging.info(f"Loaded {sum([len(v) for _, v in dataset_splits.items()])} molecules.")
+    return dataset_splits
 

@@ -125,7 +125,6 @@ def _make_first_fragment(
     heavy_first,
     max_targets_per_graph,
     transition_first,
-    periodic,
 ):
     rng, k = jax.random.split(rng)
     if transition_first:
@@ -180,7 +179,6 @@ def _make_first_fragment(
         target_nodes=target_nodes,
         stop=False,
         max_targets_per_graph=max_targets_per_graph,
-        periodic=periodic,
     )
 
     rng, k = jax.random.split(rng)

@@ -2,7 +2,7 @@
 
 import ml_collections
 
-from configs.tmqm import default, nequip, e3schnet
+from configs.perov5 import default, nequip, e3schnet
 
 
 def get_config() -> ml_collections.ConfigDict:
