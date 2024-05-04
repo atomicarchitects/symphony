@@ -12,6 +12,9 @@ import ml_collections
 
 from symphony import datatypes
 from symphony.data import datasets
+from symphony.models.angular_predictors.discretized_predictor import (
+    DiscretizedAngularPredictor,
+)
 from symphony.models.angular_predictors.linear_angular_predictor import (
     LinearAngularPredictor,
 )
@@ -408,22 +411,40 @@ def create_model(
             ),
             num_species=num_species,
         )
+
         angular_predictor_config = config.target_position_predictor.angular_predictor
         radial_predictor_config = config.target_position_predictor.radial_predictor
-        angular_predictor_fn = lambda: LinearAngularPredictor(
-            max_ell=config.target_position_predictor.embedder_config.max_ell,
-            num_channels=angular_predictor_config.num_channels,
-            radial_mlp_num_layers=angular_predictor_config.radial_mlp_num_layers,
-            radial_mlp_latent_size=angular_predictor_config.radial_mlp_latent_size,
-            max_radius=radial_predictor_config.max_radius,
-            res_beta=angular_predictor_config.res_beta,
-            res_alpha=angular_predictor_config.res_alpha,
-            quadrature=angular_predictor_config.quadrature,
-            sampling_inverse_temperature_factor=angular_predictor_config.sampling_inverse_temperature_factor,
-            sampling_num_steps=angular_predictor_config.sampling_num_steps,
-            sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
-        )
-        if config.target_position_predictor.continuous_radius:
+        if config.target_position_predictor.angular_predictor.continuous:
+            angular_predictor_fn = lambda: LinearAngularPredictor(
+                max_ell=config.target_position_predictor.embedder_config.max_ell,
+                num_channels=angular_predictor_config.num_channels,
+                radial_mlp_num_layers=angular_predictor_config.radial_mlp_num_layers,
+                radial_mlp_latent_size=angular_predictor_config.radial_mlp_latent_size,
+                max_radius=radial_predictor_config.max_radius,
+                res_beta=angular_predictor_config.res_beta,
+                res_alpha=angular_predictor_config.res_alpha,
+                quadrature=angular_predictor_config.quadrature,
+                sampling_inverse_temperature_factor=angular_predictor_config.sampling_inverse_temperature_factor,
+                sampling_num_steps=angular_predictor_config.sampling_num_steps,
+                sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
+            )
+        else:
+            angular_predictor_fn = lambda: DiscretizedAngularPredictor(
+                max_ell=config.target_position_predictor.embedder_config.max_ell,
+                num_channels=angular_predictor_config.num_channels,
+                apply_gate=angular_predictor_config.apply_gate,
+                max_radius=radial_predictor_config.max_radius,
+                radial_mlp_num_layers=angular_predictor_config.radial_mlp_num_layers,
+                radial_mlp_latent_size=angular_predictor_config.radial_mlp_latent_size,
+                num_radius_bins=radial_predictor_config.num_bins,
+                res_beta=angular_predictor_config.res_beta,
+                res_alpha=angular_predictor_config.res_alpha,
+                quadrature=angular_predictor_config.quadrature,
+                sampling_inverse_temperature_factor=angular_predictor_config.sampling_inverse_temperature_factor,
+                sampling_num_steps=angular_predictor_config.sampling_num_steps,
+                sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
+            )
+        if config.target_position_predictor.radial_predictor.continuous:
             radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
                 num_bins=radial_predictor_config.num_bins,
                 min_radius=radial_predictor_config.min_radius,

@@ -47,9 +47,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.generate_every_steps = 2_000_000 #120000
     config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
-    config.max_n_graphs = 8
+    config.max_n_graphs = 16
     config.max_n_nodes = 60 * config.get_ref("max_n_graphs")
-    config.max_n_edges = 720 * config.get_ref("max_n_graphs")
+    config.max_n_edges = 900 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.mask_atom_types = False
@@ -65,8 +65,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.activation = "softplus"
 
     config.target_position_predictor = ml_collections.ConfigDict()
+
     config.target_position_predictor.angular_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.angular_predictor.num_channels = 2
+    config.target_position_predictor.angular_predictor.apply_gate = False
     config.target_position_predictor.angular_predictor.radial_mlp_num_layers = 2
     config.target_position_predictor.angular_predictor.radial_mlp_latent_size = 8
     config.target_position_predictor.angular_predictor.res_beta = 100
@@ -75,7 +77,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.angular_predictor.sampling_inverse_temperature_factor = 10.0
     config.target_position_predictor.angular_predictor.sampling_num_steps = 1000
     config.target_position_predictor.angular_predictor.sampling_init_step_size = 10.0
-    config.target_position_predictor.continuous_radius = False
+    config.target_position_predictor.angular_predictor.continuous = False
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.radial_predictor.num_bins = 16
@@ -85,6 +87,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
+    config.target_position_predictor.radial_predictor.continuous = False
 
     # Generation.
     config.generation = ml_collections.ConfigDict()

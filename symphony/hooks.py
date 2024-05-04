@@ -184,14 +184,15 @@ class EvaluateModelHook:
             logging.info("No best state found yet.")
             min_val_loss = float("inf")
 
-        if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+        if jnp.all(eval_metrics["val_eval"]["total_loss"] < min_val_loss):
             state = state.replace(
                 best_params=state.params,
                 # metrics_for_best_params=eval_metrics,
                 metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
                 step_for_best_params=state.step,
             )
-            logging.info("New best state found at step %d.", state.get_step())
+            # logging.info("New best state found at step %d.", state.get_step())
+            # logging.info(f"New min loss: {eval_metrics['val_eval']['total_loss']}")
 
         return state
 
