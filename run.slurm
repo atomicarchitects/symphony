@@ -3,7 +3,7 @@
 #SBATCH -p gpuA100x4
 #SBATCH --gpus-per-node=1
 #SBATCH -c 8
-#SBATCH --time=1-00:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH -J symphony-periodic
 
 cd /u/skim12

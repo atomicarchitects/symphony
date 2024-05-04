@@ -12,6 +12,7 @@ from git import Repo
 import numpy as np
 import pandas as pd
 import ase
+import pickle
 
 
 from symphony.data import datasets
