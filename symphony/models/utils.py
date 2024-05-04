@@ -25,7 +25,6 @@ from symphony.models.radius_predictors.rational_quadratic_spline import (
     RationalQuadraticSplineRadialPredictor,
 )
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
-from symphony.models.position_predictor import FactorizedTargetPositionPredictor as OldTargetPositionPredictor
 from symphony.models.predictor import Predictor
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro

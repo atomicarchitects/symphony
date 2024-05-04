@@ -15,7 +15,7 @@ source .venv/rdkit/bin/activate
 cd symphony
 
 dataset=tmqm
-workdir=/u/skim12/workdirs/"$dataset"_may1/e3schnet_and_nequip/nn/max_targets_4
+workdir=/u/skim12/workdirs/"$dataset"_may4/e3schnet_and_nequip/nn/max_targets_4
 
 python -m symphony \
     --config=configs/tmqm/e3schnet_and_nequip.py \
