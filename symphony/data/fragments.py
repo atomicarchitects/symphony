@@ -124,7 +124,7 @@ def _make_first_fragment(
     mode,
     heavy_first,
     max_targets_per_graph,
-    transition_first
+    transition_first,
 ):
     rng, k = jax.random.split(rng)
     if transition_first:
