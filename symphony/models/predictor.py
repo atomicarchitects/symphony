@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from symphony import datatypes
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
+from symphony.models.position_predictor import TargetPositionPredictor as DiscretizedTargetPositionPredictor
 from symphony.models import utils
 
 
@@ -16,7 +17,7 @@ class Predictor(hk.Module):
     def __init__(
         self,
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
-        target_position_predictor: TargetPositionPredictor,
+        target_position_predictor: DiscretizedTargetPositionPredictor | TargetPositionPredictor,
         name: str = None,
     ):
         super().__init__(name=name)
@@ -65,14 +66,14 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert radial_logits.shape == (
-            num_graphs,
-            num_targets,
-        )
-        assert angular_logits.shape == (
-            num_graphs,
-            num_targets,
-        )
+        # assert radial_logits.shape == (
+        #     num_graphs,
+        #     num_targets,
+        # )
+        # assert angular_logits.shape == (
+        #     num_graphs,
+        #     num_targets,
+        # )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
