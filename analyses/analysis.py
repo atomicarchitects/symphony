@@ -323,7 +323,7 @@ def load_from_workdir(
     )
 
 
-def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
+def construct_molecule(molecule_str: str, cell: np.array, periodic: bool) -> Tuple[ase.Atoms, str]:
     """Returns a molecule from the given input string.
 
     The input is interpreted either as an index for the QM9 dataset,
@@ -342,8 +342,5 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
         return molecule, f"qm9_index={molecule_str}"
 
     # If the string is a valid molecule name, try to build it.
-    try:
-        molecule = ase.build.molecule(molecule_str)
-    except:
-        molecule = ase.Atoms(molecule_str)
+    molecule = ase.Atoms(molecule_str, cell=cell, pbc=periodic)
     return molecule, molecule.get_chemical_formula()

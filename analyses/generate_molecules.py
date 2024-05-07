@@ -178,7 +178,11 @@ def generate_molecules(
 
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
-        init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
+        init_molecule, init_molecule_name = analysis.construct_molecule(
+            init_molecules,
+            cell=np.diag(np.random.normal(4.1, 0.3, 3)),
+            periodic=True
+        )
         logging_fn(
             f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
         )
