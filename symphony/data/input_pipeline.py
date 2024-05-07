@@ -245,7 +245,7 @@ def ase_atoms_to_jraph_graph(
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers0, senders0 = matscipy.neighbours.neighbour_list(
-        quantities="ij", atoms=atoms, cutoff=radial_cutoff, cell=cell, pbc=periodic
+        quantities="ij", atoms=atoms, cutoff=radial_cutoff,# cell=cell, pbc=periodic
     )
     senders = senders0[senders0 != receivers0]
     receivers = receivers0[senders0 != receivers0]

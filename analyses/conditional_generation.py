@@ -11,23 +11,8 @@ import tensorflow as tf
 
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
-from symphony.data.datasets import qm9
-
-
-
-workdir = "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64"
-outputdir = "conditional_generation"
-beta_species = 1.0
-beta_position = 1.0
-step = "7530000"
-num_seeds_per_chunk = 25
-max_num_atoms = 35
-visualize = False
-num_mols = 1000
-
-all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
-test_mols = all_mols[-num_mols:]
-train_mols = all_mols[:num_mols]
+from symphony.data.datasets import perov
+from configs.root_dirs import get_root_dir
 
 
 def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
@@ -40,6 +25,8 @@ def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
                 fragment = ase.Atoms(
                     positions=np.vstack([mol.positions[:j], mol.positions[j + 1 :]]),
                     numbers=np.concatenate([mol.numbers[:j], mol.numbers[j + 1 :]]),
+                    cell=mol.cell,
+                    pbc=True
                 )
                 fragments.append(fragment)
     return fragments
@@ -53,9 +40,10 @@ def main(unused_argv: Sequence[str]):
     max_num_atoms = 200
     max_num_steps = 10
     num_mols = 20
+    outputdir = "conditional_generation"
 
-    all_mols = tmqm.load_tmqm("../tmqm_data")
-    mols_by_split = {"train": all_mols[:num_mols], "test": all_mols[-num_mols:]}
+    all_mols = perov.load_perov(get_root_dir('perov5'), supercell=False)
+    mols_by_split = {"train": all_mols['train'][:num_mols], "test": all_mols['test'][-num_mols:]}
 
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
