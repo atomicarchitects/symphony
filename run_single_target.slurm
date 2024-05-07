@@ -16,9 +16,10 @@ source .venv/rdkit/bin/activate
 cd symphony-periodic
 
 dataset=perov5
-workdir=/projects/bbyc/symphony/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_4
+workdir=/projects/bbyc/symphony/workdirs/"$dataset"_single_may6/e3schnet_and_nequip/nn/max_targets_4
 
 python -m symphony \
     --config=configs/"$dataset"/e3schnet_and_nequip.py \
     --workdir=$workdir \
-    --use_wandb=False
+    --use_wandb=False \
+    --config.max_targets_per_graph=1

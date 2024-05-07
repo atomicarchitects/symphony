@@ -77,13 +77,14 @@ class PerovDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
-        return np.array([
-            3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 19, 20,
-            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
-            32, 33, 37, 38, 39, 40, 41, 42, 44, 45, 46, 
-            47, 48, 49, 50, 51, 52, 55, 56, 57, 72, 73, 
-            74, 75, 76, 77, 78, 79, 80, 81, 82, 83
-        ])
+        #return np.array([
+        #    3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 19, 20,
+        #    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
+        #    32, 33, 37, 38, 39, 40, 41, 42, 44, 45, 46, 
+        #    47, 48, 49, 50, 51, 52, 55, 56, 57, 72, 73, 
+        #    74, 75, 76, 77, 78, 79, 80, 81, 82, 83
+        #])
+        return np.arange(1, 84)
 
     def structures(self) -> Iterable[datatypes.Structures]:
         return self.molecules 
