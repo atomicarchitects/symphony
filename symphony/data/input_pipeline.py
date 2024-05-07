@@ -255,7 +255,7 @@ def ase_atoms_to_jraph_graph(
 
     cell = atoms.cell
     relative_positions = get_relative_positions(positions, senders, receivers, cell, periodic)
-    assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
+    assert len(relative_positions) == 0 or np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
 
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(positions, species),

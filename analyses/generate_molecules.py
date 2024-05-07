@@ -91,7 +91,7 @@ def append_predictions(
             positions=new_positions,
             species=new_species,
         ),
-        edges=datatypes.FragmentsEdges(relative_positions=relative_positions),
+        edges=datatypes.EdgesInfo(relative_positions=relative_positions),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
         n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
         senders=senders,
