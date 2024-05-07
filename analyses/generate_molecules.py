@@ -180,7 +180,8 @@ def generate_molecules(
     if isinstance(init_molecules, str):
         init_molecule, init_molecule_name = analysis.construct_molecule(
             init_molecules,
-            cell=np.diag(np.random.normal(4.1, 0.3, 3)),
+            cell=np.eye(3) * np.random.normal(4.1, 0.3),  # TODO hardcoded for perovskites
+            # cell=np.diag(np.random.normal(4.1, 0.3, 3)),  # TODO hardcoded for perovskites
             periodic=True
         )
         logging_fn(

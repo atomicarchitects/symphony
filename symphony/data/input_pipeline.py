@@ -19,7 +19,7 @@ from symphony.data import fragments, datasets
 
 def get_relative_positions(positions, senders, receivers, cell, periodic):
     relative_positions = positions[receivers] - positions[senders]
-    if periodic: return relative_positions
+    if not periodic: return relative_positions
     # for periodic structures, re-center the target positions and recompute relative positions if necessary
     for d in itertools.product(range(-1, 2), repeat=3):
         shifted_rel_pos = positions[receivers] - positions[senders] + np.array(d) @ cell
