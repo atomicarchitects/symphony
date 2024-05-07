@@ -241,22 +241,29 @@ def get_datasets(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, radial_cutoff: float
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, radial_cutoff: float, periodic: bool, cell: jnp.ndarray=np.eye(3)
 ) -> jraph.GraphsTuple:
     # Create edges
-    receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=radial_cutoff, cell=np.eye(3)
+    receivers0, senders0 = matscipy.neighbours.neighbour_list(
+        quantities="ij", atoms=atoms, cutoff=radial_cutoff, cell=cell, pbc=periodic
     )
-
+    senders = senders0[senders0 != receivers0]
+    receivers = receivers0[senders0 != receivers0]
+    positions = np.asarray(atoms.positions)
     # Get the species indices
-    species = np.searchsorted(atomic_numbers, atoms.numbers)
+    species = np.asarray(np.searchsorted(atomic_numbers, atoms.numbers))
+
+    cell = atoms.cell
+    relative_positions = get_relative_positions(positions, senders, receivers, cell, periodic)
+    assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(np.asarray(atoms.positions), np.asarray(species)),
-        edges=np.ones(len(senders)),
-        globals=None,
+        nodes=datatypes.NodesInfo(positions, species),
+        edges=datatypes.EdgesInfo(relative_positions),
+        globals=datatypes.GlobalsInfo(np.asarray(atoms.cell)),
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([len(atoms)]),
         n_edge=np.array([len(senders)]),
     )
+

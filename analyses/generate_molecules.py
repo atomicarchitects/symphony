@@ -12,6 +12,7 @@ import ase.data
 #from ase.db import connect
 import ase.io
 import ase.visualize
+import itertools
 import jax
 import jax.numpy as jnp
 import jraph
@@ -54,6 +55,14 @@ def append_predictions(
     distance_matrix = jnp.linalg.norm(
         new_positions[None, :, :] - new_positions[:, None, :], axis=-1
     )
+    cell = pred.globals.cell[0]
+    for d in itertools.product(range(-1, 2), repeat=3):
+        distance_matrix = jnp.minimum(
+            distance_matrix,
+            jnp.linalg.norm(
+                new_positions[None, :, :] - (new_positions[:, None, :] + np.array(d) @ cell), axis=-1
+            ),
+        )
     node_indices = jnp.arange(num_nodes)
 
     # Avoid self-edges.
@@ -69,11 +78,20 @@ def append_predictions(
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
 
+    relative_positions = new_positions[receivers] - new_positions[senders]
+    for d in itertools.product(range(-1, 2), repeat=3):
+        shifted_rel_pos = new_positions[receivers] - new_positions[senders] + np.array(d) @ cell
+        relative_positions = jnp.where(
+            jnp.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < jnp.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+            shifted_rel_pos,
+            relative_positions)
+
     return padded_fragment._replace(
         nodes=padded_fragment.nodes._replace(
             positions=new_positions,
             species=new_species,
         ),
+        edges=datatypes.FragmentsEdges(relative_positions=relative_positions),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
         n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
         senders=senders,
@@ -178,7 +196,7 @@ def generate_molecules(
     # Prepare initial fragments.
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, atomic_numbers, radial_cutoff
+            init_molecule, atomic_numbers, radial_cutoff, periodic=True, 
         )
         for init_molecule in init_molecules
     ]
@@ -329,13 +347,15 @@ def generate_molecules(
                 final_padded_fragment.nodes.species[:num_valid_nodes],
                 atomic_numbers
             ),
+            cell=ase.cell.Cell(final_padded_fragment.globals.cell[0]).cellpar(),
+            pbc=True
         )
         if stop:
             logging_fn("Generated %s", generated_molecule.get_chemical_formula())
-            outputfile = f"{init_molecule_name}_seed={seed}.xyz"
+            outputfile = f"{init_molecule_name}_seed={seed}.cif"
         else:
             logging_fn("STOP was not produced. Discarding...")
-            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
+            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.cif"
 
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
@@ -443,7 +463,13 @@ def generate_molecules_from_workdir(
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
-    atomic_numbers = np.arange(1, 81)  # TODO make this no longer hard-coded
+    atomic_numbers = np.array([
+            3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 19, 20,
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
+            32, 33, 37, 38, 39, 40, 41, 42, 44, 45, 46, 
+            47, 48, 49, 50, 51, 52, 55, 56, 57, 72, 73, 
+            74, 75, 76, 77, 78, 79, 80, 81, 82, 83
+        ])  # TODO make this no longer hard-coded
 
     generate_molecules_from_workdir(
         FLAGS.workdir,
