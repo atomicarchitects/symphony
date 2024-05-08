@@ -189,22 +189,24 @@ def generate_molecules(
         )
         init_molecules = [init_molecule] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
-    else:
+    elif isinstance(init_molecules[0], ase.Atoms):
         assert len(init_molecules) == num_seeds
         init_molecule_names = [
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
+        init_molecules = [
+            input_pipeline.ase_atoms_to_jraph_graph(
+                init_molecule, atomic_numbers, radial_cutoff, periodic=True,
+            )
+            for init_molecule in init_molecules
+        ]
+    else:
+        init_molecule_names = [f"mol_{i}" for i in range(len(init_molecules))]
 
     if visualize:
         pass
 
     # Prepare initial fragments.
-    init_fragments = [
-        input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, atomic_numbers, radial_cutoff, periodic=True, 
-        )
-        for init_molecule in init_molecules
-    ]
     init_fragments = [
         jraph.pad_with_graphs(
             init_fragment,
@@ -212,7 +214,7 @@ def generate_molecules(
             n_edge=(max_num_atoms + 1) * avg_neighbors_per_atom,
             n_graph=2,
         )
-        for init_fragment in init_fragments
+        for init_fragment in init_molecules
     ]
     init_fragments = jax.tree_util.tree_map(lambda *val: np.stack(val), *init_fragments)
     init_fragments = jax.vmap(
@@ -352,7 +354,7 @@ def generate_molecules(
                 final_padded_fragment.nodes.species[:num_valid_nodes],
                 atomic_numbers
             ),
-            cell=ase.cell.Cell(final_padded_fragment.globals.cell[0]).cellpar(),
+            cell=ase.cell.Cell(final_padded_fragment.globals.cell[:-1, :]).cellpar(),
             pbc=True
         )
         if stop:
@@ -380,6 +382,7 @@ def generate_molecules(
 def generate_molecules_from_workdir(
     workdir: str,
     outputdir: str,
+    radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
     step: Union[str, int],
@@ -452,7 +455,7 @@ def generate_molecules_from_workdir(
             apply_fn=jax.jit(model.apply),
             params=params,
             molecules_outputdir=molecules_outputdir,
-            radial_cutoff=config.radial_cutoff,
+            radial_cutoff=radial_cutoff,
             focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=position_inverse_temperature,
             num_seeds=num_seeds,
@@ -479,6 +482,7 @@ def main(unused_argv: Sequence[str]) -> None:
     generate_molecules_from_workdir(
         FLAGS.workdir,
         FLAGS.outputdir,
+        FLAGS.radial_cutoff,
         FLAGS.focus_and_atom_type_inverse_temperature,
         FLAGS.position_inverse_temperature,
         FLAGS.step,
@@ -505,6 +509,11 @@ if __name__ == "__main__":
         "outputdir",
         os.path.join(os.getcwd(), "analyses", "analysed_workdirs"),
         "Directory where molecules should be saved.",
+    )
+    flags.DEFINE_float(
+        "radial_cutoff",
+        5.0,
+        "Radial cutoff for edge finding"
     )
     flags.DEFINE_float(
         "focus_and_atom_type_inverse_temperature",

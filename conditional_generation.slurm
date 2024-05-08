@@ -4,7 +4,6 @@
 #SBATCH --gpus-per-node=1
 #SBATCH -c 8
 #SBATCH --time=0-12:00:00
-#SBATCH -J symphony-periodic
 
 cd /scratch/bbyc/skim12
 source .bashrc
@@ -16,10 +15,7 @@ source .venv/rdkit/bin/activate
 cd symphony-periodic
 
 dataset=perov5
-workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_1
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_6
 
-python -m symphony \
-    --config=configs/"$dataset"/e3schnet_and_nequip.py \
-    --workdir=$workdir \
-    --use_wandb=False \
-    --config.max_targets_per_graph=1
+python -m analyses.conditional_generation \
+    --workdir=$workdir

@@ -257,6 +257,8 @@ def ase_atoms_to_jraph_graph(
     relative_positions = get_relative_positions(positions, senders, receivers, cell, periodic)
     assert len(relative_positions) == 0 or np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
 
+    n_edge = [len(senders)] if len(senders) else [0]
+
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(positions, species),
         edges=datatypes.EdgesInfo(relative_positions),
@@ -264,6 +266,6 @@ def ase_atoms_to_jraph_graph(
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_node=np.array([len(atoms)]),
-        n_edge=np.array([len(senders)]),
+        n_edge=np.array(n_edge),
     )
 

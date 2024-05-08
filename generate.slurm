@@ -3,23 +3,22 @@
 #SBATCH -p gpuA100x4
 #SBATCH --gpus-per-node=1
 #SBATCH -c 8
-#SBATCH --time=2-00:00:00
+#SBATCH --time=0-12:00:00
 
-cd /u/skim12
+cd /scratch/bbyc/skim12
 source .bashrc
 module load gcc-runtime/11.4.0
 module load cuda/12.4.0
 module load python/3.10.13
 source .venv/rdkit/bin/activate
 
-cd symphony
+cd symphony-periodic
 
-dataset=tmqm
-workdir=/u/skim12/workdirs/"$dataset"_may1/e3schnet_and_nequip/nn/max_targets_4
+dataset=perov5
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_6
 
 python -m analyses.generate_molecules \
     --workdir=$workdir \
-    --max_num_atoms=200 \
-    --init=Ni \
+    --init=N \
     --num_seeds=100 \
-    --num_seeds_per_chunk=2
+    --num_seeds_per_chunk=5

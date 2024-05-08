@@ -13,18 +13,20 @@ from absl import flags, app
 import analyses.generate_molecules as generate_molecules
 from symphony.data.datasets import perov
 from configs.root_dirs import get_root_dir
+from symphony import datatypes
 
 
-def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
+def get_fragment_list(mols: Sequence[datatypes.Structures], num_mols: int):
     fragments = []
     for i in range(num_mols):
         mol = mols[i]
-        filter_ON = (mol.numbers == 8) | (mol.numbers == 7)
+        # offset by 1
+        filter_ON = (mol.nodes.species == 6) | (mol.nodes.species == 7)
         fragment = ase.Atoms(
             # all perovskites in perov5 contain either O or N as negative ion
-            positions=mol.positions[~filter_ON, :],
-            numbers=mol.numbers[~filter_ON],
-            cell=mol.cell,
+            positions=mol.nodes.positions[~filter_ON, :],
+            numbers=mol.nodes.species[~filter_ON],
+            cell=mol.globals.cell.reshape(3, 3),
             pbc=True
         )
         fragments.append(fragment)
@@ -32,12 +34,13 @@ def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
 
 
 def main(unused_argv: Sequence[str]):
+    radial_cutoff = 5.0
     beta_species = 1.0
     beta_position = 1.0
     step = flags.FLAGS.step
     num_seeds_per_chunk = 1
     max_num_atoms = 35
-    num_mols = 100
+    num_mols = 20
     avg_neighbors_per_atom = 10
 
     atomic_numbers = np.array([
@@ -54,7 +57,7 @@ def main(unused_argv: Sequence[str]):
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
         mol_list = get_fragment_list(split_mols, num_mols)
-        mol_list = split_mols[
+        mol_list = mol_list[
             : num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)
         ]
         print(f"Number of fragments for {split}: {len(mol_list)}")
@@ -62,6 +65,7 @@ def main(unused_argv: Sequence[str]):
         gen_mol_list = generate_molecules.generate_molecules_from_workdir(
             flags.FLAGS.workdir,
             os.path.join(flags.FLAGS.outputdir, split),
+            radial_cutoff,
             beta_species,
             beta_position,
             step,
