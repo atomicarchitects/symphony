@@ -36,8 +36,9 @@ def main(unused_argv: Sequence[str]):
     beta_position = 1.0
     step = flags.FLAGS.step
     num_seeds_per_chunk = 1
-    max_num_atoms = 200
-    num_mols = 20
+    max_num_atoms = 35
+    num_mols = 100
+    avg_neighbors_per_atom = 10
 
     atomic_numbers = np.array([
             3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 19, 20,
@@ -69,7 +70,7 @@ def main(unused_argv: Sequence[str]):
             num_seeds_per_chunk,
             mol_list,
             max_num_atoms,
-            flags.FLAGS.avg_neighbors_per_atom,
+            avg_neighbors_per_atom,
             atomic_numbers,
             flags.FLAGS.visualize,
         )
@@ -100,10 +101,5 @@ if __name__ == "__main__":
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
-    )
-    flags.DEFINE_integer(
-        "avg_neighbors_per_atom",
-        10,
-        "Average number of neighbors per atom.",
     )
     app.run(main)
