@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from symphony import datatypes
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
+from symphony.models.position_predictor import TargetPositionPredictor as DiscretizedTargetPositionPredictor
 from symphony.models import utils
 
 
@@ -16,7 +17,7 @@ class Predictor(hk.Module):
     def __init__(
         self,
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
-        target_position_predictor: TargetPositionPredictor,
+        target_position_predictor: DiscretizedTargetPositionPredictor | TargetPositionPredictor,
         name: str = None,
     ):
         super().__init__(name=name)
@@ -65,14 +66,14 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert radial_logits.shape == (
-            num_graphs,
-            num_targets,
-        )
-        assert angular_logits.shape == (
-            num_graphs,
-            num_targets,
-        )
+        # assert radial_logits.shape == (
+        #     num_graphs,
+        #     num_targets,
+        # )
+        # assert angular_logits.shape == (
+        #     num_graphs,
+        #     num_targets,
+        # )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -95,6 +96,7 @@ class Predictor(hk.Module):
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
                 position_vectors=None,
+                cell=graphs.globals.cell,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,
@@ -146,19 +148,8 @@ class Predictor(hk.Module):
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
         )
 
-        # Compute the radial and angular logits.
-        (
-            radial_logits,
-            angular_logits,
-        ) = self.target_position_predictor.get_evaluation_predictions(
-            graphs,
-            focus_indices,
-            target_species,
-            position_inverse_temperature,
-        )
-
         # Compute the position coefficients.
-        position_vectors = self.target_position_predictor.get_evaluation_predictions(
+        radial_logits, angular_logits, position_vectors = self.target_position_predictor.get_evaluation_predictions(
             graphs,
             focus_indices,
             target_species,
@@ -195,9 +186,10 @@ class Predictor(hk.Module):
                 stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
-                radial_logits=None,
-                angular_logits=None,
+                radial_logits=radial_logits,
+                angular_logits=angular_logits,
                 position_vectors=position_vectors,
+                cell=graphs.globals.cell,
             ),
             senders=graphs.senders,
             receivers=graphs.receivers,

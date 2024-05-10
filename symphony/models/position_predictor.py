@@ -1,12 +1,15 @@
 from typing import Callable, Optional, Tuple
 
-import e3nn_jax as e3nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from typing import Optional, Tuple
+import e3nn_jax as e3nn
 
 from symphony import datatypes
 from symphony.models import utils
+from symphony.models.angular_predictors import AngularPredictor
+from symphony.models.radius_predictors import RadiusPredictor
 
 
 class TargetPositionPredictor(hk.Module):
@@ -14,100 +17,172 @@ class TargetPositionPredictor(hk.Module):
 
     def __init__(
         self,
-        node_embedder: hk.Module,
-        position_coeffs_lmax: int,
-        res_beta: int,
-        res_alpha: int,
-        num_channels: int,
+        node_embedder_fn: Callable[[], hk.Module],
+        radial_predictor_fn: Callable[[], RadiusPredictor],
+        angular_predictor_fn: Callable[[], AngularPredictor],
         num_species: int,
-        min_radius: float,
-        max_radius: float,
-        num_radii: int,
-        apply_gate: bool = False,
         name: Optional[str] = None,
     ):
         super().__init__(name)
-        self.node_embedder = node_embedder
-        self.position_coeffs_lmax = position_coeffs_lmax
-        self.res_beta = res_beta
-        self.res_alpha = res_alpha
-        self.num_channels = num_channels
+        self.node_embedder = node_embedder_fn()
+        self.radial_predictor = radial_predictor_fn()
+        self.angular_predictor = angular_predictor_fn()
         self.num_species = num_species
-        self.min_radius = min_radius
-        self.max_radius = max_radius
-        self.num_radii = num_radii
-        self.apply_gate = apply_gate
 
-    def create_radii(self) -> jnp.ndarray:
-        """Creates the binned radii for the target positions."""
-        return jnp.linspace(self.min_radius, self.max_radius, self.num_radii)
-
-    def __call__(
+    def compute_conditioning(
         self,
         graphs: datatypes.Fragments,
-        focus_indices: jnp.ndarray,
+        focus_node_indices: jnp.ndarray,
         target_species: jnp.ndarray,
-        inverse_temperature: float = 1.0,
-    ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+    ) -> e3nn.IrrepsArray:
+        """Computes the conditioning for the target position predictor."""
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the focus node embeddings.
         node_embeddings = self.node_embedder(graphs)
-        focus_node_embeddings = node_embeddings[focus_indices]
+        focus_node_embeddings = node_embeddings[focus_node_indices]
 
         assert focus_node_embeddings.shape == (
             num_graphs,
             focus_node_embeddings.irreps.dim,
         )
 
+        # Embed the target species.
         target_species_embeddings = hk.Embed(
-            self.num_species, embed_dim=focus_node_embeddings.irreps.num_irreps
+            self.num_species,
+            embed_dim=focus_node_embeddings.irreps.num_irreps,
         )(target_species)
-
         assert target_species_embeddings.shape == (
             num_graphs,
             focus_node_embeddings.irreps.num_irreps,
+        ), (
+            target_species_embeddings.shape,
+            target_species.shape,
+            focus_node_embeddings.shape,
+            self.num_species,
+            (num_graphs, focus_node_embeddings.irreps.num_irreps),
         )
 
-        # Create the irreps for projecting onto the spherical harmonics.
-        # Also, add a few scalars for the gate activation.
-        s2_irreps = e3nn.s2_irreps(self.position_coeffs_lmax, p_val=1, p_arg=-1)
-        if self.apply_gate:
-            irreps = e3nn.Irreps(f"{self.position_coeffs_lmax}x0e") + s2_irreps
-        else:
-            irreps = s2_irreps
+        # Concatenate the focus and target species embeddings.
+        conditioning = e3nn.concatenate(
+            [focus_node_embeddings, target_species_embeddings], axis=-1
+        )
+        assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
+        return conditioning
 
-        log_position_coeffs = e3nn.haiku.Linear(
-            self.num_radii * self.num_channels * irreps, force_irreps_out=True
-        )(target_species_embeddings * focus_node_embeddings)
-        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_channels)
-        log_position_coeffs = log_position_coeffs.mul_to_axis(factor=self.num_radii)
+    def get_training_predictions(
+        self,
+        graphs: datatypes.Fragments,
+    ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
+        num_graphs = graphs.n_node.shape[0]
+        num_targets = graphs.globals.target_positions.shape[1]
 
-        # Apply the gate activation.
-        if self.apply_gate:
-            log_position_coeffs = e3nn.gate(log_position_coeffs)
+        # Focus nodes are the first nodes in each graph during training.
+        focus_node_indices = utils.get_first_node_indices(graphs)
 
-        assert log_position_coeffs.shape == (
+        # Compute the conditioning based on the focus nodes and target species.
+        target_species = graphs.globals.target_species
+        conditioning = self.compute_conditioning(
+            graphs, focus_node_indices, target_species
+        )
+
+        target_positions = graphs.globals.target_positions
+        target_positions = e3nn.IrrepsArray("1o", target_positions)
+        assert target_positions.shape == (
             num_graphs,
-            self.num_channels,
-            self.num_radii,
-            s2_irreps.dim,
+            num_targets,
+            3,
         )
 
-        # Scale the coefficients of logits by the inverse temperature.
-        log_position_coeffs = log_position_coeffs * inverse_temperature
+        def predict_logits_for_single_graph(
+            target_positions: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
+        ) -> Tuple[float, float]:
+            """Predicts the logits for a single graph."""
+            assert target_positions.shape == (num_targets, 3)
+            assert conditioning.shape == (conditioning.irreps.dim,)
 
-        # Convert the coefficients to a signal on the grid.
-        position_logits = jax.vmap(
-            lambda coeffs: utils.log_coeffs_to_logits(
-                coeffs, self.res_beta, self.res_alpha, self.num_radii
-            )
-        )(log_position_coeffs)
-        assert position_logits.shape == (
+            radial_logits = self.radial_predictor.predict_logits(conditioning)
+            angular_logits = hk.vmap(
+                lambda pos: self.angular_predictor.coeffs(
+                    jnp.linalg.norm(pos.array), conditioning
+                ), split_rng=False
+            )(target_positions)
+            angular_logits = hk.vmap(
+                lambda coeffs: self.angular_predictor.coeffs_to_probability_distribution(
+                    coeffs,
+                    self.angular_predictor.res_beta,
+                    self.angular_predictor.res_alpha,
+                    self.angular_predictor.quadrature
+                ), split_rng=False
+            )(angular_logits)
+            # angular_logits = hk.vmap(
+            #     lambda pos: self.angular_predictor.coeffs(
+            #         jnp.linalg.norm(pos.array), conditioning
+            #     ), split_rng=False
+            # )(target_positions)
+
+            return radial_logits, angular_logits
+
+        radial_logits, angular_logits = hk.vmap(
+            predict_logits_for_single_graph, split_rng=False
+        )(target_positions, conditioning)
+
+        assert radial_logits.shape == (
             num_graphs,
-            self.num_radii,
-            self.res_beta,
-            self.res_alpha,
+            self.radial_predictor.num_bins
         )
+        assert angular_logits.shape == (
+            num_graphs,
+            num_targets, 
+            self.angular_predictor.res_beta,
+            self.angular_predictor.res_alpha
+        )
+        # assert angular_logits.shape == (
+        #     num_graphs,
+        #     num_targets, 
+        #     self.angular_predictor.num_channels,
+        #     (self.angular_predictor.max_ell + 1) ** 2
+        # ), angular_logits.shape
 
-        return log_position_coeffs, position_logits
+        return radial_logits, angular_logits
+
+    def get_evaluation_predictions(
+        self,
+        graphs: datatypes.Fragments,
+        focus_indices: jnp.ndarray,
+        target_species: jnp.ndarray,
+        inverse_temperature: float,
+    ) -> e3nn.IrrepsArray:
+        num_graphs = graphs.n_node.shape[0]
+
+        # Compute the conditioning based on the focus nodes and target species.
+        conditioning = self.compute_conditioning(graphs, focus_indices, target_species)
+        assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
+
+        # Sample the radial component.
+        radial_logits = hk.vmap(self.radial_predictor.predict_logits, split_rng=False)(conditioning)
+        radii = hk.vmap(self.radial_predictor.sample, split_rng=True)(conditioning)
+        assert radii.shape == (num_graphs,)
+
+        # Predict the target position vectors.
+        angular_logits = hk.vmap(
+            lambda r, c: self.angular_predictor.coeffs(
+                r, c
+            ), split_rng=False
+        )(radii, conditioning)
+        angular_logits = hk.vmap(
+            lambda coeffs: self.angular_predictor.coeffs_to_probability_distribution(
+                coeffs,
+                self.angular_predictor.res_beta,
+                self.angular_predictor.res_alpha,
+                self.angular_predictor.quadrature
+            ), split_rng=False
+        )(angular_logits)
+        angular_sample_fn = lambda r, cond: self.angular_predictor.sample(
+            r, cond, inverse_temperature
+        )
+        position_vectors = hk.vmap(angular_sample_fn, split_rng=True)(
+            radii, conditioning
+        )
+        assert position_vectors.shape == (num_graphs, 3)
+        return radial_logits, angular_logits, position_vectors

@@ -23,7 +23,8 @@ from clu import (
 )
 
 from symphony import datatypes, hooks, models, loss, train_state
-from symphony.data import input_pipeline_tf, input_pipeline
+from symphony.data import input_pipeline
+import symphony.data as data
 
 
 @flax.struct.dataclass
@@ -315,7 +316,7 @@ def train_and_evaluate(
         init_molecules=config.generation.init_molecules,
         max_num_atoms=config.generation.max_num_atoms,
         avg_neighbors_per_atom=config.generation.avg_neighbors_per_atom,
-        atomic_numbers=datasets.utils.get_dataset(config).get_atomic_numbers(),
+        atomic_numbers=data.datasets.utils.get_dataset(config).get_atomic_numbers(),
     )
 
     # Begin training loop.

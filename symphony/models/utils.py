@@ -15,20 +15,22 @@ from symphony.data import datasets
 from symphony.models.angular_predictors.linear_angular_predictor import (
     LinearAngularPredictor,
 )
+from symphony.models.radius_predictors.discretized_predictor import (
+    DiscretizedRadialPredictor,
+)
 from symphony.models.radius_predictors.rational_quadratic_spline import (
     RationalQuadraticSplineRadialPredictor,
 )
+from symphony.models.position_predictor import TargetPositionPredictor as DiscretizedTargetPositionPredictor
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
 from symphony.models.predictor import Predictor
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
-ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
 
-
-def get_atomic_numbers(species: jnp.ndarray) -> jnp.ndarray:
+def get_atomic_numbers(species: jnp.ndarray, atomic_numbers: jnp.ndarray) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
-    return jnp.asarray(ATOMIC_NUMBERS)[species]
+    return jnp.asarray(atomic_numbers)[species]
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
@@ -230,7 +232,7 @@ def compute_grid_of_joint_distribution(
     assert angular_dist.shape == (
         res_beta,
         res_alpha,
-    )
+    ), (angular_dist.shape)
 
     # Mix in the radius weights to get a distribution over all spheres.
     dist = radial_weights * angular_dist[None, :, :]
@@ -357,6 +359,7 @@ def create_node_embedder(
             cutoff=config.cutoff,
             max_ell=config.max_ell,
             num_species=num_species,
+            simple_embedding=config.simple_embedding,
         )
 
     if config.model == "Allegro":
@@ -406,6 +409,7 @@ def create_model(
             ),
             num_species=num_species,
         )
+
         angular_predictor_config = config.target_position_predictor.angular_predictor
         radial_predictor_config = config.target_position_predictor.radial_predictor
         angular_predictor_fn = lambda: LinearAngularPredictor(
@@ -421,23 +425,41 @@ def create_model(
             sampling_num_steps=angular_predictor_config.sampling_num_steps,
             sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
         )
-        radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
-            num_bins=radial_predictor_config.num_bins,
-            min_radius=radial_predictor_config.min_radius,
-            max_radius=radial_predictor_config.max_radius,
-            num_layers=radial_predictor_config.num_layers,
-            num_param_mlp_layers=radial_predictor_config.num_param_mlp_layers,
-            boundary_error=radial_predictor_config.boundary_error,
-        )
-        target_position_predictor = TargetPositionPredictor(
-            node_embedder_fn=lambda: create_node_embedder(
-                config.target_position_predictor.embedder_config,
-                num_species,
-            ),
-            angular_predictor_fn=angular_predictor_fn,
-            radial_predictor_fn=radial_predictor_fn,
-            num_species=num_species,
-        )
+        if config.target_position_predictor.radial_predictor.continuous:
+            radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
+                num_bins=radial_predictor_config.num_bins,
+                min_radius=radial_predictor_config.min_radius,
+                max_radius=radial_predictor_config.max_radius,
+                num_layers=radial_predictor_config.num_layers,
+                num_param_mlp_layers=radial_predictor_config.num_param_mlp_layers,
+                boundary_error=radial_predictor_config.boundary_error,
+            )
+            target_position_predictor = TargetPositionPredictor(
+                node_embedder_fn=lambda: create_node_embedder(
+                    config.target_position_predictor.embedder_config,
+                    num_species,
+                ),
+                angular_predictor_fn=angular_predictor_fn,
+                radial_predictor_fn=radial_predictor_fn,
+                num_species=num_species,
+            )
+        else:
+            radial_predictor_fn = lambda: DiscretizedRadialPredictor(
+                num_bins=radial_predictor_config.num_bins,
+                range_min=radial_predictor_config.min_radius,
+                range_max=radial_predictor_config.max_radius,
+                num_layers=radial_predictor_config.num_layers,
+                latent_size=radial_predictor_config.latent_size,
+            )
+            target_position_predictor = DiscretizedTargetPositionPredictor(
+                node_embedder_fn=lambda: create_node_embedder(
+                    config.target_position_predictor.embedder_config,
+                    num_species,
+                ),
+                angular_predictor_fn=angular_predictor_fn,
+                radial_predictor_fn=radial_predictor_fn,
+                num_species=num_species,
+            )
         predictor = Predictor(
             focus_and_target_species_predictor=focus_and_target_species_predictor,
             target_position_predictor=target_position_predictor,

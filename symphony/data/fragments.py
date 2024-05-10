@@ -6,7 +6,7 @@ import numpy as np
 import chex
 
 from symphony import datatypes
-from symphony.models import ptable
+from symphony.models.ptable import PeriodicTableEmbedder
 
 
 def generate_fragments(
@@ -69,7 +69,7 @@ def generate_fragments(
             mode,
             heavy_first,
             max_targets_per_graph,
-            transition_first
+            transition_first,
         )
         yield frag
 
@@ -124,12 +124,13 @@ def _make_first_fragment(
     mode,
     heavy_first,
     max_targets_per_graph,
-    transition_first
+    transition_first,
 ):
     rng, k = jax.random.split(rng)
     if transition_first:
-        bound1 = ptable.groups[graph.nodes.species] >= 2
-        bound2 = ptable.groups[graph.nodes.species] <= 11
+        ptable = PeriodicTableEmbedder()
+        bound1 = ptable.get_group(graph.nodes.species+1) >= 2
+        bound2 = ptable.get_group(graph.nodes.species+1) <= 11
         transition_metals = (bound1 & bound2).astype(np.float32)
         transition_metals /= transition_metals.sum()
         first_node = jax.random.choice(
@@ -309,6 +310,7 @@ def _into_fragment(
         target_species=target_species[0],
         target_positions=pos[padded_target_nodes] - pos[focus_node],
         target_positions_mask=target_positions_mask,
+        cell=graph.globals.cell,
     )
     globals = jax.tree_map(lambda x: np.expand_dims(x, axis=0), globals)
     graph = graph._replace(nodes=nodes, globals=globals)
