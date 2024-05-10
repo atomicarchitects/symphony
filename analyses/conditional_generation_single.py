@@ -27,7 +27,7 @@ def get_fragment_list(mols: Sequence[datatypes.Structures], num_mols: int, perio
                 # all perovskites in perov5 contain either O or N as negative ion
                 positions=mol.nodes.positions[mask, :],
                 numbers=mol.nodes.species[mask]+1,
-                cell=np.eye(3),
+                cell=cell,
                 pbc=periodic
             ) 
             fragments.append(fragment)
@@ -44,7 +44,7 @@ def main(unused_argv: Sequence[str]):
     num_mols = 500
     avg_neighbors_per_atom = 64
 
-    atomic_numbers = np.arange(1, 84)
+    atomic_numbers = np.arange(84)
 
     all_mols = perov.load_perov(get_root_dir('perov5'), supercell=True)
     mols_by_split = {"train": all_mols['train'][:num_mols], "test": all_mols['test'][-num_mols:]}

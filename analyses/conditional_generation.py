@@ -29,7 +29,7 @@ def get_fragment_list(mols: Sequence[datatypes.Structures], num_mols: int, perio
             # all perovskites in perov5 contain either O or N as negative ion
             positions=mol.nodes.positions[(~filter_ON) | is_first_ON, :],
             numbers=mol.nodes.species[(~filter_ON) | is_first_ON]+1,
-            cell=mol.globals.cell.reshape(3, 3),
+            cell=cell,
             pbc=periodic
         )
         fragments.append(fragment)
@@ -46,7 +46,7 @@ def main(unused_argv: Sequence[str]):
     num_mols = 500
     avg_neighbors_per_atom = 32
 
-    atomic_numbers = np.arange(1, 84)
+    atomic_numbers = np.arange(84)
 
     all_mols = perov.load_perov(get_root_dir('perov5'), supercell=True)
     mols_by_split = {"train": all_mols['train'][:num_mols], "test": all_mols['test'][-num_mols:]}
@@ -103,5 +103,10 @@ if __name__ == "__main__":
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_bool(
+        "periodic",
+        True,
+        "Treat structures as periodic"
     )
     app.run(main)

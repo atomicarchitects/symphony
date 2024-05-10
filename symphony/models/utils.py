@@ -12,9 +12,6 @@ import ml_collections
 
 from symphony import datatypes
 from symphony.data import datasets
-from symphony.models.angular_predictors.discretized_predictor import (
-    DiscretizedAngularPredictor,
-)
 from symphony.models.angular_predictors.linear_angular_predictor import (
     LinearAngularPredictor,
 )
