@@ -140,7 +140,7 @@ class Predictor(hk.Module):
         )
 
         # Compute the position coefficients.
-        position_vectors = self.target_position_predictor.get_evaluation_predictions(
+        radial_logits, angular_logits, position_vectors = self.target_position_predictor.get_evaluation_predictions(
             graphs,
             focus_indices,
             target_species,
@@ -177,8 +177,8 @@ class Predictor(hk.Module):
                 stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
-                radial_logits=None,
-                angular_logits=None,
+                radial_logits=radial_logits,
+                angular_logits=angular_logits,
                 position_vectors=position_vectors,
             ),
             senders=graphs.senders,

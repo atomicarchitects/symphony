@@ -160,10 +160,24 @@ class TargetPositionPredictor(hk.Module):
         assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
 
         # Sample the radial component.
+        radial_logits = hk.vmap(self.radial_predictor.predict_logits, split_rng=False)(conditioning)
         radii = hk.vmap(self.radial_predictor.sample, split_rng=True)(conditioning)
         assert radii.shape == (num_graphs,)
 
         # Predict the target position vectors.
+        angular_logits = hk.vmap(
+            lambda r, c: self.angular_predictor.coeffs(
+                r, c
+            ), split_rng=False
+        )(radii, conditioning)
+        angular_logits = hk.vmap(
+            lambda coeffs: self.angular_predictor.coeffs_to_probability_distribution(
+                coeffs,
+                self.angular_predictor.res_beta,
+                self.angular_predictor.res_alpha,
+                self.angular_predictor.quadrature
+            ), split_rng=False
+        )(angular_logits)
         angular_sample_fn = lambda r, cond: self.angular_predictor.sample(
             r, cond, inverse_temperature
         )
@@ -171,4 +185,4 @@ class TargetPositionPredictor(hk.Module):
             radii, conditioning
         )
         assert position_vectors.shape == (num_graphs, 3)
-        return position_vectors
+        return radial_logits, angular_logits, position_vectors

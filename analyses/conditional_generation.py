@@ -11,23 +11,11 @@ import tensorflow as tf
 
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
-from symphony.data.datasets import qm9
-
+from symphony.data.datasets import tmqm
 
 
 workdir = "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64"
 outputdir = "conditional_generation"
-beta_species = 1.0
-beta_position = 1.0
-step = "7530000"
-num_seeds_per_chunk = 25
-max_num_atoms = 35
-visualize = False
-num_mols = 1000
-
-all_mols = qm9.load_qm9("../qm9_data", use_edm_splits=True, check_molecule_sanity=False)
-test_mols = all_mols[-num_mols:]
-train_mols = all_mols[:num_mols]
 
 
 def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
@@ -50,9 +38,11 @@ def main(unused_argv: Sequence[str]):
     beta_position = 1.0
     step = flags.FLAGS.step
     num_seeds_per_chunk = 1
-    max_num_atoms = 200
-    max_num_steps = 10
-    num_mols = 20
+    max_num_atoms = 50
+    num_mols = 500
+    avg_neighbors_per_atom = 32
+
+    atomic_numbers = np.arange(84)
 
     all_mols = tmqm.load_tmqm("../tmqm_data")
     mols_by_split = {"train": all_mols[:num_mols], "test": all_mols[-num_mols:]}
@@ -75,7 +65,8 @@ def main(unused_argv: Sequence[str]):
             num_seeds_per_chunk,
             mol_list,
             max_num_atoms,
-            max_num_steps,
+            avg_neighbors_per_atom,
+            atomic_numbers,
             flags.FLAGS.visualize,
         )
 
@@ -100,5 +91,15 @@ if __name__ == "__main__":
         "step",
         "best",
         "Step number to load model from. The default corresponds to the best model.",
+    )
+    flags.DEFINE_list(
+        "steps_for_weight_averaging",
+        None,
+        "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_bool(
+        "periodic",
+        True,
+        "Treat structures as periodic"
     )
     app.run(main)
