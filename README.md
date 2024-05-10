@@ -1,8 +1,4 @@
-## Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation
-
-![A high-level overview of Symphony.](cover.png)
-
-This is the official code-release for the paper [Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation](https://openreview.net/forum?id=MIEnYtlGyv), published at ICLR 2024.
+## Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Periodic Structure Generation
 
 ### Instructions
 
@@ -74,19 +70,3 @@ python -m symphony --config configs/qm9/e3schnet_and_nequip.py \
 
 For more extensive changes, directly edit the configuration files,
 or add your own.
-
-
-## Citation
-
-Please cite our paper if you use this code!
-
-```bibtex
-@inproceedings{
-    daigavane2024symphony,
-    title={Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Molecule Generation},
-    author={Ameya Daigavane and Song Eun Kim and Mario Geiger and Tess Smidt},
-    booktitle={The Twelfth International Conference on Learning Representations},
-    year={2024},
-    url={https://openreview.net/forum?id=MIEnYtlGyv}
-}
-```
