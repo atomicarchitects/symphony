@@ -1,5 +1,7 @@
 ## Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for Periodic Structure Generation
 
+An E(3)-equivariant autoregressive model for generating periodic molecular structures.
+
 ### Instructions
 
 Clone the repository:
@@ -7,10 +9,7 @@ Clone the repository:
 ```shell
 git clone git@github.com:atomicarchitects/symphony.git
 cd symphony
-git checkout iclr_2024_final
 ```
-
-Since this repository is actively being developed, we recommend using the `iclr_2024_final` branch for the most stable version of the code.
 
 #### Default Setup
 Create and activate a virtual environment:
