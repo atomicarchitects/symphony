@@ -155,6 +155,7 @@ def generate_molecules(
     atomic_numbers: np.ndarray = np.arange(1, 81),
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
+    periodic: bool = True,
     verbose: bool = True,
 ):
     """Generates molecules from a trained model at the given workdir."""
@@ -182,7 +183,7 @@ def generate_molecules(
             init_molecules,
             cell=np.eye(3) * np.random.normal(4.1, 0.3),  # TODO hardcoded for perovskites
             # cell=np.diag(np.random.normal(4.1, 0.3, 3)),  # TODO hardcoded for perovskites
-            periodic=True
+            periodic=periodic
         )
         logging_fn(
             f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
@@ -196,7 +197,7 @@ def generate_molecules(
         ]
         init_molecules = [
             input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, atomic_numbers, radial_cutoff, periodic=True,
+                init_molecule, atomic_numbers, radial_cutoff, periodic=periodic,
             )
             for init_molecule in init_molecules
         ]
@@ -394,6 +395,7 @@ def generate_molecules_from_workdir(
     avg_neighbors_per_atom: int,
     atomic_numbers: np.ndarray,
     visualize: bool = False,
+    periodic: bool = True,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
     verbose: bool = False,    
@@ -466,6 +468,7 @@ def generate_molecules_from_workdir(
             atomic_numbers=atomic_numbers,
             visualize=visualize,
             visualizations_dir=visualizations_dir,
+            periodic=periodic,
             verbose=verbose,
         )
 
@@ -494,6 +497,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.avg_neighbors_per_atom,
         atomic_numbers,
         FLAGS.visualize,
+        FLAGS.periodic,
         FLAGS.res_alpha,
         FLAGS.res_beta,
         verbose=True,
@@ -576,6 +580,11 @@ if __name__ == "__main__":
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_bool(
+        "periodic",
+        True,
+        "Whether to consider input structures as periodic."
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

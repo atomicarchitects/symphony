@@ -255,7 +255,16 @@ def ase_atoms_to_jraph_graph(
 
     cell = atoms.cell
     relative_positions = get_relative_positions(positions, senders, receivers, cell, periodic)
-    assert len(relative_positions) == 0 or np.linalg.norm(relative_positions, axis=-1).min() > 1e-5
+    if len(relative_positions) == 0:
+        assert len(positions) == 1
+    else:
+        assert np.linalg.norm(relative_positions, axis=-1).min() > 1e-5, (
+            relative_positions,
+            senders,
+            receivers,
+            species,
+            positions
+        )
 
     n_edge = [len(senders)] if len(senders) else [0]
 

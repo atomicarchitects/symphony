@@ -17,6 +17,6 @@ cd symphony-periodic
 dataset=perov5
 workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_nonperiodic_may9/e3schnet_and_nequip/nn/max_targets_8
 
-#python -m analyses.conditional_generation \
-python -m analyses.conditional_generation_nonperiodic \
-    --workdir=$workdir
+python -m analyses.conditional_generation_single \
+    --workdir=$workdir \
+    --periodic=False

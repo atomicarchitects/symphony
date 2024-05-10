@@ -20,19 +20,17 @@ def get_fragment_list(mols: Sequence[datatypes.Structures], num_mols: int, perio
     fragments = []
     for i in range(num_mols):
         mol = mols[i]
-        # offset by 1
-        filter_ON = (mol.nodes.species == 6) | (mol.nodes.species == 7)
-        first_ON = np.arange(len(mol.nodes.species))[filter_ON][0]
-        is_first_ON = np.arange(len(mol.nodes.species)) == first_ON
-        cell = mol.globals.cell.reshape(3, 3) if periodic else np.eye(3)
-        fragment = ase.Atoms(
-            # all perovskites in perov5 contain either O or N as negative ion
-            positions=mol.nodes.positions[(~filter_ON) | is_first_ON, :],
-            numbers=mol.nodes.species[(~filter_ON) | is_first_ON]+1,
-            cell=mol.globals.cell.reshape(3, 3),
-            pbc=periodic
-        )
-        fragments.append(fragment)
+        for j in range(len(mol.nodes.species)):
+            mask = np.arange(len(mol.nodes.species)) != j
+            cell = mol.globals.cell.reshape(3, 3) if periodic else np.eye(3)
+            fragment = ase.Atoms(
+                # all perovskites in perov5 contain either O or N as negative ion
+                positions=mol.nodes.positions[mask, :],
+                numbers=mol.nodes.species[mask]+1,
+                cell=np.eye(3),
+                pbc=periodic
+            ) 
+            fragments.append(fragment)
     return fragments
 
 
@@ -44,7 +42,7 @@ def main(unused_argv: Sequence[str]):
     num_seeds_per_chunk = 1
     max_num_atoms = 50
     num_mols = 500
-    avg_neighbors_per_atom = 32
+    avg_neighbors_per_atom = 64
 
     atomic_numbers = np.arange(1, 84)
 
@@ -74,7 +72,7 @@ def main(unused_argv: Sequence[str]):
             avg_neighbors_per_atom,
             atomic_numbers,
             flags.FLAGS.visualize,
-            flags.FLAGS.periodic
+            flags.FLAGS.periodic,
         )
 
 
@@ -103,5 +101,10 @@ if __name__ == "__main__":
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_bool(
+        "periodic",
+        True,
+        "Treat structures as periodic"
     )
     app.run(main)

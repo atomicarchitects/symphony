@@ -22,7 +22,6 @@ from symphony import datatypes
 
 PEROV_URL = "https://github.com/txie-93/cdvae.git"
 
-
 def _molecule_to_structure(molecule: ase.Atoms, supercell: bool) -> datatypes.Structures:
     """Converts a molecule to a datatypes.Structures object."""
     if supercell:
@@ -167,7 +166,7 @@ def load_perov(root_dir: str, supercell: bool) -> List[ase.Atoms]:
     data_path = root_dir
     repo_path = os.path.join(data_path, "cdvae")
     cif_path = os.path.join(data_path, "cdvae", "data", "perov_5", "cif")
-    mol_path = os.path.join(data_path, "cdvae", "data", "perov_5", "molecules.pkl")
+    mol_path = os.path.join(data_path, "cdvae", "data", "perov_5", f"molecules{'_supercell' if supercell else ''}.pkl")
 
     if os.path.exists(mol_path):
         logging.info(f"Using saved molecules: {mol_path}")

@@ -80,7 +80,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.angular_predictor.apply_gate = False
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.radial_predictor.num_bins = 16
+    config.target_position_predictor.radial_predictor.num_bins = 128
     config.target_position_predictor.radial_predictor.num_param_mlp_layers = 2
     config.target_position_predictor.radial_predictor.num_layers = 2
     config.target_position_predictor.radial_predictor.min_radius = 0.0
