@@ -88,6 +88,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
     config.target_position_predictor.radial_predictor.continuous = False
+    config.loss_kwargs.discretized_loss = not config.target_position_predictor.radial_predictor.continuous
 
     # Generation.
     config.generation = ml_collections.ConfigDict()

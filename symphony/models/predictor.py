@@ -66,14 +66,6 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        # assert radial_logits.shape == (
-        #     num_graphs,
-        #     num_targets,
-        # )
-        # assert angular_logits.shape == (
-        #     num_graphs,
-        #     num_targets,
-        # )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
