@@ -14,6 +14,7 @@ def generation_loss(
     preds: datatypes.Predictions,
     graphs: datatypes.Fragments,
     ignore_position_loss_for_small_fragments: bool,
+    discretized_loss: bool,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -308,8 +309,10 @@ def generation_loss(
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
-    loss_position = (1 - graphs.globals.stop) * discretized_position_loss()
-    # loss_position = (1 - graphs.globals.stop) * position_loss()
+    if discretized_loss:
+        loss_position = (1 - graphs.globals.stop) * discretized_position_loss()
+    else:
+        loss_position = (1 - graphs.globals.stop) * position_loss()
 
     # Ignore position loss for graphs with less than, or equal to 3 atoms?
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
