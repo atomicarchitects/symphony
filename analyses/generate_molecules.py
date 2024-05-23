@@ -129,6 +129,7 @@ def generate_molecules(
     radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
+    start_seed: int,
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
@@ -241,7 +242,7 @@ def generate_molecules(
         results = jax.tree_util.tree_map(lambda arr: arr.reshape((-1, *arr.shape[2:])), results)
         return results
 
-    seeds = jnp.arange(num_seeds)
+    seeds = jnp.arange(start_seed, num_seeds+start_seed)
     rngs = jax.vmap(jax.random.PRNGKey)(seeds)
 
     # Compute compilation time.
@@ -257,16 +258,16 @@ def generate_molecules(
         final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
 
     molecule_list = []
-    for seed in tqdm.tqdm(seeds, desc="Visualizing molecules"):
-        init_fragment = jax.tree_util.tree_map(lambda x: x[seed], init_fragments)
-        init_molecule_name = init_molecule_names[seed]
+    for i, seed in tqdm.tqdm(enumerate(seeds), desc="Visualizing molecules"):
+        init_fragment = jax.tree_util.tree_map(lambda x: x[i], init_fragments)
+        init_molecule_name = init_molecule_names[i]
 
         if visualize:
             # Get the padded fragment and predictions for this seed.
             padded_fragments_for_seed = jax.tree_util.tree_map(
-                lambda x: x[seed], padded_fragments
+                lambda x: x[i], padded_fragments
             )
-            preds_for_seed = jax.tree_util.tree_map(lambda x: x[seed], preds)
+            preds_for_seed = jax.tree_util.tree_map(lambda x: x[i], preds)
 
             figs = []
             for step in range(max_num_atoms):
@@ -318,9 +319,9 @@ def generate_molecules(
         else:
             # We already have the final padded fragment.
             final_padded_fragment = jax.tree_util.tree_map(
-                lambda x: x[seed], final_padded_fragments
+                lambda x: x[i], final_padded_fragments
             )
-            stop = jax.tree_util.tree_map(lambda x: x[seed], stops)
+            stop = jax.tree_util.tree_map(lambda x: x[i], stops)
 
         num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
@@ -359,6 +360,7 @@ def generate_molecules_from_workdir(
     position_inverse_temperature: float,
     step: Union[str, int],
     steps_for_weight_averaging: Optional[Sequence[int]],
+    start_seed: int,
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
@@ -430,6 +432,7 @@ def generate_molecules_from_workdir(
             radial_cutoff=config.radial_cutoff,
             focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=position_inverse_temperature,
+            start_seed=start_seed,
             num_seeds=num_seeds,
             num_seeds_per_chunk=num_seeds_per_chunk,
             init_molecules=init_molecules,
@@ -452,6 +455,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.position_inverse_temperature,
         FLAGS.step,
         FLAGS.steps_for_weight_averaging,
+        FLAGS.start_seed,
         FLAGS.num_seeds,
         FLAGS.num_seeds_per_chunk,
         FLAGS.init,
@@ -501,6 +505,11 @@ if __name__ == "__main__":
         "res_beta",
         None,
         "Angular resolution of beta.",
+    )
+    flags.DEFINE_integer(
+        "start_seed",
+        0,
+        "Initial seed."
     )
     flags.DEFINE_integer(
         "num_seeds",
