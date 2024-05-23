@@ -15,10 +15,9 @@ source .venv/rdkit/bin/activate
 cd symphony-periodic
 
 dataset=perov5
-workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_6
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_supercell_may8/e3schnet_and_nequip/nn/max_targets_1
 
-python -m analyses.generate_molecules \
+python -m analyses.conditional_generation \
     --workdir=$workdir \
-    --init=N \
-    --num_seeds=100 \
-    --num_seeds_per_chunk=5
+    --periodic=True \
+    --seed_structure=True

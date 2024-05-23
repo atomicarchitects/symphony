@@ -154,10 +154,7 @@ class E3SchNet(hk.Module):
         # 'species' are actually atomic numbers mapped to [0, self.num_species).
         # But we keep the same name for consistency with SchNetPack.
         species = fragments.nodes.species
-        r_ij = (
-            fragments.nodes.positions[fragments.receivers]
-            - fragments.nodes.positions[fragments.senders]
-        )
+        r_ij = fragments.edges.relative_positions
         idx_i = fragments.receivers
         idx_j = fragments.senders
 

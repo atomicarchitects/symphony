@@ -9,7 +9,7 @@ import tarfile
 import urllib
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm
+from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm, perov
 
 
 def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
@@ -47,6 +47,12 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_train_molecules=config.num_train_molecules,
             num_val_molecules=config.num_val_molecules,
             num_test_molecules=config.num_test_molecules,
+        )
+    
+    if config.dataset == "perov5":
+        return perov.PerovDataset(
+            root_dir=config.root_dir,
+            supercell=config.supercell
         )
 
     raise ValueError(

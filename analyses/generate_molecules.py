@@ -12,6 +12,7 @@ import ase.data
 #from ase.db import connect
 import ase.io
 import ase.visualize
+import itertools
 import jax
 import jax.numpy as jnp
 import jraph
@@ -54,6 +55,14 @@ def append_predictions(
     distance_matrix = jnp.linalg.norm(
         new_positions[None, :, :] - new_positions[:, None, :], axis=-1
     )
+    cell = pred.globals.cell[0]
+    for d in itertools.product(range(-1, 2), repeat=3):
+        distance_matrix = jnp.minimum(
+            distance_matrix,
+            jnp.linalg.norm(
+                new_positions[None, :, :] - (new_positions[:, None, :] + np.array(d) @ cell), axis=-1
+            ),
+        )
     node_indices = jnp.arange(num_nodes)
 
     # Avoid self-edges.
@@ -69,11 +78,20 @@ def append_predictions(
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
 
+    relative_positions = new_positions[receivers] - new_positions[senders]
+    for d in itertools.product(range(-1, 2), repeat=3):
+        shifted_rel_pos = new_positions[receivers] - new_positions[senders] + np.array(d) @ cell
+        relative_positions = jnp.where(
+            jnp.linalg.norm(shifted_rel_pos, axis=-1).reshape(-1, 1) < jnp.linalg.norm(relative_positions, axis=-1).reshape(-1, 1),
+            shifted_rel_pos,
+            relative_positions)
+
     return padded_fragment._replace(
         nodes=padded_fragment.nodes._replace(
             positions=new_positions,
             species=new_species,
         ),
+        edges=datatypes.EdgesInfo(relative_positions=relative_positions),
         n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
         n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
         senders=senders,
@@ -137,6 +155,7 @@ def generate_molecules(
     atomic_numbers: np.ndarray = np.arange(1, 81),
     visualize: bool = False,
     visualizations_dir: Optional[str] = None,
+    periodic: bool = True,
     verbose: bool = True,
 ):
     """Generates molecules from a trained model at the given workdir."""
@@ -160,28 +179,35 @@ def generate_molecules(
 
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
-        init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
+        init_molecule, init_molecule_name = analysis.construct_molecule(
+            init_molecules,
+            cell=np.eye(3) * np.random.normal(4.1, 0.3),  # TODO hardcoded for perovskites
+            # cell=np.diag(np.random.normal(4.1, 0.3, 3)),  # TODO hardcoded for perovskites
+            periodic=periodic
+        )
         logging_fn(
             f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
         )
         init_molecules = [init_molecule] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
-    else:
+    elif isinstance(init_molecules[0], ase.Atoms):
         assert len(init_molecules) == num_seeds
         init_molecule_names = [
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
+        init_molecules = [
+            input_pipeline.ase_atoms_to_jraph_graph(
+                init_molecule, atomic_numbers, radial_cutoff, periodic=periodic,
+            )
+            for init_molecule in init_molecules
+        ]
+    else:
+        init_molecule_names = [f"mol_{i}" for i in range(len(init_molecules))]
 
     if visualize:
         pass
 
     # Prepare initial fragments.
-    init_fragments = [
-        input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, atomic_numbers, radial_cutoff
-        )
-        for init_molecule in init_molecules
-    ]
     init_fragments = [
         jraph.pad_with_graphs(
             init_fragment,
@@ -189,7 +215,7 @@ def generate_molecules(
             n_edge=(max_num_atoms + 1) * avg_neighbors_per_atom,
             n_graph=2,
         )
-        for init_fragment in init_fragments
+        for init_fragment in init_molecules
     ]
     init_fragments = jax.tree_util.tree_map(lambda *val: np.stack(val), *init_fragments)
     init_fragments = jax.vmap(
@@ -329,13 +355,15 @@ def generate_molecules(
                 final_padded_fragment.nodes.species[:num_valid_nodes],
                 atomic_numbers
             ),
+            cell=ase.cell.Cell(final_padded_fragment.globals.cell[:-1, :]).cellpar(),
+            pbc=True
         )
         if stop:
             logging_fn("Generated %s", generated_molecule.get_chemical_formula())
-            outputfile = f"{init_molecule_name}_seed={seed}.xyz"
+            outputfile = f"{init_molecule_name}_seed={seed}.cif"
         else:
             logging_fn("STOP was not produced. Discarding...")
-            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
+            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.cif"
 
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
@@ -355,6 +383,7 @@ def generate_molecules(
 def generate_molecules_from_workdir(
     workdir: str,
     outputdir: str,
+    radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
     step: Union[str, int],
@@ -366,6 +395,7 @@ def generate_molecules_from_workdir(
     avg_neighbors_per_atom: int,
     atomic_numbers: np.ndarray,
     visualize: bool = False,
+    periodic: bool = True,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
     verbose: bool = False,    
@@ -427,7 +457,7 @@ def generate_molecules_from_workdir(
             apply_fn=jax.jit(model.apply),
             params=params,
             molecules_outputdir=molecules_outputdir,
-            radial_cutoff=config.radial_cutoff,
+            radial_cutoff=radial_cutoff,
             focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=position_inverse_temperature,
             num_seeds=num_seeds,
@@ -438,16 +468,24 @@ def generate_molecules_from_workdir(
             atomic_numbers=atomic_numbers,
             visualize=visualize,
             visualizations_dir=visualizations_dir,
+            periodic=periodic,
             verbose=verbose,
         )
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
-    atomic_numbers = np.arange(1, 81)  # TODO make this no longer hard-coded
+    atomic_numbers = np.array([
+            3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 19, 20,
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
+            32, 33, 37, 38, 39, 40, 41, 42, 44, 45, 46, 
+            47, 48, 49, 50, 51, 52, 55, 56, 57, 72, 73, 
+            74, 75, 76, 77, 78, 79, 80, 81, 82, 83
+        ])  # TODO make this no longer hard-coded
 
     generate_molecules_from_workdir(
         FLAGS.workdir,
         FLAGS.outputdir,
+        FLAGS.radial_cutoff,
         FLAGS.focus_and_atom_type_inverse_temperature,
         FLAGS.position_inverse_temperature,
         FLAGS.step,
@@ -459,6 +497,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.avg_neighbors_per_atom,
         atomic_numbers,
         FLAGS.visualize,
+        FLAGS.periodic,
         FLAGS.res_alpha,
         FLAGS.res_beta,
         verbose=True,
@@ -474,6 +513,11 @@ if __name__ == "__main__":
         "outputdir",
         os.path.join(os.getcwd(), "analyses", "analysed_workdirs"),
         "Directory where molecules should be saved.",
+    )
+    flags.DEFINE_float(
+        "radial_cutoff",
+        5.0,
+        "Radial cutoff for edge finding"
     )
     flags.DEFINE_float(
         "focus_and_atom_type_inverse_temperature",
@@ -536,6 +580,11 @@ if __name__ == "__main__":
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_bool(
+        "periodic",
+        True,
+        "Whether to consider input structures as periodic."
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

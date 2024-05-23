@@ -103,7 +103,7 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
         if not os.path.exists(root_dir):
             os.makedirs(root_dir)
         logging.info(f"Cloning TMQM repository to {root_dir}...")
-        _ = datasets.utils.clone_url(TMQM_URL, root_dir)
+        _ = clone_url(TMQM_URL, root_dir)
         if not os.path.exists(xyzs_path):
             os.makedirs(xyzs_path)
 

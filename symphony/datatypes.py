@@ -10,11 +10,20 @@ class NodesInfo(NamedTuple):
     species: jnp.ndarray  # [n_node] int array
 
 
+class EdgesInfo(NamedTuple):
+    relative_positions: jnp.ndarray  # [n_edge, 3] float array
+
+
+class GlobalsInfo(NamedTuple):
+    cell: jnp.ndarray  # [3, 3] float array
+
+
 class FragmentsGlobals(NamedTuple):
     target_positions_mask: jnp.ndarray  # [n_graph, n_targets] bool array
     target_positions: jnp.ndarray  # [n_graph, n_targets, 3] float array (only for training)
     target_species: jnp.ndarray  # [n_graph, n_targets] int array (only for training)
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
+    cell: jnp.ndarray  # [n_graph, 3, 3] float array (only for reference)
 
 
 class FragmentsNodes(NamedTuple):
@@ -23,9 +32,13 @@ class FragmentsNodes(NamedTuple):
     focus_and_target_species_probs: jnp.ndarray  # [n_node, n_species] float array (only for training)
 
 
+class FragmentsEdges(NamedTuple):
+    relative_positions: jnp.ndarray  # [n_edge, 3] float array
+
+
 class Fragments(jraph.GraphsTuple):
     nodes: FragmentsNodes
-    edges: None
+    edges: FragmentsEdges
     receivers: jnp.ndarray  # with integer dtype
     senders: jnp.ndarray  # with integer dtype
     globals: FragmentsGlobals
@@ -72,6 +85,7 @@ class GlobalPredictions(NamedTuple):
     radial_logits: jnp.ndarray  # [n_graph, n_targets] float array
     angular_logits: jnp.ndarray  # [n_graph, n_targets] float array
     position_vectors: jnp.ndarray  # [n_graph, 3] float array
+    cell: jnp.ndarray  # [n_graph, 3, 3] float array (only for reference)
 
 
 class OldGlobalPredictions(NamedTuple):

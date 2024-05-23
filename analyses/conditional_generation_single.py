@@ -16,27 +16,20 @@ from configs.root_dirs import get_root_dir
 from symphony import datatypes
 
 
-def get_fragment_list(mols: Sequence[datatypes.Structures], num_mols: int, periodic: bool, seed_structure: bool):
+def get_fragment_list(mols: Sequence[datatypes.Structures], num_mols: int, periodic: bool):
     fragments = []
     for i in range(num_mols):
         mol = mols[i]
-        cell = mol.globals.cell.reshape(3, 3) if periodic else np.eye(3)
-        for species in set(mol.nodes.species.tolist()):
-            # offset by 1
-            #filter_ON = (mol.nodes.species == 6) | (mol.nodes.species == 7)
-            #first_ON = np.arange(len(mol.nodes.species))[filter_ON][0]
-            #is_first_ON = np.arange(len(mol.nodes.species)) == first_ON
-            filter_el = mol.nodes.species == species
-            first_missing = np.arange(len(mol.nodes.species))[filter_el][0]
-            if seed_structure:
-                filter_el = filter_el & (np.arange(len(mol.nodes.species)) != first_missing)
+        for j in range(len(mol.nodes.species)):
+            mask = np.arange(len(mol.nodes.species)) != j
+            cell = mol.globals.cell.reshape(3, 3) if periodic else np.eye(3)
             fragment = ase.Atoms(
                 # all perovskites in perov5 contain either O or N as negative ion
-                positions=mol.nodes.positions[~filter_el, :],
-                numbers=mol.nodes.species[~filter_el]+1,
+                positions=mol.nodes.positions[mask, :],
+                numbers=mol.nodes.species[mask]+1,
                 cell=cell,
                 pbc=periodic
-            )
+            ) 
             fragments.append(fragment)
     return fragments
 
@@ -58,9 +51,9 @@ def main(unused_argv: Sequence[str]):
 
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
-        mol_list = get_fragment_list(split_mols, num_mols, flags.FLAGS.periodic, flags.FLAGS.seed_structure)
+        mol_list = get_fragment_list(split_mols, num_mols, flags.FLAGS.periodic)
         mol_list = mol_list[
-            : num_seeds_per_chunk * (len(mol_list) // num_seeds_per_chunk)
+            : num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)
         ]
         print(f"Number of fragments for {split}: {len(mol_list)}")
 
@@ -79,7 +72,7 @@ def main(unused_argv: Sequence[str]):
             avg_neighbors_per_atom,
             atomic_numbers,
             flags.FLAGS.visualize,
-            flags.FLAGS.periodic
+            flags.FLAGS.periodic,
         )
 
 
@@ -113,10 +106,5 @@ if __name__ == "__main__":
         "periodic",
         True,
         "Treat structures as periodic"
-    )
-    flags.DEFINE_bool(
-        "seed_structure",
-        False,
-        "Add initial atom of the missing element to structure"
     )
     app.run(main)
