@@ -30,7 +30,7 @@ from symphony import train
 from configs import root_dirs
 
 try:
-    from symphony.data import input_pipeline_tf
+    from symphony.data import input_pipeline
     import tensorflow as tf
 
     tf.config.experimental.set_visible_devices([], "GPU")
@@ -253,14 +253,7 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    if 'max_targets_per_graph' in config:
-        config.root_dir = root_dirs.get_root_dir(
-            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
-        )
-    else:
-        config.root_dir = root_dirs.get_root_dir(
-            config.dataset, config.get("fragment_logic", "nn")
-        )
+    config.root_dir = root_dirs.get_root_dir(config.dataset)
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
@@ -295,8 +288,8 @@ def load_from_workdir(
     else:
         if init_graphs is None:
             logging.info("Initializing dummy model with init_graphs from dataloader")
-            datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
-            train_iter = datasets["train"].as_numpy_iterator()
+            datasets = input_pipeline.get_datasets(dataset_rng, config)
+            train_iter = datasets["train"]
             init_graphs = next(train_iter)
         else:
             logging.info("Initializing dummy model with provided init_graphs")
@@ -304,26 +297,30 @@ def load_from_workdir(
         params = jax.jit(net.init)(init_rng, init_graphs)
 
     tx = train.create_optimizer(config)
-    dummy_state = train_state.TrainState.create(
-        apply_fn=net.apply, params=params, tx=tx
-    )
+    # dummy_state = train_state.TrainState.create(
+    #     apply_fn=net.apply, params=params, tx=tx
+    # )
 
     # Load the actual values.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     ckpt = checkpoint.Checkpoint(checkpoint_dir, max_to_keep=5)
-    data = ckpt.restore({"best_state": dummy_state, "metrics_for_best_state": None})
-    best_state = jax.tree_util.tree_map(jnp.asarray, data["best_state"])
+    data = ckpt.restore_dict()["state"]
+    best_state = jax.tree_util.tree_map(
+        jnp.asarray,
+        train_state.TrainState.create(
+            apply_fn=net.apply, params=data["best_params"], tx=tx
+    ))
     best_state_in_eval_mode = best_state.replace(apply_fn=eval_net.apply)
 
     return (
         config,
         best_state,
         best_state_in_eval_mode,
-        cast_keys_as_int(data["metrics_for_best_state"]),
+        cast_keys_as_int(data["metrics_for_best_params"]),
     )
 
 
-def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
+def construct_molecule(molecule_str: str, cell: np.array, periodic: bool) -> Tuple[ase.Atoms, str]:
     """Returns a molecule from the given input string.
 
     The input is interpreted either as an index for the QM9 dataset,
@@ -342,8 +339,5 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
         return molecule, f"qm9_index={molecule_str}"
 
     # If the string is a valid molecule name, try to build it.
-    try:
-        molecule = ase.build.molecule(molecule_str)
-    except:
-        molecule = ase.Atoms(molecule_str)
+    molecule = ase.Atoms(molecule_str, cell=cell, pbc=periodic)
     return molecule, molecule.get_chemical_formula()

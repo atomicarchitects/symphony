@@ -14,13 +14,10 @@ source .venv/rdkit/bin/activate
 
 cd symphony-periodic
 
-dataset=tmqm
-workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_finegrain_may6/e3schnet_and_nequip/nn/max_targets_4
+dataset=perov5
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_supercell_may8/e3schnet_and_nequip/nn/max_targets_1
 
-python -m analyses.generate_molecules \
+python -m analyses.conditional_generation \
     --workdir=$workdir \
-    --max_num_atoms=200 \
-    --init=Ni \
-    --num_seeds=1000 \
-    --step=best \
-    --num_seeds_per_chunk=2
+    --periodic=True \
+    --seed_structure=True

@@ -23,7 +23,7 @@ from clu import (
 )
 
 from symphony import datatypes, hooks, models, loss, train_state
-from symphony.data import input_pipeline_tf, input_pipeline
+from symphony.data import input_pipeline
 import symphony.data as data
 
 

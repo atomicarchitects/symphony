@@ -3,8 +3,8 @@
 #SBATCH -p gpuA100x4
 #SBATCH --gpus-per-node=1
 #SBATCH -c 8
-#SBATCH --time=2-00:00:00
-#SBATCH -J symphony
+#SBATCH --time=0-12:00:00
+#SBATCH -J symphony-periodic
 
 cd /scratch/bbyc/skim12
 source .bashrc
@@ -15,11 +15,13 @@ source .venv/rdkit/bin/activate
 
 cd symphony-periodic
 
-dataset=tmqm
-workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_4
+dataset=perov5
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_nonperiodic_may9/e3schnet_and_nequip/nn/max_targets_8
 
 python -m symphony \
     --config=configs/"$dataset"/e3schnet_and_nequip.py \
     --workdir=$workdir \
     --use_wandb=False \
-    --config.max_targets_per_graph=$max_targets
+    --config.max_targets_per_graph=8 \
+    --config.periodic=False \
+    --config.supercell=True

@@ -4,6 +4,7 @@
 #SBATCH --gpus-per-node=1
 #SBATCH -c 8
 #SBATCH --time=0-12:00:00
+#SBATCH -J symphony-periodic
 
 cd /scratch/bbyc/skim12
 source .bashrc
@@ -14,13 +15,11 @@ source .venv/rdkit/bin/activate
 
 cd symphony-periodic
 
-dataset=tmqm
-workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_finegrain_may6/e3schnet_and_nequip/nn/max_targets_4
+dataset=perov5
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_1
 
-python -m analyses.generate_molecules \
+python -m symphony \
+    --config=configs/"$dataset"/e3schnet_and_nequip.py \
     --workdir=$workdir \
-    --max_num_atoms=200 \
-    --init=Ni \
-    --num_seeds=1000 \
-    --step=best \
-    --num_seeds_per_chunk=2
+    --use_wandb=False \
+    --config.max_targets_per_graph=1
