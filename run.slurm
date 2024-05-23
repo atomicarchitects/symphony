@@ -4,8 +4,9 @@
 #SBATCH --gpus-per-node=1
 #SBATCH -c 8
 #SBATCH --time=2-00:00:00
+#SBATCH -J symphony
 
-cd /u/skim12
+cd /scratch/bbyc/skim12
 source .bashrc
 module load gcc-runtime/11.4.0
 module load cuda/12.4.0
@@ -15,9 +16,9 @@ source .venv/rdkit/bin/activate
 cd symphony
 
 dataset=tmqm
-workdir=/u/skim12/workdirs/"$dataset"_may4/e3schnet_and_nequip/nn/max_targets_4
+workdir=/scratch/bbyc/skim12/workdirs/"$dataset"_may6/e3schnet_and_nequip/nn/max_targets_4
 
 python -m symphony \
-    --config=configs/tmqm/e3schnet_and_nequip.py \
+    --config=configs/"$dataset"/e3schnet_and_nequip.py \
     --workdir=$workdir \
     --use_wandb=False
