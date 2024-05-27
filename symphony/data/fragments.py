@@ -69,7 +69,7 @@ def generate_fragments(
             mode,
             heavy_first,
             max_targets_per_graph,
-            transition_first
+            transition_first,
         )
         yield frag
 

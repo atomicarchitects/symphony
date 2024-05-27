@@ -12,6 +12,8 @@ import tensorflow as tf
 from absl import flags, app
 import analyses.generate_molecules as generate_molecules
 from symphony.data.datasets import tmqm
+from configs.root_dirs import get_root_dir
+from symphony import datatypes
 
 
 workdir = "/home/ameyad/spherical-harmonic-net/workdirs/qm9_bessel_embedding_attempt6_edm_splits/e3schnet_and_nequip/interactions=3/l=5/position_channels=2/channels=64"
@@ -34,6 +36,7 @@ def get_fragment_list(mols: Sequence[ase.Atoms], num_mols: int):
 
 
 def main(unused_argv: Sequence[str]):
+    radial_cutoff = 5.0
     beta_species = 1.0
     beta_position = 1.0
     step = flags.FLAGS.step
@@ -42,7 +45,7 @@ def main(unused_argv: Sequence[str]):
     num_mols = 500
     avg_neighbors_per_atom = 32
 
-    atomic_numbers = np.arange(84)
+    atomic_numbers = np.arange(1, 81)
 
     all_mols = tmqm.load_tmqm("../tmqm_data")
     mols_by_split = {"train": all_mols[:num_mols], "test": all_mols[-num_mols:]}
@@ -50,17 +53,19 @@ def main(unused_argv: Sequence[str]):
     for split, split_mols in mols_by_split.items():
         # Ensure that the number of molecules is a multiple of num_seeds_per_chunk.
         mol_list = get_fragment_list(split_mols, num_mols)
-        mol_list = split_mols[
-            : num_seeds_per_chunk * (len(split_mols) // num_seeds_per_chunk)
+        mol_list = mol_list[
+            : num_seeds_per_chunk * (len(mol_list) // num_seeds_per_chunk)
         ]
         print(f"Number of fragments for {split}: {len(mol_list)}")
 
-        gen_mol_list = generate_molecules.generate_molecules(
+        gen_mol_list = generate_molecules.generate_molecules_from_workdir(
             flags.FLAGS.workdir,
             os.path.join(flags.FLAGS.outputdir, split),
+            radial_cutoff,
             beta_species,
             beta_position,
             step,
+            flags.FLAGS.steps_for_weight_averaging,
             len(mol_list),
             num_seeds_per_chunk,
             mol_list,
@@ -98,8 +103,8 @@ if __name__ == "__main__":
         "Steps to average parameters over. If None, the model at the given step is used.",
     )
     flags.DEFINE_bool(
-        "periodic",
-        True,
-        "Treat structures as periodic"
+        "seed_structure",
+        False,
+        "Add initial atom of the missing element to structure"
     )
     app.run(main)

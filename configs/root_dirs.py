@@ -12,6 +12,8 @@ def get_root_dir(dataset: str) -> Optional[str]:
         return f"/data/NFS/radish/symphony/root_dirs/{dataset}"
     if hostname == "potato.mit.edu":
         return f"/radish/symphony/root_dirs/{dataset}"
+    if hostname == "eofe10.mit.edu":
+        return f"/pool001/songk/root_dirs/{dataset}"
     if hostname[-23:] == "delta.ncsa.illinois.edu":
         return f"/projects/bbyc/symphony/root_dirs/{dataset}"
     if hostname == "eofe10.mit.edu":
