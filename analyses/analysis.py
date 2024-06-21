@@ -105,8 +105,9 @@ def load_model_at_step(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset,
+        config.dataset
     )
+
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_util.tree_map(jnp.asarray, params)
     return model, params, config
@@ -131,9 +132,14 @@ def load_weighted_average_model_at_steps(
         config = yaml.unsafe_load(config_file)
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
-    )
+    if 'max_targets_per_graph' in config:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
+        )
+    else:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn")
+        )
 
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params_avg = jax.tree_util.tree_map(jnp.asarray, params_avg)
@@ -210,7 +216,7 @@ def load_metrics_from_workdir(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
+        config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
     )
 
     checkpoint_dir = os.path.join(workdir, "checkpoints")
@@ -247,9 +253,14 @@ def load_from_workdir(
     # Check that the config was loaded correctly.
     assert config is not None
     config = ml_collections.ConfigDict(config)
-    config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
-    )
+    if 'max_targets_per_graph' in config:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn"), config.max_targets_per_graph
+        )
+    else:
+        config.root_dir = root_dirs.get_root_dir(
+            config.dataset, config.get("fragment_logic", "nn")
+        )
 
     # Mimic what we do in train.py.
     rng = jax.random.PRNGKey(config.rng_seed)
@@ -331,5 +342,8 @@ def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:
         return molecule, f"qm9_index={molecule_str}"
 
     # If the string is a valid molecule name, try to build it.
-    molecule = ase.build.molecule(molecule_str)
+    try:
+        molecule = ase.build.molecule(molecule_str)
+    except:
+        molecule = ase.Atoms(molecule_str)
     return molecule, molecule.get_chemical_formula()
