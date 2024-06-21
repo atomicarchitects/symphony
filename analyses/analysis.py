@@ -105,7 +105,7 @@ def load_model_at_step(
     assert config is not None
     config = ml_collections.ConfigDict(config)
     config.root_dir = root_dirs.get_root_dir(
-        config.dataset, config.get("fragment_logic", "nn")
+        config.dataset,
     )
     model = models.create_model(config, run_in_evaluation_mode=run_in_evaluation_mode)
     params = jax.tree_util.tree_map(jnp.asarray, params)
