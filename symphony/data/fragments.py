@@ -129,8 +129,8 @@ def _make_first_fragment(
     rng, k = jax.random.split(rng)
     if transition_first:
         ptable = PeriodicTableEmbedder()
-        bound1 = ptable.get_group(graph.nodes.species+1) >= 2
-        bound2 = ptable.get_group(graph.nodes.species+1) <= 11
+        bound1 = ptable.get_group(graph.nodes.species) >= 2
+        bound2 = ptable.get_group(graph.nodes.species) <= 11
         transition_metals = (bound1 & bound2).astype(np.float32)
         transition_metals /= transition_metals.sum()
         first_node = jax.random.choice(

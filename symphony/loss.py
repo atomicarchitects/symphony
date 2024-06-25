@@ -101,13 +101,6 @@ def generation_loss(
         num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
         loss_position /= num_valid_targets
 
-        # jax.debug.print("target_positions={x}", x=graphs.globals.target_positions)
-        # jax.debug.print("radial_logits={x}", x=preds.globals.radial_logits)
-        # jax.debug.print("angular_logits={x}", x=preds.globals.angular_logits)
-        # jax.debug.print("mask={x}", x=graphs.globals.target_positions_mask)
-        # jax.debug.print("loss_position={x}", x=loss_position)
-        # jax.debug.print("")
-
         assert loss_position.shape == (num_graphs,)
 
         return loss_position

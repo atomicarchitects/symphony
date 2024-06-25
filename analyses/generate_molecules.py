@@ -166,6 +166,11 @@ def generate_molecules(
             f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
         )
         init_molecules = [init_molecule] * num_seeds
+        init_molecules = [
+            input_pipeline.ase_atoms_to_jraph_graph(
+                init_molecule, atomic_numbers, radial_cutoff,
+            )
+        ] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
     elif isinstance(init_molecules[0], ase.Atoms):
         assert len(init_molecules) == num_seeds
@@ -449,7 +454,8 @@ def generate_molecules_from_workdir(
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
-    atomic_numbers = np.arange(1, 81)  # TODO make this no longer hard-coded
+    # atomic_numbers = np.arange(1, 81)  # TODO make this no longer hard-coded
+    atomic_numbers = np.array([1, 6, 7, 8, 9])
 
     generate_molecules_from_workdir(
         FLAGS.workdir,

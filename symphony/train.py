@@ -311,6 +311,7 @@ def train_and_evaluate(
         res_alpha=config.generation.res_alpha,
         res_beta=config.generation.res_beta,
         radial_cutoff=config.generation.radial_cutoff,
+        start_seed=config.generation.start_seed,
         num_seeds=config.generation.num_seeds,
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,

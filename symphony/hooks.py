@@ -63,6 +63,7 @@ class GenerateMoleculesHook:
     res_alpha: int
     res_beta: int
     radial_cutoff: float
+    start_seed: int
     num_seeds: int
     num_seeds_per_chunk: int
     init_molecules: str
@@ -89,6 +90,7 @@ class GenerateMoleculesHook:
             radial_cutoff=self.radial_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=self.position_inverse_temperature,
+            start_seed=self.start_seed,
             num_seeds=self.num_seeds,
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,

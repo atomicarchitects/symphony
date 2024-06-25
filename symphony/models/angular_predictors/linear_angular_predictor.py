@@ -124,6 +124,7 @@ class LinearAngularPredictor(AngularPredictor):
         # jax.debug.print("logits={x}", x=logits)
 
         return logits - log_Z
+        # return jnp.minimum(jnp.zeros_like(logits), logits - log_Z)  # TODO ???
 
     @staticmethod
     def coeffs_to_probability_distribution(

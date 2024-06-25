@@ -21,6 +21,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.radial_cutoff = 5.0
     config.max_targets_per_graph = 4
     config.heavy_first = False
+    config.transition_first = False
 
     # Optimizer.
     config.optimizer = "adam"
@@ -52,6 +53,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
+    config.loss_kwargs.discretized_loss = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
@@ -84,7 +86,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
-    config.target_position_predictor.continuous_radius = False
+    config.target_position_predictor.radial_predictor.continuous = True
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
@@ -93,6 +95,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.res_beta = config.target_position_predictor.angular_predictor.get_ref("res_beta")
     config.generation.res_alpha = config.target_position_predictor.angular_predictor.get_ref("res_alpha")
     config.generation.radial_cutoff = config.get_ref("radial_cutoff")
+    config.generation.start_seed = 0
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"

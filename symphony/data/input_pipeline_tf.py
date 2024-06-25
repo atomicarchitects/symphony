@@ -261,7 +261,7 @@ def get_unbatched_qm9_datasets(
     config.root_dir = (
         "/Users/ameyad/Documents/spherical-harmonic-net/qm9_fragments_fixed/nn_edm"
     )
-    config.train_molecules = (0, 10)
+    config.train_molecules = (0, 100000)
     config.val_molecules = (100000, 110000)
     config.test_molecules = (110000, 130000)
     config.train_on_split_smaller_than_chunk = True

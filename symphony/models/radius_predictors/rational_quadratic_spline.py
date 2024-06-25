@@ -67,12 +67,13 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         return dist
 
     def log_prob(
-        self, samples: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
+        self, samples: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray, eps: float = 1e-6
     ) -> jnp.ndarray:
         """Computes the log probability of the given samples."""
         dist = self.create_distribution(conditioning)
         radii = jnp.linalg.norm(samples.array, axis=-1)
-        return dist.log_prob(radii)
+        return dist.log_prob(radii)  # TODO ???
+        # return jnp.minimum(jnp.zeros_like(radii), dist.log_prob(radii))  # TODO ???
 
     def sample(
         self,
