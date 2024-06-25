@@ -225,7 +225,7 @@ class CheckpointHook:
     def __call__(self, state: train_state.TrainState) -> Any:
         state = flax.jax_utils.unreplicate(state)
 
-        # Save the current and best params.
+        # Save the current and best params to the checkpoint directory.
         with open(
             os.path.join(self.checkpoint_dir, f"params_{state.get_step()}.pkl"), "wb"
         ) as f:
@@ -233,6 +233,19 @@ class CheckpointHook:
 
         with open(os.path.join(self.checkpoint_dir, "params_best.pkl"), "wb") as f:
             pickle.dump(state.best_params, f)
+
+        # Save the best params as a wandb artifact.
+        if wandb.run is not None:
+            artifact = wandb.Artifact(
+                "params_best",
+                type="model",
+                metadata={
+                    "step": state.step_for_best_params,
+                    "val_loss": state.metrics_for_best_params["val_eval"]["total_loss"],
+                },
+            )
+            artifact.add_file(os.path.join(self.checkpoint_dir, "params_best.pkl"))
+            wandb.run.log_artifact(artifact)
 
         # Save the whole training state.
         self.ckpt.save(
