@@ -6,7 +6,7 @@ import haiku as hk
 import jraph
 
 from symphony import datatypes
-from symphony.models import utils
+from symphony.models.utils import utils
 
 
 class MultiHeadAttention(hk.Module):

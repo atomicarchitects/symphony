@@ -4,7 +4,7 @@ import tqdm
 from absl import logging
 import os
 import zipfile
-from sh import gunzip
+import sh
 import urllib.error
 import urllib.request
 import pickle
@@ -14,7 +14,7 @@ import rdkit.Chem as Chem
 
 
 from symphony.data import datasets
-from symphony.models.ptable import PeriodicTableEmbedder
+from symphony.models import PeriodicTable
 from symphony import datatypes
 
 
@@ -69,7 +69,7 @@ class TMQMDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def species_to_atom_types() -> Dict[int, str]:
-        ptable = PeriodicTableEmbedder()
+        ptable = PeriodicTable()
         return {
             i: ptable.get_symbol(i) for i in range(80)
         }
@@ -110,7 +110,7 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
         for i in range(1, 3):
             gz_path = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz.gz")
             logging.info(f"Unzipping {gz_path}...")
-            gunzip(gz_path)
+            sh.gunzip(gz_path)
 
             mol_file = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz")
             with open(mol_file, "r") as f:

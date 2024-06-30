@@ -7,8 +7,7 @@ import jax.numpy as jnp
 from symphony import datatypes
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
-from symphony.models.position_predictor import TargetPositionPredictor as DiscretizedTargetPositionPredictor
-from symphony.models import utils
+from symphony.models.utils import utils
 
 
 class Predictor(hk.Module):
@@ -17,7 +16,7 @@ class Predictor(hk.Module):
     def __init__(
         self,
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
-        target_position_predictor: DiscretizedTargetPositionPredictor | TargetPositionPredictor,
+        target_position_predictor: TargetPositionPredictor,
         name: str = None,
     ):
         super().__init__(name=name)

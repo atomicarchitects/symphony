@@ -57,6 +57,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
+    config.add_noise_to_target_distance = True
+    config.target_distance_noise_std = 0.01
     config.freeze_node_embedders = False
 
     # Prediction heads.
