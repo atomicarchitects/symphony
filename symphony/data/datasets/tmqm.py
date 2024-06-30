@@ -4,7 +4,7 @@ import tqdm
 from absl import logging
 import os
 import zipfile
-from sh import gunzip
+import sh
 import urllib.error
 import urllib.request
 import numpy as np

@@ -20,8 +20,12 @@ from symphony import models
 
 FLAGS = flags.FLAGS
 
+
 def append_predictions_to_fragment(
-    fragment: datatypes.Fragments, pred: datatypes.Predictions, valid: bool, radial_cutoff: float,
+    fragment: datatypes.Fragments,
+    pred: datatypes.Predictions,
+    valid: bool,
+    radial_cutoff: float,
 ) -> Tuple[int, datatypes.Fragments]:
     """Appends the predictions to a single fragment."""
     # If padding graph, just return the fragment.
@@ -48,7 +52,11 @@ def append_predictions_to_fragment(
     return stop, new_fragment
 
 
-def create_batch_iterator(all_fragments: Sequence[datatypes.Fragments], stopped: Sequence[bool], padding_budget: Dict[str, int]):
+def create_batch_iterator(
+    all_fragments: Sequence[datatypes.Fragments],
+    stopped: Sequence[bool],
+    padding_budget: Dict[str, int],
+):
     """Creates a iterator over batches."""
     assert len(all_fragments) == len(stopped)
 
@@ -66,11 +74,44 @@ def create_batch_iterator(all_fragments: Sequence[datatypes.Fragments], stopped:
             batch = jraph.pad_with_graphs(batch, **padding_budget)
             yield indices, batch
             indices, batch = [], []
-    
+
     if len(batch) > 0:
         indices = indices + [None] * (padding_budget["n_graph"] - len(batch))
         batch = jraph.pad_with_graphs(jraph.batch_np(batch), **padding_budget)
         yield indices, batch
+
+
+def estimate_padding_budget(
+    all_fragments, num_seeds_per_chunk, padding_mode: str = "fixed"
+):
+    """Estimates the padding budget for a batch."""
+
+    def round_to_nearest_multiple_of_64(x):
+        return int(np.ceil(x / 64) * 64)
+
+    if padding_mode == "fixed":
+        avg_nodes_per_graph = 50
+        avg_edges_per_graph = 500
+    elif padding_mode == "dynamic":
+        avg_nodes_per_graph = sum(
+            fragment.n_node.sum() for fragment in all_fragments
+        ) / len(all_fragments)
+        avg_edges_per_graph = sum(
+            fragment.n_edge.sum() for fragment in all_fragments
+        ) / len(all_fragments)
+
+    avg_nodes_per_graph = max(avg_nodes_per_graph, 1)
+    avg_edges_per_graph = max(avg_edges_per_graph, 1)
+    padding_budget = dict(
+        n_node=round_to_nearest_multiple_of_64(
+            num_seeds_per_chunk * avg_nodes_per_graph * 1.5
+        ),
+        n_edge=round_to_nearest_multiple_of_64(
+            num_seeds_per_chunk * avg_edges_per_graph * 1.5
+        ),
+        n_graph=num_seeds_per_chunk,
+    )
+    return padding_budget
 
 
 def generate_molecules(
@@ -92,7 +133,6 @@ def generate_molecules(
         logging_fn = logging.info
     else:
         logging_fn = lambda *args: None
-
 
     logging_fn("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging_fn("JAX local devices: %r", jax.local_devices())
@@ -152,29 +192,31 @@ def generate_molecules(
         for init_molecule in init_molecules
     ]
     stopped = [False] * len(all_fragments)
-
-    num_atoms_per_chunk = avg_atoms_per_graph * (num_seeds_per_chunk + 1)
-    padding_budget = dict(
-        n_node=num_atoms_per_chunk,
-        n_edge=num_atoms_per_chunk * avg_neighbors_per_atom * 2,
-        n_graph=(num_seeds_per_chunk + 1),
-    )
+    iteration_count = 0
 
     # Start timer.
     start_time = time.time()
 
     # Create a ThreadPoolExecutor for parallel execution on the CPU
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-
-        # Keep track of progress.
-        pbar = tqdm.tqdm(desc="Generating molecules")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
 
         while True:
+            # Keep track of start time for this iteration.
+            iteration_start_time = time.time()
+
+            # Update padding budget.
+            padding_budget = estimate_padding_budget(
+                all_fragments[:10], num_seeds_per_chunk
+            )
+            logging_fn("Padding budget for this iteration: %r", padding_budget)
+
             # Process all batches.
             indices, gpu_futures = [], []
-            for fragment_indices, fragments in create_batch_iterator(all_fragments, stopped, padding_budget):
+            for fragment_indices, fragments in create_batch_iterator(
+                all_fragments, stopped, padding_budget
+            ):
                 apply_rng, rng = jax.random.split(rng)
-                
+
                 # Predict on this batch.
                 gpu_future = executor.submit(apply_fn, fragments, apply_rng)
                 gpu_futures.append(gpu_future)
@@ -189,19 +231,27 @@ def generate_molecules(
 
             # Process the results on the CPU.
             cpu_futures = []
+            cpu_results = []
             for fragments, preds in gpu_results:
-                
+
                 # Bring back to CPU.
                 fragments = jax.tree_util.tree_map(np.asarray, fragments)
                 preds = jax.tree_util.tree_map(np.asarray, preds)
                 valids = jraph.get_graph_padding_mask(fragments)
 
-                for fragment, pred, valid in zip(jraph.unbatch(fragments), jraph.unbatch(preds), valids):
-                    cpu_future = executor.submit(append_predictions_to_fragment, fragment, pred, valid, config.radial_cutoff)
-                    cpu_futures.append(cpu_future)
+                for fragment, pred, valid in zip(
+                    jraph.unbatch(fragments), jraph.unbatch(preds), valids
+                ):
+                    # cpu_future = executor.submit(append_predictions_to_fragment, fragment, pred, valid, config.radial_cutoff)
+                    # cpu_futures.append(cpu_future)
 
-            # Wait for all the CPU tasks to complete.
-            cpu_results = [future.result() for future in cpu_futures]
+                    stop, new_fragment = append_predictions_to_fragment(
+                        fragment, pred, valid, config.radial_cutoff
+                    )
+                    cpu_results.append((stop, new_fragment))
+
+            # # Wait for all the CPU tasks to complete.
+            # cpu_results = [future.result() for future in cpu_futures]
 
             # Update the input data with the CPU results.
             assert len(indices) == len(cpu_results)
@@ -209,24 +259,32 @@ def generate_molecules(
                 if index is None:
                     continue
 
-                stopped[index] |= stop
-                stopped[index] |= (len(new_fragment.nodes.species) > max_num_atoms)
-                
+                # stopped[index] |= stop
+                stopped[index] |= len(new_fragment.nodes.species) > max_num_atoms
+
                 if not stopped[index]:
                     all_fragments[index] = new_fragment
 
-            # Update progress bar.
-            pbar.update()
+            # Update iteration count.
+            iteration_count += 1
+
+            # Log iteration time.
+            iteration_elapsed_time = time.time() - iteration_start_time
+            logging_fn(
+                "Iteration %d took %0.2f seconds.",
+                iteration_count,
+                iteration_elapsed_time,
+            )
 
     # Stop timer.
     elapsed_time = time.time() - start_time
 
     # Log generation time.
     logging_fn(
-        f"Generated {len(all_fragments)} molecules in {elapsed_time} seconds."
+        f"Generated {len(all_fragments)} molecules in {elapsed_time:.2f} seconds."
     )
     logging_fn(
-        f"Average time per molecule: {elapsed_time / len(all_fragments)} seconds."
+        f"Average time per molecule: {elapsed_time / len(all_fragments):.2f} seconds."
     )
 
     generated_molecules_ase = []
@@ -238,10 +296,8 @@ def generate_molecules(
         )
 
         if stop:
-            logging_fn("Generated %s", generated_molecule_ase.get_chemical_formula())
             output_file = f"{init_molecule_name}_seed={index}.xyz"
         else:
-            logging_fn("STOP was not produced ...")
             output_file = f"{init_molecule_name}_seed={index}_no_stop.xyz"
 
         generated_molecule_ase.write(os.path.join(molecules_outputdir, output_file))
@@ -271,6 +327,8 @@ def main(unused_argv: Sequence[str]) -> None:
 
 
 if __name__ == "__main__":
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
     flags.DEFINE_string("workdir", None, "Workdir for model.")
     flags.DEFINE_string(
         "outputdir",
@@ -306,7 +364,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "max_num_atoms",
-        10,
+        50,
         "Maximum number of atoms to generate per molecule.",
     )
     flags.DEFINE_integer(
@@ -321,7 +379,7 @@ if __name__ == "__main__":
     )
     flags.DEFINE_integer(
         "num_seeds_per_chunk",
-        64,
+        8,
         "Number of seeds to process in parallel.",
     )
     flags.DEFINE_bool(
