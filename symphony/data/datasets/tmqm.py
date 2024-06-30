@@ -13,7 +13,7 @@ import rdkit.Chem as Chem
 
 
 from symphony.data import datasets
-from symphony.models import ptable
+from symphony.models.ptable import PeriodicTableEmbedder
 from symphony import datatypes
 
 
@@ -68,8 +68,9 @@ class TMQMDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def species_to_atom_types() -> Dict[int, str]:
+        ptable = PeriodicTableEmbedder()
         return {
-            i: ptable.symbols[i] for i in range(1, 81)
+            i: ptable.get_symbol(i) for i in range(80)
         }
 
     def split_indices(self) -> Dict[str, Set[int]]:
