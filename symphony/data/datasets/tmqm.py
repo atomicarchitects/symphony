@@ -102,7 +102,7 @@ def load_tmqm(root_dir: str) -> List[ase.Atoms]:
         for i in range(1, 3):
             gz_path = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz.gz")
             logging.info(f"Unzipping {gz_path}...")
-            gunzip(gz_path)
+            sh.gunzip(gz_path)
 
             mol_file = os.path.join(data_path, "tmqm/data", f"tmQM_X{i}.xyz")
             with open(mol_file, "r") as f:
