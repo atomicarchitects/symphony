@@ -31,7 +31,6 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
-        num_targets = graphs.globals.target_positions.shape[1]
         num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
@@ -84,7 +83,7 @@ class Predictor(hk.Module):
                 stop_probs=stop_probs,
                 stop=None,
                 focus_indices=focus_node_indices,
-                target_species=None,
+                target_species=graphs.globals.target_species,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
                 position_vectors=None,
