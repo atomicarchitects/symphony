@@ -116,7 +116,7 @@ class E3SchNet(hk.Module):
         cutoff: float,
         max_ell: int,
         num_species: int,
-        simple_embedding: bool,
+        periodic_table_embedding: bool,
         name: Optional[str] = None,
     ):
         """
@@ -147,7 +147,7 @@ class E3SchNet(hk.Module):
         self.cutoff_fn = lambda x: cosine_cutoff(x, cutoff=cutoff)
         self.max_ell = max_ell
         self.num_species = num_species
-        self.simple_embedding = simple_embedding
+        self.periodic_table_embedding = periodic_table_embedding
         self.ptable = PeriodicTable()
 
     def __call__(self, fragments: datatypes.Fragments) -> jnp.ndarray:
@@ -170,14 +170,14 @@ class E3SchNet(hk.Module):
 
         # Compute atom embeddings.
         # Initially, the atom embeddings are just scalars.
-        if self.simple_embedding:
-            x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
-        else:
+        if self.periodic_table_embedding:
             x_species = hk.Embed(self.num_species, self.init_embedding_dim)(species)
             x_group = hk.Embed(18, self.init_embedding_dim)(jax.vmap(lambda s: self.ptable.get_group(s))(species))
             x_row = hk.Embed(7, self.init_embedding_dim)(jax.vmap(lambda s: self.ptable.get_row(s))(species))
             x_block = hk.Embed(4, self.init_embedding_dim)(jax.vmap(lambda s: self.ptable.get_block(s))(species))
             x = jnp.concatenate([x_species, x_group, x_row, x_block], axis=-1)  # TODO: what's the best way to combine these things?
+        else:
+            x = hk.Embed(self.num_species, self.init_embedding_dim)(species)
         x = e3nn.IrrepsArray(f"{x.shape[-1]}x0e", x)
         x = e3nn.haiku.Linear(irreps_out=latent_irreps, force_irreps_out=True)(x)
 

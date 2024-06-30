@@ -385,6 +385,8 @@ def train_and_evaluate(
                 config.loss_kwargs,
                 config.add_noise_to_positions,
                 config.position_noise_std,
+                config.add_noise_to_target_distance,
+                config.target_distance_noise_std,
             )
 
             # Update metrics.

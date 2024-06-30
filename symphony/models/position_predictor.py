@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from symphony import datatypes
-from symphony.models import utils
+from symphony.models.utils import utils
 
 
 class TargetPositionPredictor(hk.Module):

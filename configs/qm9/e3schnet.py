@@ -17,6 +17,7 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config.num_channels = 32
     config.max_ell = 2
     config.activation = "shifted_softplus"
+    config.periodic_table_embedding = False
 
     return config
 
