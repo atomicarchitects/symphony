@@ -6,7 +6,7 @@ import numpy as np
 import chex
 
 from symphony import datatypes
-from symphony.models.ptable import PeriodicTableEmbedder
+from symphony.models import PeriodicTable
 
 
 def generate_fragments(
@@ -128,7 +128,7 @@ def _make_first_fragment(
 ):
     rng, k = jax.random.split(rng)
     if transition_first:
-        ptable = PeriodicTableEmbedder()
+        ptable = PeriodicTable()
         bound1 = ptable.get_group(graph.nodes.species+1) >= 2
         bound2 = ptable.get_group(graph.nodes.species+1) <= 11
         transition_metals = (bound1 & bound2).astype(np.float32)

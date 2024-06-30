@@ -5,7 +5,7 @@ import haiku as hk
 import e3nn_jax as e3nn
 
 from symphony import datatypes
-from symphony.models.ptable import PeriodicTableEmbedder
+from symphony.models import PeriodicTable
 
 
 def shifted_softplus(x: jnp.ndarray) -> jnp.ndarray:
@@ -148,7 +148,7 @@ class E3SchNet(hk.Module):
         self.max_ell = max_ell
         self.num_species = num_species
         self.simple_embedding = simple_embedding
-        self.ptable = PeriodicTableEmbedder()
+        self.ptable = PeriodicTable()
 
     def __call__(self, fragments: datatypes.Fragments) -> jnp.ndarray:
         # 'species' are actually atomic numbers mapped to [0, self.num_species).
