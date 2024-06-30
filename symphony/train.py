@@ -92,7 +92,9 @@ def train_step(
     rng: chex.PRNGKey,
     loss_kwargs: Dict[str, Union[float, int]],
     add_noise_to_positions: bool,
-    noise_std: float,
+    position_noise_std: float,
+    add_noise_to_target_distance: bool,
+    target_distance_noise_std: float,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
@@ -118,10 +120,26 @@ def train_step(
     if add_noise_to_positions:
         noise_rng, rng = jax.random.split(rng)
         position_noise = (
-            jax.random.normal(noise_rng, graphs.nodes.positions.shape) * noise_std
+            jax.random.normal(noise_rng, graphs.nodes.positions.shape) * position_noise_std
         )
         noisy_positions = graphs.nodes.positions + position_noise
         graphs = graphs._replace(nodes=graphs.nodes._replace(positions=noisy_positions))
+
+    if add_noise_to_target_distance:
+        noise_rng, rng = jax.random.split(rng)
+        target_distances = jnp.linalg.norm(graphs.globals.target_positions, axis=-1)
+        target_distance_noise = (
+            jax.random.normal(noise_rng, target_distances.shape) * target_distance_noise_std
+        )
+        noisy_target_distances = target_distances + target_distance_noise
+        scale_factors = noisy_target_distances / target_distances
+        graphs = graphs._replace(
+            globals=graphs.globals._replace(
+                target_positions=(
+                    graphs.globals.target_positions * scale_factors[:, :, None]
+                )
+            )
+        )
 
     # Compute gradients.
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
