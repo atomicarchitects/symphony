@@ -83,7 +83,7 @@ def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments
     )
 
 
-# @functools.partial(jax.jit, static_argnums=(3, 4, 5))
+@functools.partial(jax.jit, static_argnums=(3, 4, 5))
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(3, 4, 5))
 @chex.assert_max_traces(n=2)
 def train_step(
@@ -168,7 +168,7 @@ def train_step(
     return state, batch_metrics
 
 
-# @functools.partial(jax.jit, static_argnums=(2,))
+@functools.partial(jax.jit, static_argnums=(2,))
 @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(2,))
 @chex.assert_max_traces(n=2)
 def evaluate_step(
