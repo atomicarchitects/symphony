@@ -51,6 +51,7 @@ def create_fragments_dataset(
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
     transition_first: Optional[bool] = False,
+    fragment_number: Optional[int] = -1,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
@@ -76,7 +77,7 @@ def create_fragments_dataset(
                         structure, radial_cutoff=radial_cutoff
                     )
 
-                yield from fragments.generate_fragments(
+                frag_generator = fragments.generate_fragments(
                     rng=structure_rng,
                     graph=structure,
                     num_species=num_species,
@@ -87,6 +88,14 @@ def create_fragments_dataset(
                     max_targets_per_graph=max_targets_per_graph,
                     transition_first=transition_first,
                 )
+
+                if fragment_number == -1:
+                    yield from frag_generator
+                else:
+                    for i, frag in enumerate(frag_generator):
+                        if i == fragment_number:
+                            yield frag
+                            break
 
     return fragment_generator(rng)
 
@@ -204,6 +213,7 @@ def get_datasets(
             heavy_first=config.heavy_first,
             max_targets_per_graph=config.max_targets_per_graph,
             transition_first=config.transition_first,
+            fragment_number=config.get("fragment_number", -1),
         )
         for split in ["train", "val", "test"]
     }

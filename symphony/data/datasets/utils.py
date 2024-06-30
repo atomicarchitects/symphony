@@ -9,7 +9,7 @@ import tarfile
 import urllib
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm
+from symphony.data.datasets import dataset, platonic_solids, qm9, qm9_single, geom_drugs, tmqm
 
 
 def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
@@ -23,6 +23,12 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_train_molecules=config.num_train_molecules,
             num_val_molecules=config.num_val_molecules,
             num_test_molecules=config.num_test_molecules,
+        )
+    
+    elif config.dataset == "qm9_single":
+        return qm9_single.QM9Dataset(
+            root_dir=config.root_dir,
+            check_molecule_sanity=config.get("check_molecule_sanity", False),
         )
     
     if config.dataset == "tmqm":
