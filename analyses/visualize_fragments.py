@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import jraph
 
-from symphony.data import input_pipeline_tf
+from symphony.data import input_pipeline
 
 from analyses import analysis
 from analyses import visualizer
@@ -56,10 +56,10 @@ def visualize_predictions_and_fragments(
     config.shuffle_datasets = False
     rng = jax.random.PRNGKey(config.rng_seed)
     rng, dataset_rng = jax.random.split(rng)
-    datasets = input_pipeline_tf.get_datasets(dataset_rng, config)
+    datasets = input_pipeline.get_datasets(dataset_rng, config)
 
     # Load the fragments and compute predictions.
-    fragments = next(datasets["train"].take(1).as_numpy_iterator())
+    fragments = next(iter(datasets["train"]))
     preds = jax.jit(model.apply)(
         params,
         rng,

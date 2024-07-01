@@ -150,10 +150,78 @@ def create_node_embedder(
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
+def create_predictor(config: ml_collections.ConfigDict) -> Predictor:
+    """Creates the predictor model as specified by the config."""
+
+    num_species = datasets.utils.get_dataset(config).num_species()
+    focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
+        node_embedder_fn=lambda: create_node_embedder(
+            config.focus_and_target_species_predictor.embedder_config,
+            num_species,
+        ),
+        latent_size=config.focus_and_target_species_predictor.latent_size,
+        num_layers=config.focus_and_target_species_predictor.num_layers,
+        activation=get_activation(
+            config.focus_and_target_species_predictor.activation
+        ),
+        num_species=num_species,
+    )
+    angular_predictor_config = config.target_position_predictor.angular_predictor
+    radial_predictor_config = config.target_position_predictor.radial_predictor
+    angular_predictor_fn = lambda: LinearAngularPredictor(
+        max_ell=config.target_position_predictor.embedder_config.max_ell,
+        num_channels=angular_predictor_config.num_channels,
+        radial_mlp_num_layers=angular_predictor_config.radial_mlp_num_layers,
+        radial_mlp_latent_size=angular_predictor_config.radial_mlp_latent_size,
+        max_radius=radial_predictor_config.max_radius,
+        res_beta=angular_predictor_config.res_beta,
+        res_alpha=angular_predictor_config.res_alpha,
+        quadrature=angular_predictor_config.quadrature,
+        sampling_inverse_temperature_factor=angular_predictor_config.sampling_inverse_temperature_factor,
+        sampling_num_steps=angular_predictor_config.sampling_num_steps,
+        sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
+    )
+    if config.target_position_predictor.radial_predictor_type == "rational_quadratic_spline":
+        radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
+            num_bins=radial_predictor_config.num_bins,
+            min_radius=radial_predictor_config.min_radius,
+            max_radius=radial_predictor_config.max_radius,
+            num_layers=radial_predictor_config.num_layers,
+            num_param_mlp_layers=radial_predictor_config.num_param_mlp_layers,
+            boundary_error=radial_predictor_config.boundary_error,
+        )
+    elif config.target_position_predictor.radial_predictor_type == "discretized":
+        radial_predictor_fn = lambda: DiscretizedRadialPredictor(
+            num_bins=radial_predictor_config.num_bins,
+            range_min=radial_predictor_config.min_radius,
+            range_max=radial_predictor_config.max_radius,
+            num_layers=radial_predictor_config.num_layers,
+            latent_size=radial_predictor_config.latent_size,
+        )
+    else:
+        raise ValueError(
+            f"Unsupported radial predictor type: {config.target_position_predictor.radial_predictor_type}."
+        )
+    target_position_predictor = TargetPositionPredictor(
+        node_embedder_fn=lambda: create_node_embedder(
+            config.target_position_predictor.embedder_config,
+            num_species,
+        ),
+        angular_predictor_fn=angular_predictor_fn,
+        radial_predictor_fn=radial_predictor_fn,
+        num_species=num_species,
+    )
+    predictor = Predictor(
+        focus_and_target_species_predictor=focus_and_target_species_predictor,
+        target_position_predictor=target_position_predictor,
+    )
+    return predictor
+
+
 def create_model(
     config: ml_collections.ConfigDict, run_in_evaluation_mode: bool
 ) -> hk.Transformed:
-    """Create a model as specified by the config."""
+    """Create a model with init() and apply() defined, as specified by the config."""
 
     def model_fn(
         graphs: datatypes.Fragments,
@@ -161,66 +229,7 @@ def create_model(
         position_inverse_temperature: float = 1.0,
     ) -> datatypes.Predictions:
         """Defines the entire network."""
-
-        num_species = datasets.utils.get_dataset(config).num_species()
-        focus_and_target_species_predictor = FocusAndTargetSpeciesPredictor(
-            node_embedder_fn=lambda: create_node_embedder(
-                config.focus_and_target_species_predictor.embedder_config,
-                num_species,
-            ),
-            latent_size=config.focus_and_target_species_predictor.latent_size,
-            num_layers=config.focus_and_target_species_predictor.num_layers,
-            activation=get_activation(
-                config.focus_and_target_species_predictor.activation
-            ),
-            num_species=num_species,
-        )
-        angular_predictor_config = config.target_position_predictor.angular_predictor
-        radial_predictor_config = config.target_position_predictor.radial_predictor
-        angular_predictor_fn = lambda: LinearAngularPredictor(
-            max_ell=config.target_position_predictor.embedder_config.max_ell,
-            num_channels=angular_predictor_config.num_channels,
-            radial_mlp_num_layers=angular_predictor_config.radial_mlp_num_layers,
-            radial_mlp_latent_size=angular_predictor_config.radial_mlp_latent_size,
-            max_radius=radial_predictor_config.max_radius,
-            res_beta=angular_predictor_config.res_beta,
-            res_alpha=angular_predictor_config.res_alpha,
-            quadrature=angular_predictor_config.quadrature,
-            sampling_inverse_temperature_factor=angular_predictor_config.sampling_inverse_temperature_factor,
-            sampling_num_steps=angular_predictor_config.sampling_num_steps,
-            sampling_init_step_size=angular_predictor_config.sampling_init_step_size,
-        )
-        if config.target_position_predictor.continuous_radius:
-            radial_predictor_fn = lambda: RationalQuadraticSplineRadialPredictor(
-                num_bins=radial_predictor_config.num_bins,
-                min_radius=radial_predictor_config.min_radius,
-                max_radius=radial_predictor_config.max_radius,
-                num_layers=radial_predictor_config.num_layers,
-                num_param_mlp_layers=radial_predictor_config.num_param_mlp_layers,
-                boundary_error=radial_predictor_config.boundary_error,
-            )
-        else:
-            radial_predictor_fn = lambda: DiscretizedRadialPredictor(
-                num_bins=radial_predictor_config.num_bins,
-                range_min=radial_predictor_config.min_radius,
-                range_max=radial_predictor_config.max_radius,
-                num_layers=radial_predictor_config.num_layers,
-                latent_size=radial_predictor_config.latent_size,
-            )
-        target_position_predictor = TargetPositionPredictor(
-            node_embedder_fn=lambda: create_node_embedder(
-                config.target_position_predictor.embedder_config,
-                num_species,
-            ),
-            angular_predictor_fn=angular_predictor_fn,
-            radial_predictor_fn=radial_predictor_fn,
-            num_species=num_species,
-        )
-        predictor = Predictor(
-            focus_and_target_species_predictor=focus_and_target_species_predictor,
-            target_position_predictor=target_position_predictor,
-        )
-
+        predictor = create_predictor(config)
         if run_in_evaluation_mode:
             return predictor.get_evaluation_predictions(
                 graphs,

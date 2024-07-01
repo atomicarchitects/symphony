@@ -85,31 +85,19 @@ class LinearAngularPredictor(AngularPredictor):
         coeffs = self.coeffs(jnp.linalg.norm(position.array), conditioning)
 
         # We have to compute the log partition function, because the distribution is not normalized.
-        prob_signal = e3nn.to_s2grid(
-            coeffs,
-            res_beta=self.res_beta,
-            res_alpha=self.res_alpha,
-            quadrature=self.quadrature,
+        prob_signal = self.coeffs_to_probability_distribution(
+            coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
         assert prob_signal.shape == (
             self.num_channels,
             self.res_beta,
             self.res_alpha,
         )
-        factor = jnp.max(prob_signal.grid_values)
-        prob_signal = prob_signal.replace_values(prob_signal.grid_values - factor)
-        prob_signal = prob_signal.replace_values(jnp.exp(prob_signal.grid_values))
-        prob_signal = prob_signal.replace_values(
-            jnp.sum(prob_signal.grid_values, axis=-3)
-        )
-        assert prob_signal.shape == (self.res_beta, self.res_alpha), prob_signal.shape
-
         log_Z = jnp.log(prob_signal.integrate().array.sum())
         assert log_Z.shape == (), log_Z.shape
 
         # We can compute the logits.
         vals = e3nn.to_s2point(coeffs, normalized_position)
-        vals -= factor
         vals = vals.array.squeeze(-1)
         assert vals.shape == (self.num_channels,), vals.shape
 
@@ -145,6 +133,8 @@ class LinearAngularPredictor(AngularPredictor):
             prob_signal.grid_values - jnp.max(prob_signal.grid_values)
         )
         prob_signal = prob_signal.replace_values(jnp.exp(prob_signal.grid_values))
+        
+        # Sum over the channels.
         prob_signal = prob_signal.replace_values(
             jnp.sum(prob_signal.grid_values, axis=-3)
         )

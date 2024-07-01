@@ -16,6 +16,8 @@ import importlib.resources
 
 from symphony import models
 from symphony import datatypes
+from symphony.data.datasets import utils as dataset_utils
+
 
 ATOMIC_NUMBERS = []
 ELEMENTS = []
@@ -143,10 +145,11 @@ def combine_visualizations(
 
 def get_plotly_traces_for_fragment(
     fragment: datatypes.Fragments,
+    dataset: str = "qm9",
 ) -> Sequence[go.Scatter3d]:
     """Returns the plotly traces for the fragment."""
     atomic_numbers = list(
-        int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
+        int(num) for num in dataset_utils.species_to_atomic_numbers(fragment.nodes.species, dataset)
     )
     molecule_traces = []
     molecule_traces.append(
@@ -197,7 +200,7 @@ def get_plotly_traces_for_fragment(
                         size=[
                             1.05
                             * ATOMIC_SIZES[
-                                models.ATOMIC_NUMBERS[
+                                ATOMIC_NUMBERS[
                                     fragment.globals.target_species.item()
                                 ]
                             ]
@@ -213,12 +216,13 @@ def get_plotly_traces_for_fragment(
 
 
 def get_plotly_traces_for_predictions(
-    pred: datatypes.Predictions, fragment: datatypes.Fragments
+    pred: datatypes.Predictions, fragment: datatypes.Fragments,
+    dataset: str = "qm9",
 ) -> Sequence[go.Scatter3d]:
     """Returns a list of plotly traces for the prediction."""
 
     atomic_numbers = list(
-        int(num) for num in models.get_atomic_numbers(fragment.nodes.species)
+        int(num) for num in dataset_utils.species_to_atomic_numbers(fragment.nodes.species, dataset)
     )
     focus = pred.globals.focus_indices.item()
     focus_position = fragment.nodes.positions[focus]
@@ -274,7 +278,7 @@ def get_plotly_traces_for_predictions(
                     size=[
                         1.05
                         * ATOMIC_SIZES[
-                            models.ATOMIC_NUMBERS[pred.globals.target_species.item()]
+                            ATOMIC_NUMBERS[pred.globals.target_species.item()]
                         ]
                     ],
                     color=["purple"],
