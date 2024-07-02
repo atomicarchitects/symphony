@@ -127,17 +127,27 @@ def train_step(
 
     if add_noise_to_target_distance:
         noise_rng, rng = jax.random.split(rng)
-        target_distances = jnp.linalg.norm(graphs.globals.target_positions, axis=-1)
-        target_distance_noise = (
-            jax.random.normal(noise_rng, target_distances.shape) * target_distance_noise_std
+        # target_distances = jnp.linalg.norm(graphs.globals.target_positions, axis=-1)
+        # target_distances_noise = (
+        #     jax.random.normal(noise_rng, target_distances.shape) * target_distance_noise_std
+        # )
+        # noisy_target_distances = target_distances + target_distances_noise
+        # scale_factors = noisy_target_distances / target_distances
+        # graphs = graphs._replace(
+        #     globals=graphs.globals._replace(
+        #         target_positions=(
+        #             graphs.globals.target_positions * scale_factors[:, :, None]
+        #         )
+        #     )
+        # )
+
+        target_positions = graphs.globals.target_positions
+        target_positions_noise = (
+            jax.random.normal(noise_rng, target_positions.shape) * 0.02
         )
-        noisy_target_distances = target_distances + target_distance_noise
-        scale_factors = noisy_target_distances / target_distances
         graphs = graphs._replace(
             globals=graphs.globals._replace(
-                target_positions=(
-                    graphs.globals.target_positions * scale_factors[:, :, None]
-                )
+                target_positions=target_positions + target_positions_noise
             )
         )
 
@@ -333,9 +343,8 @@ def train_and_evaluate(
         num_seeds=config.generation.num_seeds,
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,
-        max_num_atoms=config.generation.max_num_atoms,
-        avg_neighbors_per_atom=config.generation.avg_neighbors_per_atom,
-        atomic_numbers=data.datasets.utils.get_dataset(config).get_atomic_numbers(),
+        dataset=config.dataset,
+        padding_mode=config.generation.padding_mode,
     )
 
     # Begin training loop.
@@ -347,13 +356,15 @@ def train_and_evaluate(
             state = train_metrics_hook(state)
 
         # Evaluate model, if required.
-        if config.eval and (step % config.eval_every_steps == 0 or first_or_last_step):
+        if config.eval_during_training and (
+            step % config.eval_every_steps == 0 or first_or_last_step
+        ):
             logging.info("Evaluating model.")
             state = evaluate_model_hook(state)
             checkpoint_hook(state)
 
         # Generate molecules, if required.
-        if config.generate and (
+        if config.generate_during_training and (
             step % config.generate_every_steps == 0 or first_or_last_step
         ):
             logging.info("Generating molecules.")

@@ -74,8 +74,7 @@ class TargetPositionPredictor(hk.Module):
         self,
         graphs: datatypes.Fragments,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
-        num_graphs = graphs.n_node.shape[0]
-        num_targets = graphs.globals.target_positions.shape[1]
+        num_graphs, num_targets, _ = graphs.globals.target_positions.shape
 
         # Focus nodes are the first nodes in each graph during training.
         focus_node_indices = utils.get_first_node_indices(graphs)
