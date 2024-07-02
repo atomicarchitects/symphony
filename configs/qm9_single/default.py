@@ -81,6 +81,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.angular_predictor.sampling_init_step_size = 10.0
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
+    config.target_position_predictor.radial_predictor_type = "rational_quadratic_spline"
     config.target_position_predictor.radial_predictor.num_bins = 16
     config.target_position_predictor.radial_predictor.num_param_mlp_layers = 2
     config.target_position_predictor.radial_predictor.num_layers = 2

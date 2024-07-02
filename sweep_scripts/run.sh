@@ -13,11 +13,11 @@
 
 mode=nn
 max_targets_per_graph=4
-cuda=1
+cuda=0
 dataset=qm9
 #workdir=/pool001/songk/workdirs/tmqmg_coord/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 #workdir=/pool001/songk/workdirs/tmqmg_feb26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_single_jun30/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jul01/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir
@@ -31,8 +31,9 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config=configs/$dataset/e3schnet_and_nequip.py \
     --config.log_every_steps=1000 \
     --config.eval_every_steps=10000 \
-    --config.num_train_steps=1000000 \
-    --config.num_train_molecules=1 \
-    --config.num_val_molecules=1 \
-    --config.num_test_molecules=1
+    --config.generate_every_steps=10000 \
+    --config.num_train_steps=1000000
+    # --config.num_train_molecules=1 \
+    # --config.num_val_molecules=1 \
+    # --config.num_test_molecules=1
 
