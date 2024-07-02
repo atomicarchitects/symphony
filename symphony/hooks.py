@@ -17,7 +17,7 @@ import jax.numpy as jnp
 
 from symphony import train, train_state
 from symphony import graphics
-from analyses import metrics, generate_molecules
+from analyses import metrics, generate_molecules_stream_new as generate_molecules
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -67,9 +67,8 @@ class GenerateMoleculesHook:
     num_seeds: int
     num_seeds_per_chunk: int
     init_molecules: str
-    max_num_atoms: int
-    avg_neighbors_per_atom: int
-    atomic_numbers: jnp.ndarray
+    dataset: str
+    padding_mode: str
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -83,7 +82,7 @@ class GenerateMoleculesHook:
             f"step={state.get_step()}",
         )
 
-        molecules_ase, _ = generate_molecules.generate_molecules(
+        molecules_ase = generate_molecules.generate_molecules(
             apply_fn=state.eval_apply_fn,
             params=flax.jax_utils.unreplicate(state.params),
             molecules_outputdir=molecules_outputdir,
@@ -94,10 +93,8 @@ class GenerateMoleculesHook:
             num_seeds=self.num_seeds,
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,
-            max_num_atoms=self.max_num_atoms,
-            avg_neighbors_per_atom=self.avg_neighbors_per_atom,
-            atomic_numbers=self.atomic_numbers,
-            visualize=False,
+            dataset=self.dataset,
+            padding_mode=self.padding_mode,
             verbose=False,
         )
         logging.info(
@@ -110,6 +107,7 @@ class GenerateMoleculesHook:
         molecules = metrics.ase_to_rdkit_molecules(molecules_ase)
 
         # Compute metrics.
+        logging.info("Computing metrics...")
         validity = metrics.compute_validity(molecules)
         uniqueness = metrics.compute_uniqueness(molecules)
 

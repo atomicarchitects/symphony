@@ -39,7 +39,7 @@ import ase
 from analyses import analysis
 from symphony.data import input_pipeline
 from symphony import datatypes
-from symphony.models import utils
+from symphony.models.utils import utils
 
 
 def append_predictions(

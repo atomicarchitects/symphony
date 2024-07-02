@@ -54,10 +54,7 @@ class QM9Dataset(datasets.InMemoryDataset):
 
     def split_indices(self) -> Dict[str, np.ndarray]:
         """Return a dictionary of indices for each split."""
-        if not self.use_edm_splits:
-            raise NotImplementedError("Only EDM splits are supported for QM9.")
-
-        splits = get_edm_splits(self.root_dir)
+        splits = get_qm9_splits(self.root_dir, edm_splits=self.use_edm_splits)
         requested_splits = {
             "train": self.num_train_molecules,
             "val": self.num_val_molecules,
@@ -144,8 +141,9 @@ def load_qm9(
     return all_structures
 
 
-def get_edm_splits(
+def get_qm9_splits(
     root_dir: str,
+    edm_splits: bool,
 ) -> Dict[str, np.ndarray]:
     """Adapted from https://github.com/ehoogeboom/e3_diffusion_for_molecules/blob/main/qm9/data/prepare/qm9.py."""
 
@@ -156,7 +154,7 @@ def get_edm_splits(
         except:
             return False
 
-    logging.info("Using EDM splits. This drops some molecules.")
+    logging.info("Dropping uncharacterized molecules.")
     gdb9_url_excluded = "https://springernature.figshare.com/ndownloader/files/3195404"
     gdb9_txt_excluded = os.path.join(root_dir, "uncharacterized.txt")
     urllib.request.urlretrieve(gdb9_url_excluded, filename=gdb9_txt_excluded)
@@ -195,7 +193,10 @@ def get_edm_splits(
 
     # Generate random permutation.
     np.random.seed(0)
-    data_permutation = np.random.permutation(Nmols)
+    if edm_splits:
+        data_permutation = np.random.permutation(Nmols)
+    else:
+        data_permutation = np.arange(Nmols)
 
     train, val, test, extra = np.split(
         data_permutation, [Ntrain, Ntrain + Nval, Ntrain + Nval + Ntest]

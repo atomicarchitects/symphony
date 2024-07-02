@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Sequence, Union
+from typing import Dict, Tuple, Sequence, Union, Callable
 import concurrent.futures
 import os
 import time
@@ -7,16 +7,19 @@ from absl import app
 from absl import flags
 from absl import logging
 import ase
-import tqdm
-import jax
+import chex
 import jax.numpy as jnp
+import optax
+import jax
 import jraph
 import numpy as np
 
 from analyses import analysis
 from symphony import datatypes
 from symphony.data import input_pipeline
+from symphony.data.datasets import qm9, tmqm
 from symphony import models
+
 
 FLAGS = flags.FLAGS
 
@@ -82,7 +85,11 @@ def create_batch_iterator(
 
 
 def estimate_padding_budget(
-    all_fragments, num_seeds_per_chunk, padding_mode: str = "fixed"
+    all_fragments: Sequence[datatypes.Fragments],
+    num_seeds_per_chunk: int, 
+    avg_nodes_per_graph: int,
+    avg_edges_per_graph: int,
+    padding_mode: str,
 ):
     """Estimates the padding budget for a batch."""
 
@@ -99,6 +106,8 @@ def estimate_padding_budget(
         avg_edges_per_graph = sum(
             fragment.n_edge.sum() for fragment in all_fragments
         ) / len(all_fragments)
+    else:
+        raise ValueError(f"Unknown padding mode: {padding_mode}")
 
     avg_nodes_per_graph = max(avg_nodes_per_graph, 1)
     avg_edges_per_graph = max(avg_edges_per_graph, 1)
@@ -114,7 +123,7 @@ def estimate_padding_budget(
     return padding_budget
 
 
-def generate_molecules(
+def generate_molecules_from_workdir(
     workdir: str,
     outputdir: str,
     focus_and_atom_type_inverse_temperature: float,
@@ -122,10 +131,9 @@ def generate_molecules(
     step: str,
     num_seeds: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
-    max_num_atoms: int,
-    avg_atoms_per_graph: int,
-    avg_neighbors_per_atom: int,
     num_seeds_per_chunk: int,
+    dataset: str,
+    padding_mode: str,
     verbose: bool = True,
 ):
     """Generates molecules from a trained model at the given workdir."""
@@ -137,6 +145,62 @@ def generate_molecules(
     logging_fn("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging_fn("JAX local devices: %r", jax.local_devices())
     logging_fn("CUDA_VISIBLE_DEVICES: %r", os.environ.get("CUDA_VISIBLE_DEVICES"))
+
+    # Load model.
+    name = analysis.name_from_workdir(workdir)
+    model, params, config = analysis.load_model_at_step(
+        workdir, step, run_in_evaluation_mode=True
+    )
+    params = jax.device_put(params)
+
+    # Log config.
+    logging_fn(config.to_dict())
+
+    # Set output directory.
+    molecules_outputdir = os.path.join(
+        outputdir,
+        name,
+        f"fait={focus_and_atom_type_inverse_temperature}",
+        f"pit={position_inverse_temperature}",
+        f"step={step}",
+        "molecules",
+    )
+
+    # Generate molecules.
+    return generate_molecules(
+        apply_fn=model.apply,
+        params=params,
+        molecules_outputdir=molecules_outputdir,
+        radial_cutoff=config.radial_cutoff,
+        focus_and_atom_type_inverse_temperature=focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature=position_inverse_temperature,
+        num_seeds=num_seeds,
+        init_molecules=init_molecules,
+        num_seeds_per_chunk=num_seeds_per_chunk,
+        dataset=dataset,
+        padding_mode=padding_mode,
+        verbose=verbose,
+    )
+
+
+def generate_molecules(
+    apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    params: optax.Params,
+    molecules_outputdir: str,
+    radial_cutoff: float,
+    focus_and_atom_type_inverse_temperature: float,
+    position_inverse_temperature: float,
+    num_seeds: int,
+    num_seeds_per_chunk: int,
+    init_molecules: Sequence[Union[str, ase.Atoms]],
+    dataset: str,
+    padding_mode: str,
+    verbose: bool = False,
+):
+    if verbose:
+        logging_fn = logging.info
+    else:
+        logging_fn = lambda *args: None
 
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
@@ -152,17 +216,23 @@ def generate_molecules(
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
 
-    # Load model.
-    rng = jax.random.PRNGKey(0)
-    name = analysis.name_from_workdir(workdir)
-    model, params, config = analysis.load_model_at_step(
-        workdir, step, run_in_evaluation_mode=True
-    )
-    params = jax.device_put(params)
+    # Set parameters based on the dataset.
+    if dataset == "qm9":
+        max_num_atoms = 35
+        avg_nodes_per_graph = 35
+        avg_edges_per_graph = 350
+        atomic_numbers = qm9.QM9Dataset.get_atomic_numbers()
+    elif dataset == "tmqm":
+        max_num_atoms = 60
+        avg_nodes_per_graph = 50
+        avg_edges_per_graph = 500
+        atomic_numbers = tmqm.TMQMDataset.get_atomic_numbers()
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
 
     @jax.jit
-    def apply_fn(batch, apply_rng):
-        preds = model.apply(
+    def apply_fn_wrapped(batch, apply_rng):
+        preds = apply_fn(
             params,
             apply_rng,
             batch,
@@ -171,29 +241,20 @@ def generate_molecules(
         )
         return batch, preds
 
-    # Log config.
-    logging_fn(config.to_dict())
-
     # Create output directories.
-    molecules_outputdir = os.path.join(
-        outputdir,
-        name,
-        f"fait={focus_and_atom_type_inverse_temperature}",
-        f"pit={position_inverse_temperature}",
-        f"step={step}",
-        "molecules",
-    )
     os.makedirs(molecules_outputdir, exist_ok=True)
 
+    # Create initial fragments.
     all_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, config.radial_cutoff
+            init_molecule, atomic_numbers, radial_cutoff
         )
         for init_molecule in init_molecules
     ]
     stopped = [False] * len(all_fragments)
     iteration_count = 0
-
+    rng = jax.random.PRNGKey(0)
+ 
     # Start timer.
     start_time = time.time()
 
@@ -206,7 +267,9 @@ def generate_molecules(
 
             # Update padding budget.
             padding_budget = estimate_padding_budget(
-                all_fragments[:10], num_seeds_per_chunk
+                all_fragments[:10], num_seeds_per_chunk,
+                avg_nodes_per_graph, avg_edges_per_graph,
+                padding_mode=padding_mode,
             )
             logging_fn("Padding budget for this iteration: %r", padding_budget)
 
@@ -218,7 +281,7 @@ def generate_molecules(
                 apply_rng, rng = jax.random.split(rng)
 
                 # Predict on this batch.
-                gpu_future = executor.submit(apply_fn, fragments, apply_rng)
+                gpu_future = executor.submit(apply_fn_wrapped, fragments, apply_rng)
                 gpu_futures.append(gpu_future)
                 indices.extend(fragment_indices)
 
@@ -230,7 +293,6 @@ def generate_molecules(
             gpu_results = [future.result() for future in gpu_futures]
 
             # Process the results on the CPU.
-            cpu_futures = []
             cpu_results = []
             for fragments, preds in gpu_results:
 
@@ -246,7 +308,7 @@ def generate_molecules(
                     # cpu_futures.append(cpu_future)
 
                     stop, new_fragment = append_predictions_to_fragment(
-                        fragment, pred, valid, config.radial_cutoff
+                        fragment, pred, valid, radial_cutoff
                     )
                     cpu_results.append((stop, new_fragment))
 
@@ -259,7 +321,7 @@ def generate_molecules(
                 if index is None:
                     continue
 
-                # stopped[index] |= stop
+                stopped[index] |= stop
                 stopped[index] |= len(new_fragment.nodes.species) > max_num_atoms
 
                 if not stopped[index]:
@@ -291,7 +353,7 @@ def generate_molecules(
     for index, (stop, fragment) in enumerate(zip(stopped, all_fragments)):
         init_molecule_name = init_molecule_names[index]
         generated_molecule_ase = ase.Atoms(
-            symbols=models.utils.get_atomic_numbers(fragment.nodes.species),
+            symbols=models.get_atomic_numbers(fragment.nodes.species, dataset),
             positions=fragment.nodes.positions,
         )
 
@@ -310,19 +372,20 @@ def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
 
     workdir = os.path.abspath(FLAGS.workdir)
-    generate_molecules(
-        workdir,
-        FLAGS.outputdir,
-        FLAGS.focus_and_atom_type_inverse_temperature,
-        FLAGS.position_inverse_temperature,
-        FLAGS.step,
-        FLAGS.num_seeds,
-        FLAGS.init,
-        FLAGS.max_num_atoms,
-        FLAGS.avg_atoms_per_graph,
-        FLAGS.avg_neighbors_per_atom,
-        FLAGS.num_seeds_per_chunk,
-        FLAGS.verbose,
+    generate_molecules_from_workdir(
+        workdir=workdir,
+        outputdir=FLAGS.outputdir,
+        focus_and_atom_type_inverse_temperature=FLAGS.focus_and_atom_type_inverse_temperature,
+        position_inverse_temperature=FLAGS.position_inverse_temperature,
+        step=FLAGS.step,
+        num_seeds=FLAGS.num_seeds,
+        init_molecules=FLAGS.init,
+        max_num_atoms=FLAGS.max_num_atoms,
+        avg_nodes_per_graph=FLAGS.avg_nodes_per_graph,
+        avg_edges_per_graph=FLAGS.avg_edges_per_graph,
+        num_seeds_per_chunk=FLAGS.num_seeds_per_chunk,
+        dataset=FLAGS.dataset,
+        padding_mode=FLAGS.padding_mode,
     )
 
 
@@ -368,19 +431,24 @@ if __name__ == "__main__":
         "Maximum number of atoms to generate per molecule.",
     )
     flags.DEFINE_integer(
-        "avg_atoms_per_graph",
-        20,
+        "avg_nodes_per_graph",
+        50,
         "Average number of atoms per graph.",
     )
     flags.DEFINE_integer(
-        "avg_neighbors_per_atom",
-        10,
+        "avg_edges_per_graph",
+        500,
         "Average number of neighbors per atom.",
     )
     flags.DEFINE_integer(
         "num_seeds_per_chunk",
         8,
         "Number of seeds to process in parallel.",
+    )
+    flags.DEFINE_string(
+        "padding_mode",
+        "fixed",
+        "Kind of padding to use.",
     )
     flags.DEFINE_bool(
         "verbose",
