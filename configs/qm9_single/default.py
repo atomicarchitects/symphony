@@ -21,7 +21,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_test_molecules = 1
     config.heavy_first = False
     config.transition_first = False
-    config.fragment_number = 5
+    config.fragment_number = -1
 
     # Optimizer.
     config.optimizer = "adam"
