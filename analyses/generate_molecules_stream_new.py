@@ -17,7 +17,7 @@ import numpy as np
 from analyses import analysis
 from symphony import datatypes
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, tmqm
+from symphony.data.datasets import qm9, qm9_single, tmqm
 from symphony import models
 
 
@@ -218,7 +218,7 @@ def generate_molecules(
         ]
 
     # Set parameters based on the dataset.
-    if dataset == "qm9":
+    if "qm9" in dataset:
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 350
