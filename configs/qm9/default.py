@@ -42,6 +42,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_train_steps = 1_000_000
     config.log_every_steps = 1000
     config.eval = True
+    config.eval_during_training = True
+    config.generate_during_training = True
     config.num_eval_steps = 100
     config.eval_every_steps = 30000
     config.generate = True
@@ -105,5 +107,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.max_num_atoms = 35
     config.generation.avg_neighbors_per_atom = 5
     config.generation.species = [1, 6, 7, 8, 9]
+    config.generation.padding_mode = "fixed"
 
     return config
