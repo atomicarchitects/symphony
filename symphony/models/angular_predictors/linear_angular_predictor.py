@@ -89,10 +89,10 @@ class LinearAngularPredictor(AngularPredictor):
             coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
         assert prob_signal.shape == (
-            self.num_channels,
+            # self.num_channels,
             self.res_beta,
             self.res_alpha,
-        )
+        ), prob_signal.shape
         log_Z = jnp.log(prob_signal.integrate().array.sum())
         assert log_Z.shape == (), log_Z.shape
 

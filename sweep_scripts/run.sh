@@ -17,7 +17,7 @@ cuda=0
 dataset=qm9
 #workdir=/pool001/songk/workdirs/tmqmg_coord/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 #workdir=/pool001/songk/workdirs/tmqmg_feb26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jun22/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jul01/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir \

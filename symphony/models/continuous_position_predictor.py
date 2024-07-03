@@ -133,7 +133,7 @@ class TargetPositionPredictor(hk.Module):
 
         # Sample the radial component.
         radii = hk.vmap(self.radial_predictor.sample, split_rng=True)(conditioning)
-        assert radii.shape == (num_graphs,)
+        assert radii.shape == (num_graphs,), (radii.shape, num_graphs)
 
         # Predict the target position vectors.
         angular_sample_fn = lambda r, cond: self.angular_predictor.sample(
