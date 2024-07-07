@@ -148,9 +148,8 @@ def get_plotly_traces_for_fragment(
     dataset: str = "qm9",
 ) -> Sequence[go.Scatter3d]:
     """Returns the plotly traces for the fragment."""
-    atomic_numbers = list(
-        int(num) for num in dataset_utils.species_to_atomic_numbers(fragment.nodes.species, dataset)
-    )
+    atomic_numbers = dataset_utils.get_atomic_numbers(dataset)
+    fragment_atomic_numbers = atomic_numbers[fragment.nodes.species]
     molecule_traces = []
     molecule_traces.append(
         go.Scatter3d(
@@ -159,19 +158,21 @@ def get_plotly_traces_for_fragment(
             z=fragment.nodes.positions[:, 2],
             mode="markers",
             marker=dict(
-                size=[ATOMIC_SIZES[num] for num in atomic_numbers],
-                color=[ATOMIC_COLORS[num] for num in atomic_numbers],
+                size=[ATOMIC_SIZES[num] for num in fragment_atomic_numbers],
+                color=[ATOMIC_COLORS[num] for num in fragment_atomic_numbers],
             ),
             hovertext=[
-                f"Element: {ase.data.chemical_symbols[num]}" for num in atomic_numbers
+                f"Element: {ase.data.chemical_symbols[num]}" for num in fragment_atomic_numbers
             ],
             opacity=1.0,
             name="Molecule Atoms",
             legendrank=1,
         )
     )
-    # Add bonds.
+    # Add fragment edges.
+    edge_count = 0
     for i, j in zip(fragment.senders, fragment.receivers):
+        edge_count += 1
         molecule_traces.append(
             go.Scatter3d(
                 x=fragment.nodes.positions[[i, j], 0],
@@ -179,34 +180,46 @@ def get_plotly_traces_for_fragment(
                 z=fragment.nodes.positions[[i, j], 2],
                 line=dict(color="black"),
                 mode="lines",
-                showlegend=False,
+                showlegend=(edge_count == 1),
+                visible="legendonly",
+                name="Edges",
+                legendgroup="Edges",
             )
         )
 
     # Highlight the target atom.
     if fragment.globals is not None:
         if fragment.globals.target_positions is not None and not fragment.globals.stop:
-            # The target position is relative to the fragment's focus node.
+            # The target positions are relative to the fragment's focus node.
             target_positions = (
                 fragment.globals.target_positions + fragment.nodes.positions[0]
             )
+            target_atomic_number = atomic_numbers[
+                fragment.globals.target_species.item()
+            ]
             molecule_traces.append(
                 go.Scatter3d(
-                    x=[target_positions[:, 0]],
-                    y=[target_positions[:, 1]],
-                    z=[target_positions[:, 2]],
+                    x=target_positions[:, 0],
+                    y=target_positions[:, 1],
+                    z=target_positions[:, 2],
                     mode="markers",
                     marker=dict(
                         size=[
-                            1.05
-                            * ATOMIC_SIZES[
-                                ATOMIC_NUMBERS[
-                                    fragment.globals.target_species.item()
-                                ]
-                            ]
+                            ATOMIC_SIZES[target_atomic_number]
+                            for _ in target_positions
                         ],
-                        color=["green"],
+                        color=[
+                            ATOMIC_COLORS[target_atomic_number]
+                            for _ in target_positions
+                        ],
+                        line=dict(
+                            color='red',
+                            width=3,
+                        )
                     ),
+                    hovertext=[
+                        f"Element: {ase.data.chemical_symbols[target_atomic_number]}" for _ in target_positions
+                    ],
                     opacity=0.5,
                     name="Target Atoms",
                 )
@@ -296,7 +309,7 @@ def get_plotly_traces_for_predictions(
     position_logits.grid_values -= np.max(position_logits.grid_values)
     position_probs = position_logits.apply(np.exp)
 
-    count = 0
+    r_surface_count = 0
     cmin = 0.0
     cmax = position_probs.grid_values.max().item()
     for i in range(len(radii)):
@@ -306,8 +319,8 @@ def get_plotly_traces_for_predictions(
         if prob_r.grid_values.max() < 1e-2 * cmax:
             continue
 
-        count += 1
-        surface_r = go.Surface(
+        r_surface_count += 1
+        r_surface = go.Surface(
             **prob_r.plotly_surface(radius=radii[i], translation=focus_position),
             colorscale=[[0, "rgba(4, 59, 192, 0.)"], [1, "rgba(4, 59, 192, 1.)"]],
             showscale=False,
@@ -315,10 +328,10 @@ def get_plotly_traces_for_predictions(
             cmax=cmax,
             name="Position Probabilities",
             legendgroup="Position Probabilities",
-            showlegend=(count == 1),
+            showlegend=(r_surface_count == 1),
             visible="legendonly",
         )
-        molecule_traces.append(surface_r)
+        molecule_traces.append(r_surface)
 
     # Plot spherical harmonic projections of logits.
     # Find closest index in RADII to the sampled positions.
@@ -437,8 +450,8 @@ def visualize_fragment(
     fig.update_layout(
         scene=dict(
             xaxis=dict(**axis),
-            yaxis=dict(**axis, scaleanchor="x", scaleratio=1),
-            zaxis=dict(**axis, scaleanchor="x", scaleratio=1),
+            yaxis=dict(**axis),
+            zaxis=dict(**axis),
             aspectmode="data",
         ),
         paper_bgcolor="rgba(255,255,255,1)",
@@ -453,7 +466,7 @@ def visualize_fragment(
 
     try:
         return go.FigureWidget(fig)
-    except NotImplementedError:
+    except (ImportError, NotImplementedError):
         return fig
 
 
@@ -563,7 +576,7 @@ def visualize_predictions(
         fig_widget.layout.scene2.on_change(cam_change_2, "camera")
 
         return fig_widget
-    except NotImplementedError:
+    except (ImportError, NotImplementedError):
         return fig
 
 
