@@ -85,7 +85,7 @@ class LinearAngularPredictor(AngularPredictor):
         coeffs = self.coeffs(jnp.linalg.norm(position.array), conditioning)
 
         # We have to compute the log partition function, because the distribution is not normalized.
-        prob_signal = self.coeffs_to_probability_distribution(
+        prob_signal, max_val = self.coeffs_to_probability_distribution(
             coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
         assert prob_signal.shape == (
@@ -98,25 +98,19 @@ class LinearAngularPredictor(AngularPredictor):
 
         # We can compute the logits.
         vals = e3nn.to_s2point(coeffs, normalized_position)
+        vals -= max_val
         vals = vals.array.squeeze(-1)
         assert vals.shape == (self.num_channels,), vals.shape
 
         logits = jax.scipy.special.logsumexp(vals, axis=-1)
         assert logits.shape == (), logits.shape
 
-        # jax.debug.print("grid_values_min={x}, grid_values_max={y}", x=jnp.min(prob_signal.grid_values), y=jnp.max(prob_signal.grid_values))
-        # jax.debug.print("integral={x}", x=prob_signal.integrate())
-        # jax.debug.print("normalized_position={x}", x=normalized_position)
-        # jax.debug.print("coeffs={x}", x=coeffs)
-        # jax.debug.print("vals={x}", x=vals)
-        # jax.debug.print("logits={x}", x=logits)
-
         return logits - log_Z
 
     @staticmethod
     def coeffs_to_probability_distribution(
         coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int, quadrature: str
-    ) -> e3nn.SphericalSignal:
+    ) -> Tuple[e3nn.SphericalSignal, float]:
         """Converts the coefficients at this radius to a probability distribution."""
         num_channels = coeffs.shape[-2]
 
@@ -129,8 +123,9 @@ class LinearAngularPredictor(AngularPredictor):
             res_alpha,
         )
 
+        max_val = jnp.max(prob_signal.grid_values)
         prob_signal = prob_signal.replace_values(
-            prob_signal.grid_values - jnp.max(prob_signal.grid_values)
+            prob_signal.grid_values - max_val
         )
         prob_signal = prob_signal.replace_values(jnp.exp(prob_signal.grid_values))
         
@@ -143,7 +138,7 @@ class LinearAngularPredictor(AngularPredictor):
             res_beta,
             res_alpha,
         )
-        return prob_signal
+        return prob_signal, max_val
 
     def sample(
         self, radius: float, conditioning: e3nn.IrrepsArray, inverse_temperature: float
@@ -157,7 +152,7 @@ class LinearAngularPredictor(AngularPredictor):
         coeffs *= beta
 
         # We have to compute the log partition function, because the distribution is not normalized.
-        prob_signal = self.coeffs_to_probability_distribution(
+        prob_signal, _ = self.coeffs_to_probability_distribution(
             coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
 
