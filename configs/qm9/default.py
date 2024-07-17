@@ -19,7 +19,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
-    config.max_targets_per_graph = 4
+    config.max_targets_per_graph = 1
     config.heavy_first = False
     config.transition_first = False
 
@@ -27,14 +27,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.optimizer = "adam"
     config.momentum = None
     config.learning_rate = 5e-4
-    config.learning_rate_schedule = "constant"
-    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
-    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
-    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
-        "learning_rate"
-    )
-    config.learning_rate_schedule_kwargs.warmup_steps = 2000
-    config.learning_rate_schedule_kwargs.decay_steps = 50000
 
     # Training.
     config.rng_seed = 0

@@ -13,6 +13,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_val_molecules = 1
     config.num_test_molecules = 1
     config.num_train_steps = 10000
+    config.use_edm_splits = False
+    config.position_noise_std = 0.1
+    config.target_distance_noise_std = 0.05
     config.num_eval_steps = 10
     config.eval_every_steps = 500
+    config.generate_every_steps = 1000
     return config
