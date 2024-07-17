@@ -136,7 +136,7 @@ class TargetPositionPredictor(hk.Module):
             num_targets, 
             self.angular_predictor.res_beta,
             self.angular_predictor.res_alpha
-        )
+        ), angular_logits.shape
         # assert angular_logits.shape == (
         #     num_graphs,
         #     num_targets, 

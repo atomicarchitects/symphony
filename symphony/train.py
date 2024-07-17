@@ -31,6 +31,8 @@ import symphony.data as data
 class Metrics(metrics.Collection):
     total_loss: metrics.Average.from_output("total_loss")
     focus_and_atom_type_loss: metrics.Average.from_output("focus_and_atom_type_loss")
+    radial_loss: metrics.Average.from_output("radial_loss")
+    angular_loss: metrics.Average.from_output("angular_loss")
     position_loss: metrics.Average.from_output("position_loss")
 
 
@@ -105,6 +107,8 @@ def train_step(
         preds = state.apply_fn(params, None, graphs)
         total_loss, (
             focus_and_atom_type_loss,
+            radial_loss,
+            angular_loss,
             position_loss,
         ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
         mask = jraph.get_graph_padding_mask(graphs)
@@ -112,6 +116,8 @@ def train_step(
         return mean_loss, (
             total_loss,
             focus_and_atom_type_loss,
+            radial_loss,
+            angular_loss,
             position_loss,
             mask,
         )
@@ -155,7 +161,7 @@ def train_step(
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (
         _,
-        (total_loss, focus_and_atom_type_loss, position_loss, mask),
+        (total_loss, focus_and_atom_type_loss, radial_loss, angular_loss, position_loss, mask),
     ), grads = grad_fn(state.params, graphs)
 
     # Average gradients across devices.
@@ -165,6 +171,8 @@ def train_step(
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
+        radial_loss=radial_loss,
+        angular_loss=angular_loss,
         position_loss=position_loss,
         mask=mask,
     )
@@ -195,6 +203,8 @@ def evaluate_step(
     preds = state.apply_fn(state.params, None, graphs)
     total_loss, (
         focus_and_atom_type_loss,
+        radial_loss,
+        angular_loss,
         position_loss,
     ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
 
@@ -203,6 +213,8 @@ def evaluate_step(
     return Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
+        radial_loss=radial_loss,
+        angular_loss=angular_loss,
         position_loss=position_loss,
         mask=mask,
     )

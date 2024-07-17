@@ -98,7 +98,7 @@ def estimate_padding_budget(
 
     if padding_mode == "fixed":
         avg_nodes_per_graph = 50
-        avg_edges_per_graph = 500
+        avg_edges_per_graph = 1000  # TODO why did this get so much bigger?
     elif padding_mode == "dynamic":
         avg_nodes_per_graph = sum(
             fragment.n_node.sum() for fragment in all_fragments

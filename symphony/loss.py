@@ -92,18 +92,22 @@ def generation_loss(
             num_targets,
         )
 
-        target_positions_mask = graphs.globals.target_positions_mask
-        assert target_positions_mask.shape == (num_graphs, num_targets)
+        def process_logits(logits):
+            target_positions_mask = graphs.globals.target_positions_mask
+            assert target_positions_mask.shape == (num_graphs, num_targets)
 
-        loss_position = -position_logits
-        loss_position = jnp.where(target_positions_mask, loss_position, 0)
-        loss_position = loss_position.sum(axis=-1)
-        num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
-        loss_position /= num_valid_targets
+            loss = -position_logits
+            loss = jnp.where(target_positions_mask, loss, 0)
+            loss = loss.sum(axis=-1)
+            num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
+            loss /= num_valid_targets
 
-        assert loss_position.shape == (num_graphs,)
+            assert loss.shape == (num_graphs,)
+            return loss
 
-        return loss_position
+        return (process_logits(preds.globals.radial_logits),
+            process_logits(preds.globals.angular_logits),
+            process_logits(position_logits))
     
     def discretized_position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
@@ -176,11 +180,14 @@ def generation_loss(
                 * (models.safe_log(true_radial_weights) - predicted_radial_logits)
             ).sum()
 
-        _, _, res_beta, res_alpha = preds.globals.angular_logits.shape
+        # print("Angular logits shape:", preds.globals.angular_logits.shape)
+        # print("Radial logits shape:", preds.globals.radial_logits.shape)
         quadrature = "gausslegendre"
         _, num_radii = preds.globals.radial_logits.shape
         radial_bins = jnp.linspace(0, 5, num_radii)  # TODO hardcoded
         lmax = 5  # TODO hardcoded
+        res_beta = 100  # TODO hardcoded
+        res_alpha = 99  # TODO hardcoded
 
         target_positions = graphs.globals.target_positions
         target_positions_mask = graphs.globals.target_positions_mask
@@ -262,50 +269,39 @@ def generation_loss(
         )
 
         predicted_angular_logits = preds.globals.angular_logits
-        # if predicted_angular_logits is None:
-        #     position_probs = jax.vmap(models.position_logits_to_position_distribution)(
-        #         position_logits
-        #     )
-        #     predicted_angular_dist = jax.vmap(
-        #         models.position_distribution_to_angular_distribution,
-        #     )(position_probs)
-        #     predicted_angular_logits = predicted_angular_dist.apply(models.safe_log)
-
-        #     # Add a dummy dimension for the radial bins.
-        #     predicted_angular_logits.grid_values = predicted_angular_logits.grid_values[
-        #         :, None, :, :
-        #     ]
-
-        assert predicted_angular_logits.shape == (
+        assert predicted_angular_logits.shape == (num_graphs, num_targets), (
+            predicted_angular_logits.shape,
             num_graphs,
             num_targets,
-            res_beta,
-            res_alpha,
-        ), predicted_angular_logits.shape
+        )
 
-        # loss_angular = jax.vmap(kl_divergence_on_spheres)(
-        #     mean_true_angular_dist, predicted_angular_logits
-        # )
+        target_positions_mask = graphs.globals.target_positions_mask
+        assert target_positions_mask.shape == (num_graphs, num_targets)
 
-        loss_angular = jax.vmap(lambda dist, logits_single_graph: jax.vmap(
-                lambda logits: kl_divergence_on_spheres(dist, logits))(logits_single_graph)
-            )(
-            mean_true_angular_dist, predicted_angular_logits
-        ).sum(axis=-1) / num_targets
+        loss_angular = -predicted_angular_logits
+        loss_angular = jnp.where(target_positions_mask, loss_angular, 0)
+        loss_angular = loss_angular.sum(axis=-1)
+        num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
+        loss_angular /= num_valid_targets
+
+        assert loss_angular.shape == (num_graphs,)
 
         loss_position = loss_angular + loss_radial
         assert loss_position.shape == (num_graphs,)
         # jax.debug.print("Radial loss: {x}", x=loss_radial)
         # jax.debug.print("Angular loss: {x}", x=loss_angular)
 
-        return loss_position
+        return loss_radial, loss_angular, loss_position
 
     # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     if discretized_loss:
-        loss_position = (1 - graphs.globals.stop) * discretized_position_loss()
+        loss_radial, loss_angular, loss_position = discretized_position_loss()
     else:
-        loss_position = (1 - graphs.globals.stop) * position_loss()
+        loss_radial, loss_angular, loss_position = position_loss()
+    loss_radial = (1 - graphs.globals.stop) * loss_radial
+    loss_angular = (1 - graphs.globals.stop) * loss_angular
+    loss_position = (1 - graphs.globals.stop) * loss_position
 
     # Ignore position loss for graphs with less than, or equal to 3 atoms?
     # This is because there are symmetry-based degeneracies in the target distribution for these graphs.
@@ -313,4 +309,4 @@ def generation_loss(
         loss_position = jnp.where(n_node <= 3, 0, loss_position)
 
     total_loss = loss_focus_and_atom_type + loss_position
-    return total_loss, (loss_focus_and_atom_type, loss_position)
+    return total_loss, (loss_focus_and_atom_type, loss_radial, loss_angular, loss_position)

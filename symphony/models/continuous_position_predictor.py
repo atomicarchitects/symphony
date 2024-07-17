@@ -143,4 +143,4 @@ class TargetPositionPredictor(hk.Module):
             radii, conditioning
         )
         assert position_vectors.shape == (num_graphs, 3)
-        return position_vectors
+        return None, None, position_vectors
