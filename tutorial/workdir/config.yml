@@ -1,0 +1,287 @@
+!!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+_configdict: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+  _convert_dict: true
+  _fields:
+    add_noise_to_positions: true
+    compute_padding_dynamically: false
+    dataset: qm9
+    eval_every_steps: 30000
+    focus_and_target_species_predictor: &id006 !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        activation: softplus
+        compute_global_embedding: false
+        embedder_config: &id007 !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+          _convert_dict: true
+          _fields:
+            activation: shifted_softplus
+            cutoff: 5.0
+            max_ell: 2
+            model: E3SchNet
+            num_channels: 64
+            num_filters: 16
+            num_interactions: 3
+            num_radial_basis_functions: 8
+          _locked: true
+          _type_safe: true
+        latent_size: 128
+        num_layers: 3
+      _locked: true
+      _type_safe: true
+    fragment_logic: nn_edm
+    freeze_node_embedders: false
+    learning_rate: &id001 !!python/object:ml_collections.config_dict.config_dict.FieldReference
+      _field_type: &id002 !!python/name:builtins.float ''
+      _ops: []
+      _required: false
+      _value: 0.0005
+    learning_rate_schedule: constant
+    learning_rate_schedule_kwargs: &id008 !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        decay_steps: 50000
+        init_value: *id001
+        peak_value: !!python/object:ml_collections.config_dict.config_dict.FieldReference
+          _field_type: *id002
+          _ops:
+          - !!python/object/new:ml_collections.config_dict.config_dict._Op
+            - !!python/object/apply:functools.partial
+              args:
+              - &id003 !!python/name:_operator.mul ''
+              state: !!python/tuple
+              - *id003
+              - !!python/tuple
+                - 2
+              - {}
+              - null
+            - []
+          _required: false
+          _value: *id001
+        warmup_steps: 2000
+      _locked: true
+      _type_safe: true
+    log_every_steps: 1000
+    loss_kwargs: &id009 !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        ignore_position_loss_for_small_fragments: false
+        mask_atom_types: false
+        position_loss_type: kl_divergence
+        radial_loss_scaling_factor: 1.0
+        radius_rbf_variance: 1.0e-05
+        target_position_inverse_temperature: 20.0
+        target_position_lmax: 5
+      _locked: true
+      _type_safe: true
+    mask_atom_types: false
+    max_n_edges: !!python/object:ml_collections.config_dict.config_dict.FieldReference
+      _field_type: &id004 !!python/name:builtins.int ''
+      _ops:
+      - !!python/object/new:ml_collections.config_dict.config_dict._Op
+        - !!python/object/apply:functools.partial
+          args:
+          - *id003
+          state: !!python/tuple
+          - *id003
+          - !!python/tuple
+            - 90
+          - {}
+          - null
+        - []
+      _required: false
+      _value: &id005 !!python/object:ml_collections.config_dict.config_dict.FieldReference
+        _field_type: *id004
+        _ops: []
+        _required: false
+        _value: 16
+    max_n_graphs: *id005
+    max_n_nodes: !!python/object:ml_collections.config_dict.config_dict.FieldReference
+      _field_type: *id004
+      _ops:
+      - !!python/object/new:ml_collections.config_dict.config_dict._Op
+        - !!python/object/apply:functools.partial
+          args:
+          - *id003
+          state: !!python/tuple
+          - *id003
+          - !!python/tuple
+            - 30
+          - {}
+          - null
+        - []
+      _required: false
+      _value: *id005
+    momentum: null
+    nn_cutoff: 5.0
+    nn_tolerance: 0.5
+    num_eval_steps: 3000
+    num_eval_steps_at_end_of_training: 5000
+    num_train_steps: 10000000
+    optimizer: adam
+    position_noise_std: 0.05
+    rng_seed: 0
+    root_dir: /radish/qm9_fragments_fixed/nn_edm
+    shuffle_datasets: true
+    target_position_predictor: &id010 !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+      _convert_dict: true
+      _fields:
+        apply_gate: false
+        embedder_config: &id011 !!python/object:ml_collections.config_dict.config_dict.ConfigDict
+          _convert_dict: true
+          _fields:
+            activation: softplus
+            avg_num_neighbors: 300.0
+            even_activation: swish
+            max_ell: 5
+            mlp_activation: swish
+            mlp_n_layers: 2
+            model: NequIP
+            num_basis_fns: 8
+            num_channels: 64
+            num_interactions: 3
+            odd_activation: tanh
+            r_max: 5
+            skip_connection: true
+            use_pseudoscalars_and_pseudovectors: false
+          _locked: true
+          _type_safe: true
+        factorized: false
+        max_radius: 2.0
+        min_radius: 0.9
+        num_channels: 2
+        num_radii: 64
+        radial_mlp_activation: swish
+        radial_mlp_latent_size: 128
+        radial_mlp_num_layers: 2
+        res_alpha: 359
+        res_beta: 180
+      _locked: true
+      _type_safe: true
+    test_molecules: &id012 !!python/tuple
+    - 120000
+    - 135000
+    train_molecules: &id013 !!python/tuple
+    - 0
+    - 100000
+    train_on_split_smaller_than_chunk: false
+    val_molecules: &id014 !!python/tuple
+    - 100000
+    - 120000
+  _locked: true
+  _type_safe: true
+_convert_dict: true
+_fields:
+  add_noise_to_positions: true
+  compute_padding_dynamically: false
+  dataset: qm9
+  eval_every_steps: 30000
+  focus_and_target_species_predictor: !!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+    _configdict: *id006
+    _convert_dict: true
+    _fields:
+      activation: softplus
+      compute_global_embedding: false
+      embedder_config: !!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+        _configdict: *id007
+        _convert_dict: true
+        _fields:
+          activation: shifted_softplus
+          cutoff: 5.0
+          max_ell: 2
+          model: E3SchNet
+          num_channels: 64
+          num_filters: 16
+          num_interactions: 3
+          num_radial_basis_functions: 8
+        _locked: false
+        _type_safe: true
+      latent_size: 128
+      num_layers: 3
+    _locked: false
+    _type_safe: true
+  fragment_logic: nn_edm
+  freeze_node_embedders: false
+  learning_rate: 0.0005
+  learning_rate_schedule: constant
+  learning_rate_schedule_kwargs: !!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+    _configdict: *id008
+    _convert_dict: true
+    _fields:
+      decay_steps: 50000
+      init_value: 0.0005
+      peak_value: 0.001
+      warmup_steps: 2000
+    _locked: false
+    _type_safe: true
+  log_every_steps: 1000
+  loss_kwargs: !!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+    _configdict: *id009
+    _convert_dict: true
+    _fields:
+      ignore_position_loss_for_small_fragments: false
+      mask_atom_types: false
+      position_loss_type: kl_divergence
+      radial_loss_scaling_factor: 1.0
+      radius_rbf_variance: 1.0e-05
+      target_position_inverse_temperature: 20.0
+      target_position_lmax: 5
+    _locked: false
+    _type_safe: true
+  mask_atom_types: false
+  max_n_edges: 1440
+  max_n_graphs: 16
+  max_n_nodes: 480
+  momentum: null
+  nn_cutoff: 5.0
+  nn_tolerance: 0.5
+  num_eval_steps: 3000
+  num_eval_steps_at_end_of_training: 5000
+  num_train_steps: 10000000
+  optimizer: adam
+  position_noise_std: 0.05
+  rng_seed: 0
+  root_dir: /radish/qm9_fragments_fixed/nn_edm
+  shuffle_datasets: true
+  target_position_predictor: !!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+    _configdict: *id010
+    _convert_dict: true
+    _fields:
+      apply_gate: false
+      embedder_config: !!python/object:ml_collections.config_dict.config_dict.FrozenConfigDict
+        _configdict: *id011
+        _convert_dict: true
+        _fields:
+          activation: softplus
+          avg_num_neighbors: 300.0
+          even_activation: swish
+          max_ell: 5
+          mlp_activation: swish
+          mlp_n_layers: 2
+          model: NequIP
+          num_basis_fns: 8
+          num_channels: 64
+          num_interactions: 3
+          odd_activation: tanh
+          r_max: 5
+          skip_connection: true
+          use_pseudoscalars_and_pseudovectors: false
+        _locked: false
+        _type_safe: true
+      factorized: false
+      max_radius: 2.0
+      min_radius: 0.9
+      num_channels: 2
+      num_radii: 64
+      radial_mlp_activation: swish
+      radial_mlp_latent_size: 128
+      radial_mlp_num_layers: 2
+      res_alpha: 359
+      res_beta: 180
+    _locked: false
+    _type_safe: true
+  test_molecules: *id012
+  train_molecules: *id013
+  train_on_split_smaller_than_chunk: false
+  val_molecules: *id014
+_locked: true
+_type_safe: true
