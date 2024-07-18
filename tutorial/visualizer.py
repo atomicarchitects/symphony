@@ -23,11 +23,11 @@ NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
 # Colors and sizes for the atoms.
 ATOMIC_COLORS = {
-    1: "rgb(150, 150, 150)",  # H
-    6: "rgb(50, 50, 50)",  # C
-    7: "rgb(0, 100, 255)",  # N
-    8: "rgb(255, 0, 0)",  # O
-    9: "rgb(255, 0, 255)",  # F
+    1: "rgb(255, 255, 255)",
+    6: "rgb(144, 144, 144)",
+    7: "rgb(48, 80, 248)",
+    8: "rgb(255, 13, 13)",
+    9: "rgb(144, 224, 80)",
 }
 ATOMIC_SIZES = {
     1: 6,  # H
@@ -151,7 +151,7 @@ def get_plotly_traces_for_predictions(
     def get_scaling_factor(focus_prob: float, num_nodes: int) -> float:
         """Returns a scaling factor for the size of the atom."""
         if focus_prob < 1 / num_nodes - 1e-3:
-            return 0.95
+            return 0.01
         return 1 + focus_prob**2
 
     def chosen_focus_string(index: int, focus: int) -> str:
@@ -161,26 +161,27 @@ def get_plotly_traces_for_predictions(
         return f"Atom {index} (Not Chosen as Focus)"
 
     molecule_traces = []
-    # molecule_traces.append(
-    #     go.Scatter3d(
-    #         x=fragment.nodes.positions[:, 0],
-    #         y=fragment.nodes.positions[:, 1],
-    #         z=fragment.nodes.positions[:, 2],
-    #         mode="markers",
-    #         marker=dict(
-    #             size=[
-    #                 get_scaling_factor(float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
-    #                 for focus_prob, num in zip(focus_probs, atomic_numbers)
-    #             ],
-    #             color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
-    #         ),
-    #         hovertext=[
-    #             f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
-    #             for i, focus_prob in enumerate(focus_probs)
-    #         ],
-    #         name="Focus Probabilities",
-    #     )
-    # )
+    molecule_traces.append(
+        go.Scatter3d(
+            x=fragment.nodes.positions[:, 0],
+            y=fragment.nodes.positions[:, 1],
+            z=fragment.nodes.positions[:, 2],
+            mode="markers",
+            marker=dict(
+                size=[
+                    get_scaling_factor(float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
+                    for focus_prob, num in zip(focus_probs, atomic_numbers)
+                ],
+                color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
+            ),
+            hovertext=[
+                f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
+                for i, focus_prob in enumerate(focus_probs)
+            ],
+            name="Focus Probabilities",
+            visible="legendonly",
+        )
+    )
 
     # Highlight predicted position, if not stopped.
     if not pred.globals.stop:
@@ -311,7 +312,7 @@ def get_plotly_traces_for_predictions(
             ],
             y=[get_focus_string(i) for i in range(num_nodes)],
             z=np.round(pred.nodes.focus_and_target_species_probs, 3),
-            texttemplate="%{z}",
+            texttemplate="%{z:0.2f}",
             showlegend=False,
             showscale=False,
             colorscale="Blues",
@@ -384,6 +385,7 @@ def visualize_fragment(
 def visualize_predictions(
     pred: datatypes.Predictions,
     fragment: datatypes.Fragments,
+    showlegend: bool = True,
 ) -> go.Figure:
     """Visualizes the predictions for a molecule at a particular step."""
 
@@ -393,7 +395,6 @@ def visualize_predictions(
         cols=3,
         specs=[[{"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
         column_widths=[0.75, 0.25, 0.05],
-        subplot_titles=("Predictions", "", ""),
     )
 
     # Traces corresponding to the input fragment.
@@ -464,6 +465,8 @@ def visualize_predictions(
             font=dict(size=8)
         ),
         font=dict(size=8),
+        title_text="Symphony Predictions",
+        showlegend=showlegend,
     )
 
     # Sync cameras.
