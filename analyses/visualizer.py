@@ -196,6 +196,7 @@ def get_plotly_traces_for_fragment(
                     z=[target_positions[2]],
                     mode="markers",
                     marker=dict(
+                        symbol="x",
                         size=[
                             1.05
                             * ATOMIC_SIZES[
@@ -204,7 +205,10 @@ def get_plotly_traces_for_fragment(
                                 ]
                             ]
                         ],
-                        color=["green"],
+                        color=[
+                            ATOMIC_COLORS[target_atomic_number]
+                            for _ in target_positions
+                        ],
                     ),
                     opacity=0.5,
                     name="Target Atom",
@@ -431,6 +435,7 @@ def visualize_fragment(
         zeroline=False,
         title="",
         nticks=3,
+        range=[-5, 5],
     )
     fig.update_layout(
         scene=dict(
@@ -499,12 +504,6 @@ def visualize_predictions(
     furthest_dist = np.max(
         np.linalg.norm(
             fragment.nodes.positions + pred.globals.position_vectors - centre_of_mass,
-            axis=-1,
-        )
-    )
-    furthest_dist = np.max(
-        np.linalg.norm(
-            fragment.nodes.positions - pred.globals.position_vectors - centre_of_mass,
             axis=-1,
         )
     )
