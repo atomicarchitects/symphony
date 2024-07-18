@@ -17,25 +17,25 @@ import importlib.resources
 from symphony import models
 from symphony import datatypes
 
+ATOMIC_NUMBERS = [1, 6, 7, 8, 9]
+ELEMENTS = ["H", "C", "N", "O", "F"]
+NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
-ATOMIC_NUMBERS = []
-ELEMENTS = []
-NUMBER_TO_SYMBOL = {}
-ATOMIC_COLORS = {}
-ATOMIC_SIZES = {}
-
-with open("./visualization/elements.ini") as f:  # taken from VESTA
-    for line in f:
-        z, symbol, radius, _, _, r, g, b = line.strip().split()
-        z = int(z)
-        ATOMIC_NUMBERS.append(z)
-        ELEMENTS.append(symbol)
-        NUMBER_TO_SYMBOL[z] = symbol
-        r = float(r)
-        g = float(g)
-        b = float(b)
-        ATOMIC_COLORS[z] = f"rgb({255 * r}, {255 * g}, {255 * b})"
-        ATOMIC_SIZES[z] = float(radius) * 20
+# Colors and sizes for the atoms.
+ATOMIC_COLORS = {
+    1: "rgb(150, 150, 150)",  # H
+    6: "rgb(50, 50, 50)",  # C
+    7: "rgb(0, 100, 255)",  # N
+    8: "rgb(255, 0, 0)",  # O
+    9: "rgb(255, 0, 255)",  # F
+}
+ATOMIC_SIZES = {
+    1: 6,  # H
+    6: 20,  # C
+    7: 20,  # N
+    8: 20,  # O
+    9: 20,  # F
+}
 
 
 def get_atomic_numbers() -> np.ndarray:
@@ -104,6 +104,7 @@ def get_plotly_traces_for_fragment(
             target_atomic_number = atomic_numbers[
                 fragment.globals.target_species.item()
             ]
+            target_positions = target_positions.reshape(-1, 3)
             molecule_traces.append(
                 go.Scatter3d(
                     x=target_positions[:, 0],
@@ -125,7 +126,7 @@ def get_plotly_traces_for_fragment(
                         f"Element: {ase.data.chemical_symbols[target_atomic_number]}" for _ in target_positions
                     ],
                     opacity=0.5,
-                    name="Target Atoms",
+                    name="Target Atom",
                 )
             )
 
@@ -160,55 +161,61 @@ def get_plotly_traces_for_predictions(
         return f"Atom {index} (Not Chosen as Focus)"
 
     molecule_traces = []
-    molecule_traces.append(
-        go.Scatter3d(
-            x=fragment.nodes.positions[:, 0],
-            y=fragment.nodes.positions[:, 1],
-            z=fragment.nodes.positions[:, 2],
-            mode="markers",
-            marker=dict(
-                size=[
-                    get_scaling_factor(float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
-                    for focus_prob, num in zip(focus_probs, atomic_numbers)
-                ],
-                color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
-            ),
-            hovertext=[
-                f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
-                for i, focus_prob in enumerate(focus_probs)
-            ],
-            name="Focus Probabilities",
-        )
-    )
+    # molecule_traces.append(
+    #     go.Scatter3d(
+    #         x=fragment.nodes.positions[:, 0],
+    #         y=fragment.nodes.positions[:, 1],
+    #         z=fragment.nodes.positions[:, 2],
+    #         mode="markers",
+    #         marker=dict(
+    #             size=[
+    #                 get_scaling_factor(float(focus_prob), num_nodes) * ATOMIC_SIZES[num]
+    #                 for focus_prob, num in zip(focus_probs, atomic_numbers)
+    #             ],
+    #             color=["rgba(150, 75, 0, 0.5)" for _ in range(num_nodes)],
+    #         ),
+    #         hovertext=[
+    #             f"Focus Probability: {focus_prob:.3f}<br>{chosen_focus_string(i, focus)}"
+    #             for i, focus_prob in enumerate(focus_probs)
+    #         ],
+    #         name="Focus Probabilities",
+    #     )
+    # )
 
     # Highlight predicted position, if not stopped.
     if not pred.globals.stop:
-        predicted_target_position = focus_position + pred.globals.position_vectors
-        molecule_traces.append(
-            go.Scatter3d(
-                x=[predicted_target_position[0]],
-                y=[predicted_target_position[1]],
-                z=[predicted_target_position[2]],
-                mode="markers",
-                marker=dict(
-                    size=[
-                        1.05
-                        * ATOMIC_SIZES[
-                            ATOMIC_NUMBERS[pred.globals.target_species.item()]
-                        ]
-                    ],
-                    color=["purple"],
-                ),
-                opacity=0.5,
-                name="Predicted Atom",
+        if pred.globals.position_vectors is not None:
+            predicted_target_position = focus_position + pred.globals.position_vectors
+            molecule_traces.append(
+                go.Scatter3d(
+                    x=[predicted_target_position[0]],
+                    y=[predicted_target_position[1]],
+                    z=[predicted_target_position[2]],
+                    mode="markers",
+                    marker=dict(
+                        size=[
+                            ATOMIC_SIZES[
+                                ATOMIC_NUMBERS[pred.globals.target_species.item()]
+                            ]
+                        ],
+                        color=[
+                            ATOMIC_COLORS[
+                                ATOMIC_NUMBERS[pred.globals.target_species.item()]
+                            ]
+                        ],
+                        symbol="circle-open",
+                    ),
+                    opacity=0.5,
+                    name="Predicted Atom",
+                )
             )
-        )
 
     # Since we downsample the position grid, we need to recompute the position probabilities.
     position_coeffs = pred.globals.log_position_coeffs
     radii = pred.globals.radial_bins
     num_radii = radii.shape[0]
-    position_logits = models.log_coeffs_to_logits(position_coeffs, 50, 99, num_radii)
+    res_beta, res_alpha = 150, 149
+    position_logits = models.log_coeffs_to_logits(position_coeffs, res_beta, res_alpha, num_radii)
     position_logits.grid_values -= np.max(position_logits.grid_values)
     position_probs = position_logits.apply(np.exp)
 
@@ -232,7 +239,7 @@ def get_plotly_traces_for_predictions(
             name="Position Probabilities",
             legendgroup="Position Probabilities",
             showlegend=(r_surface_count == 1),
-            visible="legendonly",
+            # visible="legendonly",
         )
         molecule_traces.append(r_surface)
 
@@ -243,14 +250,14 @@ def get_plotly_traces_for_predictions(
     most_likely_radius_index = np.abs(radii - radius).argmin()
     most_likely_radius = radii[most_likely_radius_index]
     all_sigs = e3nn.to_s2grid(
-        position_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+        position_coeffs, res_beta, res_alpha, quadrature="soft", p_val=1, p_arg=-1
     )
     cmin = all_sigs.grid_values.min().item()
     cmax = all_sigs.grid_values.max().item()
     for channel in range(position_coeffs.shape[0]):
         most_likely_radius_coeffs = position_coeffs[channel, most_likely_radius_index]
         most_likely_radius_sig = e3nn.to_s2grid(
-            most_likely_radius_coeffs, 50, 99, quadrature="soft", p_val=1, p_arg=-1
+            most_likely_radius_coeffs, res_beta, res_alpha, quadrature="soft", p_val=1, p_arg=-1
         )
         spherical_harmonics = go.Surface(
             most_likely_radius_sig.plotly_surface(
@@ -261,7 +268,7 @@ def get_plotly_traces_for_predictions(
             ),
             cmin=cmin,
             cmax=cmax,
-            name=f"Spherical Harmonics for Logits: Channel {channel}",
+            name=f"Spherical Harmonics: Channel {channel}",
             showlegend=True,
             visible="legendonly",
         )
@@ -383,10 +390,10 @@ def visualize_predictions(
     # Make subplots.
     fig = plotly.subplots.make_subplots(
         rows=1,
-        cols=4,
-        specs=[[{"type": "scene"}, {"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
-        column_widths=[0.3, 0.3, 0.2, 0.1],
-        subplot_titles=("Input Fragment", "Predictions", "", ""),
+        cols=3,
+        specs=[[{"type": "scene"}, {"type": "xy"}, {"type": "xy"}]],
+        column_widths=[0.75, 0.25, 0.05],
+        subplot_titles=("Predictions", "", ""),
     )
 
     # Traces corresponding to the input fragment.
@@ -401,17 +408,15 @@ def visualize_predictions(
 
     for trace in fragment_traces:
         fig.add_trace(trace, row=1, col=1)
-        trace.showlegend = False
-        fig.add_trace(trace, row=1, col=2)
 
     for trace in predicted_fragment_traces:
-        fig.add_trace(trace, row=1, col=2)
+        fig.add_trace(trace, row=1, col=1)
 
     for trace in focus_and_atom_type_traces:
-        fig.add_trace(trace, row=1, col=3)
+        fig.add_trace(trace, row=1, col=2)
 
     for trace in stop_traces:
-        fig.add_trace(trace, row=1, col=4)
+        fig.add_trace(trace, row=1, col=3)
 
     # Update the layout.
     centre_of_mass = np.mean(fragment.nodes.positions, axis=0)
@@ -456,7 +461,9 @@ def visualize_predictions(
             y=0.99,
             xanchor="right",
             x=0.1,
+            font=dict(size=8)
         ),
+        font=dict(size=8),
     )
 
     # Sync cameras.
