@@ -1,18 +1,10 @@
 from typing import Optional, Sequence
+
 import plotly.graph_objects as go
 import plotly.subplots
 import numpy as np
 import e3nn_jax as e3nn
 import ase
-import rdkit
-import rdkit.Chem.PyMol
-import os
-import time
-
-from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-import importlib.resources
 
 from symphony import models
 from symphony import datatypes
@@ -486,65 +478,3 @@ def visualize_predictions(
         return fig_widget
     except (ImportError, NotImplementedError):
         return fig
-
-
-def visualize_bonded_molecules(input_sdf_dir: str, output_dir: str) -> None:
-    """Visualizes the molecules in the input SDF directory using RDKit and PyMol."""
-
-    # 2D visualization of molecules, as a grid.
-    os.makedirs(os.path.join(output_dir, "2D"), exist_ok=True)
-    molecules = []
-    filenames = []
-    for molecules_file in os.listdir(input_sdf_dir):
-        if not molecules_file.endswith(".sdf"):
-            continue
-
-        molecule = rdkit.Chem.MolFromMolFile(
-            os.path.join(input_sdf_dir, molecules_file)
-        )
-        filenames.append(molecules_file)
-        molecules.append(molecule)
-
-    rdkit.Chem.Draw.MolsToGridImage(
-        molecules,
-        molsPerRow=6,
-        subImgSize=(200, 200),
-        legends=[
-            molecules_file.replace(".sdf", "")
-            for molecules_file in os.listdir(input_sdf_dir)
-        ],
-    ).save(os.path.join(output_dir, "2D", "molecules.png"))
-
-    # 3D visualization of molecules.
-    os.makedirs(os.path.join(output_dir, "3D"), exist_ok=True)
-    viewer = rdkit.Chem.PyMol.MolViewer()
-    for molecules_file in os.listdir(input_sdf_dir):
-        if not molecules_file.endswith(".sdf"):
-            continue
-
-        viewer.DeleteAll()
-        viewer.server.do("reset")
-        viewer.LoadFile(
-            os.path.join(input_sdf_dir, molecules_file), name=molecules_file
-        )
-        viewer.Zoom(molecules_file)
-        viewer.server.do("orient")
-        viewer.server.do("bg_color white")
-        viewer.server.do("util.cbaw")
-        viewer.server.do("color gray, (name C*)")
-        viewer.server.do("center")
-        viewer.server.do("zoom center, 4")
-        viewer.server.do("hide lines")
-        viewer.server.do("show sticks")
-        viewer.server.do("show spheres")
-        viewer.server.do("set stick_radius, 0.1, (all)")
-        viewer.server.do("set sphere_scale, 0.25, (all)")
-
-        image = viewer.GetPNG(3000, 2000)
-        image.save(
-            os.path.join(output_dir, "3D", molecules_file.replace(".sdf", ".png"))
-        )
-        image.close()
-
-        # Some delay for rendering.
-        time.sleep(1)
