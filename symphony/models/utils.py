@@ -18,7 +18,6 @@ from symphony.models.position_predictor import (
     TargetPositionPredictor,
     FactorizedTargetPositionPredictor,
 )
-from symphony.models.position_updater import PositionUpdater
 from symphony.models.embedders import nequip, e3schnet
 
 ATOMIC_NUMBERS = [1, 6, 7, 8, 9]

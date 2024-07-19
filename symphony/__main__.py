@@ -15,7 +15,7 @@ from ml_collections import config_flags
 import tensorflow as tf
 
 
-from symphony import train, train_position_updater
+from symphony import train
 from configs import root_dirs
 
 
@@ -62,10 +62,7 @@ def main(argv):
     config = ml_collections.FrozenConfigDict(config)
 
     # Start training!
-    if config.get("position_updater"):
-        train_position_updater.train_and_evaluate(config, FLAGS.workdir)
-    else:
-        train.train_and_evaluate(config, FLAGS.workdir)
+    train.train_and_evaluate(config, FLAGS.workdir)
 
 
 if __name__ == "__main__":
