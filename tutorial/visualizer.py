@@ -22,7 +22,7 @@ ATOMIC_COLORS = {
     9: "rgb(144, 224, 80)",
 }
 ATOMIC_SIZES = {
-    1: 6,  # H
+    1: 10,  # H
     6: 20,  # C
     7: 20,  # N
     8: 20,  # O
@@ -197,9 +197,9 @@ def get_plotly_traces_for_predictions(
                                 ATOMIC_NUMBERS[pred.globals.target_species.item()]
                             ]
                         ],
-                        symbol="circle-open",
+                        symbol="diamond",
                     ),
-                    opacity=0.5,
+                    opacity=1.0,
                     name="Predicted Atom",
                 )
             )
