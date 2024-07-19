@@ -25,17 +25,11 @@ dependencies = [
     "flax",
     "dm-haiku",
     "jraph",
-    "clu==0.0.9",
     "absl-py",
     "chex",
     "optax",
     "scipy",
-    "tensorflow==2.13.0",
-    "rdkit",
-    "wandb",
-    "mace-jax @ git+https://github.com/ACEsuit/mace-jax",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
-    "allegro-jax @ git+https://github.com/mariogeiger/allegro-jax",
 ]
 dynamic = ["version"]
 
