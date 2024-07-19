@@ -2,19 +2,19 @@ import os
 import pickle
 from typing import Tuple
 import yaml
+
 import jax
 import jax.numpy as jnp
 import haiku as hk
 import optax
 import ml_collections
-
-from symphony import models
-
-from symphony import datatypes
 import ase
 import matscipy.neighbours
 import numpy as np
 import jraph
+
+from symphony import models
+from symphony import datatypes
 
 
 def ase_atoms_to_jraph_graph(
