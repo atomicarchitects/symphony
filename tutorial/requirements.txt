@@ -1,9 +1,0 @@
-e3nn-jax
-nequip-jax @ git+https://github.com/mariogeiger/nequip-jax
-jax
-optax
-flax
-plotly
-jraph
-ase
-matscipy

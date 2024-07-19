@@ -29,6 +29,9 @@ dependencies = [
     "chex",
     "optax",
     "scipy",
+    "ase",
+    "matscipy",
+    "ml_collections",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
 ]
 dynamic = ["version"]
