@@ -20,7 +20,6 @@ classifiers = [
 ]
 dependencies = [
     "e3nn_jax",
-    "numpy==1.26.0",
     "jax",
     "flax",
     "dm-haiku",
