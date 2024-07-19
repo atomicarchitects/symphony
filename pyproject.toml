@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "e3nn_jax",
+    "scipy==1.10.0",
     "jax",
     "flax",
     "dm-haiku",
