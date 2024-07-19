@@ -13,6 +13,11 @@ Slides for our tutorial can be found [here](https://docs.google.com/presentation
 !git clone https://github.com/atomicarchitects/symphony.git --depth 1 --branch tutorial
 ```
 
+Go to the repository:
+```bash
+cd symphony
+```
+
 - Install `symphony`:
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -e .
@@ -20,5 +25,5 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -e .
 
 Open the notebook:
 ```bash
-jupyter notebook
+jupyter notebook tutorial/04_qm9_playground.ipynb
 ```
