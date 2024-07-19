@@ -15,7 +15,7 @@ NUMBER_TO_SYMBOL = {1: "H", 6: "C", 7: "N", 8: "O", 9: "F"}
 
 # Colors and sizes for the atoms.
 ATOMIC_COLORS = {
-    1: "rgb(255, 255, 255)",
+    1: "rgb(180, 180, 180)",
     6: "rgb(144, 144, 144)",
     7: "rgb(48, 80, 248)",
     8: "rgb(255, 13, 13)",
@@ -49,6 +49,7 @@ def get_plotly_traces_for_fragment(
     """Returns the plotly traces for the fragment."""
     atomic_numbers = get_atomic_numbers()
     fragment_atomic_numbers = atomic_numbers[fragment.nodes.species]
+
     molecule_traces = []
     molecule_traces.append(
         go.Scatter3d(
