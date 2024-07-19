@@ -8,12 +8,17 @@ Slides for our tutorial can be found [here](https://docs.google.com/presentation
 
 ## Local Setup Installation for Notebook 04
 
-- Clone repo
-```
-git clone https://github.com/atomicarchitects/symphony --depth 1
+- Clone repository.
+```bash
+git clone https://github.com/atomicarchitects/symphony --depth 1  --single-branch tutorial
 ```
 
-- Install `symphony`
-```
+- Install `symphony`:
+```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -e .
+```
+
+Open the notebook:
+```bash
+jupyter notebook
 ```
