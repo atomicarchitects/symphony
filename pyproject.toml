@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "e3nn_jax",
-    "numpy",
+    "numpy==1.26.0",
     "jax",
     "flax",
     "dm-haiku",
@@ -32,6 +32,8 @@ dependencies = [
     "ase",
     "matscipy",
     "ml_collections",
+    "plotly",
+
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
 ]
 dynamic = ["version"]
