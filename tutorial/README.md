@@ -1,16 +1,16 @@
 ## The Symphony Tutorial
 
-Slides [here](https://docs.google.com/presentation/d/1a74RRHP_EZfErixEn8T3thUVTvEEg9aRp6Zvz-5UtWM/edit?usp=sharing)
-
 Interested in learning about Symphony?
 The notebooks in this repository will guide you through the building blocks: e3nn-jax, spherical harmonics and $E(3)$-equivariant neural networks.
+
+Slides for our tutorial can be found [here](https://docs.google.com/presentation/d/1a74RRHP_EZfErixEn8T3thUVTvEEg9aRp6Zvz-5UtWM/edit?usp=sharing).
 
 
 ## Local Setup Installation for Notebook 04
 
 - Clone repo
 ```
-git clone -b tutorial --single-branch https://github.com/atomicarchitects/symphony # Don't worry if this takes 5 min
+git clone https://github.com/atomicarchitects/symphony --depth 1
 ```
 
 - Install `symphony`
