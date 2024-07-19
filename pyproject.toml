@@ -33,7 +33,7 @@ dependencies = [
     "matscipy",
     "ml_collections",
     "plotly",
-
+    "nbformat>=4.2.0",
     "nequip-jax @ git+https://github.com/mariogeiger/nequip-jax",
 ]
 dynamic = ["version"]
