@@ -10,7 +10,7 @@ Slides for our tutorial can be found [here](https://docs.google.com/presentation
 
 - Clone repository.
 ```bash
-git clone https://github.com/atomicarchitects/symphony --depth 1  --single-branch tutorial
+!git clone https://github.com/atomicarchitects/symphony.git --depth 1 --branch tutorial
 ```
 
 - Install `symphony`:
