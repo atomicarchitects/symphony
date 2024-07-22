@@ -74,7 +74,7 @@ class GlobalPredictions(NamedTuple):
     target_species: jnp.ndarray  # [n_graph] int array
     radial_logits: jnp.ndarray  # [n_graph, n_targets] float array
     angular_logits: jnp.ndarray  # [n_graph, n_targets] float array
-    position_vectors: jnp.ndarray  # [n_graph, 3] float array
+    position_vectors: jnp.ndarray  # [num_graphs, num_nodes_for_multifocus, 3] float array
 
 
 class Predictions(jraph.GraphsTuple):

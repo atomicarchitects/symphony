@@ -31,7 +31,10 @@ FLAGS = flags.FLAGS
 def append_predictions(
     pred: datatypes.Predictions,
     padded_fragment: datatypes.Fragments,
+    max_num_atoms: int,
+    num_target_positions: int,
     radial_cutoff: float,
+    eps: float = 1e-4
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -39,15 +42,44 @@ def append_predictions(
     num_valid_nodes = padded_fragment.n_node[0]
     num_nodes = padded_fragment.nodes.positions.shape[0]
     num_edges = padded_fragment.receivers.shape[0]
-    focus = pred.globals.focus_indices[0]
-    focus_position = positions[focus]
-    target_position = pred.globals.position_vectors[0] + focus_position
-    new_positions = positions.at[num_valid_nodes].set(target_position)
+    focus_indices = pred.globals.focus_indices[0]
+    num_focus_nodes = focus_indices.shape[0]
+    focus_positions = positions[focus_indices]
+    # num_target_positions = pred.globals.position_vectors[0].shape[0]
+
+    # TODO this only works for 1 target per focus. actually, does this even work properly at all
+    target_positions = pred.globals.position_vectors[0] + focus_positions
+    # filter out clashing target positions
+    focus_repeated = jnp.repeat(focus_positions.reshape(1,1,-1), num_target_positions, axis=1)
+    target_repeated = jnp.repeat(target_positions.reshape(1,1,-1), num_focus_nodes, axis=0)
+    dists = jnp.linalg.norm(focus_repeated - target_repeated, axis=0)
+    partial_masks = (dists > 0) & (dists < eps)  # not identical, but yes overlapping
+    target_positions_mask = partial_masks.astype(int).sum(axis=0) == 0
+    # now the actual update
+    for i in range(num_focus_nodes):
+        new_pos = jax.lax.cond(
+            target_positions_mask[i],
+            lambda x: x,
+            lambda x: target_positions[i],
+            positions[num_valid_nodes]
+        )
+        new_positions = positions.at[num_valid_nodes].set(new_pos)
+        num_valid_nodes += 1  # TODO is this valid???????
 
     # Update the species of the first dummy node.
     species = padded_fragment.nodes.species
-    target_species = pred.globals.target_species[0]
-    new_species = species.at[num_valid_nodes].set(target_species)
+    assert species.shape == (num_nodes,), species.shape
+    # target_species = pred.globals.target_species[0][target_positions_mask]
+    target_species = jax.vmap(
+        lambda x: jax.lax.cond(
+            x,
+            lambda z: -1,
+            lambda y: species[y],
+            species[num_valid_nodes]
+        )
+    )(target_positions_mask)
+    target_species = jnp.where(target_species != -1, size=num_target_positions)
+    new_species = species.at[num_valid_nodes:num_valid_nodes+num_target_positions].set(target_species)
 
     # Compute the distance matrix to select the edges.
     distance_matrix = jnp.linalg.norm(
@@ -85,13 +117,15 @@ def generate_one_step(
     stop: bool,
     rng: chex.PRNGKey,
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    max_num_atoms: int,
+    max_targets: int,
     radial_cutoff: float,
 ) -> Tuple[
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
+    next_padded_fragment = append_predictions(pred, padded_fragment, max_num_atoms, max_targets, radial_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -104,6 +138,7 @@ def generate_for_one_seed(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     init_fragment: datatypes.Fragments,
     max_num_atoms: int,
+    max_targets: int,
     cutoff: float,
     rng: chex.PRNGKey,
     return_intermediates: bool = False,
@@ -111,7 +146,7 @@ def generate_for_one_seed(
     """Generates a single molecule for a given seed."""
     step_rngs = jax.random.split(rng, num=max_num_atoms)
     (final_padded_fragment, stop), (padded_fragments, preds) = jax.lax.scan(
-        lambda args, rng: generate_one_step(*args, rng, apply_fn, cutoff),
+        lambda args, rng: generate_one_step(*args, rng, apply_fn, max_num_atoms, max_targets, cutoff),
         (init_fragment, False),
         step_rngs,
     )
@@ -198,6 +233,8 @@ def generate_molecules(
     # Ensure params are frozen.
     params = flax.core.freeze(params)
 
+    max_targets = init_fragments.globals.position_vectors[0].shape[0]
+
     @jax.jit
     def chunk_and_apply(
         init_fragments: datatypes.Fragments, rngs: chex.PRNGKey
@@ -222,6 +259,7 @@ def generate_molecules(
                 apply_fn_wrapped,
                 init_fragment,
                 max_num_atoms,
+                max_targets,
                 radial_cutoff,
                 rng,
                 return_intermediates=visualize,

@@ -190,6 +190,8 @@ def get_datasets(
     structures = dataset.structures()
     split_indices = dataset.split_indices()
 
+    print("Max num of targets:", config.max_targets_per_graph)
+
     # Create the fragments datasets.
     fragments_iterators = {
         split: create_fragments_dataset(

@@ -19,8 +19,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
-    config.max_targets_per_graph = 4
+    config.max_targets_per_graph = 1
     config.heavy_first = False
+    config.transition_first = False
+    config.num_nodes_for_multifocus = 4
 
     # Optimizer.
     config.optimizer = "adam"

@@ -34,26 +34,26 @@ class TargetPositionPredictor(hk.Module):
         graphs: datatypes.Fragments,
         target_species: jnp.ndarray,
         num_nodes_for_multifocus: int,
-        focus_mask: jnp.ndarray
+        focus_indices: jnp.ndarray,
+        focus_mask: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
         """Computes the conditioning for the target position predictor."""
         num_graphs = graphs.n_node.shape[0]
+        cum_num_nodes = jnp.concatenate([jnp.zeros(1), jnp.cumsum(graphs.n_node)])
         num_nodes = graphs.nodes.positions.shape[0]
 
         # Compute the focus node embeddings.
         node_embeddings = self.node_embedder(graphs)
-        segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
-        def get_focus_embeddings(segment_id: int):
-            segment_mask = segment_ids == segment_id
-            ndx = jnp.where(jnp.arange(1, num_nodes+1) * segment_mask * focus_mask, size=num_nodes_for_multifocus)[0]
-            return e3nn.IrrepsArray(
+        def get_focus_embeddings(indices: jnp.ndarray, mask: jnp.ndarray, segment_id: int):
+            indices_shifted = indices + cum_num_nodes[segment_id]
+            return e3nn.IrrepsArray(  # TODO: is there no element-wise multiplication in e3nn?
                 node_embeddings.irreps,
-                node_embeddings.array[ndx - 1] * jnp.minimum(ndx, 1)[:, None])  # TODO this is equivariantly sus
-
+                node_embeddings.array[indices_shifted.astype(jnp.int32)] * mask[:, None]
+            )
         focus_node_embeddings = jax.vmap(
             get_focus_embeddings,
-        )(jnp.arange(num_graphs))
+        )(focus_indices, focus_mask, jnp.arange(num_graphs))
 
         assert focus_node_embeddings.shape == (
             num_graphs,
@@ -102,9 +102,16 @@ class TargetPositionPredictor(hk.Module):
 
         # Compute the conditioning based on the focus nodes and target species.
         target_species = graphs.globals.target_species
+        segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
+        def get_focus_indices_and_mask(segment_id: int):
+            segment_mask = segment_ids == segment_id
+            ndx = jnp.where(jnp.arange(1, num_nodes+1) * segment_mask * graphs.nodes.focus_mask, size=num_nodes_for_multifocus)[0]
+            mask = ndx > 0
+            return ndx - mask, mask
+        focus_indices, focus_mask = jax.vmap(get_focus_indices_and_mask)(jnp.arange(num_graphs))
         conditioning = self.compute_conditioning(
-            graphs, target_species, num_nodes_for_multifocus, graphs.nodes.focus_mask
+            graphs, target_species, num_nodes_for_multifocus, focus_indices, focus_mask
         )
 
         target_positions = e3nn.IrrepsArray("1o", graphs.globals.target_positions)
@@ -146,7 +153,8 @@ class TargetPositionPredictor(hk.Module):
         target_species: jnp.ndarray,
         inverse_temperature: float,
         num_nodes_for_multifocus: int,
-        focus_mask: jnp.ndarray
+        focus_indices: jnp.ndarray,
+        focus_mask: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
         num_graphs = graphs.n_node.shape[0]
 
@@ -155,19 +163,20 @@ class TargetPositionPredictor(hk.Module):
             graphs,
             target_species,
             num_nodes_for_multifocus,
-            focus_mask)
-        assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
+            focus_indices,
+            focus_mask,)
+        assert conditioning.shape == (num_graphs, num_nodes_for_multifocus, conditioning.irreps.dim)
 
         # Sample the radial component.
-        radii = hk.vmap(self.radial_predictor.sample, split_rng=True)(conditioning)
-        assert radii.shape == (num_graphs,)
+        radii = hk.vmap(hk.vmap(self.radial_predictor.sample, split_rng=True), split_rng=True)(conditioning)
+        assert radii.shape == (num_graphs, num_nodes_for_multifocus)
 
         # Predict the target position vectors.
         angular_sample_fn = lambda r, cond: self.angular_predictor.sample(
             r, cond, inverse_temperature
         )
-        position_vectors = hk.vmap(angular_sample_fn, split_rng=True)(
+        position_vectors = hk.vmap(hk.vmap(angular_sample_fn, split_rng=True), split_rng=True)(
             radii, conditioning
         )
-        assert position_vectors.shape == (num_graphs, 3)
+        assert position_vectors.shape == (num_graphs, num_nodes_for_multifocus, 3)
         return position_vectors

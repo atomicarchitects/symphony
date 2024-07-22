@@ -126,12 +126,10 @@ def segment_sample_2D(
             logit_rng, jnp.arange(num_species), p=normalized_probs_for_index
         )
         mask = jnp.arange(num_nodes_for_multifocus) == 0
-        full_mask = jnp.where(jnp.arange(num_nodes) == node_index + cum_num_nodes[segment_id], 1, 0)
         return (
             mask * node_index,
-            mask * 1,
-            full_mask,
-            species_index,
+            mask,
+            mask * species_index,
         )
     
     def sample_for_segment_multi(rng: chex.PRNGKey, segment_id: int) -> Tuple[int, int, int]:
@@ -148,17 +146,15 @@ def segment_sample_2D(
         )
         normalized_probs_for_index = species_probabilities[node_index] / jnp.sum(
             species_probabilities[node_index], axis=-1
-        )
+        )[:, None]
         species_index = jax.vmap(
             lambda probs: jax.random.choice(
                 logit_rng, jnp.arange(num_species), p=probs
             )
         )(normalized_probs_for_index)
-        full_mask = jnp.where(jnp.isin(jnp.arange(num_nodes), node_index + cum_num_nodes[segment_id]), 1, 0)
         return (
             node_index,
-            jnp.ones(num_nodes_for_multifocus),
-            full_mask,  # TODO might not actually need this, now that I know jnp.where adds padding
+            jnp.ones(num_nodes_for_multifocus, dtype=jnp.bool),
             species_index,
         )
     
@@ -173,15 +169,13 @@ def segment_sample_2D(
         )
 
     rngs = jax.random.split(rng, num_segments)
-    node_indices, focus_mask, focus_mask_all, species_indices = jax.vmap(f)(
+    node_indices, focus_mask, species_indices = jax.vmap(f)(
         rngs, jnp.arange(num_segments)
     )
-    focus_mask_all = jnp.sum(focus_mask_all, axis=0)
     assert node_indices.shape == (num_segments, num_nodes_for_multifocus)
     assert focus_mask.shape == (num_segments, num_nodes_for_multifocus)
-    assert focus_mask_all.shape == (num_nodes,)
     assert species_indices.shape == (num_segments, num_nodes_for_multifocus)
-    return node_indices, focus_mask, focus_mask_all, species_indices
+    return node_indices, focus_mask, species_indices
 
 
 def log_coeffs_to_logits(

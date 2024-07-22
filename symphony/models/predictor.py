@@ -33,7 +33,7 @@ class Predictor(hk.Module):
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
         num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
-        num_targets = graphs.globals.target_positions.shape[1]
+        num_targets = graphs.globals.target_positions.shape[2]
         num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
@@ -73,7 +73,7 @@ class Predictor(hk.Module):
             num_graphs,
             num_nodes_for_multifocus,
             num_targets,
-        )
+        ), (radial_logits.shape, (num_graphs, num_nodes_for_multifocus, num_targets))
         assert angular_logits.shape == (
             num_graphs,
             num_nodes_for_multifocus,
@@ -152,10 +152,9 @@ class Predictor(hk.Module):
 
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
-        focus_indices, focus_mask_eval, focus_mask, target_species = utils.segment_sample_2D(
+        focus_indices, focus_mask, target_species = utils.segment_sample_2D(
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng, self.num_nodes_for_multifocus
         )
-        focus_indices = focus_indices + graphs.n_node
 
         # Compute the position coefficients.
         # do i just pass in focus mask as part of the params???
@@ -164,6 +163,7 @@ class Predictor(hk.Module):
             target_species,
             position_inverse_temperature,
             self.num_nodes_for_multifocus,
+            focus_indices,
             focus_mask
         )
 
@@ -177,7 +177,9 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert position_vectors.shape == (num_graphs, 3)
+        assert len(position_vectors.shape) == 3
+        assert position_vectors.shape[0] == num_graphs
+        assert position_vectors.shape[2] == 3
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -189,6 +191,8 @@ class Predictor(hk.Module):
                 embeddings_for_positions=self.target_position_predictor.node_embedder(
                     graphs
                 ),
+                focus_mask=focus_mask,
+                target_species=target_species,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -196,7 +200,7 @@ class Predictor(hk.Module):
                 stop_probs=stop_probs,
                 stop=stop,
                 focus_indices=focus_indices,
-                focus_mask=focus_mask_eval,
+                focus_mask=focus_mask,
                 target_species=target_species,
                 radial_logits=None,
                 angular_logits=None,
