@@ -76,7 +76,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.angular_predictor.sampling_inverse_temperature_factor = 10.0
     config.target_position_predictor.angular_predictor.sampling_num_steps = 1000
     config.target_position_predictor.angular_predictor.sampling_init_step_size = 10.0
-    config.target_position_predictor.continuous_radius = False
+    config.target_position_predictor.radial_predictor_type = "discretized"
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.radial_predictor.num_bins = 16

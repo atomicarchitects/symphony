@@ -39,7 +39,7 @@ import ase
 from analyses import analysis
 from symphony.data import input_pipeline
 from symphony import datatypes
-from symphony.models import utils
+from symphony.models.utils import utils
 
 
 def append_predictions(
@@ -227,7 +227,6 @@ def generate_molecules(
     logging.info(
         f"Average time per molecule: {elapsed_time / len(generated_molecules)} seconds."
     )
-    return
 
     generated_molecules_ase = []
     for stop, fragment in generated_molecules:

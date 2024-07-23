@@ -85,7 +85,8 @@ def main(argv):
         # Add dataset and model name as tags.
         wandb_tags = FLAGS.wandb_tags
         wandb_tags.append(f"dataset:{config.dataset}")
-        #wandb_tags.append(f"workdir:{FLAGS.workdir}")
+        # workdir_tag = os.path.basename(FLAGS.workdir)
+        # wandb_tags.append(f"workdir:{workdir_tag}")
         try:
             wandb_tags.append(
                 f"focus-predictor:{config.focus_and_target_species_predictor.embedder_config.model}"

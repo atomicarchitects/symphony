@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 import e3nn_jax as e3nn
 
 from symphony import datatypes
-from symphony.models import utils
+from symphony.models.utils import utils
 from symphony.models.angular_predictors import AngularPredictor
 from symphony.models.radius_predictors import RadiusPredictor
 

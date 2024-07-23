@@ -1,6 +1,9 @@
+"""Utilities for downloading and extracting datasets."""
+
 from typing import Dict
 import os
 
+import jax.numpy as jnp
 from absl import logging
 import tqdm
 from git import Repo
@@ -11,6 +14,28 @@ import ml_collections
 
 from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm
 
+
+def get_atomic_numbers(dataset: str) -> Dict[str, int]:
+    """Returns a dictionary mapping atomic symbols to atomic numbers."""
+    if dataset == "qm9":
+        return qm9.QM9Dataset.get_atomic_numbers()
+    elif dataset == "tmqm":
+        return tmqm.TMQMDataset.get_atomic_numbers()
+    elif dataset == "platonic_solids":
+        return platonic_solids.PlatonicSolidsDataset.get_atomic_numbers()
+    elif dataset == "geom_drugs":
+        return geom_drugs.GEOMDrugsDataset.get_atomic_numbers()
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+
+
+def species_to_atomic_numbers(
+    species: jnp.ndarray, dataset: str,
+) -> jnp.ndarray:
+    """Returns the atomic numbers for the species."""
+    atomic_numbers = get_atomic_numbers(dataset)
+    return jnp.asarray(atomic_numbers)[species]
+    
 
 def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
     """Creates the dataset of structures, as specified in the config."""

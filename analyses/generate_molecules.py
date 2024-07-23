@@ -173,7 +173,7 @@ def generate_molecules(
     visualizations_dir: Optional[str] = None,
     verbose: bool = True,
 ):
-    """Generates molecules from a trained model at the given workdir."""
+    """Generates molecules from a model."""
 
     if verbose:
         logging_fn = logging.info

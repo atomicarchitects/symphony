@@ -1,33 +1,49 @@
+"""Module to store information about the periodic table (groups, rows, blocks)."""
+
 import jax.numpy as jnp
 
-class PeriodicTableEmbedder:
+class PeriodicTable:
+    """Class to store information about the periodic table (groups, rows, blocks)."""
+
     def __init__(self):
-        # Encodings of periodic table location information (groups, rows, blocks).
         self.groups = jnp.array(
-            [0, 17,] +
-            [0, 1, 12, 13, 14, 15, 16, 17] * 2 +
-            list(range(0, 18)) * 2 +
-            [0, 1] + [2] * 15 + list(range(3, 18)) + 
-            [0, 1] + [2] * 15 + list(range(3, 18))
+            [
+                0,
+                17,
+            ]
+            + [0, 1, 12, 13, 14, 15, 16, 17] * 2
+            + list(range(0, 18)) * 2
+            + [0, 1]
+            + [2] * 15
+            + list(range(3, 18))
+            + [0, 1]
+            + [2] * 15
+            + list(range(3, 18))
         )
         self.rows = jnp.array(
-            [0] * 2 +
-            [1] * 8 +
-            [2] * 8 +
-            [3] * 18 +
-            [4] * 18 +
-            [5] * 32 +
-            [6] * 32
+            [0] * 2 + [1] * 8 + [2] * 8 + [3] * 18 + [4] * 18 + [5] * 32 + [6] * 32
         )
         # s = 0, p = 1, ...
         self.blocks = jnp.array(
-            [0] * 2 +
-            [0] * 2 +                       [1] * 6 +
-            [0] * 2 +                       [1] * 6 +
-            [0] * 2 +            [2] * 10 + [1] * 6 +
-            [0] * 2 +            [2] * 10 + [1] * 6 +
-            [0] * 2 + [3] * 14 + [2] * 10 + [1] * 6 +
-            [0] * 2 + [3] * 14 + [2] * 10 + [1] * 6
+            [0] * 2
+            + [0] * 2
+            + [1] * 6
+            + [0] * 2
+            + [1] * 6
+            + [0] * 2
+            + [2] * 10
+            + [1] * 6
+            + [0] * 2
+            + [2] * 10
+            + [1] * 6
+            + [0] * 2
+            + [3] * 14
+            + [2] * 10
+            + [1] * 6
+            + [0] * 2
+            + [3] * 14
+            + [2] * 10
+            + [1] * 6
         )
 
         self.symbols = [
@@ -271,18 +287,18 @@ class PeriodicTableEmbedder:
             3.0,
             3.0,
         ]
-    
+
     def get_group(self, atomic_number: int | jnp.ndarray) -> jnp.ndarray:
         return self.groups[atomic_number]
-    
+
     def get_row(self, atomic_number: int | jnp.ndarray) -> jnp.ndarray:
         return self.rows[atomic_number]
-    
+
     def get_block(self, atomic_number: int | jnp.ndarray) -> jnp.ndarray:
         return self.blocks[atomic_number]
-    
+
     def get_symbol(self, atomic_number: int | jnp.ndarray) -> jnp.ndarray:
         return self.symbols[atomic_number]
-    
+
     def get_radius(self, atomic_number: int | jnp.ndarray) -> jnp.ndarray:
         return self.radii[atomic_number]

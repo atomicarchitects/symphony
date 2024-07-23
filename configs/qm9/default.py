@@ -28,24 +28,16 @@ def get_config() -> ml_collections.ConfigDict:
     config.optimizer = "adam"
     config.momentum = None
     config.learning_rate = 5e-4
-    config.learning_rate_schedule = "constant"
-    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
-    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
-    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
-        "learning_rate"
-    )
-    config.learning_rate_schedule_kwargs.warmup_steps = 2000
-    config.learning_rate_schedule_kwargs.decay_steps = 50000
 
     # Training.
     config.rng_seed = 0
     config.use_same_rng_across_structures = False
     config.num_train_steps = 1_000_000
     config.log_every_steps = 1000
-    config.eval = True
+    config.eval_during_training = True
     config.num_eval_steps = 100
     config.eval_every_steps = 30000
-    config.generate = True
+    config.generate_during_training = True
     config.generate_every_steps = 120000
     config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
@@ -57,6 +49,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
+    config.add_noise_to_target_distance = True
+    config.target_distance_noise_std = 0.01
     config.freeze_node_embedders = False
 
     # Prediction heads.
@@ -86,7 +80,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
-    config.target_position_predictor.continuous_radius = False
+    config.target_position_predictor.radial_predictor_type = "rational_quadratic_spline"
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
@@ -99,7 +93,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.num_seeds_per_chunk = 20
     config.generation.init_molecules = "H"
     config.generation.max_num_atoms = 35
-    config.generation.avg_neighbors_per_atom = 5
-    config.generation.species = [1, 6, 7, 8, 9]
+    config.generation.padding_mode = "fixed"
 
     return config
