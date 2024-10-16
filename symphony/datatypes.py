@@ -13,7 +13,7 @@ class NodesInfo(NamedTuple):
 class FragmentsGlobals(NamedTuple):
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
     target_positions: jnp.ndarray  # [n_graph, num_nodes_for_multifocus, max_targets_per_graph, 3] float array (only for training)
-    target_position_mask: jnp.ndarray  # [n_graph, num_nodes_for_multifocus, max_targets_per_graph] bool array (only for training)
+    target_positions_mask: jnp.ndarray  # [n_graph, num_nodes_for_multifocus, max_targets_per_graph] bool array (only for training)
     target_species: jnp.ndarray  # [n_graph] int array (only for training)
 
 
@@ -67,7 +67,7 @@ class NodePredictions(NamedTuple):
 
 class GlobalPredictions(NamedTuple):
     focus_indices: jnp.ndarray  # [n_graph, num_nodes_for_multifocus] int array
-    focus_mask: jnp.ndarray  # [n_graph, num_nodes_for_multifocus] int array
+    focus_mask: jnp.ndarray  # [n_graph, num_nodes_for_multifocus] bool array
     stop_logits: jnp.ndarray  # [n_graph] float array
     stop_probs: jnp.ndarray  # [n_graph] float array
     stop: jnp.ndarray  # [n_graph] bool array

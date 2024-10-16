@@ -72,7 +72,8 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         """Computes the log probability of the given samples."""
         dist = self.create_distribution(conditioning)
         radii = jnp.linalg.norm(samples.array, axis=-1)
-        return dist.log_prob(radii)
+        log_prob = dist.log_prob(radii)
+        return log_prob
 
     def sample(
         self,
@@ -84,4 +85,11 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         sample_rngs = jax.random.split(sample_rng, self.boundary_error_max_tries)
         samples = jax.vmap(lambda rng: dist.sample(seed=rng))(sample_rngs)
 
-        return samples
+        valid_range = samples >= self.min_radius + self.boundary_error
+        valid_range = jnp.logical_and(
+            valid_range, samples <= self.max_radius - self.boundary_error
+        )
+
+        return jax.random.choice(rng, samples, p=valid_range)
+
+        # return samples

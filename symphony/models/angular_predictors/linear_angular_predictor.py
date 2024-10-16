@@ -78,7 +78,10 @@ class LinearAngularPredictor(AngularPredictor):
     ) -> float:
         """Computes the logits for the given position and coefficients."""
         # Normalize the position.
-        normalized_position = position / jnp.linalg.norm(position.array)
+        eps = 1e-6
+        norm = jnp.linalg.norm(position.array)
+        norm = jnp.where(norm < eps, 1., norm)
+        normalized_position = position / norm
         assert normalized_position.shape == (3,), normalized_position.shape
 
         # Compute the coefficients at this radius.
@@ -89,10 +92,10 @@ class LinearAngularPredictor(AngularPredictor):
             coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
         assert prob_signal.shape == (
-            self.num_channels,
+            # self.num_channels,
             self.res_beta,
             self.res_alpha,
-        )
+        ), prob_signal.shape
         log_Z = jnp.log(prob_signal.integrate().array.sum())
         assert log_Z.shape == (), log_Z.shape
 

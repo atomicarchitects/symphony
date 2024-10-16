@@ -19,6 +19,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
+    config.max_radius = 5.0
     config.max_targets_per_graph = 1
     config.heavy_first = False
     config.transition_first = False
@@ -39,13 +40,14 @@ def get_config() -> ml_collections.ConfigDict:
     config.eval_every_steps = 30000
     config.generate_during_training = True
     config.generate_every_steps = 120000
-    config.nn_tolerance = 0.5
+    # config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 30 * config.get_ref("max_n_graphs")
     config.max_n_edges = 90 * config.get_ref("max_n_graphs")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
+    config.loss_kwargs.discretized_loss = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.05
@@ -90,9 +92,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.res_alpha = config.target_position_predictor.angular_predictor.get_ref("res_alpha")
     config.generation.radial_cutoff = config.get_ref("radial_cutoff")
     config.generation.num_seeds = 100
-    config.generation.num_seeds_per_chunk = 20
+    config.generation.num_seeds_per_chunk = 16
     config.generation.init_molecules = "H"
     config.generation.max_num_atoms = 35
     config.generation.padding_mode = "fixed"
+    config.generation.eps = 1e-4
 
     return config

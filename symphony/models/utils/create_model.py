@@ -214,6 +214,8 @@ def create_predictor(config: ml_collections.ConfigDict) -> Predictor:
     predictor = Predictor(
         focus_and_target_species_predictor=focus_and_target_species_predictor,
         target_position_predictor=target_position_predictor,
+        num_nodes_for_multifocus=config.num_nodes_for_multifocus,
+        num_targets=config.max_targets_per_graph,
     )
     return predictor
 

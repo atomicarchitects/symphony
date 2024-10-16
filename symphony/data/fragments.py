@@ -185,7 +185,7 @@ def _make_first_fragment(
     sample = _into_fragment(
         graph,
         visited=np.array([first_node]),
-        focus_mask=(np.arange(num_nodes) == first_node).astype(int),
+        focus_mask=(np.arange(num_nodes) == first_node),
         target_species_probability=target_species_probability,
         target_nodes=np.expand_dims(target_nodes, axis=0),
         target_mask=target_mask,
@@ -233,6 +233,9 @@ def _make_middle_fragment(
         del min_dist
     if mode == "radius":
         mask = mask & (dist < max_radius)
+
+    # dists_masked = np.linalg.norm(graph.nodes.positions[receivers[mask]] - graph.nodes.positions[senders[mask]], axis=-1)
+    # print("dists_masked", dists_masked)
 
     counts = np.zeros((n_nodes, num_species))
     for focus_node in range(n_nodes):
@@ -292,6 +295,12 @@ def _make_middle_fragment(
         target_nodes_all.append(np.pad(targets_of_same_species, (0, max_targets_per_graph - len(targets_of_same_species))))
     target_nodes_all = np.asarray(target_nodes_all)
 
+    # if mode == "radius":
+    #     target_node_dist = np.linalg.norm(graph.nodes.positions[focus_per_target] - graph.nodes.positions[target_nodes_all], axis=-1)
+    #     assert np.all(target_node_dist < max_radius), (
+    #         f"Target positions are outside the radial cutoff\nmasked distances: {target_node_dist}"
+    #     )
+
     new_visited = np.concatenate([visited, target_nodes])
     new_visited = np.unique(new_visited)
 
@@ -318,7 +327,7 @@ def _make_last_fragment(graph, num_species, max_targets_per_graph, num_nodes_for
     return _into_fragment(
         graph,
         visited=np.arange(n_nodes),
-        focus_mask=np.zeros((n_nodes,)),
+        focus_mask=np.zeros((n_nodes,), dtype=bool),
         target_species_probability=np.zeros((n_nodes, num_species)),
         target_nodes=np.zeros((num_nodes_for_multifocus, max_targets_per_graph)),
         target_mask=np.zeros((num_nodes_for_multifocus, max_targets_per_graph)),
@@ -359,10 +368,16 @@ def _into_fragment(
         target_species[i, ] = species_i[0]
 
     target_positions = np.zeros((num_nodes_for_multifocus, max_targets_per_graph, 3))
-    for i, (nodes, mask) in enumerate(zip(target_nodes, target_mask)):
+    focus_list = np.arange(len(graph.nodes.positions))[focus_mask]
+    for i, (focus, nodes, mask) in enumerate(zip(focus_list, target_nodes, target_mask)):
         nodes = nodes[mask]
         if len(nodes):
-            target_positions[i, :nodes.shape[0]] = graph.nodes.positions[nodes]
+            target_positions[i, :nodes.shape[0]] = graph.nodes.positions[nodes] - graph.nodes.positions[focus]
+
+    assert np.all(np.linalg.norm(target_positions, axis=-1) < 5.0), (
+        "target positions are outside the radial cutoff\ndistances:",
+        np.linalg.norm(target_positions, axis=-1),
+    )
 
     nodes = datatypes.FragmentsNodes(
         positions=pos,
@@ -374,7 +389,7 @@ def _into_fragment(
         stop=np.array([stop], dtype=bool),  # [1]
         target_species=target_species.astype(int),  # [num_nodes_for_multifocus, max_targets_per_graph]
         target_positions=target_positions,  # [num_nodes_for_multifocus, max_targets_per_graph, 3]
-        target_position_mask=target_mask,  # [num_nodes_for_multifocus, max_targets_per_graph]
+        target_positions_mask=target_mask,  # [num_nodes_for_multifocus, max_targets_per_graph]
     )
     globals = jax.tree_map(lambda x: np.expand_dims(x, axis=0), globals)
     graph = graph._replace(nodes=nodes, globals=globals)

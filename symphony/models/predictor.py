@@ -18,12 +18,14 @@ class Predictor(hk.Module):
         focus_and_target_species_predictor: FocusAndTargetSpeciesPredictor,
         target_position_predictor: TargetPositionPredictor,
         num_nodes_for_multifocus: int,
+        num_targets: int,
         name: str = None,
     ):
         super().__init__(name=name)
         self.focus_and_target_species_predictor = focus_and_target_species_predictor
         self.target_position_predictor = target_position_predictor
         self.num_nodes_for_multifocus = num_nodes_for_multifocus
+        self.num_targets = num_targets
 
     def get_training_predictions(
         self, graphs: datatypes.Fragments
@@ -32,10 +34,8 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
-        num_nodes_for_multifocus = graphs.globals.target_positions.shape[1]
-        num_targets = graphs.globals.target_positions.shape[2]
         num_species = self.focus_and_target_species_predictor.num_species
-        segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
+        segment_ids = utils.get_segment_ids(graphs.n_node.reshape(-1,), num_nodes)
 
         # Get the species and stop logits.
         (
@@ -71,13 +71,13 @@ class Predictor(hk.Module):
         )
         assert radial_logits.shape == (
             num_graphs,
-            num_nodes_for_multifocus,
-            num_targets,
-        ), (radial_logits.shape, (num_graphs, num_nodes_for_multifocus, num_targets))
+            self.num_nodes_for_multifocus,
+            self.num_targets,
+        ), (radial_logits.shape, (num_graphs, self.num_nodes_for_multifocus, self.num_targets))
         assert angular_logits.shape == (
             num_graphs,
-            num_nodes_for_multifocus,
-            num_targets,
+            self.num_nodes_for_multifocus,
+            self.num_targets,
         )
 
         return datatypes.Predictions(
@@ -152,19 +152,20 @@ class Predictor(hk.Module):
 
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
-        focus_indices, focus_mask, target_species = utils.segment_sample_2D(
+        focus_indices, target_species = utils.segment_sample_2D(
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng, self.num_nodes_for_multifocus
         )
+        focus_mask = jnp.zeros((num_nodes,), dtype=jnp.bool_)
+        focus_mask = focus_mask.at[focus_indices].set(True)
 
         # Compute the position coefficients.
-        # do i just pass in focus mask as part of the params???
         position_vectors = self.target_position_predictor.get_evaluation_predictions(
             graphs,
             target_species,
             position_inverse_temperature,
             self.num_nodes_for_multifocus,
+            self.num_targets,
             focus_indices,
-            focus_mask
         )
 
         assert stop.shape == (num_graphs,)

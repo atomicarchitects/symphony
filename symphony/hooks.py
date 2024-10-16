@@ -17,6 +17,7 @@ import jax.numpy as jnp
 
 from symphony import train, train_state
 from symphony import graphics
+# from analyses import metrics, generate_molecules_stream as generate_molecules
 from analyses import metrics, generate_molecules_stream_new as generate_molecules
 
 
@@ -83,7 +84,8 @@ class GenerateMoleculesHook:
 
         molecules_ase = generate_molecules.generate_molecules(
             apply_fn=state.eval_apply_fn,
-            params=flax.jax_utils.unreplicate(state.params),
+            params=state.params,
+            # params=flax.jax_utils.unreplicate(state.params),  # TODO reinstate this line!
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=self.radial_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
@@ -129,8 +131,8 @@ class LogTrainMetricsHook:
     is_empty: bool = True
 
     def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
-        # train_metrics = state.train_metrics
-        train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
+        train_metrics = state.train_metrics  # TODO comment this out
+        # train_metrics = flax.jax_utils.unreplicate(state.train_metrics)  # TODO reinstate this line!
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
@@ -140,8 +142,8 @@ class LogTrainMetricsHook:
                 add_prefix_to_keys(train_metrics.compute(), "train"),
             )
             state = state.replace(
-                train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
-                # train_metrics=train.Metrics.empty(),
+                # train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),  # TODO reinstate this line!
+                train_metrics=train.Metrics.empty(),  # TODO comment this out
             )
             self.is_empty = True
 
@@ -182,7 +184,7 @@ class EvaluateModelHook:
             logging.info("No best state found yet.")
             min_val_loss = float("inf")
 
-        if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+        if jnp.all(eval_metrics["val_eval"]["total_loss"] < min_val_loss):
             state = state.replace(
                 best_params=state.params,
                 # metrics_for_best_params=eval_metrics,
@@ -218,7 +220,7 @@ class CheckpointHook:
         return state
 
     def __call__(self, state: train_state.TrainState) -> Any:
-        state = flax.jax_utils.unreplicate(state)
+        # state = flax.jax_utils.unreplicate(state)  # TODO reinstate this line!
 
         # Save the current and best params to the checkpoint directory.
         with open(
@@ -228,6 +230,8 @@ class CheckpointHook:
 
         with open(os.path.join(self.checkpoint_dir, "params_best.pkl"), "wb") as f:
             pickle.dump(state.best_params, f)
+        
+        logging.info("Metrics for best params: %s", state.metrics_for_best_params)
 
         # Save the best params as a wandb artifact.
         if wandb.run is not None:

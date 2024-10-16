@@ -69,7 +69,8 @@ def segment_sample_2D(
     segment_ids: jnp.ndarray,
     num_segments: int,
     rng: chex.PRNGKey,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    num_nodes_for_multifocus: int
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Sample indices from a categorical distribution across each segment.
     Args:
         species_probabilities: A 2D array of probabilities.
@@ -95,6 +96,7 @@ def segment_sample_2D(
         node_index = jax.random.choice(
             node_rng,
             jnp.arange(num_nodes),
+            shape=(num_nodes_for_multifocus,),
             p=jnp.where(
                 segment_id == segment_ids, species_probabilities.sum(axis=-1), 0.0
             ),
@@ -102,17 +104,17 @@ def segment_sample_2D(
         normalized_probs_for_index = species_probabilities[node_index] / jnp.sum(
             species_probabilities[node_index]
         )
-        species_index = jax.random.choice(
-            logit_rng, jnp.arange(num_species), p=normalized_probs_for_index
-        )
+        species_index = jax.vmap(lambda probs: jax.random.choice(
+            logit_rng, jnp.arange(num_species), p=probs
+        ))(normalized_probs_for_index)
         return node_index, species_index
 
     rngs = jax.random.split(rng, num_segments)
     node_indices, species_indices = jax.vmap(sample_for_segment)(
         rngs, jnp.arange(num_segments)
     )
-    assert node_indices.shape == (num_segments,)
-    assert species_indices.shape == (num_segments,)
+    assert node_indices.shape == (num_segments, num_nodes_for_multifocus)
+    assert species_indices.shape == (num_segments, num_nodes_for_multifocus)
     return node_indices, species_indices
 
 
