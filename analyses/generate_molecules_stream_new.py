@@ -27,8 +27,10 @@ FLAGS = flags.FLAGS
 def append_predictions_to_fragment(
     fragment: datatypes.Fragments,
     pred: datatypes.Predictions,
+    max_len: int,
     valid: bool,
     radial_cutoff: float,
+    eps: float,
 ) -> Tuple[int, datatypes.Fragments]:
     """Appends the predictions to a single fragment."""
     # If padding graph, just return the fragment.
@@ -36,14 +38,27 @@ def append_predictions_to_fragment(
         return True, fragment
 
     target_relative_positions = pred.globals.position_vectors[0]
-    focus_index = pred.globals.focus_indices[0]
-    focus_position = fragment.nodes.positions[focus_index]
-    extra_position = target_relative_positions + focus_position
-    extra_species = pred.globals.target_species[focus_index]
+    focus_indices = pred.globals.focus_indices[0]
+    focus_positions = fragment.nodes.positions[focus_indices]
+    extra_positions = (target_relative_positions + focus_positions).reshape(-1, 3)
+    extra_species = (pred.globals.target_species[0]).reshape(-1,)
     stop = pred.globals.stop
 
-    new_positions = np.concatenate([fragment.nodes.positions, [extra_position]], axis=0)
-    new_species = np.concatenate([fragment.nodes.species, [extra_species]], axis=0)
+    filtered_positions = []
+    position_mask = np.ones(len(extra_positions), dtype=bool)
+    for i in range(len(extra_positions)):
+        if not position_mask[i]:
+            continue
+        if eps > np.linalg.norm(extra_positions[i]) > 0:
+            position_mask[i] = False
+        else:
+            filtered_positions.append(extra_positions[i])
+    extra_positions = np.array(filtered_positions)
+    extra_species = extra_species[position_mask]
+    extra_len = min(len(extra_positions), max_len)
+
+    new_positions = np.concatenate([fragment.nodes.positions, extra_positions[:extra_len]], axis=0)
+    new_species = np.concatenate([fragment.nodes.species, extra_species[:extra_len]], axis=0)
 
     atomic_numbers = np.asarray([1, 6, 7, 8, 9])
     new_fragment = input_pipeline.ase_atoms_to_jraph_graph(
@@ -112,10 +127,12 @@ def estimate_padding_budget(
     avg_nodes_per_graph = max(avg_nodes_per_graph, 1)
     avg_edges_per_graph = max(avg_edges_per_graph, 1)
     padding_budget = dict(
-        n_node=round_to_nearest_multiple_of_64(
+        # n_node=round_to_nearest_multiple_of_64(
+        n_node=(
             num_seeds_per_chunk * avg_nodes_per_graph * 1.5
         ),
-        n_edge=round_to_nearest_multiple_of_64(
+        # n_edge=round_to_nearest_multiple_of_64(
+        n_edge=(
             num_seeds_per_chunk * avg_edges_per_graph * 1.5
         ),
         n_graph=num_seeds_per_chunk,
@@ -301,14 +318,22 @@ def generate_molecules(
                 preds = jax.tree_util.tree_map(np.asarray, preds)
                 valids = jraph.get_graph_padding_mask(fragments)
 
+                # the problem occurs at the very last batch (which is not full)
+                # does this show up when pmapping? does that even have anything to do with this
+                # batch size issue? i took out the round-to-64 thing
+                a = jraph.unbatch(fragments)
+                b = jraph.unbatch(preds)
+                c = valids
+
                 for fragment, pred, valid in zip(
-                    jraph.unbatch(fragments), jraph.unbatch(preds), valids
+                    a, b, c
+                    # jraph.unbatch(fragments), jraph.unbatch(preds), valids
                 ):
                     # cpu_future = executor.submit(append_predictions_to_fragment, fragment, pred, valid, config.radial_cutoff)
                     # cpu_futures.append(cpu_future)
 
                     stop, new_fragment = append_predictions_to_fragment(
-                        fragment, pred, valid, radial_cutoff
+                        fragment, pred, max_num_atoms, valid, radial_cutoff, eps=1e-4
                     )
                     cpu_results.append((stop, new_fragment))
 
@@ -353,7 +378,8 @@ def generate_molecules(
     for index, (stop, fragment) in enumerate(zip(stopped, all_fragments)):
         init_molecule_name = init_molecule_names[index]
         generated_molecule_ase = ase.Atoms(
-            symbols=models.get_atomic_numbers(fragment.nodes.species, dataset),
+            symbols=atomic_numbers[fragment.nodes.species],
+            # symbols=models.get_atomic_numbers(fragment.nodes.species, dataset),
             positions=fragment.nodes.positions,
         )
 

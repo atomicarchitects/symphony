@@ -91,12 +91,11 @@ class Predictor(hk.Module):
                     graphs
                 ),
                 focus_mask=None,
-                target_species=None,
+                # target_species=None,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
                 focus_indices=None,
-                focus_mask=None,
                 stop_logits=stop_logits,
                 stop_probs=stop_probs,
                 stop=None,
@@ -193,7 +192,7 @@ class Predictor(hk.Module):
                     graphs
                 ),
                 focus_mask=focus_mask,
-                target_species=target_species,
+                # target_species=target_species,
             ),
             edges=None,
             globals=datatypes.GlobalPredictions(
@@ -201,7 +200,6 @@ class Predictor(hk.Module):
                 stop_probs=stop_probs,
                 stop=stop,
                 focus_indices=focus_indices,
-                focus_mask=focus_mask,
                 target_species=target_species,
                 radial_logits=None,
                 angular_logits=None,

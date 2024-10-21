@@ -62,12 +62,11 @@ class NodePredictions(NamedTuple):
     focus_and_target_species_logits: jnp.ndarray  # [n_node, n_species] float array
     focus_and_target_species_probs: jnp.ndarray  # [n_node, n_species] float array
     focus_mask: jnp.ndarray  # [n_node] bool array
-    target_species: jnp.ndarray  # [n_node,] int array
+    # target_species: jnp.ndarray  # [n_node,] int array
 
 
 class GlobalPredictions(NamedTuple):
     focus_indices: jnp.ndarray  # [n_graph, num_nodes_for_multifocus] int array
-    focus_mask: jnp.ndarray  # [n_graph, num_nodes_for_multifocus] bool array
     stop_logits: jnp.ndarray  # [n_graph] float array
     stop_probs: jnp.ndarray  # [n_graph] float array
     stop: jnp.ndarray  # [n_graph] bool array

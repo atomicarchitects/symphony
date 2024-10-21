@@ -95,7 +95,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.num_seeds_per_chunk = 16
     config.generation.init_molecules = "H"
     config.generation.max_num_atoms = 35
-    config.generation.padding_mode = "fixed"
+    config.generation.padding_mode = "dynamic"
     config.generation.eps = 1e-4
 
     return config

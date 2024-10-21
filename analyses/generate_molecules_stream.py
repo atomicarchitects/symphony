@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence, Tuple, Iterable, Optional, Union
+from typing import Sequence, Tuple, Iterable, Optional, Union, Callable
 
 import os
 import time
@@ -13,10 +13,12 @@ import ase.data
 from ase.db import connect
 import ase.io
 import ase.visualize
+import chex
 import jax
 import jax.numpy as jnp
 import jraph
 import numpy as np
+import optax
 
 import analyses.analysis as analysis
 from symphony import datatypes
@@ -43,7 +45,7 @@ from symphony.models.utils import utils
 
 
 def append_predictions(
-    fragments: datatypes.Fragments, preds: datatypes.Predictions, radial_cutoff: float
+    fragments: datatypes.Fragments, preds: datatypes.Predictions, radial_cutoff: float, max_len: int
 ) -> Iterable[Tuple[int, datatypes.Fragments]]:
     """Appends the predictions to the fragments."""
     # Bring back to CPU.
@@ -57,23 +59,40 @@ def append_predictions(
     ):
         if valid:
             yield *append_predictions_to_fragment(
-                fragment, pred, radial_cutoff
+                fragment, pred, max_len, radial_cutoff, 1e-4
             ), fragment, pred
 
 
 def append_predictions_to_fragment(
-    fragment: datatypes.Fragments, pred: datatypes.Predictions, radial_cutoff: float
+    fragment: datatypes.Fragments,
+    pred: datatypes.Predictions,
+    max_len: int,
+    radial_cutoff: float,
+    eps: float,
 ) -> Tuple[int, datatypes.Fragments]:
     """Appends the predictions to a single fragment."""
     target_relative_positions = pred.globals.position_vectors[0]
-    focus_index = pred.globals.focus_indices[0]
-    focus_position = fragment.nodes.positions[focus_index]
-    extra_position = target_relative_positions + focus_position
-    extra_species = pred.globals.target_species[focus_index]
+    focus_indices = pred.globals.focus_indices[0]
+    focus_positions = fragment.nodes.positions[focus_indices]
+    extra_positions = (target_relative_positions + focus_positions).reshape(-1, 3)
+    extra_species = (pred.globals.target_species[0]).reshape(-1,)
     stop = pred.globals.stop
 
-    new_positions = np.concatenate([fragment.nodes.positions, [extra_position]], axis=0)
-    new_species = np.concatenate([fragment.nodes.species, [extra_species]], axis=0)
+    filtered_positions = []
+    position_mask = np.ones(len(extra_positions), dtype=bool)
+    for i in range(len(extra_positions)):
+        if not position_mask[i]:
+            continue
+        if eps > np.linalg.norm(extra_positions[i]) > 0:
+            position_mask[i] = False
+        else:
+            filtered_positions.append(extra_positions[i])
+    extra_positions = np.array(filtered_positions)
+    extra_species = extra_species[position_mask]
+    extra_len = min(len(extra_positions), max_len)
+
+    new_positions = np.concatenate([fragment.nodes.positions, extra_positions[:extra_len]], axis=0)
+    new_species = np.concatenate([fragment.nodes.species, extra_species[:extra_len]], axis=0)
 
     atomic_numbers = np.asarray([1, 6, 7, 8, 9])
     new_fragment = input_pipeline.ase_atoms_to_jraph_graph(
@@ -92,18 +111,18 @@ def _make_queue_iterator(q: queue.SimpleQueue):
 
 
 def generate_molecules(
-    workdir: str,
-    outputdir: str,
+    apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+    params: optax.Params,
+    molecules_outputdir: str,
+    radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
-    step: str,
     num_seeds: int,
+    num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
-    max_num_atoms: int,
-    num_node_for_padding: int,
-    num_edge_for_padding: int,
-    num_graph_for_padding: int,
-    steps_for_weight_averaging: Optional[Sequence[int]] = None,
+    dataset: str,
+    padding_mode: str,
+    verbose: bool = False,
 ):
     """Generates molecules from a trained model at the given workdir."""
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
@@ -124,37 +143,11 @@ def generate_molecules(
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
 
-    # Load model.
-    name = analysis.name_from_workdir(workdir)
-    if steps_for_weight_averaging is not None:
-        logging.info("Loading model averaged from steps %s", steps_for_weight_averaging)
-        model, params, config = analysis.load_weighted_average_model_at_steps(
-            workdir, steps_for_weight_averaging, run_in_evaluation_mode=True
-        )
-    else:
-        model, params, config = analysis.load_model_at_step(
-            workdir, step, run_in_evaluation_mode=True
-        )
-    apply_fn = jax.jit(model.apply)
-    params = jax.device_put(params)
-
-    # Log config.
-    logging.info(config.to_dict())
-
-    # Create output directories.
-    molecules_outputdir = os.path.join(
-        outputdir,
-        name,
-        f"fait={focus_and_atom_type_inverse_temperature}",
-        f"pit={position_inverse_temperature}",
-        f"step={step}",
-        "molecules",
-    )
     os.makedirs(molecules_outputdir, exist_ok=True)
 
     init_fragments = [
         input_pipeline.ase_atoms_to_jraph_graph(
-            init_molecule, models.ATOMIC_NUMBERS, config.radial_cutoff
+            init_molecule, np.array([1, 6, 7, 8, 9]), radial_cutoff
         )
         for init_molecule in init_molecules
     ]
@@ -166,10 +159,16 @@ def generate_molecules(
         )
         fragment_pool.put(init_fragment)
 
+    if dataset == "qm9":
+        max_num_atoms = 35
+    elif dataset == "tmqm":
+        max_num_atoms = 60
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
     padding_budget = dict(
-        n_node=num_node_for_padding,
-        n_edge=num_edge_for_padding,
-        n_graph=num_graph_for_padding,
+        n_node=max_num_atoms,
+        n_edge=max_num_atoms * 10,
+        n_graph=2,
     )
 
     # Generate molecules.
@@ -199,7 +198,7 @@ def generate_molecules(
             print("Computed all predictions.")
 
             for stop, new_fragment, fragment, pred in append_predictions(
-                fragments, preds, radial_cutoff=config.radial_cutoff
+                fragments, preds, radial_cutoff=radial_cutoff, max_len=max_num_atoms
             ):
                 num_atoms_in_fragment = len(new_fragment.nodes.species)
                 if stop or num_atoms_in_fragment >= max_num_atoms:

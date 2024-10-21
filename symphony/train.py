@@ -108,6 +108,8 @@ def train_step(
         preds = state.apply_fn(params, None, graphs)
         total_loss, (
             focus_and_atom_type_loss,
+            radial_loss,
+            angular_loss,
             position_loss,
         ) = loss.generation_loss(preds=preds, graphs=graphs, **loss_kwargs)
         mask = jraph.get_graph_padding_mask(graphs)
@@ -115,6 +117,8 @@ def train_step(
         return mean_loss, (
             total_loss,
             focus_and_atom_type_loss,
+            radial_loss,
+            angular_loss,
             position_loss,
             mask,
         )
@@ -168,6 +172,8 @@ def train_step(
     batch_metrics = Metrics.single_from_model_output(
         total_loss=total_loss,
         focus_and_atom_type_loss=focus_and_atom_type_loss,
+        radial_loss=radial_loss,
+        angular_loss=angular_loss,
         position_loss=position_loss,
         mask=mask,
     )
@@ -393,7 +399,8 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             step_rng, rng = jax.random.split(rng)
-            step_rngs = jax.random.split(step_rng, jax.local_device_count())
+            step_rngs = step_rng
+            # step_rngs = jax.random.split(step_rng, jax.local_device_count())  # TODO put this back along with the rest of pmap stuff
             state, batch_metrics = train_step(
                 graphs,
                 state,

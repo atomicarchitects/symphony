@@ -36,80 +36,38 @@ def append_predictions(
     radial_cutoff: float,
     eps: float = 1e-4
 ) -> datatypes.Fragments:
-    """Appends the predictions to the padded fragment."""
-    # Update the positions of the first dummy node.
-    positions = padded_fragment.nodes.positions
-    num_valid_nodes = padded_fragment.n_node[0]
-    num_nodes = padded_fragment.nodes.positions.shape[0]
-    num_edges = padded_fragment.receivers.shape[0]
+    """Appends the predictions to a single fragment."""
+    target_relative_positions = pred.globals.position_vectors[0]
     focus_indices = pred.globals.focus_indices[0]
-    num_focus_nodes = focus_indices.shape[0]
-    focus_positions = positions[focus_indices]
-    # num_target_positions = pred.globals.position_vectors[0].shape[0]
+    focus_positions = padded_fragment.nodes.positions[focus_indices]
+    extra_positions = (target_relative_positions + focus_positions).reshape(-1, 3)
+    extra_species = (pred.globals.target_species[0]).reshape(-1,)
+    stop = pred.globals.stop
 
-    # TODO this only works for 1 target per focus. actually, does this even work properly at all
-    target_positions = pred.globals.position_vectors[0] + focus_positions
-    # filter out clashing target positions
-    focus_repeated = jnp.repeat(focus_positions.reshape(1,1,-1), num_target_positions, axis=1)
-    target_repeated = jnp.repeat(target_positions.reshape(1,1,-1), num_focus_nodes, axis=0)
-    dists = jnp.linalg.norm(focus_repeated - target_repeated, axis=0)
-    partial_masks = (dists > 0) & (dists < eps)  # not identical, but yes overlapping
-    target_positions_mask = partial_masks.astype(int).sum(axis=0) == 0
-    # now the actual update
-    for i in range(num_focus_nodes):
-        new_pos = jax.lax.cond(
-            target_positions_mask[i],
-            lambda x: x,
-            lambda x: target_positions[i],
-            positions[num_valid_nodes]
-        )
-        new_positions = positions.at[num_valid_nodes].set(new_pos)
-        num_valid_nodes += 1  # TODO is this valid???????
+    filtered_positions = []
+    position_mask = np.ones(len(extra_positions), dtype=bool)
+    for i in range(len(extra_positions)):
+        if not position_mask[i]:
+            continue
+        if eps > np.linalg.norm(extra_positions[i]) > 0:
+            position_mask[i] = False
+        else:
+            filtered_positions.append(extra_positions[i])
+    extra_positions = np.array(filtered_positions)
+    extra_species = extra_species[position_mask]
+    extra_len = min(len(extra_positions), max_num_atoms)
 
-    # Update the species of the first dummy node.
-    species = padded_fragment.nodes.species
-    assert species.shape == (num_nodes,), species.shape
-    # target_species = pred.globals.target_species[0][target_positions_mask]
-    target_species = jax.vmap(
-        lambda x: jax.lax.cond(
-            x,
-            lambda z: -1,
-            lambda y: species[y],
-            species[num_valid_nodes]
-        )
-    )(target_positions_mask)
-    target_species = jnp.where(target_species != -1, size=num_target_positions)
-    new_species = species.at[num_valid_nodes:num_valid_nodes+num_target_positions].set(target_species)
+    new_positions = np.concatenate([fragment.nodes.positions, extra_positions[:extra_len]], axis=0)
+    new_species = np.concatenate([fragment.nodes.species, extra_species[:extra_len]], axis=0)
 
-    # Compute the distance matrix to select the edges.
-    distance_matrix = jnp.linalg.norm(
-        new_positions[None, :, :] - new_positions[:, None, :], axis=-1
+    atomic_numbers = np.asarray([1, 6, 7, 8, 9])
+    new_fragment = input_pipeline.ase_atoms_to_jraph_graph(
+        atoms=ase.Atoms(numbers=atomic_numbers[new_species], positions=new_positions),
+        atomic_numbers=atomic_numbers,
+        radial_cutoff=radial_cutoff,
     )
-    node_indices = jnp.arange(num_nodes)
-
-    # Avoid self-edges.
-    valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
-    valid_edges = (
-        valid_edges
-        & (node_indices[None, :] <= num_valid_nodes)
-        & (node_indices[:, None] <= num_valid_nodes)
-    )
-    senders, receivers = jnp.nonzero(
-        valid_edges, size=num_edges, fill_value=-1
-    )
-    num_valid_edges = jnp.sum(valid_edges)
-    num_valid_nodes += 1
-
-    return padded_fragment._replace(
-        nodes=padded_fragment.nodes._replace(
-            positions=new_positions,
-            species=new_species,
-        ),
-        n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
-        n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
-        senders=senders,
-        receivers=receivers,
-    )
+    new_fragment = new_fragment._replace(globals=padded_fragment.globals)
+    return stop, new_fragment
 
 
 def generate_one_step(
