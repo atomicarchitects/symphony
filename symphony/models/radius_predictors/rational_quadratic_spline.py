@@ -72,8 +72,7 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         """Computes the log probability of the given samples."""
         dist = self.create_distribution(conditioning)
         radii = jnp.linalg.norm(samples.array, axis=-1)
-        return dist.log_prob(radii)  # TODO ???
-        # return jnp.minimum(jnp.zeros_like(radii), dist.log_prob(radii))  # TODO ???
+        return dist.log_prob(radii)
 
     def sample(
         self,

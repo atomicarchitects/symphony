@@ -36,7 +36,7 @@ def append_predictions_to_fragment(
         return True, fragment
 
     target_relative_positions = pred.globals.position_vectors[0]
-    focus_index = pred.globals.focus_indices[0]
+    focus_index = pred.globals.focus_indices[0]  # TODO uh. well. oop
     focus_position = fragment.nodes.positions[focus_index]
     extra_position = target_relative_positions + focus_position
     extra_species = pred.globals.target_species[focus_index]
@@ -98,7 +98,7 @@ def estimate_padding_budget(
 
     if padding_mode == "fixed":
         avg_nodes_per_graph = 50
-        avg_edges_per_graph = 1000  # TODO why did this get so much bigger?
+        avg_edges_per_graph = 1000
     elif padding_mode == "dynamic":
         avg_nodes_per_graph = sum(
             fragment.n_node.sum() for fragment in all_fragments

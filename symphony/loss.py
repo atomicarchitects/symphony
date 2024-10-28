@@ -77,6 +77,19 @@ def generation_loss(
 
         return loss_focus_and_atom_type
 
+    def process_logits(logits):
+        target_positions_mask = graphs.globals.target_positions_mask
+        assert target_positions_mask.shape == (num_graphs, num_targets)
+
+        loss = -logits
+        loss = jnp.where(target_positions_mask, loss, 0)
+        loss = loss.sum(axis=-1)
+        num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
+        loss /= num_valid_targets
+
+        assert loss.shape == (num_graphs,)
+        return loss
+
     def position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities."""
         assert graphs.globals.target_positions.shape == (num_graphs, num_targets, 3), (
@@ -91,19 +104,6 @@ def generation_loss(
             num_graphs,
             num_targets,
         )
-
-        def process_logits(logits):
-            target_positions_mask = graphs.globals.target_positions_mask
-            assert target_positions_mask.shape == (num_graphs, num_targets)
-
-            loss = -position_logits
-            loss = jnp.where(target_positions_mask, loss, 0)
-            loss = loss.sum(axis=-1)
-            num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
-            loss /= num_valid_targets
-
-            assert loss.shape == (num_graphs,)
-            return loss
 
         return (process_logits(preds.globals.radial_logits),
             process_logits(preds.globals.angular_logits),
