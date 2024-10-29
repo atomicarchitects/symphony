@@ -18,7 +18,6 @@ from symphony.models.radius_predictors.discretized_predictor import (
 from symphony.models.radius_predictors.rational_quadratic_spline import (
     RationalQuadraticSplineRadialPredictor,
 )
-from symphony.models.position_predictor import TargetPositionPredictor as DiscretizedTargetPositionPredictor
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
 from symphony.models.predictor import Predictor
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
