@@ -65,11 +65,11 @@ def create_fragments_dataset(
         # Loop indefinitely.
         while True:
             for _ in range(num_seeds):
-                original_rng, rng = jax.random.split(original_rng)
+                _, rng = jax.random.split(original_rng)
                 for index in keep_indices:
                     structure = structures[index]
                     if use_same_rng_across_structures:
-                        structure_rng = original_rng
+                        structure_rng = rng
                     else:
                         rng, structure_rng = jax.random.split(rng)
 
