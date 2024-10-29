@@ -17,7 +17,7 @@ import jax.numpy as jnp
 
 from symphony import train, train_state
 from symphony import graphics
-from analyses import metrics, generate_molecules_stream_new as generate_molecules
+from analyses import metrics, generate_molecules
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -63,6 +63,7 @@ class GenerateMoleculesHook:
     res_alpha: int
     res_beta: int
     radial_cutoff: float
+    start_seed: int
     num_seeds: int
     num_seeds_per_chunk: int
     init_molecules: str
@@ -88,6 +89,7 @@ class GenerateMoleculesHook:
             radial_cutoff=self.radial_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=self.position_inverse_temperature,
+            start_seed=self.start_seed,
             num_seeds=self.num_seeds,
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,
@@ -182,14 +184,15 @@ class EvaluateModelHook:
             logging.info("No best state found yet.")
             min_val_loss = float("inf")
 
-        if eval_metrics["val_eval"]["total_loss"] < min_val_loss:
+        if jnp.all(eval_metrics["val_eval"]["total_loss"] < min_val_loss):
             state = state.replace(
                 best_params=state.params,
                 # metrics_for_best_params=eval_metrics,
                 metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
                 step_for_best_params=state.step,
             )
-            logging.info("New best state found at step %d.", state.get_step())
+            # logging.info("New best state found at step %d.", state.get_step())
+            # logging.info(f"New min loss: {eval_metrics['val_eval']['total_loss']}")
 
         return state
 

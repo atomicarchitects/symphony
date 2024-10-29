@@ -103,7 +103,7 @@ def main(argv):
             config=config.to_dict(),
             dir=FLAGS.workdir,
             sync_tensorboard=True,
-            tags=wandb_tags,
+            tags=FLAGS.wandb_tags,
             name=FLAGS.wandb_name,
             notes=FLAGS.wandb_notes,
         )

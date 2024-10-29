@@ -67,7 +67,7 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         return dist
 
     def log_prob(
-        self, samples: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
+        self, samples: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray, eps: float = 1e-6
     ) -> jnp.ndarray:
         """Computes the log probability of the given samples."""
         dist = self.create_distribution(conditioning)
@@ -84,4 +84,11 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         sample_rngs = jax.random.split(sample_rng, self.boundary_error_max_tries)
         samples = jax.vmap(lambda rng: dist.sample(seed=rng))(sample_rngs)
 
-        return samples
+        return jax.random.choice(rng, samples)
+
+        # valid_range = samples >= self.min_radius + self.boundary_error
+        # valid_range = jnp.logical_and(
+        #     valid_range, samples <= self.max_radius - self.boundary_error
+        # )
+
+        # return jax.random.choice(rng, samples, p=valid_range)

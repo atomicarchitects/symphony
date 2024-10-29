@@ -17,7 +17,7 @@ import numpy as np
 from analyses import analysis
 from symphony import datatypes
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, tmqm
+from symphony.data.datasets import qm9, qm9_single, tmqm
 from symphony import models
 
 
@@ -36,7 +36,7 @@ def append_predictions_to_fragment(
         return True, fragment
 
     target_relative_positions = pred.globals.position_vectors[0]
-    focus_index = pred.globals.focus_indices[0]
+    focus_index = pred.globals.focus_indices[0]  # TODO uh. well. oop
     focus_position = fragment.nodes.positions[focus_index]
     extra_position = target_relative_positions + focus_position
     extra_species = pred.globals.target_species[focus_index]
@@ -98,7 +98,7 @@ def estimate_padding_budget(
 
     if padding_mode == "fixed":
         avg_nodes_per_graph = 50
-        avg_edges_per_graph = 500
+        avg_edges_per_graph = 1000
     elif padding_mode == "dynamic":
         avg_nodes_per_graph = sum(
             fragment.n_node.sum() for fragment in all_fragments
@@ -190,6 +190,7 @@ def generate_molecules(
     radial_cutoff: float,
     focus_and_atom_type_inverse_temperature: float,
     position_inverse_temperature: float,
+    start_seed: int,
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
@@ -217,7 +218,7 @@ def generate_molecules(
         ]
 
     # Set parameters based on the dataset.
-    if dataset == "qm9":
+    if "qm9" in dataset:
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 350
@@ -227,6 +228,11 @@ def generate_molecules(
         avg_nodes_per_graph = 50
         avg_edges_per_graph = 500
         atomic_numbers = tmqm.TMQMDataset.get_atomic_numbers()
+    elif dataset == "platonic_solids":
+        max_num_atoms = 35
+        avg_nodes_per_graph = 35
+        avg_edges_per_graph = 175
+        atomic_numbers = np.array([1])
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -350,17 +356,17 @@ def generate_molecules(
     )
 
     generated_molecules_ase = []
-    for index, (stop, fragment) in enumerate(zip(stopped, all_fragments)):
-        init_molecule_name = init_molecule_names[index]
+    for seed, stop, fragment in zip(range(start_seed, start_seed+num_seeds), stopped, all_fragments):
+        init_molecule_name = init_molecule_names[seed]
         generated_molecule_ase = ase.Atoms(
-            symbols=models.get_atomic_numbers(fragment.nodes.species, dataset),
+            symbols=models.get_atomic_numbers(fragment.nodes.species, atomic_numbers),
             positions=fragment.nodes.positions,
         )
 
         if stop:
-            output_file = f"{init_molecule_name}_seed={index}.xyz"
+            output_file = f"{init_molecule_name}_seed={seed}.xyz"
         else:
-            output_file = f"{init_molecule_name}_seed={index}_no_stop.xyz"
+            output_file = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
 
         generated_molecule_ase.write(os.path.join(molecules_outputdir, output_file))
         generated_molecules_ase.append(generated_molecule_ase)

@@ -8,26 +8,34 @@ def get_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     # Dataset.
-    config.dataset = "qm9"
+    config.dataset = "qm9_single"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
-    config.use_edm_splits = True
-    config.num_train_molecules = 100000
-    config.num_val_molecules = 10000
-    config.num_test_molecules = 13083
-    config.num_frag_seeds = 4
-    config.shuffle_datasets = True
+    config.shuffle_datasets = False
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
     config.max_targets_per_graph = 1
+    config.num_train_molecules = 1
+    config.num_val_molecules = 1
+    config.num_test_molecules = 1
+    config.num_frag_seeds = 4
     config.heavy_first = False
     config.transition_first = False
+    config.fragment_number = -1
 
     # Optimizer.
     config.optimizer = "adam"
     config.momentum = None
     config.learning_rate = 5e-4
+    config.learning_rate_schedule = "constant"
+    config.learning_rate_schedule_kwargs = ml_collections.ConfigDict()
+    config.learning_rate_schedule_kwargs.init_value = config.get_ref("learning_rate")
+    config.learning_rate_schedule_kwargs.peak_value = 2 * config.get_ref(
+        "learning_rate"
+    )
+    config.learning_rate_schedule_kwargs.warmup_steps = 2000
+    config.learning_rate_schedule_kwargs.decay_steps = 50000
 
     # Training.
     config.rng_seed = 0

@@ -24,7 +24,6 @@ from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
 from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
 
 
-
 def get_activation(activation: str) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Get the activation function."""
     if activation == "shifted_softplus":
