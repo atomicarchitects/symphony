@@ -1,6 +1,6 @@
 """Generates molecules from a trained model."""
 
-from typing import Sequence, Tuple, Callable, Optional, Union
+from typing import Sequence, Tuple, Callable, Optional, Union, Dict
 import os
 import time
 
@@ -22,11 +22,79 @@ import chex
 import optax
 
 import analyses.analysis as analysis
-from symphony import datatypes
+from symphony import datatypes, models
 from symphony.data import input_pipeline
-from symphony import models
+from symphony.data.datasets import qm9, qm9_single, tmqm
 
 FLAGS = flags.FLAGS
+
+
+def create_batch_iterator(
+    all_fragments: Sequence[datatypes.Fragments],
+    stopped: Sequence[bool],
+    padding_budget: Dict[str, int],
+):
+    """Creates a iterator over batches."""
+    assert len(all_fragments) == len(stopped)
+
+    indices, batch = [], []
+    for index, data in enumerate(all_fragments):
+        if stopped[index]:
+            continue
+
+        indices.append(index)
+        batch.append(data)
+
+        if len(batch) == padding_budget["n_graph"] - 1:
+            indices = indices + [None] * (padding_budget["n_graph"] - len(batch))
+            batch = jraph.batch_np(batch)
+            batch = jraph.pad_with_graphs(batch, **padding_budget)
+            yield indices, batch
+            indices, batch = [], []
+
+    if len(batch) > 0:
+        indices = indices + [None] * (padding_budget["n_graph"] - len(batch))
+        batch = jraph.pad_with_graphs(jraph.batch_np(batch), **padding_budget)
+        yield indices, batch
+
+
+def estimate_padding_budget(
+    all_fragments: Sequence[datatypes.Fragments],
+    num_seeds_per_chunk: int, 
+    avg_nodes_per_graph: int,
+    avg_edges_per_graph: int,
+    padding_mode: str,
+):
+    """Estimates the padding budget for a batch."""
+
+    def round_to_nearest_multiple_of_64(x):
+        return int(np.ceil(x / 64) * 64)
+
+    if padding_mode == "fixed":
+        avg_nodes_per_graph = 50
+        avg_edges_per_graph = 1000
+    elif padding_mode == "dynamic":
+        avg_nodes_per_graph = sum(
+            fragment.n_node.sum() for fragment in all_fragments
+        ) / len(all_fragments)
+        avg_edges_per_graph = sum(
+            fragment.n_edge.sum() for fragment in all_fragments
+        ) / len(all_fragments)
+    else:
+        raise ValueError(f"Unknown padding mode: {padding_mode}")
+
+    avg_nodes_per_graph = max(avg_nodes_per_graph, 1)
+    avg_edges_per_graph = max(avg_edges_per_graph, 1)
+    padding_budget = dict(
+        n_node=round_to_nearest_multiple_of_64(
+            num_seeds_per_chunk * avg_nodes_per_graph * 1.5
+        ),
+        n_edge=round_to_nearest_multiple_of_64(
+            num_seeds_per_chunk * avg_edges_per_graph * 1.5
+        ),
+        n_graph=num_seeds_per_chunk,
+    )
+    return padding_budget
 
 
 def append_predictions(
@@ -133,13 +201,28 @@ def generate_molecules(
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
-    max_num_atoms: int,
-    avg_neighbors_per_atom: int,
-    atomic_numbers: np.ndarray = np.arange(1, 81),
-    visualize: bool = False,
-    visualizations_dir: Optional[str] = None,
-    verbose: bool = True,
+    dataset: str,
+    padding_mode: str,
+    verbose: bool = False,
 ):
+# def generate_molecules(
+#     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
+#     params: optax.Params,
+#     molecules_outputdir: str,
+#     radial_cutoff: float,
+#     focus_and_atom_type_inverse_temperature: float,
+#     position_inverse_temperature: float,
+#     start_seed: int,
+#     num_seeds: int,
+#     num_seeds_per_chunk: int,
+#     init_molecules: Sequence[Union[str, ase.Atoms]],
+#     max_num_atoms: int,
+#     avg_neighbors_per_atom: int,
+#     atomic_numbers: np.ndarray = np.arange(1, 81),
+#     visualize: bool = False,
+#     visualizations_dir: Optional[str] = None,
+#     verbose: bool = True,
+# ):
     """Generates molecules from a model."""
 
     if verbose:
@@ -149,9 +232,25 @@ def generate_molecules(
 
     # Create output directories.
     os.makedirs(molecules_outputdir, exist_ok=True)
-    if visualize:
-        assert visualizations_dir is not None
-        os.makedirs(visualizations_dir, exist_ok=True)
+
+    # Set parameters based on the dataset.
+    if "qm9" in dataset:
+        max_num_atoms = 35
+        avg_nodes_per_graph = 35
+        avg_edges_per_graph = 350
+        atomic_numbers = qm9.QM9Dataset.get_atomic_numbers()
+    elif dataset == "tmqm":
+        max_num_atoms = 60
+        avg_nodes_per_graph = 50
+        avg_edges_per_graph = 500
+        atomic_numbers = tmqm.TMQMDataset.get_atomic_numbers()
+    elif dataset == "platonic_solids":
+        max_num_atoms = 35
+        avg_nodes_per_graph = 35
+        avg_edges_per_graph = 175
+        atomic_numbers = np.array([1])
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
 
     # Check that we can divide the seeds into chunks properly.
     if num_seeds % num_seeds_per_chunk != 0:
@@ -186,15 +285,17 @@ def generate_molecules(
     else:
         init_molecule_names = [f"mol_{i}" for i in range(len(init_molecules))]
 
-    if visualize:
-        pass
-
     # Prepare initial fragments.
+    padding_budget = estimate_padding_budget(
+        init_molecules[:10], num_seeds_per_chunk,
+        avg_nodes_per_graph, avg_edges_per_graph,
+        padding_mode=padding_mode,
+    )
     init_fragments = [
         jraph.pad_with_graphs(
             init_fragment,
             n_node=(max_num_atoms + 1),
-            n_edge=(max_num_atoms + 1) * avg_neighbors_per_atom,
+            n_edge=(max_num_atoms + 1) * avg_edges_per_graph / avg_nodes_per_graph,
             n_graph=2,
         )
         for init_fragment in init_molecules
@@ -233,7 +334,7 @@ def generate_molecules(
                 max_num_atoms,
                 radial_cutoff,
                 rng,
-                return_intermediates=visualize,
+                return_intermediates=False,
             )
             return jax.vmap(generate_for_one_seed_fn)(rngs, init_fragments)
 
@@ -258,77 +359,77 @@ def generate_molecules(
     compilation_time = time.time() - start_time
     logging_fn("Compilation time: %.2f s", compilation_time)
 
-    # Generate molecules (and intermediate steps, if visualizing).
-    if visualize:
-        padded_fragments, preds = chunk_and_apply(init_fragments, rngs)
-    else:
-        final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
+    # # Generate molecules (and intermediate steps, if visualizing).
+    # if visualize:
+    #     padded_fragments, preds = chunk_and_apply(init_fragments, rngs)
+    # else:
+    final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
 
     molecule_list = []
     for i, seed in tqdm.tqdm(enumerate(seeds), desc="Visualizing molecules"):
         init_fragment = jax.tree_util.tree_map(lambda x: x[i], init_fragments)
         init_molecule_name = init_molecule_names[i]
 
-        if visualize:
-            # Get the padded fragment and predictions for this seed.
-            padded_fragments_for_seed = jax.tree_util.tree_map(
-                lambda x: x[i], padded_fragments
-            )
-            preds_for_seed = jax.tree_util.tree_map(lambda x: x[i], preds)
+        # if visualize:
+        #     # Get the padded fragment and predictions for this seed.
+        #     padded_fragments_for_seed = jax.tree_util.tree_map(
+        #         lambda x: x[i], padded_fragments
+        #     )
+        #     preds_for_seed = jax.tree_util.tree_map(lambda x: x[i], preds)
 
-            figs = []
-            for step in range(max_num_atoms):
-                if step == 0:
-                    padded_fragment = init_fragment
-                else:
-                    padded_fragment = jax.tree_util.tree_map(
-                        lambda x: x[step - 1], padded_fragments_for_seed
-                    )
-                pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
+        #     figs = []
+        #     for step in range(max_num_atoms):
+        #         if step == 0:
+        #             padded_fragment = init_fragment
+        #         else:
+        #             padded_fragment = jax.tree_util.tree_map(
+        #                 lambda x: x[step - 1], padded_fragments_for_seed
+        #             )
+        #         pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
 
-                # Save visualization of generation process.
-                fragment = jraph.unpad_with_graphs(padded_fragment)
-                pred = jraph.unpad_with_graphs(pred)
-                fragment = fragment._replace(
-                    globals=jax.tree_util.tree_map(
-                        lambda x: np.squeeze(x, axis=0), fragment.globals
-                    )
-                )
-                pred = pred._replace(
-                    globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
-                )
-                fig = analysis.visualize_predictions(pred, fragment)
-                figs.append(fig)
+        #         # Save visualization of generation process.
+        #         fragment = jraph.unpad_with_graphs(padded_fragment)
+        #         pred = jraph.unpad_with_graphs(pred)
+        #         fragment = fragment._replace(
+        #             globals=jax.tree_util.tree_map(
+        #                 lambda x: np.squeeze(x, axis=0), fragment.globals
+        #             )
+        #         )
+        #         pred = pred._replace(
+        #             globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
+        #         )
+        #         fig = analysis.visualize_predictions(pred, fragment)
+        #         figs.append(fig)
 
-                # This may be the final padded fragment.
-                final_padded_fragment = padded_fragment
+        #         # This may be the final padded fragment.
+        #         final_padded_fragment = padded_fragment
 
-                # Check if we should stop.
-                stop = pred.globals.stop
-                if stop:
-                    break
+        #         # Check if we should stop.
+        #         stop = pred.globals.stop
+        #         if stop:
+        #             break
 
-            # Save the visualizations of the generation process.
-            for index, fig in enumerate(figs):
-                # Update the title.
-                fig.update_layout(
-                    title=f"Predictions for Seed {seed}",
-                    title_x=0.5,
-                )
+        #     # Save the visualizations of the generation process.
+        #     for index, fig in enumerate(figs):
+        #         # Update the title.
+        #         fig.update_layout(
+        #             title=f"Predictions for Seed {seed}",
+        #             title_x=0.5,
+        #         )
 
-                # Save to file.
-                outputfile = os.path.join(
-                    visualizations_dir,
-                    f"seed_{seed}_fragments_{index}.html",
-                )
-                fig.write_html(outputfile, include_plotlyjs="cdn")
+        #         # Save to file.
+        #         outputfile = os.path.join(
+        #             visualizations_dir,
+        #             f"seed_{seed}_fragments_{index}.html",
+        #         )
+        #         fig.write_html(outputfile, include_plotlyjs="cdn")
 
-        else:
-            # We already have the final padded fragment.
-            final_padded_fragment = jax.tree_util.tree_map(
-                lambda x: x[i], final_padded_fragments
-            )
-            stop = jax.tree_util.tree_map(lambda x: x[i], stops)
+        # else:
+        # We already have the final padded fragment.
+        final_padded_fragment = jax.tree_util.tree_map(
+            lambda x: x[i], final_padded_fragments
+        )
+        stop = jax.tree_util.tree_map(lambda x: x[i], stops)
 
         num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
@@ -356,7 +457,7 @@ def generate_molecules(
     #    for mol in molecule_list:
     #        conn.write(mol)
 
-    return molecule_list, molecules_outputdir
+    return molecule_list
 
 
 

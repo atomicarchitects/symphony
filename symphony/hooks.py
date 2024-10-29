@@ -17,7 +17,7 @@ import jax.numpy as jnp
 
 from symphony import train, train_state
 from symphony import graphics
-from analyses import metrics, generate_molecules_stream_new as generate_molecules
+from analyses import metrics, generate_molecules
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:

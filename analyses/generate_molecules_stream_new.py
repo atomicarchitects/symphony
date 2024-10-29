@@ -228,6 +228,11 @@ def generate_molecules(
         avg_nodes_per_graph = 50
         avg_edges_per_graph = 500
         atomic_numbers = tmqm.TMQMDataset.get_atomic_numbers()
+    elif dataset == "platonic_solids":
+        max_num_atoms = 35
+        avg_nodes_per_graph = 35
+        avg_edges_per_graph = 175
+        atomic_numbers = np.array([1])
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
