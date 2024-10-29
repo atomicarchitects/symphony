@@ -16,6 +16,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_train_molecules = 100000
     config.num_val_molecules = 10000
     config.num_test_molecules = 13083
+    config.num_frag_seeds = 4
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0

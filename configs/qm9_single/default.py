@@ -15,13 +15,14 @@ def get_config() -> ml_collections.ConfigDict:
     config.shuffle_datasets = False
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
-    config.max_targets_per_graph = 4
+    config.max_targets_per_graph = 1
     config.num_train_molecules = 1
     config.num_val_molecules = 1
     config.num_test_molecules = 1
+    config.num_frag_seeds = 4
     config.heavy_first = False
     config.transition_first = False
-    config.fragment_number = 3
+    config.fragment_number = -1
 
     # Optimizer.
     config.optimizer = "adam"
