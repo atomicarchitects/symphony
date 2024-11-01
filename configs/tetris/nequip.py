@@ -11,6 +11,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # NequIP hyperparameters.
     config.model = "NequIP"
+    config.num_hidden_channels = 16
     config.num_channels = 64
     config.r_max = 5
     config.avg_num_neighbors = 20.0  # NequIP is not properly normalized.

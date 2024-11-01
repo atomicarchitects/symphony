@@ -11,6 +11,7 @@ def get_embedder_config() -> ml_collections.ConfigDict:
 
     # MACE hyperparameters.
     config.model = "MACE"
+    config.num_hidden_channels = 16
     config.num_channels = 128
     config.r_max = 5
     config.num_interactions = 1

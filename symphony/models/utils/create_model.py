@@ -36,9 +36,9 @@ def _irreps_from_lmax(
     lmax: int, num_channels: int, use_pseudoscalars_and_pseudovectors: bool
 ) -> e3nn.Irreps:
     """Convenience function to create irreps from lmax."""
-    irreps = e3nn.s2_irreps(lmax)
+    irreps = e3nn.s2_irreps(lmax, p_val=1)
     if use_pseudoscalars_and_pseudovectors:
-        irreps += e3nn.Irreps("0o + 1e")
+        irreps += e3nn.s2_irreps(lmax, p_val=-1)
     return (num_channels * irreps).regroup()
 
 
@@ -49,6 +49,11 @@ def create_node_embedder(
     """Creates a node embedder as specified by the config."""
 
     if config.model == "MACE":
+        hidden_irreps = _irreps_from_lmax(
+            config.max_ell,
+            config.num_hidden_channels,
+            use_pseudoscalars_and_pseudovectors=True,
+        )
         output_irreps = _irreps_from_lmax(
             config.max_ell,
             config.num_channels,
@@ -56,7 +61,7 @@ def create_node_embedder(
         )
         return mace.MACE(
             output_irreps=output_irreps,
-            hidden_irreps=output_irreps,
+            hidden_irreps=hidden_irreps,
             readout_mlp_irreps=output_irreps,
             r_max=config.r_max,
             num_interactions=config.num_interactions,
@@ -68,6 +73,11 @@ def create_node_embedder(
         )
 
     if config.model == "NequIP":
+        hidden_irreps = _irreps_from_lmax(
+            config.max_ell,
+            config.num_hidden_channels,
+            config.use_pseudoscalars_and_pseudovectors,
+        )
         output_irreps = _irreps_from_lmax(
             config.max_ell,
             config.num_channels,
@@ -79,6 +89,7 @@ def create_node_embedder(
             avg_num_neighbors=config.avg_num_neighbors,
             max_ell=config.max_ell,
             init_embedding_dims=config.num_channels,
+            hidden_irreps=hidden_irreps,
             output_irreps=output_irreps,
             num_interactions=config.num_interactions,
             even_activation=get_activation(config.even_activation),
