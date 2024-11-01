@@ -10,6 +10,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Dataset.
     config.dataset = "platonic_solids"
     config.fragment_logic = "nn"
+    config.heavy_first = True
     config.root_dir = None
     config.shuffle_datasets = True
     config.train_solids = None
@@ -32,6 +33,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
+    config.use_same_rng_across_structures = False
     config.num_train_steps = 10000
     config.log_every_steps = 1000
     config.eval = True

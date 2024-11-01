@@ -17,7 +17,8 @@ class NequIP(hk.Module):
         avg_num_neighbors: float,
         max_ell: int,
         init_embedding_dims: int,
-        output_irreps: str,
+        hidden_irreps: e3nn.Irreps,
+        output_irreps: e3nn.Irreps,
         num_interactions: int,
         even_activation: Callable[[jnp.ndarray], jnp.ndarray],
         odd_activation: Callable[[jnp.ndarray], jnp.ndarray],
@@ -34,6 +35,7 @@ class NequIP(hk.Module):
         self.avg_num_neighbors = avg_num_neighbors
         self.max_ell = max_ell
         self.init_embedding_dims = init_embedding_dims
+        self.hidden_irreps = hidden_irreps
         self.output_irreps = output_irreps
         self.num_interactions = num_interactions
         self.even_activation = even_activation
@@ -59,11 +61,11 @@ class NequIP(hk.Module):
         node_feats = hk.Embed(self.num_species, self.init_embedding_dims)(species)
         node_feats = e3nn.IrrepsArray(f"{node_feats.shape[1]}x0e", node_feats)
 
-        for interaction in range(self.num_interactions):
-            new_node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
+        for _ in range(self.num_interactions):
+            node_feats = nequip_jax.NEQUIPESCNLayerHaiku(
                 avg_num_neighbors=self.avg_num_neighbors,
                 num_species=self.num_species,
-                output_irreps=self.output_irreps,
+                output_irreps=self.hidden_irreps,
                 even_activation=self.even_activation,
                 odd_activation=self.odd_activation,
                 mlp_activation=self.mlp_activation,
@@ -71,13 +73,10 @@ class NequIP(hk.Module):
                 mlp_n_layers=self.mlp_n_layers,
                 n_radial_basis=self.n_radial_basis,
             )(relative_positions, node_feats, species, graphs.senders, graphs.receivers)
-            new_node_feats = e3nn.haiku.Linear(
-                self.output_irreps, force_irreps_out=True
-            )(new_node_feats)
 
-            if self.skip_connection and interaction > 0:
-                new_node_feats += node_feats
-            node_feats = new_node_feats
+        node_feats = e3nn.haiku.Linear(
+            self.output_irreps, force_irreps_out=True
+        )(node_feats)
 
         alpha = 0.5 ** jnp.array(node_feats.irreps.ls)
         node_feats = node_feats * alpha
