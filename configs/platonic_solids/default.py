@@ -11,6 +11,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.dataset = "platonic_solids"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
+    config.heavy_first = True
     config.root_dir = None
     config.shuffle_datasets = False
     config.infer_edges_with_radial_cutoff = True
@@ -20,7 +21,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_val_molecules = 1
     config.num_test_molecules = 1
     config.num_frag_seeds = 4
-    config.heavy_first = False
     config.transition_first = False
     config.fragment_number = -1
     config.train_solids = [1]
@@ -43,7 +43,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Training.
     config.rng_seed = 0
     config.use_same_rng_across_structures = False
-    config.num_train_steps = 1_000_000
+    config.num_train_steps = 10000
     config.log_every_steps = 1000
     config.eval = True
     config.eval_during_training = True
