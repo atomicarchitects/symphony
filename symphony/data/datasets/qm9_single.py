@@ -24,7 +24,7 @@ class QM9Dataset(datasets.InMemoryDataset):
         self,
         root_dir: str,
         check_molecule_sanity: bool,
-        mol_num: int = 20,
+        mol_num: int = 0,
     ):
         super().__init__()
 

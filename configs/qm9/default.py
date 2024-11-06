@@ -21,7 +21,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
     config.max_targets_per_graph = 1
-    config.heavy_first = False
+    config.heavy_first = True
     config.transition_first = False
 
     # Optimizer.
@@ -51,9 +51,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs.discretized_loss = False
     config.mask_atom_types = False
     config.add_noise_to_positions = True
-    config.position_noise_std = 0.05
+    config.position_noise_std = 0.1
     config.add_noise_to_target_distance = True
-    config.target_distance_noise_std = 0.01
+    config.target_distance_noise_std = 0.1
     config.freeze_node_embedders = False
 
     # Prediction heads.
@@ -84,7 +84,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
-    config.target_position_predictor.radial_predictor.continuous = True
 
     # Generation.
     config.generation = ml_collections.ConfigDict()
@@ -96,7 +95,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.start_seed = 0
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
-    config.generation.init_molecules = "H"
+    config.generation.init_molecules = "C"
     config.generation.max_num_atoms = 35
     config.generation.avg_neighbors_per_atom = 5
     config.generation.species = [1, 6, 7, 8, 9]
