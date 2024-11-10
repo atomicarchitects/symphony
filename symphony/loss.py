@@ -183,7 +183,7 @@ def generation_loss(
         quadrature = "gausslegendre"
         _, num_radii = preds.globals.radial_logits.shape
         radial_bins = jnp.linspace(0, 5, num_radii)  # TODO hardcoded
-        lmax = 5  # TODO hardcoded
+        lmax = 3  # TODO hardcoded
         res_beta = 100  # TODO hardcoded
         res_alpha = 99  # TODO hardcoded
 

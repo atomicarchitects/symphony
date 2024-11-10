@@ -7,7 +7,6 @@ import time
 
 import chex
 import flax
-import clu
 import jax
 import jax.numpy as jnp
 import jraph
@@ -86,9 +85,9 @@ def fill_in_target_positions(graphs: datatypes.Fragments) -> datatypes.Fragments
     )
 
 
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(3, 4, 5, 6, 7))
 @functools.partial(jax.jit, static_argnums=(3, 4, 5, 6, 7))
-# @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(3, 4, 5, 6, 7))
-# @chex.assert_max_traces(n=2)
+@chex.assert_max_traces(n=2)
 def train_step(
     graphs: datatypes.Fragments,
     state: train_state.TrainState,
@@ -166,7 +165,7 @@ def train_step(
     ), grads = grad_fn(state.params, graphs)
 
     # Average gradients across devices.
-    # grads = jax.lax.pmean(grads, axis_name="device")
+    grads = jax.lax.pmean(grads, axis_name="device")
     state = state.apply_gradients(grads=grads)
 
     batch_metrics = Metrics.single_from_model_output(
@@ -187,9 +186,9 @@ def train_step(
     return state, batch_metrics
 
 
+@functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(2,))
 @functools.partial(jax.jit, static_argnums=(2,))
-# @functools.partial(jax.pmap, axis_name="device", static_broadcasted_argnums=(2,))
-# @chex.assert_max_traces(n=2)
+@chex.assert_max_traces(n=2)
 def evaluate_step(
     graphs: datatypes.Fragments,
     state: train_state.TrainState,
@@ -219,6 +218,13 @@ def evaluate_step(
         position_loss=position_loss,
         mask=mask,
     )
+    # return Metrics.gather_from_model_output(
+    #     axis_name="device",
+    #     total_loss=total_loss,
+    #     focus_and_atom_type_loss=focus_and_atom_type_loss,
+    #     position_loss=position_loss,
+    #     mask=mask,
+    # )
 
 
 def evaluate_model(
@@ -233,11 +239,10 @@ def evaluate_model(
     eval_metrics = {}
     for split, fragment_iterator in datasets.items():
         split_metrics = Metrics.empty()
-        # split_metrics = flax.jax_utils.replicate(split_metrics)
+        split_metrics = flax.jax_utils.replicate(split_metrics)
 
         # Loop over graphs.
-        for eval_step, graphs in enumerate(fragment_iterator):
-        # for eval_step, graphs in enumerate(device_batch(fragment_iterator)):
+        for eval_step, graphs in enumerate(device_batch(fragment_iterator)):
             if eval_step >= num_eval_steps:
                 break
 
@@ -247,7 +252,7 @@ def evaluate_model(
             batch_metrics = evaluate_step(graphs, state, loss_kwargs)
             split_metrics = split_metrics.merge(batch_metrics)
 
-        # split_metrics = flax.jax_utils.unreplicate(split_metrics)
+        split_metrics = flax.jax_utils.unreplicate(split_metrics)
         eval_metrics[split + "_eval"] = split_metrics
 
     return eval_metrics
@@ -289,7 +294,6 @@ def train_and_evaluate(
     net = models.create_model(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
-    # params = net.init(init_rng, init_graphs)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
@@ -302,9 +306,7 @@ def train_and_evaluate(
     # Create the training state.
     state = train_state.TrainState.create(
         apply_fn=jax.jit(net.apply),
-        # apply_fn=net.apply,
         eval_apply_fn=jax.jit(eval_net.apply),
-        # eval_apply_fn=eval_net.apply,
         params=params,
         tx=tx,
         best_params=params,
@@ -318,10 +320,10 @@ def train_and_evaluate(
     checkpoint_dir = os.path.join(workdir, "checkpoints")
     checkpoint_hook = hooks.CheckpointHook(checkpoint_dir, max_to_keep=1)
     state = checkpoint_hook.restore_or_initialize(state)
-    initial_step = state.step
+    initial_step = int(state.step)
 
     # Replicate the training and evaluation state across devices.
-    # state = flax.jax_utils.replicate(state)
+    state = flax.jax_utils.replicate(state)
 
     # Hooks called periodically during training.
     report_progress = periodic_actions.ReportProgress(
@@ -349,6 +351,7 @@ def train_and_evaluate(
         res_alpha=config.generation.res_alpha,
         res_beta=config.generation.res_beta,
         radial_cutoff=config.generation.radial_cutoff,
+        start_seed=config.generation.start_seed,
         num_seeds=config.generation.num_seeds,
         num_seeds_per_chunk=config.generation.num_seeds_per_chunk,
         init_molecules=config.generation.init_molecules,
@@ -382,8 +385,7 @@ def train_and_evaluate(
         # Get a batch of graphs.
         try:
             start = time.perf_counter()
-            graphs = next(datasets["train"])
-            # graphs = next(device_batch(datasets["train"]))
+            graphs = next(device_batch(datasets["train"]))
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
             logging.log_first_n(
                 logging.INFO,
@@ -399,8 +401,7 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
             step_rng, rng = jax.random.split(rng)
-            step_rngs = step_rng
-            # step_rngs = jax.random.split(step_rng, jax.local_device_count())  # TODO put this back along with the rest of pmap stuff
+            step_rngs = jax.random.split(step_rng, jax.local_device_count())
             state, batch_metrics = train_step(
                 graphs,
                 state,

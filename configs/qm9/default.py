@@ -91,9 +91,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.res_beta = config.target_position_predictor.angular_predictor.get_ref("res_beta")
     config.generation.res_alpha = config.target_position_predictor.angular_predictor.get_ref("res_alpha")
     config.generation.radial_cutoff = config.get_ref("radial_cutoff")
+    config.generation.start_seed = 0
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 16
-    config.generation.init_molecules = "H"
+    config.generation.init_molecules = "C"
     config.generation.max_num_atoms = 35
     config.generation.padding_mode = "dynamic"
     config.generation.eps = 1e-4

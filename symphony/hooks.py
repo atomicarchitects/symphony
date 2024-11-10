@@ -17,8 +17,7 @@ import jax.numpy as jnp
 
 from symphony import train, train_state
 from symphony import graphics
-# from analyses import metrics, generate_molecules_stream as generate_molecules
-from analyses import metrics, generate_molecules_stream_new as generate_molecules
+from analyses import metrics, generate_molecules
 
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
@@ -64,6 +63,7 @@ class GenerateMoleculesHook:
     res_alpha: int
     res_beta: int
     radial_cutoff: float
+    start_seed: int
     num_seeds: int
     num_seeds_per_chunk: int
     init_molecules: str
@@ -84,12 +84,12 @@ class GenerateMoleculesHook:
 
         molecules_ase = generate_molecules.generate_molecules(
             apply_fn=state.eval_apply_fn,
-            params=state.params,
-            # params=flax.jax_utils.unreplicate(state.params),  # TODO reinstate this line!
+            params=flax.jax_utils.unreplicate(state.params),
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=self.radial_cutoff,
             focus_and_atom_type_inverse_temperature=self.focus_and_atom_type_inverse_temperature,
             position_inverse_temperature=self.position_inverse_temperature,
+            start_seed=self.start_seed,
             num_seeds=self.num_seeds,
             num_seeds_per_chunk=self.num_seeds_per_chunk,
             init_molecules=self.init_molecules,
@@ -131,8 +131,8 @@ class LogTrainMetricsHook:
     is_empty: bool = True
 
     def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
-        train_metrics = state.train_metrics  # TODO comment this out
-        # train_metrics = flax.jax_utils.unreplicate(state.train_metrics)  # TODO reinstate this line!
+        # train_metrics = state.train_metrics
+        train_metrics = flax.jax_utils.unreplicate(state.train_metrics)
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
@@ -142,8 +142,8 @@ class LogTrainMetricsHook:
                 add_prefix_to_keys(train_metrics.compute(), "train"),
             )
             state = state.replace(
-                # train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),  # TODO reinstate this line!
-                train_metrics=train.Metrics.empty(),  # TODO comment this out
+                train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
+                # train_metrics=train.Metrics.empty(),
             )
             self.is_empty = True
 
@@ -191,7 +191,8 @@ class EvaluateModelHook:
                 metrics_for_best_params=flax.jax_utils.replicate(eval_metrics),
                 step_for_best_params=state.step,
             )
-            logging.info("New best state found at step %d.", state.get_step())
+            # logging.info("New best state found at step %d.", state.get_step())
+            # logging.info(f"New min loss: {eval_metrics['val_eval']['total_loss']}")
 
         return state
 
@@ -220,7 +221,7 @@ class CheckpointHook:
         return state
 
     def __call__(self, state: train_state.TrainState) -> Any:
-        # state = flax.jax_utils.unreplicate(state)  # TODO reinstate this line!
+        state = flax.jax_utils.unreplicate(state)
 
         # Save the current and best params to the checkpoint directory.
         with open(
@@ -230,8 +231,6 @@ class CheckpointHook:
 
         with open(os.path.join(self.checkpoint_dir, "params_best.pkl"), "wb") as f:
             pickle.dump(state.best_params, f)
-        
-        logging.info("Metrics for best params: %s", state.metrics_for_best_params)
 
         # Save the best params as a wandb artifact.
         if wandb.run is not None:

@@ -88,7 +88,7 @@ class LinearAngularPredictor(AngularPredictor):
         coeffs = self.coeffs(jnp.linalg.norm(position.array), conditioning)
 
         # We have to compute the log partition function, because the distribution is not normalized.
-        prob_signal, max_val = self.coeffs_to_probability_distribution(
+        prob_signal, max_val, log_Z = self.coeffs_to_probability_distribution(
             coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
         assert prob_signal.shape == (
@@ -96,7 +96,6 @@ class LinearAngularPredictor(AngularPredictor):
             self.res_beta,
             self.res_alpha,
         ), prob_signal.shape
-        log_Z = jnp.log(prob_signal.integrate().array.sum())
         assert log_Z.shape == (), log_Z.shape
 
         # We can compute the logits.
@@ -113,7 +112,7 @@ class LinearAngularPredictor(AngularPredictor):
     @staticmethod
     def coeffs_to_probability_distribution(
         coeffs: e3nn.IrrepsArray, res_beta: int, res_alpha: int, quadrature: str
-    ) -> Tuple[e3nn.SphericalSignal, float]:
+    ) -> Tuple[e3nn.SphericalSignal, float, float]:
         """Converts the coefficients at this radius to a probability distribution."""
         num_channels = coeffs.shape[-2]
 
@@ -136,12 +135,13 @@ class LinearAngularPredictor(AngularPredictor):
         prob_signal = prob_signal.replace_values(
             jnp.sum(prob_signal.grid_values, axis=-3)
         )
-        prob_signal /= prob_signal.integrate().array.sum()
+        Z = prob_signal.integrate().array.sum()
+        prob_signal /= Z
         assert prob_signal.shape == (
             res_beta,
             res_alpha,
         )
-        return prob_signal, max_val
+        return prob_signal, max_val, jnp.log(Z)
 
     def sample(
         self, radius: float, conditioning: e3nn.IrrepsArray, inverse_temperature: float
@@ -155,7 +155,7 @@ class LinearAngularPredictor(AngularPredictor):
         coeffs *= beta
 
         # We have to compute the log partition function, because the distribution is not normalized.
-        prob_signal, _ = self.coeffs_to_probability_distribution(
+        prob_signal, _, _ = self.coeffs_to_probability_distribution(
             coeffs, self.res_beta, self.res_alpha, self.quadrature
         )
 
