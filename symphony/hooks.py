@@ -106,23 +106,24 @@ class GenerateMoleculesHook:
         # Convert to RDKit molecules.
         molecules = metrics.ase_to_rdkit_molecules(molecules_ase)
 
+        # Plot molecules.
+        plot_molecules_in_wandb(molecules, state.get_step())
+
         # Compute metrics.
         logging.info("Computing metrics...")
         validity = metrics.compute_validity(molecules)
         uniqueness = metrics.compute_uniqueness(molecules)
+        metrics_df = metrics.get_posebusters_results(molecules)
+        metrics_agg = {f"posebusters/{col}": metrics_df[col].sum() / self.num_seeds for col in metrics_df.columns}
+        metrics_agg["validity"] = validity
+        metrics_agg["uniqueness"] = uniqueness
 
         # Write metrics out.
         self.writer.write_scalars(
             state.get_step(),
-            {
-                "validity": validity,
-                "uniqueness": uniqueness,
-            },
+            metrics_agg,
         )
         self.writer.flush()
-
-        # Plot molecules.
-        plot_molecules_in_wandb(molecules, state.get_step())
 
 
 @dataclass
