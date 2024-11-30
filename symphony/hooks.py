@@ -129,6 +129,7 @@ class GenerateMoleculesHook:
 @dataclass
 class LogTrainMetricsHook:
     writer: metric_writers.SummaryWriter
+    is_empty: bool = True
 
     def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
         # train_metrics = state.train_metrics
@@ -136,15 +137,16 @@ class LogTrainMetricsHook:
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
-        self.writer.write_scalars(
-            state.get_step(),
-            add_prefix_to_keys(train_metrics.compute(), "train"),
-        )
-        state = state.replace(
-            train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
-            # train_metrics=train.Metrics.empty(),
-        )
-        self.is_empty = True
+        if not self.is_empty:
+            self.writer.write_scalars(
+                state.get_step(),
+                add_prefix_to_keys(train_metrics.compute(), "train"),
+            )
+            state = state.replace(
+                train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
+                # train_metrics=train.Metrics.empty(),
+            )
+            self.is_empty = True
 
         return state
 

@@ -103,12 +103,18 @@ class TargetPositionPredictor(hk.Module):
         target_species = graphs.globals.target_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
-        def get_focus_indices_and_mask(segment_id: int):
-            segment_mask = segment_ids == segment_id
-            ndx = jnp.where(jnp.arange(1, num_nodes+1) * segment_mask * graphs.nodes.focus_mask, size=num_nodes_for_multifocus)[0]
-            mask = ndx > 0
-            return ndx - mask, mask
-        focus_indices, focus_mask = jax.vmap(get_focus_indices_and_mask)(jnp.arange(num_graphs))
+        def get_focus_indices():
+            """Returns focus indices for each graph, indexed relative to each graph (as opposed to all of graphs.nodes)."""
+            ndx = jax.vmap(
+                lambda s_id: jnp.where(
+                    jnp.arange(1, num_nodes+1) * (segment_ids == s_id) * graphs.nodes.focus_mask,
+                    size=num_nodes_for_multifocus
+                )[0]
+            )(jnp.arange(num_graphs))
+            assert ndx.shape == (num_graphs, num_nodes_for_multifocus)
+            cumsum = jnp.concatenate([jnp.array([0]), graphs.n_node.cumsum()])
+            return ndx - cumsum[:-1].reshape(-1, 1)
+        focus_indices = get_focus_indices()
         conditioning = self.compute_conditioning(
             graphs, focus_indices, target_species, num_nodes_for_multifocus
         )
@@ -128,6 +134,8 @@ class TargetPositionPredictor(hk.Module):
             assert target_positions.shape == (num_targets, 3)
             assert conditioning.shape == (conditioning.irreps.dim,)
 
+            # TODO this is fine for when there's a single target, but what's the expected
+            # behavior for >1 target?
             radial_logits = hk.vmap(
                 lambda pos: self.radial_predictor.log_prob(pos, conditioning),
                 split_rng=False,
