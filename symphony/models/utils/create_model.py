@@ -68,6 +68,11 @@ def create_node_embedder(
         )
 
     if config.model == "NequIP":
+        hidden_irreps = _irreps_from_lmax(
+            config.max_ell,
+            config.num_hidden_channels,
+            config.use_pseudoscalars_and_pseudovectors,
+        )
         output_irreps = _irreps_from_lmax(
             config.max_ell,
             config.num_channels,
@@ -79,6 +84,7 @@ def create_node_embedder(
             avg_num_neighbors=config.avg_num_neighbors,
             max_ell=config.max_ell,
             init_embedding_dims=config.num_channels,
+            hidden_irreps=hidden_irreps,
             output_irreps=output_irreps,
             num_interactions=config.num_interactions,
             even_activation=get_activation(config.even_activation),
