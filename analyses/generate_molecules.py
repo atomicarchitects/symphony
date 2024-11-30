@@ -154,7 +154,7 @@ def append_predictions(
     max_num_atoms: int,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
-
+    # TODO for single-target only currently
     n_nodes = padded_fragment.n_node[0]
     target_relative_positions = pred.globals.position_vectors[0]
     focus_indices = pred.globals.focus_indices[0]
@@ -166,7 +166,12 @@ def append_predictions(
     extra_atoms = 0
     def f(fragment, extra_atoms):
         return (
-            append_predictions_single(extra_positions[i], extra_species[i], fragment, radial_cutoff),
+            append_predictions_single(
+                extra_positions[i],
+                extra_species[i],
+                fragment,
+                radial_cutoff
+            ),
             extra_atoms + 1,
         )
     for i in range(len(extra_positions)):
@@ -181,49 +186,6 @@ def append_predictions(
             extra_atoms,
         )
     return new_fragment
-
-    # # weird masking stuff ._.
-    # max_extra_atoms = max_num_atoms - n_nodes
-    # position_mask = jnp.where(jnp.linalg.norm(extra_positions, axis=-1) > eps, 1, 0)
-    # position_mask = position_mask * (jnp.arange(len(position_mask)) < max_extra_atoms)
-    # extra_len = jnp.sum(position_mask)
-
-    # new_positions = jnp.concatenate(padded_fragment.nodes.positions[:n_nodes], extra_positions, jnp.zeros((max_num_atoms, 3)))
-    # new_species = jnp.concatenate(padded_fragment.nodes.species[:n_nodes], extra_species, jnp.zeros((max_num_atoms,)))
-
-    # new_positions = new_positions[:max_num_atoms]
-    # new_species = new_species[:max_num_atoms]
-
-    # # new_positions = padded_fragment.nodes.positions.at[n_nodes:n_nodes+extra_len].set(extra_positions[position_mask])
-    # # new_species = padded_fragment.nodes.species.at[n_nodes:n_nodes+extra_len].set(extra_species[position_mask])
-
-    # # Compute the distance matrix to select the edges.
-    # distance_matrix = jnp.linalg.norm(
-    #     new_positions[None, :, :] - new_positions[:, None, :], axis=-1
-    # )
-    # # Avoid self-edges.
-    # valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
-    # valid_edges = (
-    #     valid_edges
-    #     & (node_indices[None, :] <= num_valid_nodes)
-    #     & (node_indices[:, None] <= num_valid_nodes)
-    # )
-    # senders, receivers = jnp.nonzero(
-    #     valid_edges, size=n_edges, fill_value=-1
-    # )
-    # num_valid_edges = jnp.sum(valid_edges)
-    # num_valid_nodes += 1
-
-    # return padded_fragment._replace(
-    #     nodes=padded_fragment.nodes._replace(
-    #         positions=new_positions,
-    #         species=new_species,
-    #     ),
-    #     n_node=jnp.asarray([num_valid_nodes, n_nodes - num_valid_nodes]),
-    #     n_edge=jnp.asarray([num_valid_edges, n_edges - num_valid_edges]),
-    #     senders=senders,
-    #     receivers=receivers,
-    # )
 
 
 def generate_one_step(

@@ -32,9 +32,9 @@ class TargetPositionPredictor(hk.Module):
     def compute_conditioning(
         self,
         graphs: datatypes.Fragments,
+        focus_indices: jnp.ndarray,
         target_species: jnp.ndarray,
         num_nodes_for_multifocus: int,
-        focus_indices: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
         """Computes the conditioning for the target position predictor."""
         num_graphs = graphs.n_node.shape[0]
@@ -110,7 +110,7 @@ class TargetPositionPredictor(hk.Module):
             return ndx - mask, mask
         focus_indices, focus_mask = jax.vmap(get_focus_indices_and_mask)(jnp.arange(num_graphs))
         conditioning = self.compute_conditioning(
-            graphs, target_species, num_nodes_for_multifocus, focus_indices
+            graphs, focus_indices, target_species, num_nodes_for_multifocus
         )
 
         target_positions = e3nn.IrrepsArray("1o", graphs.globals.target_positions)
@@ -160,9 +160,10 @@ class TargetPositionPredictor(hk.Module):
         # Compute the conditioning based on the focus nodes and target species.
         conditioning = self.compute_conditioning(
             graphs,
+            focus_indices,
             target_species,
             num_nodes_for_multifocus,
-            focus_indices,)
+        )
         assert conditioning.shape == (num_graphs, num_nodes_for_multifocus, conditioning.irreps.dim)
 
         # Sample the radial component.
