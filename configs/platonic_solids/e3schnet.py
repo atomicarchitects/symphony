@@ -8,6 +8,7 @@ from configs.platonic_solids import default
 def get_embedder_config() -> ml_collections.ConfigDict:
     """Get the hyperparameter configuration for the E3SchNet model."""
     config = ml_collections.ConfigDict()
+
     config.model = "E3SchNet"
     config.cutoff = 5.0
     config.num_interactions = 3
@@ -16,6 +17,7 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config.num_channels = 32
     config.max_ell = 2
     config.activation = "shifted_softplus"
+    config.periodic_table_embedding = False
 
     return config
 
@@ -27,5 +29,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
     config.target_position_predictor.embedder_config = get_embedder_config()
 
-    # NequIP hyperparameters.
     return config
