@@ -45,6 +45,7 @@ class LinearAngularPredictor(AngularPredictor):
         radial_embed = e3nn.bessel(
             radius, self.radial_mlp_latent_size, x_max=self.max_radius
         )
+        # radial_embed = radius * jnp.ones((1, self.radial_mlp_latent_size,))
         radial_embed = jnp.atleast_2d(radial_embed)
         radial_embed = e3nn.haiku.MultiLayerPerceptron(
             [self.radial_mlp_latent_size] * (self.radial_mlp_num_layers - 1)
