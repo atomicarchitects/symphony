@@ -43,7 +43,7 @@ def get_config() -> ml_collections.ConfigDict:
     # Training.
     config.rng_seed = 0
     config.use_same_rng_across_structures = False
-    config.num_train_steps = 10000
+    config.num_train_steps = 1_000_000
     config.log_every_steps = 1000
     config.eval = True
     config.eval_during_training = True
