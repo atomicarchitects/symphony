@@ -100,5 +100,6 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.avg_neighbors_per_atom = 5
     config.generation.species = [1, 6, 7, 8, 9]
     config.generation.padding_mode = "fixed"
+    config.generation.posebusters = True
 
     return config

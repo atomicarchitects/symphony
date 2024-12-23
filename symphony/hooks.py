@@ -69,6 +69,7 @@ class GenerateMoleculesHook:
     init_molecules: str
     dataset: str
     padding_mode: str
+    posebusters: bool
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -113,10 +114,13 @@ class GenerateMoleculesHook:
         logging.info("Computing metrics...")
         validity = metrics.compute_validity(molecules)
         uniqueness = metrics.compute_uniqueness(molecules)
-        metrics_df = metrics.get_posebusters_results(molecules)
-        metrics_agg = {f"posebusters/{col}": metrics_df[col].sum() / self.num_seeds for col in metrics_df.columns}
+        metrics_agg = {}
         metrics_agg["validity"] = validity
         metrics_agg["uniqueness"] = uniqueness
+        if self.posebusters:
+            metrics_df = metrics.get_posebusters_results(molecules)
+            for col in metrics_df.columns:
+                metrics_agg[f"posebusters/{col}"] = metrics_df[col].sum() / self.num_seeds
 
         # Write metrics out.
         self.writer.write_scalars(
