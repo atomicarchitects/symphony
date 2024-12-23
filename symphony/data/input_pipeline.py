@@ -50,7 +50,9 @@ def create_fragments_dataset(
     max_targets_per_graph: int,
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
+    num_seeds: int = 1,
     transition_first: Optional[bool] = False,
+    fragment_number: Optional[int] = -1,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
@@ -62,31 +64,41 @@ def create_fragments_dataset(
 
         # Loop indefinitely.
         while True:
-            for index in keep_indices:
-                structure = structures[index]
-                if use_same_rng_across_structures:
-                    structure_rng = original_rng
-                else:
-                    rng, structure_rng = jax.random.split(rng)
+            for _ in range(num_seeds):
+                _, rng = jax.random.split(original_rng)
+                for index in keep_indices:
+                    structure = structures[index]
+                    if use_same_rng_across_structures:
+                        structure_rng = rng
+                    else:
+                        rng, structure_rng = jax.random.split(rng)
 
-                if infer_edges_with_radial_cutoff:
-                    if structure.n_edge is not None:
-                        raise ValueError("Structure already has edges.")
-                    structure = infer_edges_with_radial_cutoff_on_positions(
-                        structure, radial_cutoff=radial_cutoff
+                    if infer_edges_with_radial_cutoff:
+                        if structure.n_edge is not None:
+                            raise ValueError("Structure already has edges.")
+                        structure = infer_edges_with_radial_cutoff_on_positions(
+                            structure, radial_cutoff=radial_cutoff
+                        )
+
+                    frag_generator = fragments.generate_fragments(
+                        rng=structure_rng,
+                        graph=structure,
+                        num_species=num_species,
+                        nn_tolerance=nn_tolerance,
+                        max_radius=max_radius,
+                        mode=fragment_logic,
+                        heavy_first=heavy_first,
+                        max_targets_per_graph=max_targets_per_graph,
+                        transition_first=transition_first,
                     )
 
-                yield from fragments.generate_fragments(
-                    rng=structure_rng,
-                    graph=structure,
-                    num_species=num_species,
-                    nn_tolerance=nn_tolerance,
-                    max_radius=max_radius,
-                    mode=fragment_logic,
-                    heavy_first=heavy_first,
-                    max_targets_per_graph=max_targets_per_graph,
-                    transition_first=transition_first,
-                )
+                    if fragment_number == -1:
+                        yield from frag_generator
+                    else:
+                        for i, frag in enumerate(frag_generator):
+                            if i == fragment_number:
+                                yield frag
+                                break
 
     return fragment_generator(rng)
 
@@ -201,9 +213,11 @@ def get_datasets(
             fragment_logic=config.fragment_logic,
             nn_tolerance=config.get("nn_tolerance", None),
             max_radius=config.get("max_radius", None),
+            num_seeds=config.get("num_frag_seeds", 1),
             heavy_first=config.heavy_first,
             max_targets_per_graph=config.max_targets_per_graph,
             transition_first=config.transition_first,
+            fragment_number=config.get("fragment_number", -1),
         )
         for split in ["train", "val", "test"]
     }

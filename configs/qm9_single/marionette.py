@@ -1,4 +1,4 @@
-"""Defines the default hyperparameters and training configuration for the NequIP model."""
+"""Defines the default hyperparameters and training configuration for the MarioNette model."""
 
 import ml_collections
 
@@ -6,23 +6,25 @@ from configs.qm9 import default
 
 
 def get_embedder_config() -> ml_collections.ConfigDict:
+    """Get the hyperparameter configuration for the MarioNette model."""
     config = ml_collections.ConfigDict()
 
-    config.model = "NequIP"
-    config.num_hidden_channels = 16
+    config.model = "MarioNette"
     config.num_channels = 64
-    config.r_max = 5
-    config.avg_num_neighbors = 300.0  # NequIP is not properly normalized.
-    config.num_interactions = 3
+    config.r_max = 5.0
+    config.avg_num_neighbors = 15.0
+    config.num_interactions = 4
     config.max_ell = 5
-    config.even_activation = "swish"
+    config.even_activation = "gelu"
     config.odd_activation = "tanh"
-    config.mlp_activation = "swish"
-    config.activation = "softplus"
-    config.mlp_n_layers = 2
+    config.activation = "gelu"
+    config.mlp_n_layers = 3
     config.num_basis_fns = 8
-    config.skip_connection = True
-    config.use_pseudoscalars_and_pseudovectors = False
+    config.soft_normalization = 1e5
+    config.use_bessel = True
+    config.alpha = 1.0
+    config.alphal = 0.5
+
     return config
 
 
@@ -33,5 +35,4 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.embedder_config = get_embedder_config()
     config.target_position_predictor.embedder_config = get_embedder_config()
 
-    # NequIP hyperparameters.
     return config

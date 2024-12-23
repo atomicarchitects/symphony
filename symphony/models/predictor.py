@@ -30,7 +30,6 @@ class Predictor(hk.Module):
         # Get the number of graphs and nodes.
         num_nodes = graphs.nodes.positions.shape[0]
         num_graphs = graphs.n_node.shape[0]
-        num_targets = graphs.globals.target_positions.shape[1]
         num_species = self.focus_and_target_species_predictor.num_species
         segment_ids = utils.get_segment_ids(graphs.n_node, num_nodes)
 
@@ -65,14 +64,6 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert radial_logits.shape == (
-            num_graphs,
-            num_targets,
-        )
-        assert angular_logits.shape == (
-            num_graphs,
-            num_targets,
-        )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
@@ -91,7 +82,7 @@ class Predictor(hk.Module):
                 stop_probs=stop_probs,
                 stop=None,
                 focus_indices=focus_node_indices,
-                target_species=None,
+                target_species=graphs.globals.target_species,
                 radial_logits=radial_logits,
                 angular_logits=angular_logits,
                 position_vectors=None,
@@ -147,7 +138,7 @@ class Predictor(hk.Module):
         )
 
         # Compute the position coefficients.
-        position_vectors = self.target_position_predictor.get_evaluation_predictions(
+        radial_logits, angular_logits, position_vectors = self.target_position_predictor.get_evaluation_predictions(
             graphs,
             focus_indices,
             target_species,
@@ -184,8 +175,8 @@ class Predictor(hk.Module):
                 stop=stop,
                 focus_indices=focus_indices,
                 target_species=target_species,
-                radial_logits=None,
-                angular_logits=None,
+                radial_logits=radial_logits,
+                angular_logits=angular_logits,
                 position_vectors=position_vectors,
             ),
             senders=graphs.senders,
