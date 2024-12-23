@@ -28,6 +28,8 @@ class QM9Dataset(datasets.InMemoryDataset):
         num_train_molecules: int,
         num_val_molecules: int,
         num_test_molecules: int,
+        train_on_single_molecule: bool = False,
+        train_on_single_molecule_index: int = 0,
     ):
         super().__init__()
 
@@ -37,9 +39,20 @@ class QM9Dataset(datasets.InMemoryDataset):
         self.root_dir = root_dir
         self.check_molecule_sanity = check_molecule_sanity
         self.use_edm_splits = use_edm_splits
-        self.num_train_molecules = num_train_molecules
-        self.num_val_molecules = num_val_molecules
-        self.num_test_molecules = num_test_molecules
+        self.train_on_single_molecule = train_on_single_molecule
+
+        if self.train_on_single_molecule:
+            logging.info(
+                f"Training on a single molecule with index {train_on_single_molecule_index}."
+            )
+            self.num_train_molecules = 1
+            self.num_val_molecules = 1
+            self.num_test_molecules = 1
+        else:
+            self.num_train_molecules = num_train_molecules
+            self.num_val_molecules = num_val_molecules
+            self.num_test_molecules = num_test_molecules
+        
         self.all_structures = None
 
     @staticmethod
@@ -54,6 +67,13 @@ class QM9Dataset(datasets.InMemoryDataset):
 
     def split_indices(self) -> Dict[str, np.ndarray]:
         """Return a dictionary of indices for each split."""
+        if self.train_on_single_molecule:
+            return {
+                "train": [self.train_on_single_molecule_index],
+                "val": [self.train_on_single_molecule_index],
+                "test": [self.train_on_single_molecule_index]
+            }
+    
         splits = get_qm9_splits(self.root_dir, edm_splits=self.use_edm_splits)
         requested_splits = {
             "train": self.num_train_molecules,

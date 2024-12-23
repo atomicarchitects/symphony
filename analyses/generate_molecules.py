@@ -24,7 +24,7 @@ import optax
 import analyses.analysis as analysis
 from symphony import datatypes, models
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, qm9_single, tmqm
+from symphony.data.datasets import qm9, tmqm
 
 FLAGS = flags.FLAGS
 
