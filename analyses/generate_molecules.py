@@ -97,10 +97,61 @@ def estimate_padding_budget(
     return padding_budget
 
 
+def append_predictions_single(
+    target_position: jnp.ndarray,
+    target_species: int,
+    padded_fragment: datatypes.Fragments,
+    radial_cutoff: float,
+) -> datatypes.Fragments:
+    """Appends the predictions to the padded fragment."""
+    # Update the positions of the first dummy node.
+    positions = padded_fragment.nodes.positions
+    num_valid_nodes = padded_fragment.n_node[0]
+    num_nodes = padded_fragment.nodes.positions.shape[0]
+    num_edges = padded_fragment.receivers.shape[0]
+    new_positions = positions.at[num_valid_nodes].set(target_position)
+
+    # Update the species of the first dummy node.
+    species = padded_fragment.nodes.species
+    new_species = species.at[num_valid_nodes].set(target_species)
+
+    # Compute the distance matrix to select the edges.
+    distance_matrix = jnp.linalg.norm(
+        new_positions[None, :, :] - new_positions[:, None, :], axis=-1
+    )
+    node_indices = jnp.arange(num_nodes)
+
+    # Avoid self-edges.
+    valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
+    valid_edges = (
+        valid_edges
+        & (node_indices[None, :] <= num_valid_nodes)
+        & (node_indices[:, None] <= num_valid_nodes)
+    )
+    senders, receivers = jnp.nonzero(
+        valid_edges, size=num_edges, fill_value=-1
+    )
+    num_valid_edges = jnp.sum(valid_edges)
+    num_valid_nodes += 1
+
+    return padded_fragment._replace(
+        nodes=padded_fragment.nodes._replace(
+            positions=new_positions,
+            species=new_species,
+        ),
+        n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
+        n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
+        senders=senders,
+        receivers=receivers,
+    )
+
+
 def append_predictions(
     pred: datatypes.Predictions,
     padded_fragment: datatypes.Fragments,
     radial_cutoff: float,
+    eps: float,
+    max_num_atoms: int,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -155,12 +206,14 @@ def generate_one_step(
     rng: chex.PRNGKey,
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     radial_cutoff: float,
+    eps: float,
+    max_num_atoms: int,
 ) -> Tuple[
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
+    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff, eps, max_num_atoms)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -172,6 +225,7 @@ def generate_one_step(
 def generate_for_one_seed(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     init_fragment: datatypes.Fragments,
+    eps: float,
     max_num_atoms: int,
     cutoff: float,
     rng: chex.PRNGKey,
@@ -180,7 +234,14 @@ def generate_for_one_seed(
     """Generates a single molecule for a given seed."""
     step_rngs = jax.random.split(rng, num=max_num_atoms)
     (final_padded_fragment, stop), (padded_fragments, preds) = jax.lax.scan(
-        lambda args, rng: generate_one_step(*args, rng, apply_fn, cutoff),
+        lambda args, rng: generate_one_step(
+            *args,
+            rng,
+            apply_fn,
+            cutoff,
+            eps,
+            max_num_atoms,
+        ),
         (init_fragment, False),
         step_rngs,
     )
@@ -204,6 +265,7 @@ def generate_molecules(
     dataset: str,
     padding_mode: str,
     verbose: bool = False,
+    eps: float = 1e-5,
 ):
 # def generate_molecules(
 #     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
@@ -331,6 +393,7 @@ def generate_molecules(
             generate_for_one_seed_fn = lambda rng, init_fragment: generate_for_one_seed(
                 apply_fn_wrapped,
                 init_fragment,
+                eps,
                 max_num_atoms,
                 radial_cutoff,
                 rng,

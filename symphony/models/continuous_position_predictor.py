@@ -21,6 +21,7 @@ class TargetPositionPredictor(hk.Module):
         radial_predictor_fn: Callable[[], RadiusPredictor],
         angular_predictor_fn: Callable[[], AngularPredictor],
         num_species: int,
+        num_targets: int,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -28,6 +29,7 @@ class TargetPositionPredictor(hk.Module):
         self.radial_predictor = radial_predictor_fn()
         self.angular_predictor = angular_predictor_fn()
         self.num_species = num_species
+        self.num_targets = num_targets
 
     def compute_conditioning(
         self,
@@ -130,17 +132,25 @@ class TargetPositionPredictor(hk.Module):
         # Compute the conditioning based on the focus nodes and target species.
         conditioning = self.compute_conditioning(graphs, focus_indices, target_species)
         assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
+        conditioning.array = jnp.repeat(
+            jnp.expand_dims(conditioning.array, axis=1),
+            self.num_targets,
+        )
 
         # Sample the radial component.
-        radii = hk.vmap(self.radial_predictor.sample, split_rng=True)(conditioning)
-        assert radii.shape == (num_graphs,), (radii.shape, num_graphs)
+        radii = hk.vmap(
+            hk.vmap(
+                self.radial_predictor.sample, split_rng=True
+            ), split_rng=True
+        )(conditioning)
+        assert radii.shape == (num_graphs, self.num_targets), (radii.shape, num_graphs)
 
         # Predict the target position vectors.
         angular_sample_fn = lambda r, cond: self.angular_predictor.sample(
             r, cond, inverse_temperature
         )
-        position_vectors = hk.vmap(angular_sample_fn, split_rng=True)(
+        position_vectors = hk.vmap(hk.vmap(angular_sample_fn, split_rng=True), split_rng=True)(
             radii, conditioning
         )
-        assert position_vectors.shape == (num_graphs, 3)
+        assert position_vectors.shape == (num_graphs, self.num_targets, 3)
         return None, None, position_vectors

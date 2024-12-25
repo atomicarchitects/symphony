@@ -155,7 +155,11 @@ class Predictor(hk.Module):
             num_nodes,
             num_species,
         )
-        assert position_vectors.shape == (num_graphs, 3)
+        assert position_vectors.shape == (
+            num_graphs,
+            self.target_position_predictor.num_targets,
+            3
+        )
 
         return datatypes.Predictions(
             nodes=datatypes.NodePredictions(
