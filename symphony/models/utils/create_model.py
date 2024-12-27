@@ -21,7 +21,7 @@ from symphony.models.radius_predictors.rational_quadratic_spline import (
 from symphony.models.continuous_position_predictor import TargetPositionPredictor
 from symphony.models.predictor import Predictor
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
-from symphony.models.embedders import nequip, marionette, e3schnet, mace, allegro
+from symphony.models.embedders import nequip, nequip_old, marionette, e3schnet, mace, allegro
 
 
 def get_activation(activation: str) -> Callable[[jnp.ndarray], jnp.ndarray]:
@@ -82,7 +82,11 @@ def create_node_embedder(
             config.num_channels,
             config.use_pseudoscalars_and_pseudovectors,
         )
-        return nequip.NequIP(
+        if config.use_old_nequip:
+            model = nequip_old.NequIP
+        else:
+            model = nequip.NequIP
+        return model(
             num_species=num_species,
             r_max=config.r_max,
             avg_num_neighbors=config.avg_num_neighbors,
