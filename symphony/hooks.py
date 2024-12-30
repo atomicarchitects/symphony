@@ -85,6 +85,7 @@ class GenerateMoleculesHook:
 
         molecules_ase = generate_molecules.generate_molecules(
             apply_fn=state.eval_apply_fn,
+            # params=state.params,
             params=flax.jax_utils.unreplicate(state.params),
             molecules_outputdir=molecules_outputdir,
             radial_cutoff=self.radial_cutoff,

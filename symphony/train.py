@@ -242,6 +242,7 @@ def evaluate_model(
         split_metrics = flax.jax_utils.replicate(split_metrics)
 
         # Loop over graphs.
+        # for eval_step, graphs in enumerate(fragment_iterator):
         for eval_step, graphs in enumerate(device_batch(fragment_iterator)):
             if eval_step >= num_eval_steps:
                 break
@@ -294,6 +295,7 @@ def train_and_evaluate(
     net = models.create_model(config, run_in_evaluation_mode=False)
 
     rng, init_rng = jax.random.split(rng)
+    # params = net.init(init_rng, init_graphs)
     params = jax.jit(net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
@@ -305,6 +307,8 @@ def train_and_evaluate(
 
     # Create the training state.
     state = train_state.TrainState.create(
+        # apply_fn=net.apply,
+        # eval_apply_fn=eval_net.apply,
         apply_fn=jax.jit(net.apply),
         eval_apply_fn=jax.jit(eval_net.apply),
         params=params,
@@ -386,6 +390,7 @@ def train_and_evaluate(
         # Get a batch of graphs.
         try:
             start = time.perf_counter()
+            # graphs = next(datasets["train"])
             graphs = next(device_batch(datasets["train"]))
             graphs = jax.tree_util.tree_map(jnp.asarray, graphs)
             logging.log_first_n(

@@ -49,6 +49,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.discretized_loss = False
+    config.loss_kwargs.gamma = 0.0  # default to ignoring the neighbor loss
     config.mask_atom_types = False
     config.add_noise_to_positions = True
     config.position_noise_std = 0.1

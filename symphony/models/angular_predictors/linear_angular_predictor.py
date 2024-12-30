@@ -84,7 +84,14 @@ class LinearAngularPredictor(AngularPredictor):
     ) -> float:
         """Computes the logits for the given position and coefficients."""
         # Normalize the position.
-        normalized_position = position / jnp.linalg.norm(position.array)
+        dist = jnp.linalg.norm(position.array)
+        dist = jax.lax.cond(
+            dist > 1e-6,
+            lambda _: dist,
+            lambda _: 1.0,
+            operand=None,
+        )
+        normalized_position = position / dist
         assert normalized_position.shape == (3,), normalized_position.shape
 
         # Compute the coefficients at this radius.

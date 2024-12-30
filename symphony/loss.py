@@ -15,6 +15,7 @@ def generation_loss(
     graphs: datatypes.Fragments,
     ignore_position_loss_for_small_fragments: bool,
     discretized_loss: bool,
+    gamma: float,
 ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray]]:
     """Computes the loss for the generation task.
     Args:
@@ -77,14 +78,10 @@ def generation_loss(
 
         return loss_focus_and_atom_type
 
-    def process_logits(logits):
-        target_positions_mask = graphs.globals.target_positions_mask
-        assert target_positions_mask.shape == (num_graphs, num_targets)
-
-        loss = -logits
-        loss = jnp.where(target_positions_mask, loss, 0)
+    def process_logits(logits, mask):
+        loss = jnp.where(mask, logits, 0)
         loss = loss.sum(axis=-1)
-        num_valid_targets = jnp.maximum(1, target_positions_mask.sum(axis=-1))
+        num_valid_targets = jnp.maximum(1, mask.sum(axis=-1))
         loss /= num_valid_targets
 
         assert loss.shape == (num_graphs,)
@@ -98,16 +95,23 @@ def generation_loss(
             num_targets,
             3,
         )
-        position_logits = preds.globals.radial_logits + preds.globals.angular_logits
-        assert position_logits.shape == (num_graphs, num_targets), (
-            position_logits.shape,
-            num_graphs,
-            num_targets,
+
+        target_positions_mask = graphs.globals.target_positions_mask
+        sender_mask = jax.vmap(lambda f: graphs.senders == f)(preds.globals.focus_indices)
+        assert target_positions_mask.shape == (num_graphs, num_targets)
+
+        radial_logits = process_logits(-preds.globals.radial_logits, target_positions_mask)
+        angular_logits = process_logits(-preds.globals.angular_logits, target_positions_mask)
+        neighbors = jnp.exp(
+            preds.receivers.radial_logits_neighbors + preds.receivers.angular_logits_neighbors
+        )
+        neighbors = process_logits(
+            neighbors, sender_mask
         )
 
-        return (process_logits(preds.globals.radial_logits),
-            process_logits(preds.globals.angular_logits),
-            process_logits(position_logits))
+        position_logits = radial_logits + angular_logits + gamma * neighbors
+
+        return (radial_logits, angular_logits, position_logits)
     
     def discretized_position_loss() -> jnp.ndarray:
         """Computes the loss over position probabilities using separate losses for the radial and the angular components."""
@@ -180,11 +184,9 @@ def generation_loss(
                 * (models.safe_log(true_radial_weights) - predicted_radial_logits)
             ).sum()
 
-        # print("Angular logits shape:", preds.globals.angular_logits.shape)
-        # print("Radial logits shape:", preds.globals.radial_logits.shape)
         quadrature = "gausslegendre"
-        _, num_radii = preds.globals.radial_logits.shape
-        radial_bins = jnp.linspace(0, 5, num_radii)  # TODO hardcoded
+        num_radii = 64  # TODO hardcoded
+        radial_bins = jnp.linspace(0, 2.0, num_radii)  # TODO hardcoded
         lmax = 5  # TODO hardcoded
         res_beta = 100  # TODO hardcoded
         res_alpha = 99  # TODO hardcoded
@@ -258,10 +260,6 @@ def generation_loss(
         assert (
             predicted_radial_logits.shape == mean_radial_weights.shape
         ), (predicted_radial_logits.shape, mean_radial_weights.shape)
-        # jax.debug.print("Max predicted logit: {x}", x=jnp.max(predicted_radial_logits))
-        # jax.debug.print("Min predicted logit: {x}", x=jnp.min(predicted_radial_logits))
-        # jax.debug.print("True radial weights: {x}", x=mean_radial_weights)
-        # jax.debug.print("Predicted radial logits: {x}", x=predicted_radial_logits)
 
         loss_radial = jax.vmap(kl_divergence_for_radii)(
             mean_radial_weights,
@@ -288,8 +286,6 @@ def generation_loss(
 
         loss_position = loss_angular + loss_radial
         assert loss_position.shape == (num_graphs,)
-        # jax.debug.print("Radial loss: {x}", x=loss_radial)
-        # jax.debug.print("Angular loss: {x}", x=loss_angular)
 
         return loss_radial, loss_angular, loss_position
 

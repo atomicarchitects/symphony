@@ -75,6 +75,7 @@ class TargetPositionPredictor(hk.Module):
         graphs: datatypes.Fragments,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
         num_graphs, num_targets, _ = graphs.globals.target_positions.shape
+        num_nodes = graphs.nodes.positions.shape[0]
 
         # Focus nodes are the first nodes in each graph during training.
         focus_node_indices = utils.get_first_node_indices(graphs)
@@ -97,7 +98,6 @@ class TargetPositionPredictor(hk.Module):
             target_positions: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
         ) -> Tuple[float, float]:
             """Predicts the logits for a single graph."""
-            assert target_positions.shape == (num_targets, 3)
             assert conditioning.shape == (conditioning.irreps.dim,)
 
             radial_logits = hk.vmap(
@@ -116,7 +116,30 @@ class TargetPositionPredictor(hk.Module):
         assert radial_logits.shape == (num_graphs, num_targets)
         assert angular_logits.shape == (num_graphs, num_targets)
 
-        return radial_logits, angular_logits
+        radial_logits = hk.vmap(lambda c: hk.vmap(
+            lambda r: self.radial_predictor.log_prob(e3nn.IrrepsArray('0e', r[None]), c),
+            split_rng=False,
+        )(jnp.linspace(0.0, 2.0, 64)), split_rng=False)(conditioning)
+        assert radial_logits.shape == (num_graphs, 64)
+
+        return radial_logits, angular_logits, None, None
+
+        # # radial/angular logits for non-target neighbors of the focus
+        # # i'm *pretty* sure that senders and receivers are symmetric?
+        # neighbor_relative_positions = hk.vmap(
+        #     lambda focus_pos: graphs.nodes.positions - focus_pos, split_rng=False
+        # )(graphs.nodes.positions[focus_node_indices])
+        # neighbor_relative_positions = e3nn.IrrepsArray("1o", neighbor_relative_positions)
+        # radial_logits_neighbors, angular_logits_neighbors = hk.vmap(
+        #     lambda pos, c: predict_logits_for_single_graph(
+        #         pos, c
+        #     ), split_rng=False
+        # )(neighbor_relative_positions, conditioning)
+        # assert radial_logits_neighbors.shape == (num_graphs, num_nodes)
+        # radial_logits_neighbors = radial_logits_neighbors[:, graphs.receivers]
+        # angular_logits_neighbors = angular_logits_neighbors[:, graphs.receivers]
+
+        # return radial_logits, angular_logits, radial_logits_neighbors, angular_logits_neighbors
 
     def get_evaluation_predictions(
         self,

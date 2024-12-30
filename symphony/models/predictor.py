@@ -51,6 +51,8 @@ class Predictor(hk.Module):
         (
             radial_logits,
             angular_logits,
+            radial_logits_neighbors,
+            angular_logits_neighbors,
         ) = self.target_position_predictor.get_training_predictions(
             graphs,
         )
@@ -88,7 +90,11 @@ class Predictor(hk.Module):
                 position_vectors=None,
             ),
             senders=graphs.senders,
-            receivers=graphs.receivers,
+            receivers=datatypes.ReceiverPredictions(
+                receivers=graphs.receivers,
+                radial_logits_neighbors=radial_logits_neighbors,
+                angular_logits_neighbors=angular_logits_neighbors,
+            ),
             n_node=graphs.n_node,
             n_edge=graphs.n_edge,
         )
@@ -180,7 +186,11 @@ class Predictor(hk.Module):
                 position_vectors=position_vectors,
             ),
             senders=graphs.senders,
-            receivers=graphs.receivers,
+            receivers=datatypes.ReceiverPredictions(
+                receivers=graphs.receivers,
+                radial_logits_neighbors=None,
+                angular_logits_neighbors=None,
+            ),
             n_node=graphs.n_node,
             n_edge=graphs.n_edge,
         )
