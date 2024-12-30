@@ -102,14 +102,15 @@ def generation_loss(
 
         radial_logits = process_logits(-preds.globals.radial_logits, target_positions_mask)
         angular_logits = process_logits(-preds.globals.angular_logits, target_positions_mask)
-        neighbors = jnp.exp(
-            preds.receivers.radial_logits_neighbors + preds.receivers.angular_logits_neighbors
-        )
-        neighbors = process_logits(
-            neighbors, sender_mask
-        )
+        # neighbors = jnp.exp(
+        #     preds.receivers.radial_logits_neighbors + preds.receivers.angular_logits_neighbors
+        # )
+        # neighbors = process_logits(
+        #     neighbors, sender_mask
+        # )
 
-        position_logits = radial_logits + angular_logits + gamma * neighbors
+        position_logits = radial_logits + angular_logits
+        # position_logits = radial_logits + angular_logits + gamma * neighbors
 
         return (radial_logits, angular_logits, position_logits)
     
