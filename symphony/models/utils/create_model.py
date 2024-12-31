@@ -179,6 +179,7 @@ def create_predictor(config: ml_collections.ConfigDict) -> Predictor:
             config.focus_and_target_species_predictor.activation
         ),
         num_species=num_species,
+        species_list=jnp.array(config.generation.species),
     )
     angular_predictor_config = config.target_position_predictor.angular_predictor
     radial_predictor_config = config.target_position_predictor.radial_predictor

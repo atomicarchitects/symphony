@@ -17,6 +17,7 @@ import jax.numpy as jnp
 import jraph
 import flax
 import numpy as np
+from rdkit import rdBase
 import tqdm
 import chex
 import optax
@@ -224,6 +225,8 @@ def generate_molecules(
 #     verbose: bool = True,
 # ):
     """Generates molecules from a model."""
+
+    blocker = rdBase.BlockLogs()
 
     if verbose:
         logging_fn = logging.info

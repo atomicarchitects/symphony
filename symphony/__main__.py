@@ -18,6 +18,7 @@ import wandb
 from symphony import train
 from configs import root_dirs
 
+from rdkit import RDLogger
 
 FLAGS = flags.FLAGS
 
