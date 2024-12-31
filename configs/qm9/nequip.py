@@ -9,6 +9,7 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     config.model = "NequIP"
+    config.use_old_nequip = True
     config.num_hidden_channels = 16
     config.num_channels = 64
     config.r_max = 5
