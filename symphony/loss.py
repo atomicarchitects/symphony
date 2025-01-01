@@ -53,7 +53,6 @@ def generation_loss(
 
         # Compute the cross-entropy loss.
         loss_focus_and_atom_type = -(species_targets * species_logits).sum(axis=-1)
-        jax.debug.print("focus/species loss 1: {loss_min}, {loss_max}", loss_min = loss_focus_and_atom_type.min(), loss_max = loss_focus_and_atom_type.max())
         loss_focus_and_atom_type = jraph.segment_sum(
             loss_focus_and_atom_type, segment_ids, num_graphs
         )
@@ -101,7 +100,6 @@ def generation_loss(
         assert target_positions_mask.shape == (num_graphs, num_targets)
         # sender_mask = jax.vmap(lambda f: graphs.senders == f)(preds.globals.focus_indices)
 
-        jax.debug.print("radial logits range: {min}, {max}", min = preds.globals.radial_logits.min(), max = preds.globals.radial_logits.max())
         radial_logits = process_logits(-preds.globals.radial_logits, target_positions_mask)
         radial_logits /= 100  # TODO temporary while i figure out what's going on
         angular_logits = process_logits(-preds.globals.angular_logits, target_positions_mask)
