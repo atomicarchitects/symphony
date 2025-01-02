@@ -77,11 +77,11 @@ def get_config() -> ml_collections.ConfigDict:
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.radial_predictor_type = "rational_quadratic_spline"
-    config.target_position_predictor.radial_predictor.num_bins = 64
+    config.target_position_predictor.radial_predictor.num_bins = 16
     config.target_position_predictor.radial_predictor.num_param_mlp_layers = 2
     config.target_position_predictor.radial_predictor.num_layers = 2
     config.target_position_predictor.radial_predictor.min_radius = 0.0
-    config.target_position_predictor.radial_predictor.max_radius = 2.0
+    config.target_position_predictor.radial_predictor.max_radius = 3.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
 
