@@ -12,12 +12,12 @@
 #module load cuda/12.1.0-x86_64
 
 mode=nn
-max_targets_per_graph=4
-cuda=3
+max_targets_per_graph=1
+cuda=0
 dataset=qm9
 embedder=nequip
 # train=1000
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_dec24_old/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/radish/songk/spherical-harmonic-net/workdirs/"$dataset"_dec31/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
 # workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_nov18_"$train"/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
@@ -35,7 +35,6 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config.num_train_steps=1000000 \
     --config.position_noise_std=0.1 \
     --config.target_distance_noise_std=0.1 \
-    --config.target_position_predictor.radial_predictor_type="discretized" \
     --config.max_targets_per_graph=$max_targets_per_graph
 
 
