@@ -291,12 +291,12 @@ def generation_loss(
 
         return loss_radial, loss_angular, loss_position
 
-    # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_focus_and_atom_type = focus_and_atom_type_loss()
     if discretized_loss:
-        loss_radial, loss_angular, loss_positio928658n = discretized_position_loss()
+        loss_radial, loss_angular, loss_position = discretized_position_loss()
     else:
         loss_radial, loss_angular, loss_position = position_loss()
+    # If we should predict a STOP for this fragment, we do not have to predict a position.
     loss_radial = (1 - graphs.globals.stop) * loss_radial
     loss_angular = (1 - graphs.globals.stop) * loss_angular
     loss_position = (1 - graphs.globals.stop) * loss_position
