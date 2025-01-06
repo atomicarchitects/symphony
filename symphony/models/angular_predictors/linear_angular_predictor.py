@@ -63,7 +63,7 @@ class LinearAngularPredictor(AngularPredictor):
         coeffs = e3nn.haiku.Linear(
             irreps_out=e3nn.s2_irreps(self.max_ell), channel_out=self.num_channels
         )(conditioning)
-        assert coeffs.shape == (self.num_channels, (self.max_ell + 1) ** 2)
+        assert coeffs.shape == (self.num_channels, (self.max_ell + 1) ** 2), coeffs.shape
 
         return coeffs
 

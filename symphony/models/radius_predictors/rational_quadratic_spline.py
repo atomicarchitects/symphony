@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import e3nn_jax as e3nn
 
-from symphony.models.radius_predictors import RadiusPredictor
+from symphony.models.radius_predictors import RadiusPredictor, resample_dist
 
 
 class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
@@ -27,6 +27,7 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         self.num_param_mlp_layers = num_param_mlp_layers
         self.boundary_error = boundary_error
         self.boundary_error_max_tries = 3
+        self.max_tries = 5
 
     def create_flow(self, conditioning: e3nn.IrrepsArray) -> distrax.Bijector:
         """Creates a flow with the given conditioning."""
@@ -59,20 +60,25 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
     ) -> distrax.Distribution:
         """Creates a distribution by composing a base distribution with a flow."""
         flow = self.create_flow(conditioning)
-        base_distribution = distrax.Independent(
+        base_distribution = resample_dist.ResamplingDistribution(
             distrax.Uniform(low=self.min_radius, high=self.max_radius),
-            reinterpreted_batch_ndims=0,
+            num_param_mlp_layers=self.num_param_mlp_layers,
+            param_dims=conditioning.array.shape[-1],
+            num_tries=self.max_tries,
+            eps=0.1,
         )
         dist = distrax.Transformed(base_distribution, flow)
         return dist
 
     def log_prob(
-        self, samples: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray, eps: float = 1e-6
+        self, samples: e3nn.IrrepsArray, conditioning: e3nn.IrrepsArray
     ) -> jnp.ndarray:
         """Computes the log probability of the given samples."""
         dist = self.create_distribution(conditioning)
         radii = jnp.linalg.norm(samples.array, axis=-1)
-        return dist.log_prob(radii)
+        # jax.debug.print("radii: {radii}, shape: {shape}", radii=radii, shape=radii.shape)
+        # print(f"radii: {radii}, shape: {radii.shape}")
+        return dist.log_prob(jnp.atleast_1d(radii))
 
     def sample(
         self,
@@ -84,11 +90,4 @@ class RationalQuadraticSplineRadialPredictor(RadiusPredictor):
         sample_rngs = jax.random.split(sample_rng, self.boundary_error_max_tries)
         samples = jax.vmap(lambda rng: dist.sample(seed=rng))(sample_rngs)
 
-        # return jax.random.choice(rng, samples)
-
-        valid_range = samples >= self.min_radius + self.boundary_error
-        valid_range = jnp.logical_and(
-            valid_range, samples <= self.max_radius - self.boundary_error
-        )
-
-        return jax.random.choice(rng, samples, p=valid_range)
+        return jax.random.choice(rng, samples)

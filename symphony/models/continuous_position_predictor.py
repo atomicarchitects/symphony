@@ -103,7 +103,7 @@ class TargetPositionPredictor(hk.Module):
             radial_logits = hk.vmap(
                 lambda pos: self.radial_predictor.log_prob(pos, conditioning),
                 split_rng=False,
-            )(target_positions)
+            )(target_positions)  # shape [num_targets,]
             angular_logits = hk.vmap(
                 lambda pos: self.angular_predictor.log_prob(pos, conditioning),
                 split_rng=False,
@@ -113,7 +113,8 @@ class TargetPositionPredictor(hk.Module):
         radial_logits, angular_logits = hk.vmap(
             predict_logits_for_single_graph, split_rng=False
         )(target_positions, conditioning)
-        assert radial_logits.shape == (num_graphs, num_targets)
+        radial_logits = radial_logits.squeeze(axis=-1)
+        assert radial_logits.shape == (num_graphs, num_targets), radial_logits.shape
         assert angular_logits.shape == (num_graphs, num_targets)
 
         return radial_logits, angular_logits
