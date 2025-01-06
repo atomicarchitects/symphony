@@ -8,7 +8,7 @@ def get_root_dir(dataset: str) -> Optional[str]:
     """Get the root directory for the dataset."""
     hostname, username = os.uname()[1], os.environ.get("USER")
 
-    if hostname == "radish.mit.edu":
+    if hostname == "radish":
         return f"/data/NFS/radish/symphony/root_dirs/{dataset}"
     if hostname == "potato.mit.edu":
         if "qm9" in dataset: dataset = "qm9"
