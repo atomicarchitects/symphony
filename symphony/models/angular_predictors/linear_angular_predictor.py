@@ -42,15 +42,9 @@ class LinearAngularPredictor(AngularPredictor):
 
     def coeffs(self, radius: float, conditioning: e3nn.IrrepsArray) -> e3nn.IrrepsArray:
         """Computes the spherical harmonic coefficients at the given radius."""
-        # TODO change this back?
         radial_embed = e3nn.bessel(
             radius, self.radial_mlp_latent_size, x_max=self.max_radius
         )
-        # radial_embed = e3nn.soft_one_hot_linspace(
-        #     radius, start=0.0, end=self.max_radius, number=4, basis="gaussian", cutoff=True
-        # )
-        # radial_embed = radius * jnp.ones((1, self.radial_mlp_latent_size), dtype=jnp.float32)
-
         radial_embed = jnp.atleast_2d(radial_embed)
         radial_embed = e3nn.haiku.MultiLayerPerceptron(
             [self.radial_mlp_latent_size] * (self.radial_mlp_num_layers - 1)
