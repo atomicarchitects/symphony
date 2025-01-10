@@ -48,9 +48,9 @@ def create_fragments_dataset(
     fragment_logic: str,
     heavy_first: bool,
     max_targets_per_graph: int,
+    num_seeds: int,
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
-    num_seeds: int = 1,
     transition_first: Optional[bool] = False,
     fragment_number: Optional[int] = -1,
 ) -> Iterator[datatypes.Fragments]:
@@ -60,18 +60,16 @@ def create_fragments_dataset(
 
     def fragment_generator(rng: chex.PRNGKey):
         """Generates fragments for a split."""
-        original_rng = rng
-
         # Loop indefinitely.
         while True:
-            for _ in range(num_seeds):
-                _, rng = jax.random.split(original_rng)
+            for seed in range(num_seeds):
+                seed_rng = jax.random.fold_in(rng, seed)
                 for index in keep_indices:
                     structure = structures[index]
                     if use_same_rng_across_structures:
-                        structure_rng = rng
+                        structure_rng = seed_rng
                     else:
-                        rng, structure_rng = jax.random.split(rng)
+                        structure_rng = jax.random.fold_in(seed_rng, index)
 
                     if infer_edges_with_radial_cutoff:
                         if structure.n_edge is not None:
