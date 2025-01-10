@@ -48,14 +48,21 @@ class TargetPositionPredictor(hk.Module):
             num_graphs,
             focus_node_embeddings.irreps.dim,
         )
+        focus_node_embeddings = focus_node_embeddings.reshape(
+            (num_graphs, 1, focus_node_embeddings.irreps.dim)
+        )
 
         # Embed the target species.
-        target_species_embeddings = hk.Embed(
-            self.num_species,
-            embed_dim=focus_node_embeddings.irreps.num_irreps,
+        target_species_embeddings = hk.vmap(
+            hk.Embed(
+                self.num_species,
+                embed_dim=focus_node_embeddings.irreps.num_irreps,
+            ),
+            split_rng=False
         )(target_species)
         assert target_species_embeddings.shape == (
             num_graphs,
+            self.num_targets,
             focus_node_embeddings.irreps.num_irreps,
         ), (
             target_species_embeddings.shape,
@@ -69,7 +76,7 @@ class TargetPositionPredictor(hk.Module):
         conditioning = e3nn.concatenate(
             [focus_node_embeddings, target_species_embeddings], axis=-1
         )
-        assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
+        assert conditioning.shape == (num_graphs, self.num_targets, conditioning.irreps.dim)
         return conditioning
 
     def get_training_predictions(
@@ -85,7 +92,7 @@ class TargetPositionPredictor(hk.Module):
         target_species = graphs.globals.target_species
         conditioning = self.compute_conditioning(
             graphs, focus_node_indices, target_species
-        )
+        )  # (num_graphs, num_targets, conditioning.irreps.dim)
 
         target_positions = graphs.globals.target_positions
         target_positions = e3nn.IrrepsArray("1o", target_positions)
@@ -100,16 +107,16 @@ class TargetPositionPredictor(hk.Module):
         ) -> Tuple[float, float]:
             """Predicts the logits for a single graph."""
             assert target_positions.shape == (num_targets, 3)
-            assert conditioning.shape == (conditioning.irreps.dim,)
+            assert conditioning.shape == (num_targets, conditioning.irreps.dim,)
 
             radial_logits = hk.vmap(
-                lambda pos: self.radial_predictor.log_prob(pos, conditioning),
+                self.radial_predictor.log_prob,
                 split_rng=False,
-            )(target_positions)
+            )(target_positions, conditioning)
             angular_logits = hk.vmap(
-                lambda pos: self.angular_predictor.log_prob(pos, conditioning),
+                self.angular_predictor.log_prob,
                 split_rng=False,
-            )(target_positions)
+            )(target_positions, conditioning)
             return radial_logits, angular_logits
 
         radial_logits, angular_logits = hk.vmap(
@@ -130,12 +137,12 @@ class TargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the conditioning based on the focus nodes and target species.
-        conditioning = self.compute_conditioning(graphs, focus_indices, target_species)
-        assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
-        conditioning.array = jnp.repeat(
-            jnp.expand_dims(conditioning.array, axis=1),
-            self.num_targets,
+        conditioning = self.compute_conditioning(
+            graphs,
+            focus_indices,
+            target_species,
         )
+        assert conditioning.shape == (num_graphs, self.num_targets, conditioning.irreps.dim)
 
         # Sample the radial component.
         radii = hk.vmap(

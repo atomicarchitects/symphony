@@ -134,7 +134,11 @@ class Predictor(hk.Module):
         # Sample the focus node and target species.
         rng, focus_rng = jax.random.split(rng)
         focus_indices, target_species = utils.segment_sample_2D(
-            focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
+            focus_and_target_species_probs,
+            segment_ids,
+            num_graphs,
+            self.target_position_predictor.num_targets,
+            focus_rng,
         )
 
         # Compute the position coefficients.

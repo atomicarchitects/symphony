@@ -154,50 +154,39 @@ def append_predictions(
     max_num_atoms: int,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
-    # Update the positions of the first dummy node.
-    positions = padded_fragment.nodes.positions
-    num_valid_nodes = padded_fragment.n_node[0]
-    num_nodes = padded_fragment.nodes.positions.shape[0]
-    num_edges = padded_fragment.receivers.shape[0]
-    focus = pred.globals.focus_indices[0]
-    focus_position = positions[focus]
-    target_position = pred.globals.position_vectors[0] + focus_position
-    new_positions = positions.at[num_valid_nodes].set(target_position)
+    n_nodes = padded_fragment.n_node[0]
+    target_relative_positions = pred.globals.position_vectors[0]  # (num_targets, 3)
+    focus_indices = pred.globals.focus_indices[0]
+    focus_positions = padded_fragment.nodes.positions[focus_indices]
+    extra_positions = (target_relative_positions + focus_positions).reshape(-1, 3)
+    extra_species = (pred.globals.target_species[0]).reshape(-1,)
+    
 
-    # Update the species of the first dummy node.
-    species = padded_fragment.nodes.species
-    target_species = pred.globals.target_species[0]
-    new_species = species.at[num_valid_nodes].set(target_species)
-
-    # Compute the distance matrix to select the edges.
-    distance_matrix = jnp.linalg.norm(
-        new_positions[None, :, :] - new_positions[:, None, :], axis=-1
-    )
-    node_indices = jnp.arange(num_nodes)
-
-    # Avoid self-edges.
-    valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
-    valid_edges = (
-        valid_edges
-        & (node_indices[None, :] <= num_valid_nodes)
-        & (node_indices[:, None] <= num_valid_nodes)
-    )
-    senders, receivers = jnp.nonzero(
-        valid_edges, size=num_edges, fill_value=-1
-    )
-    num_valid_edges = jnp.sum(valid_edges)
-    num_valid_nodes += 1
-
-    return padded_fragment._replace(
-        nodes=padded_fragment.nodes._replace(
-            positions=new_positions,
-            species=new_species,
-        ),
-        n_node=jnp.asarray([num_valid_nodes, num_nodes - num_valid_nodes]),
-        n_edge=jnp.asarray([num_valid_edges, num_edges - num_valid_edges]),
-        senders=senders,
-        receivers=receivers,
-    )
+    new_fragment = padded_fragment
+    extra_atoms = 0
+    i = 0
+    def f(fragment, extra_atoms):
+        return (
+            append_predictions_single(
+                extra_positions[i],
+                extra_species[i],
+                fragment,
+                radial_cutoff
+            ),
+            extra_atoms + 1,
+        )
+    for i in range(len(extra_positions)):
+        new_fragment, extra_atoms = jax.lax.cond(
+            jnp.logical_and(
+                jnp.linalg.norm(extra_positions[i]) > eps,
+                n_nodes + extra_atoms < max_num_atoms,
+            ),
+            f,
+            lambda x, y: (x, y),
+            new_fragment,
+            extra_atoms,
+        )
+    return new_fragment
 
 
 def generate_one_step(
@@ -267,24 +256,6 @@ def generate_molecules(
     verbose: bool = False,
     eps: float = 1e-5,
 ):
-# def generate_molecules(
-#     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
-#     params: optax.Params,
-#     molecules_outputdir: str,
-#     radial_cutoff: float,
-#     focus_and_atom_type_inverse_temperature: float,
-#     position_inverse_temperature: float,
-#     start_seed: int,
-#     num_seeds: int,
-#     num_seeds_per_chunk: int,
-#     init_molecules: Sequence[Union[str, ase.Atoms]],
-#     max_num_atoms: int,
-#     avg_neighbors_per_atom: int,
-#     atomic_numbers: np.ndarray = np.arange(1, 81),
-#     visualize: bool = False,
-#     visualizations_dir: Optional[str] = None,
-#     verbose: bool = True,
-# ):
     """Generates molecules from a model."""
 
     if verbose:
@@ -430,64 +401,8 @@ def generate_molecules(
 
     molecule_list = []
     for i, seed in tqdm.tqdm(enumerate(seeds), desc="Visualizing molecules"):
-        init_fragment = jax.tree_util.tree_map(lambda x: x[i], init_fragments)
         init_molecule_name = init_molecule_names[i]
 
-        # if visualize:
-        #     # Get the padded fragment and predictions for this seed.
-        #     padded_fragments_for_seed = jax.tree_util.tree_map(
-        #         lambda x: x[i], padded_fragments
-        #     )
-        #     preds_for_seed = jax.tree_util.tree_map(lambda x: x[i], preds)
-
-        #     figs = []
-        #     for step in range(max_num_atoms):
-        #         if step == 0:
-        #             padded_fragment = init_fragment
-        #         else:
-        #             padded_fragment = jax.tree_util.tree_map(
-        #                 lambda x: x[step - 1], padded_fragments_for_seed
-        #             )
-        #         pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
-
-        #         # Save visualization of generation process.
-        #         fragment = jraph.unpad_with_graphs(padded_fragment)
-        #         pred = jraph.unpad_with_graphs(pred)
-        #         fragment = fragment._replace(
-        #             globals=jax.tree_util.tree_map(
-        #                 lambda x: np.squeeze(x, axis=0), fragment.globals
-        #             )
-        #         )
-        #         pred = pred._replace(
-        #             globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
-        #         )
-        #         fig = analysis.visualize_predictions(pred, fragment)
-        #         figs.append(fig)
-
-        #         # This may be the final padded fragment.
-        #         final_padded_fragment = padded_fragment
-
-        #         # Check if we should stop.
-        #         stop = pred.globals.stop
-        #         if stop:
-        #             break
-
-        #     # Save the visualizations of the generation process.
-        #     for index, fig in enumerate(figs):
-        #         # Update the title.
-        #         fig.update_layout(
-        #             title=f"Predictions for Seed {seed}",
-        #             title_x=0.5,
-        #         )
-
-        #         # Save to file.
-        #         outputfile = os.path.join(
-        #             visualizations_dir,
-        #             f"seed_{seed}_fragments_{index}.html",
-        #         )
-        #         fig.write_html(outputfile, include_plotlyjs="cdn")
-
-        # else:
         # We already have the final padded fragment.
         final_padded_fragment = jax.tree_util.tree_map(
             lambda x: x[i], final_padded_fragments
