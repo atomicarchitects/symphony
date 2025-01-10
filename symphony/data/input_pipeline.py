@@ -69,7 +69,7 @@ def create_fragments_dataset(
                     if use_same_rng_across_structures:
                         structure_rng = seed_rng
                     else:
-                        seed_rng, structure_rng = jax.random.split(seed_rng)
+                        structure_rng = jax.random.fold_in(seed_rng, index)
 
                     if infer_edges_with_radial_cutoff:
                         if structure.n_edge is not None:
