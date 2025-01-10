@@ -12,12 +12,13 @@
 #module load cuda/12.1.0-x86_64
 
 mode=nn
-max_targets_per_graph=4
+max_targets_per_graph=1
 cuda=0
-dataset=qm9_single
-#workdir=/pool001/songk/workdirs/tmqmg_coord/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-#workdir=/pool001/songk/workdirs/tmqmg_feb26/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jul10/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+dataset=qm9
+embedder=nequip
+# train=1000
+workdir=/data/NFS/radish/songk/spherical-harmonic-net/workdirs/"$dataset"_dec31/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
+# workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_nov18_"$train"/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir
@@ -28,15 +29,17 @@ workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jul10/
 
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --workdir=$workdir \
-    --config=configs/$dataset/e3schnet_and_nequip.py \
-    --config.log_every_steps=1000 \
-    --config.eval_every_steps=10000 \
-    --config.generate_every_steps=10000 \
-    --config.num_train_steps=100000
-    # --config.target_position_predictor.radial_predictor_type="discretized" \
-    # --config.target_position_predictor.radial_predictor.num_bins=32 \
-    # --config.loss_kwargs.discretized_loss=True
-    # --config.num_train_molecules=1 \
-    # --config.num_val_molecules=1 \
-    # --config.num_test_molecules=1
+    --config=configs/$dataset/e3schnet_and_"$embedder".py \
+    --config.eval_every_steps=5000 \
+    --config.generate_every_steps=5000 \
+    --config.num_train_steps=1000000 \
+    --config.position_noise_std=0.1 \
+    --config.target_distance_noise_std=0.1 \
+    --config.max_targets_per_graph=$max_targets_per_graph
 
+
+    # --config.num_train_molecules=1000 \
+    # --config.num_val_molecules=1 \
+    # --config.num_test_molecules=1 \
+    # --config.use_edm_splits=False \
+    # --config.shuffle_datasets=False \

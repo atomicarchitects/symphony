@@ -204,3 +204,5 @@ root_dirs/
 tutorial/
 conditional_generation/
 plots/
+
+log*

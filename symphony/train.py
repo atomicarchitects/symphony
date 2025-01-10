@@ -357,6 +357,7 @@ def train_and_evaluate(
         init_molecules=config.generation.init_molecules,
         dataset=config.dataset,
         padding_mode=config.generation.padding_mode,
+        posebusters=config.generation.posebusters,
     )
 
     # Begin training loop.

@@ -20,6 +20,7 @@ def get_embedder_config() -> ml_collections.ConfigDict:
     config.num_basis_fns = 8
     config.activation = "softplus"
     config.soft_normalization = 1e2
+    config.use_pseudoscalars_and_pseudovectors = True
 
     return config
 

@@ -66,14 +66,14 @@ class MACE(hk.Module):
             radial_basis=lambda x, x_max: e3nn.bessel(x, self.num_basis_fns, x_max),
             radial_envelope=e3nn.soft_envelope,
             max_ell=self.max_ell,
-            skip_connection_first_layer=True,
+            skip_connection_first_layer=False,
             soft_normalization=self.soft_normalization,
         )(relative_positions, species, graphs.senders, graphs.receivers)
 
         assert node_embeddings.shape == (
             num_nodes,
             self.num_interactions,
-            self.output_irreps.dim,
+            node_embeddings.irreps.dim,
         )
         node_embeddings = node_embeddings.axis_to_mul(axis=-2)
         return node_embeddings

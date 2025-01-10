@@ -19,8 +19,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.num_train_molecules = 1
     config.num_val_molecules = 1
     config.num_test_molecules = 1
-    config.num_frag_seeds = 4
-    config.heavy_first = False
+    config.num_frag_seeds = 1
+    config.heavy_first = True
     config.transition_first = False
     config.fragment_number = -1
 
@@ -39,7 +39,7 @@ def get_config() -> ml_collections.ConfigDict:
 
     # Training.
     config.rng_seed = 0
-    config.use_same_rng_across_structures = False
+    config.use_same_rng_across_structures = True
     config.num_train_steps = 1_000_000
     config.log_every_steps = 1000
     config.eval = True
@@ -104,7 +104,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.start_seed = 0
     config.generation.num_seeds = 100
     config.generation.num_seeds_per_chunk = 20
-    config.generation.init_molecules = "H"
+    config.generation.init_molecules = "C"
     config.generation.max_num_atoms = 35
     config.generation.avg_neighbors_per_atom = 5
     config.generation.species = [1, 6, 7, 8, 9]

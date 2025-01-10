@@ -69,6 +69,7 @@ class GenerateMoleculesHook:
     init_molecules: str
     dataset: str
     padding_mode: str
+    posebusters: bool
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -106,29 +107,32 @@ class GenerateMoleculesHook:
         # Convert to RDKit molecules.
         molecules = metrics.ase_to_rdkit_molecules(molecules_ase)
 
+        # Plot molecules.
+        plot_molecules_in_wandb(molecules, state.get_step())
+
         # Compute metrics.
         logging.info("Computing metrics...")
         validity = metrics.compute_validity(molecules)
         uniqueness = metrics.compute_uniqueness(molecules)
+        metrics_agg = {}
+        metrics_agg["validity"] = validity
+        metrics_agg["uniqueness"] = uniqueness
+        if self.posebusters:
+            metrics_df = metrics.get_posebusters_results(molecules)
+            for col in metrics_df.columns:
+                metrics_agg[f"posebusters/{col}"] = metrics_df[col].sum() / self.num_seeds
 
         # Write metrics out.
         self.writer.write_scalars(
             state.get_step(),
-            {
-                "validity": validity,
-                "uniqueness": uniqueness,
-            },
+            metrics_agg,
         )
         self.writer.flush()
-
-        # Plot molecules.
-        plot_molecules_in_wandb(molecules, state.get_step())
 
 
 @dataclass
 class LogTrainMetricsHook:
     writer: metric_writers.SummaryWriter
-    is_empty: bool = True
 
     def __call__(self, state: train_state.TrainState) -> train_state.TrainState:
         # train_metrics = state.train_metrics
@@ -136,16 +140,15 @@ class LogTrainMetricsHook:
 
         # If the metrics are not empty, log them.
         # Once logged, reset the metrics, and mark as empty.
-        if not self.is_empty:
-            self.writer.write_scalars(
-                state.get_step(),
-                add_prefix_to_keys(train_metrics.compute(), "train"),
-            )
-            state = state.replace(
-                train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
-                # train_metrics=train.Metrics.empty(),
-            )
-            self.is_empty = True
+        self.writer.write_scalars(
+            state.get_step(),
+            add_prefix_to_keys(train_metrics.compute(), "train"),
+        )
+        state = state.replace(
+            train_metrics=flax.jax_utils.replicate(train.Metrics.empty()),
+            # train_metrics=train.Metrics.empty(),
+        )
+        self.is_empty = True
 
         return state
 
