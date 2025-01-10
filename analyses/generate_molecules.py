@@ -24,7 +24,7 @@ import optax
 import analyses.analysis as analysis
 from symphony import datatypes, models
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, qm9_single, tmqm
+from symphony.data.datasets import qm9, tmqm
 
 FLAGS = flags.FLAGS
 
@@ -463,10 +463,8 @@ def generate_molecules_from_workdir(
     num_seeds: int,
     num_seeds_per_chunk: int,
     init_molecules: Sequence[Union[str, ase.Atoms]],
-    max_num_atoms: int,
-    avg_neighbors_per_atom: int,
-    atomic_numbers: np.ndarray,
-    visualize: bool = False,
+    dataset: str,
+    padding_mode: str,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
     verbose: bool = False,    
@@ -511,19 +509,6 @@ def generate_molecules_from_workdir(
     molecules_outputdir += f"_res_beta={config.generation.res_beta}"
     molecules_outputdir += "/molecules"
 
-    if visualize:
-        visualizations_dir = os.path.join(
-            outputdir,
-            name,
-            f"fait={focus_and_atom_type_inverse_temperature}",
-            f"pit={position_inverse_temperature}",
-            f"step={step}",
-            "visualizations",
-            "generated_molecules",
-        )
-    else:
-        visualizations_dir = None
-
     return generate_molecules(
             apply_fn=jax.jit(model.apply),
             params=params,
@@ -535,18 +520,13 @@ def generate_molecules_from_workdir(
             num_seeds=num_seeds,
             num_seeds_per_chunk=num_seeds_per_chunk,
             init_molecules=init_molecules,
-            max_num_atoms=max_num_atoms,
-            avg_neighbors_per_atom=avg_neighbors_per_atom,
-            atomic_numbers=atomic_numbers,
-            visualize=visualize,
-            visualizations_dir=visualizations_dir,
+            dataset=dataset,
+            padding_mode=padding_mode,
             verbose=verbose,
         )
 
 def main(unused_argv: Sequence[str]) -> None:
     del unused_argv
-    # atomic_numbers = np.arange(1, 81)  # TODO make this no longer hard-coded
-    atomic_numbers = np.array([1, 6, 7, 8, 9])
 
     generate_molecules_from_workdir(
         FLAGS.workdir,
@@ -560,17 +540,12 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.num_seeds,
         FLAGS.num_seeds_per_chunk,
         FLAGS.init,
-        FLAGS.max_num_atoms,
-        FLAGS.avg_neighbors_per_atom,
-        atomic_numbers,
-        FLAGS.visualize,
+        FLAGS.dataset,
+        FLAGS.padding_mode,
         FLAGS.res_alpha,
         FLAGS.res_beta,
         verbose=True,
     )
-
-
-
 
 
 if __name__ == "__main__":
@@ -632,25 +607,20 @@ if __name__ == "__main__":
         "C",
         "An initial molecular fragment to start the generation process from.",
     )
-    flags.DEFINE_integer(
-        "max_num_atoms",
-        30,
-        "Maximum number of atoms to generate per molecule.",
-    )
-    flags.DEFINE_integer(
-        "avg_neighbors_per_atom",
-        10,
-        "Average number of neighbors per atom.",
-    )
-    flags.DEFINE_bool(
-        "visualize",
-        False,
-        "Whether to visualize the generation process step-by-step.",
-    )
     flags.DEFINE_list(
         "steps_for_weight_averaging",
         None,
         "Steps to average parameters over. If None, the model at the given step is used.",
+    )
+    flags.DEFINE_string(
+        "dataset",
+        "qm9",
+        "Dataset from which to generate molecules.",
+    )
+    flags.DEFINE_string(
+        "padding_mode",
+        "dynamic",
+        "How to determine molecule padding.",
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)
