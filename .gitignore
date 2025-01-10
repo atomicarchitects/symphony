@@ -199,5 +199,10 @@ slurm_logs
 slurm-*
 
 *.out
+others/
+root_dirs/
+tutorial/
+conditional_generation/
+plots/
 
 log*

@@ -17,7 +17,7 @@ import numpy as np
 from analyses import analysis
 from symphony import datatypes
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, qm9_single, tmqm
+from symphony.data.datasets import qm9, tmqm
 from symphony import models
 
 
