@@ -156,11 +156,11 @@ def append_predictions(
     """Appends the predictions to the padded fragment."""
     n_nodes = padded_fragment.n_node[0]
     target_relative_positions = pred.globals.position_vectors[0]  # (num_targets, 3)
-    focus_indices = pred.globals.focus_indices[0]
-    focus_positions = padded_fragment.nodes.positions[focus_indices]
+    num_targets = target_relative_positions.shape[0]
+    focus = pred.globals.focus_indices[0]
+    focus_positions = padded_fragment.nodes.positions[focus]
     extra_positions = (target_relative_positions + focus_positions).reshape(-1, 3)
     extra_species = (pred.globals.target_species[0]).reshape(-1,)
-    
 
     new_fragment = padded_fragment
     extra_atoms = 0
@@ -175,10 +175,22 @@ def append_predictions(
             ),
             extra_atoms + 1,
         )
+    all_positions = jnp.concatenate([extra_positions, padded_fragment.nodes.positions], axis=0)
     for i in range(len(extra_positions)):
+        collision_dists = jnp.linalg.norm(
+            all_positions - extra_positions[i], axis=-1
+        )
+        # filter out nodes that aren't part of the mol
+        collision_dists = jnp.where(
+            jnp.arange(padded_fragment.nodes.positions.shape[0] + num_targets) < n_nodes + num_targets,
+            collision_dists,
+            jnp.inf,
+        )
+        # filter out the node itself + following targets
+        collision_dists = collision_dists.at[i:num_targets].set(jnp.inf)
         new_fragment, extra_atoms = jax.lax.cond(
             jnp.logical_and(
-                jnp.linalg.norm(extra_positions[i]) > eps,
+                jnp.min(collision_dists) > eps,
                 n_nodes + extra_atoms < max_num_atoms,
             ),
             f,
