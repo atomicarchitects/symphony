@@ -51,6 +51,9 @@ class TargetPositionPredictor(hk.Module):
         focus_node_embeddings = focus_node_embeddings.reshape(
             (num_graphs, 1, focus_node_embeddings.irreps.dim)
         )
+        focus_node_embeddings = focus_node_embeddings.broadcast_to(
+            (num_graphs, self.num_targets, focus_node_embeddings.irreps.dim)
+        )
 
         # Embed the target species.
         target_species_embeddings = hk.vmap(

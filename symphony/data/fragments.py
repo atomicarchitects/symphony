@@ -269,9 +269,10 @@ def _into_fragment(
     pos = graph.nodes.positions
     species = graph.nodes.species
 
-    # Check that all target species are the same.
     target_species = species[target_nodes]
-    # assert np.all(target_species == target_species[0])
+    padded_target_species = np.pad(
+        target_species, (0, max_targets_per_graph - len(target_species))
+    )
 
     padded_target_nodes = np.pad(
         target_nodes, (0, max_targets_per_graph - len(target_nodes))
@@ -285,7 +286,7 @@ def _into_fragment(
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.asarray(stop, dtype=bool),
-        target_species=target_species,
+        target_species=padded_target_species,
         target_positions=pos[padded_target_nodes] - pos[focus_node],
         target_positions_mask=target_positions_mask,
     )
