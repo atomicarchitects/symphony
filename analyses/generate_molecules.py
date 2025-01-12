@@ -97,9 +97,8 @@ def estimate_padding_budget(
     return padding_budget
 
 
-def append_predictions_single(
-    target_position: jnp.ndarray,
-    target_species: int,
+def append_predictions(
+    pred: datatypes.Predictions,
     padded_fragment: datatypes.Fragments,
     radial_cutoff: float,
 ) -> datatypes.Fragments:
@@ -109,10 +108,14 @@ def append_predictions_single(
     num_valid_nodes = padded_fragment.n_node[0]
     num_nodes = padded_fragment.nodes.positions.shape[0]
     num_edges = padded_fragment.receivers.shape[0]
+    focus = pred.globals.focus_indices[0]
+    focus_position = positions[focus]
+    target_position = pred.globals.position_vectors[0][0] + focus_position
     new_positions = positions.at[num_valid_nodes].set(target_position)
 
     # Update the species of the first dummy node.
     species = padded_fragment.nodes.species
+    target_species = pred.globals.target_species[0][0]
     new_species = species.at[num_valid_nodes].set(target_species)
 
     # Compute the distance matrix to select the edges.
@@ -146,82 +149,18 @@ def append_predictions_single(
     )
 
 
-def append_predictions(
-    pred: datatypes.Predictions,
-    padded_fragment: datatypes.Fragments,
-    radial_cutoff: float,
-    eps: float,
-    max_num_atoms: int,
-) -> datatypes.Fragments:
-    """Appends the predictions to the padded fragment."""
-    n_nodes = padded_fragment.n_node[0]
-    target_relative_positions = pred.globals.position_vectors[0]  # (num_targets, 3)
-    num_targets = target_relative_positions.shape[0]
-    focus = pred.globals.focus_indices[0]
-    focus_positions = padded_fragment.nodes.positions[focus]
-    extra_positions = (target_relative_positions + focus_positions).reshape(-1, 3)
-    extra_species = (pred.globals.target_species[0]).reshape(-1,)
-
-    new_fragment = padded_fragment
-    extra_atoms = 0
-    def f(fragment, extra_atoms, ndx):
-        return (
-            append_predictions_single(
-                extra_positions[ndx],
-                extra_species[ndx],
-                fragment,
-                radial_cutoff
-            ),
-            extra_atoms + 1,
-        )
-    all_positions = jnp.concatenate([extra_positions, padded_fragment.nodes.positions], axis=0)
-    for i in range(len(extra_positions)):
-        collision_dists = jnp.linalg.norm(
-            all_positions - extra_positions[i], axis=-1
-        )
-        # filter out nodes that aren't part of the mol
-        collision_dists = jnp.where(
-            jnp.arange(padded_fragment.nodes.positions.shape[0] + num_targets) < n_nodes + num_targets,
-            collision_dists,
-            jnp.inf,
-        )
-        # filter out the node itself + following targets
-        collision_dists = collision_dists.at[i:num_targets].set(jnp.inf)
-        # jax.debug.print("index {i}:\nall positions: {all_positions}\nmin collision dist: {dist}, {b}",
-        #     i=i,
-        #     all_positions=all_positions,
-        #     dist=jnp.min(collision_dists),
-        #     b=jnp.logical_and(
-        #         jnp.min(collision_dists) > eps,
-        #         n_nodes + extra_atoms < max_num_atoms,
-        #     ))
-        new_fragment, extra_atoms = jax.lax.cond(
-            jnp.logical_and(
-                jnp.min(collision_dists) > eps,
-                n_nodes + extra_atoms < max_num_atoms,
-            ),
-            lambda x, y: f(x, y, i),
-            lambda x, y: (x, y),
-            new_fragment,
-            extra_atoms,
-        )
-    return new_fragment
-
-
 def generate_one_step(
     padded_fragment: datatypes.Fragments,
     stop: bool,
     rng: chex.PRNGKey,
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     radial_cutoff: float,
-    eps: float,
-    max_num_atoms: int,
 ) -> Tuple[
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
     pred = apply_fn(padded_fragment, rng)
-    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff, eps, max_num_atoms)
+    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -233,7 +172,6 @@ def generate_one_step(
 def generate_for_one_seed(
     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
     init_fragment: datatypes.Fragments,
-    eps: float,
     max_num_atoms: int,
     cutoff: float,
     rng: chex.PRNGKey,
@@ -242,14 +180,7 @@ def generate_for_one_seed(
     """Generates a single molecule for a given seed."""
     step_rngs = jax.random.split(rng, num=max_num_atoms)
     (final_padded_fragment, stop), (padded_fragments, preds) = jax.lax.scan(
-        lambda args, rng: generate_one_step(
-            *args,
-            rng,
-            apply_fn,
-            cutoff,
-            eps,
-            max_num_atoms,
-        ),
+        lambda args, rng: generate_one_step(*args, rng, apply_fn, cutoff),
         (init_fragment, False),
         step_rngs,
     )
@@ -273,7 +204,6 @@ def generate_molecules(
     dataset: str,
     padding_mode: str,
     verbose: bool = False,
-    eps: float = 5e-1,  # ~bohr radius
 ):
     """Generates molecules from a model."""
 
@@ -383,7 +313,6 @@ def generate_molecules(
             generate_for_one_seed_fn = lambda rng, init_fragment: generate_for_one_seed(
                 apply_fn_wrapped,
                 init_fragment,
-                eps,
                 max_num_atoms,
                 radial_cutoff,
                 rng,
