@@ -164,12 +164,11 @@ def append_predictions(
 
     new_fragment = padded_fragment
     extra_atoms = 0
-    i = 0
-    def f(fragment, extra_atoms):
+    def f(fragment, extra_atoms, ndx):
         return (
             append_predictions_single(
-                extra_positions[i],
-                extra_species[i],
+                extra_positions[ndx],
+                extra_species[ndx],
                 fragment,
                 radial_cutoff
             ),
@@ -188,12 +187,20 @@ def append_predictions(
         )
         # filter out the node itself + following targets
         collision_dists = collision_dists.at[i:num_targets].set(jnp.inf)
+        # jax.debug.print("index {i}:\nall positions: {all_positions}\nmin collision dist: {dist}, {b}",
+        #     i=i,
+        #     all_positions=all_positions,
+        #     dist=jnp.min(collision_dists),
+        #     b=jnp.logical_and(
+        #         jnp.min(collision_dists) > eps,
+        #         n_nodes + extra_atoms < max_num_atoms,
+        #     ))
         new_fragment, extra_atoms = jax.lax.cond(
             jnp.logical_and(
                 jnp.min(collision_dists) > eps,
                 n_nodes + extra_atoms < max_num_atoms,
             ),
-            f,
+            lambda x, y: f(x, y, i),
             lambda x, y: (x, y),
             new_fragment,
             extra_atoms,
@@ -266,7 +273,7 @@ def generate_molecules(
     dataset: str,
     padding_mode: str,
     verbose: bool = False,
-    eps: float = 1e-5,
+    eps: float = 5e-1,  # ~bohr radius
 ):
     """Generates molecules from a model."""
 
