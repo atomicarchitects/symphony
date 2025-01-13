@@ -211,6 +211,7 @@ def create_predictor(config: ml_collections.ConfigDict) -> Predictor:
             range_max=radial_predictor_config.max_radius,
             num_layers=radial_predictor_config.num_layers,
             latent_size=radial_predictor_config.latent_size,
+            num_targets=config.max_targets_per_graph,
         )
     else:
         raise ValueError(
@@ -224,6 +225,7 @@ def create_predictor(config: ml_collections.ConfigDict) -> Predictor:
         angular_predictor_fn=angular_predictor_fn,
         radial_predictor_fn=radial_predictor_fn,
         num_species=num_species,
+        num_targets=config.max_targets_per_graph,
     )
     predictor = Predictor(
         focus_and_target_species_predictor=focus_and_target_species_predictor,

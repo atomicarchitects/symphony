@@ -93,25 +93,10 @@ def generate_fragments(
 
 
 def pick_targets(
-    rng,
     targets,
-    node_species,
-    target_species_probability_for_focus,
     max_targets_per_graph,
 ):
-    # Pick a random target species.
-    rng, k = jax.random.split(rng)
-    target_species = jax.random.choice(
-        k,
-        len(target_species_probability_for_focus),
-        p=target_species_probability_for_focus,
-    )
-
-    # Pick up to max_targets_per_graph targets of the target species.
-    targets_of_this_species = targets[node_species[targets] == target_species]
-    targets_of_this_species = targets_of_this_species[:max_targets_per_graph]
-
-    return targets_of_this_species
+    return targets[:max_targets_per_graph]
 
 
 def _make_first_fragment(
@@ -162,12 +147,8 @@ def _make_first_fragment(
         graph.nodes.species[targets], num_species
     )
 
-    rng, k = jax.random.split(rng)
     target_nodes = pick_targets(
-        k,
         targets,
-        graph.nodes.species,
-        target_species_probability[first_node],
         max_targets_per_graph,
     )
 
@@ -243,10 +224,7 @@ def _make_middle_fragment(
     targets = receivers[(senders == focus_node) & mask]
 
     target_nodes = pick_targets(
-        k,
         targets,
-        graph.nodes.species,
-        target_species_probability[focus_node],
         max_targets_per_graph,
     )
 
@@ -291,9 +269,10 @@ def _into_fragment(
     pos = graph.nodes.positions
     species = graph.nodes.species
 
-    # Check that all target species are the same.
     target_species = species[target_nodes]
-    assert np.all(target_species == target_species[0])
+    padded_target_species = np.pad(
+        target_species, (0, max_targets_per_graph - len(target_species))
+    )
 
     padded_target_nodes = np.pad(
         target_nodes, (0, max_targets_per_graph - len(target_nodes))
@@ -307,7 +286,7 @@ def _into_fragment(
     )
     globals = datatypes.FragmentsGlobals(
         stop=np.asarray(stop, dtype=bool),
-        target_species=target_species[0],
+        target_species=padded_target_species,
         target_positions=pos[padded_target_nodes] - pos[focus_node],
         target_positions_mask=target_positions_mask,
     )

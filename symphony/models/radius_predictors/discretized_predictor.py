@@ -17,6 +17,7 @@ class DiscretizedRadialPredictor(RadiusPredictor):
         range_max: float,
         num_layers: int,
         latent_size: int,
+        num_targets: int,
     ):
         super().__init__()
         self.num_bins = num_bins
@@ -24,6 +25,7 @@ class DiscretizedRadialPredictor(RadiusPredictor):
         self.range_max = range_max
         self.num_layers = num_layers
         self.latent_size = latent_size
+        self.num_targets = num_targets
 
     def radii(self) -> jnp.ndarray:
         return jnp.linspace(self.range_min, self.range_max, self.num_bins)
@@ -31,6 +33,11 @@ class DiscretizedRadialPredictor(RadiusPredictor):
     def predict_logits(self, conditioning: e3nn.IrrepsArray) -> distrax.Bijector:
         """Predicts the logits."""
         conditioning = conditioning.filter("0e")
+        # conditioning = jnp.repeat(
+        #     jnp.expand_dims(conditioning.array, axis=-1),
+        #     self.num_targets,
+        #     axis=-1
+        # )
 
         logits = hk.nets.MLP(
             [self.latent_size] * (self.num_layers - 1) + [self.num_bins],

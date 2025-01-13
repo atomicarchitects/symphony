@@ -68,6 +68,7 @@ def segment_sample_2D(
     species_probabilities: jnp.ndarray,
     segment_ids: jnp.ndarray,
     num_segments: int,
+    num_targets: int,
     rng: chex.PRNGKey,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Sample indices from a categorical distribution across each segment.
@@ -103,7 +104,11 @@ def segment_sample_2D(
             species_probabilities[node_index]
         )
         species_index = jax.random.choice(
-            logit_rng, jnp.arange(num_species), p=normalized_probs_for_index
+            logit_rng,
+            jnp.arange(num_species),
+            shape=(num_targets,),
+            replace=True,
+            p=normalized_probs_for_index
         )
         return node_index, species_index
 
@@ -112,7 +117,7 @@ def segment_sample_2D(
         rngs, jnp.arange(num_segments)
     )
     assert node_indices.shape == (num_segments,)
-    assert species_indices.shape == (num_segments,)
+    assert species_indices.shape == (num_segments, num_targets)
     return node_indices, species_indices
 
 

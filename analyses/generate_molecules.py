@@ -110,12 +110,12 @@ def append_predictions(
     num_edges = padded_fragment.receivers.shape[0]
     focus = pred.globals.focus_indices[0]
     focus_position = positions[focus]
-    target_position = pred.globals.position_vectors[0] + focus_position
+    target_position = pred.globals.position_vectors[0][0] + focus_position
     new_positions = positions.at[num_valid_nodes].set(target_position)
 
     # Update the species of the first dummy node.
     species = padded_fragment.nodes.species
-    target_species = pred.globals.target_species[0]
+    target_species = pred.globals.target_species[0][0]
     new_species = species.at[num_valid_nodes].set(target_species)
 
     # Compute the distance matrix to select the edges.
@@ -205,24 +205,6 @@ def generate_molecules(
     padding_mode: str,
     verbose: bool = False,
 ):
-# def generate_molecules(
-#     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
-#     params: optax.Params,
-#     molecules_outputdir: str,
-#     radial_cutoff: float,
-#     focus_and_atom_type_inverse_temperature: float,
-#     position_inverse_temperature: float,
-#     start_seed: int,
-#     num_seeds: int,
-#     num_seeds_per_chunk: int,
-#     init_molecules: Sequence[Union[str, ase.Atoms]],
-#     max_num_atoms: int,
-#     avg_neighbors_per_atom: int,
-#     atomic_numbers: np.ndarray = np.arange(1, 81),
-#     visualize: bool = False,
-#     visualizations_dir: Optional[str] = None,
-#     verbose: bool = True,
-# ):
     """Generates molecules from a model."""
 
     if verbose:
@@ -367,64 +349,8 @@ def generate_molecules(
 
     molecule_list = []
     for i, seed in tqdm.tqdm(enumerate(seeds), desc="Visualizing molecules"):
-        init_fragment = jax.tree_util.tree_map(lambda x: x[i], init_fragments)
         init_molecule_name = init_molecule_names[i]
 
-        # if visualize:
-        #     # Get the padded fragment and predictions for this seed.
-        #     padded_fragments_for_seed = jax.tree_util.tree_map(
-        #         lambda x: x[i], padded_fragments
-        #     )
-        #     preds_for_seed = jax.tree_util.tree_map(lambda x: x[i], preds)
-
-        #     figs = []
-        #     for step in range(max_num_atoms):
-        #         if step == 0:
-        #             padded_fragment = init_fragment
-        #         else:
-        #             padded_fragment = jax.tree_util.tree_map(
-        #                 lambda x: x[step - 1], padded_fragments_for_seed
-        #             )
-        #         pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
-
-        #         # Save visualization of generation process.
-        #         fragment = jraph.unpad_with_graphs(padded_fragment)
-        #         pred = jraph.unpad_with_graphs(pred)
-        #         fragment = fragment._replace(
-        #             globals=jax.tree_util.tree_map(
-        #                 lambda x: np.squeeze(x, axis=0), fragment.globals
-        #             )
-        #         )
-        #         pred = pred._replace(
-        #             globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
-        #         )
-        #         fig = analysis.visualize_predictions(pred, fragment)
-        #         figs.append(fig)
-
-        #         # This may be the final padded fragment.
-        #         final_padded_fragment = padded_fragment
-
-        #         # Check if we should stop.
-        #         stop = pred.globals.stop
-        #         if stop:
-        #             break
-
-        #     # Save the visualizations of the generation process.
-        #     for index, fig in enumerate(figs):
-        #         # Update the title.
-        #         fig.update_layout(
-        #             title=f"Predictions for Seed {seed}",
-        #             title_x=0.5,
-        #         )
-
-        #         # Save to file.
-        #         outputfile = os.path.join(
-        #             visualizations_dir,
-        #             f"seed_{seed}_fragments_{index}.html",
-        #         )
-        #         fig.write_html(outputfile, include_plotlyjs="cdn")
-
-        # else:
         # We already have the final padded fragment.
         final_padded_fragment = jax.tree_util.tree_map(
             lambda x: x[i], final_padded_fragments
