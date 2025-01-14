@@ -55,18 +55,10 @@ class TargetPositionPredictor(hk.Module):
         assert target_species_embeddings.shape == (
             num_graphs,
             focus_node_embeddings.irreps.num_irreps,
-        ), (
-            target_species_embeddings.shape,
-            target_species.shape,
-            focus_node_embeddings.shape,
-            self.num_species,
-            (num_graphs, focus_node_embeddings.irreps.num_irreps),
         )
 
-        # Concatenate the focus and target species embeddings.
-        conditioning = e3nn.concatenate(
-            [focus_node_embeddings, target_species_embeddings], axis=-1
-        )
+        # Multiply the focus and target species embeddings.
+        conditioning = focus_node_embeddings * target_species_embeddings
         assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
         return conditioning
 
