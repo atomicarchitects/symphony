@@ -11,9 +11,7 @@ from symphony.data import datasets
 from symphony import datatypes
 
 
-CATH_URL = (
-    "http://download.cathdb.info/cath/releases/all-releases/v4_3_0/non-redundant-data-sets/cath-dataset-nonredundant-S20-v4_3_0.pdb.tgz"
-)
+CATH_URL = "http://download.cathdb.info/cath/releases/all-releases/v4_3_0/non-redundant-data-sets/cath-dataset-nonredundant-S20-v4_3_0.pdb.tgz"
 
 
 class CATHDataset(datasets.InMemoryDataset):
@@ -47,13 +45,13 @@ class CATHDataset(datasets.InMemoryDataset):
             self.num_train_molecules = num_train_molecules
             self.num_val_molecules = num_val_molecules
             self.num_test_molecules = num_test_molecules
-        
+
         self.all_structures = None
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.asarray([7, 6, 6])
-    
+
     @staticmethod
     def get_amino_acids() -> List[str]:
         return [
@@ -93,7 +91,7 @@ class CATHDataset(datasets.InMemoryDataset):
             return {
                 "train": [self.train_on_single_molecule_index],
                 "val": [self.train_on_single_molecule_index],
-                "test": [self.train_on_single_molecule_index]
+                "test": [self.train_on_single_molecule_index],
             }
 
         # TODO fix
@@ -101,10 +99,14 @@ class CATHDataset(datasets.InMemoryDataset):
             "train": np.arange(self.num_train_molecules),
             "val": np.arange(
                 self.num_train_molecules,
-                self.num_train_molecules+self.num_val_molecules),
+                self.num_train_molecules + self.num_val_molecules,
+            ),
             "test": np.arange(
-                self.num_train_molecules+self.num_val_molecules,
-                self.num_train_molecules+self.num_val_molecules+self.num_test_molecules),
+                self.num_train_molecules + self.num_val_molecules,
+                self.num_train_molecules
+                + self.num_val_molecules
+                + self.num_test_molecules,
+            ),
         }
         requested_splits = {
             "train": self.num_train_molecules,
@@ -128,6 +130,7 @@ def load_cath(
     root_dir: str,
 ) -> List[ase.Atoms]:
     """Load the CATH dataset."""
+
     def parse_pdb_format(line):
         # return type, amino acid, coordinates
         return {
@@ -145,14 +148,13 @@ def load_cath(
     datasets.utils.extract_tar(path, root_dir)
     mols_path = os.path.join(root_dir, "dompdb")
 
-    atom_types = ['N', 'CA', 'C']
+    atom_types = ["N", "CA", "C", "CB"]
     amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
-    for i, mol_file in enumerate(os.listdir(mols_path)):
+    for mol_file in os.listdir(mols_path):
         mol_path = os.path.join(mols_path, mol_file)
         positions = []
-        species = []
-        amino_acids = []
+        species = []  # arbitrary ordering: atoms, then amino acids
         # read pdb
         with open(mol_path, "r") as f:
             for line in f:
@@ -165,17 +167,20 @@ def load_cath(
                     continue  # TODO executive decision on my end to choose btwn alternatives
                 if items["atom_type"] in atom_types:
                     positions.append([items["x"], items["y"], items["z"]])
-                    species.append(atom_types.index(items["atom_type"]))
-                    # substring for things like AARG and BSER
-                    amino_acids.append(amino_acid_abbr.index(items["residue"][-3:]))
+                    # encode residues as "atoms" located at their beta carbon
+                    # GLY just doesn't get anything i guess (TODO ???)
+                    if items["atom_type"] == "CB":
+                        species.append(len(atom_types) + amino_acid_abbr.index(items["residue"][-3:]))
+                    else:
+                        species.append(atom_types.index(items["atom_type"]))
+
         # foldingdiff does this
         # (also splits anything >128 residues into random 128-residue chunks)
         if len(species) < 120:
             continue
 
-        positions=np.asarray(positions)
-        species=np.asarray(species)
-        amino_acids=np.asarray(amino_acids)
+        positions = np.asarray(positions)
+        species = np.asarray(species)
         # print(i, mol_file)
 
         # Convert to Structure.
