@@ -152,51 +152,71 @@ def load_cath(
     atom_types = ["N", "CA", "C", "CB"]
     amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
+
+    def _add_structure(pos, spec):
+        # foldingdiff does this
+        # (also splits anything >128 residues into random 128-residue chunks)
+        if len(spec) < 120:
+            return
+
+        pos = np.asarray(pos)
+        spec = np.asarray(spec)
+
+        # Convert to Structure.
+        structure = datatypes.Structures(
+            nodes=datatypes.NodesInfo(
+                positions=pos,
+                species=spec,
+            ),
+            edges=None,
+            receivers=None,
+            senders=None,
+            globals=None,
+            n_node=np.asarray([len(spec)]),
+            n_edge=None,
+        )
+        all_structures.append(structure)
+
+    logging.info("Loading structures...")
     for mol_file in os.listdir(mols_path):
         mol_path = os.path.join(mols_path, mol_file)
         positions = []
         species = []  # arbitrary ordering: atoms, then amino acids
+        last_c_term = None
         # read pdb
         with open(mol_path, "r") as f:
             for line in f:
-                # take out everything that isn't part of the backbone
                 items = parse_pdb_format(line.strip())
+                # handle alternate configurations
                 if items["residue"][-3:] not in amino_acid_abbr:
                     species = []
                     break
                 if len(items["residue"]) == 4 and items["residue"][0] == "B":
                     continue  # TODO executive decision on my end to choose btwn alternatives
+                # check if this is a different fragment
+                if last_c_term is not None and items["atom_type"] == "N":
+                    dist_from_last = np.linalg.norm(
+                        last_c_term - np.array([items["x"], items["y"], items["z"]])
+                    )
+                    if dist_from_last > 3.0:  # TODO hardcoded
+                        _add_structure(positions, species)
+                        positions = []
+                        species = []
+                # take out everything that isn't part of the backbone
                 if items["atom_type"] in atom_types:
                     positions.append([items["x"], items["y"], items["z"]])
                     # encode residues as "atoms" located at their beta carbon
                     # GLY just doesn't get anything i guess (TODO ???)
                     if items["atom_type"] == "CB":
                         species.append(len(atom_types) - 1 + amino_acid_abbr.index(items["residue"][-3:]))
+                    elif items["atom_type"] == "C":
+                        last_c_term = np.array([items["x"], items["y"], items["z"]])
                     else:
                         species.append(atom_types.index(items["atom_type"]))
+        # add last structure
+        if len(species): _add_structure(positions, species)
+    print(len(all_structures))
 
-        # foldingdiff does this
-        # (also splits anything >128 residues into random 128-residue chunks)
-        if len(species) < 120:
-            continue
-
-        positions = np.asarray(positions)
-        species = np.asarray(species)
-        # print(i, mol_file)
-
-        # Convert to Structure.
-        structure = datatypes.Structures(
-            nodes=datatypes.NodesInfo(
-                positions=positions,
-                species=species,
-            ),
-            edges=None,
-            receivers=None,
-            senders=None,
-            globals=None,
-            n_node=np.asarray([len(species)]),
-            n_edge=None,
-        )
-        all_structures.append(structure)
+        
     logging.info(f"Loaded {len(all_structures)} structures.")
     return all_structures
