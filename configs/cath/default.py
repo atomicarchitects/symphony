@@ -46,7 +46,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
     config.max_n_nodes = 513
-    config.max_n_edges = 7 * config.get_ref("max_n_nodes")
+    config.max_n_edges = 10 * config.get_ref("max_n_nodes")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.discretized_loss = False
