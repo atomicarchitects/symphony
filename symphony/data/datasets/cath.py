@@ -137,7 +137,7 @@ def load_cath(
         return {
             "atom_type": line[13:16].strip(),
             "residue": line[16:20].strip(),
-            "x": float(line[32:38].strip()),
+            "x": float(line[31:38].strip()),
             "y": float(line[38:46].strip()),
             "z": float(line[46:55].strip()),
         }
@@ -154,7 +154,7 @@ def load_cath(
     all_structures = []
 
     def _add_structure(pos, spec, molfile):
-        assert len(pos) == len(spec), f"Length mismatch: {len(pos)} vs {len(spec)} in {mol_file}"
+        assert len(pos) == len(spec), f"Length mismatch: {len(pos)} vs {len(spec)} in {molfile}"
         # foldingdiff does this
         # (also splits anything >128 residues into random 128-residue chunks)
         if len(spec) < 120:

@@ -41,7 +41,6 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config.num_train_steps=1000000 \
     --config.position_noise_std=0.1 \
     --config.max_num_residues=64 \
-    --config.radial_cutoff=4.0 \
     --config.target_distance_noise_std=0.1 \
     --config.max_targets_per_graph=$max_targets_per_graph \
     --config.target_position_predictor.radial_predictor_type="discretized"
