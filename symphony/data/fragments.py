@@ -214,8 +214,6 @@ def _make_middle_fragment(
             )
 
     if mode == "nn":
-        if len(dist[mask]) == 0:
-            print(list(graph.nodes.positions))
         min_dist = dist[mask].min()
         mask = mask & (dist < min_dist + nn_tolerance)
         del min_dist
