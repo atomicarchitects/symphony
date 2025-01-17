@@ -12,7 +12,7 @@ import tarfile
 import urllib
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm
+from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm, cath
 
 
 def get_atomic_numbers(dataset: str) -> Dict[str, int]:
@@ -25,6 +25,8 @@ def get_atomic_numbers(dataset: str) -> Dict[str, int]:
         return platonic_solids.PlatonicSolidsDataset.get_atomic_numbers()
     elif dataset == "geom_drugs":
         return geom_drugs.GEOMDrugsDataset.get_atomic_numbers()
+    elif dataset == "cath":
+        return cath.CATHDataset.get_atomic_numbers()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -74,8 +76,16 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_test_molecules=config.num_test_molecules,
         )
 
+    if config.dataset == "cath":
+        return cath.CATHDataset(
+            root_dir=config.root_dir,
+            num_train_molecules=config.num_train_molecules,
+            num_val_molecules=config.num_val_molecules,
+            num_test_molecules=config.num_test_molecules,
+        )
+
     raise ValueError(
-        f"Unknown dataset: {config.dataset}. Available datasets: qm9, platonic_solids, geom_drugs"
+        f"Unknown dataset: {config.dataset}. Available datasets: qm9, platonic_solids, geom_drugs, tmqm, cath"
     )
 
 
@@ -170,5 +180,5 @@ def extract_zip(path: str, root: str):
 def extract_tar(path: str, root: str):
     """Extract tar."""
     logging.info(f"Extracting {path} to {root}...")
-    with tarfile.TarFile(path, "r") as f:
+    with tarfile.open(path, "r") as f:
         f.extractall(path=root)

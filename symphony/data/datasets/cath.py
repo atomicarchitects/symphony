@@ -50,7 +50,8 @@ class CATHDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
-        return np.asarray([7, 6, 6])
+        # TODO how are we going to keep track of this
+        return np.asarray([7, 6, 6] + [6] * 22)  # representing residues by their CB atoms
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -170,7 +171,7 @@ def load_cath(
                     # encode residues as "atoms" located at their beta carbon
                     # GLY just doesn't get anything i guess (TODO ???)
                     if items["atom_type"] == "CB":
-                        species.append(len(atom_types) + amino_acid_abbr.index(items["residue"][-3:]))
+                        species.append(len(atom_types) - 1 + amino_acid_abbr.index(items["residue"][-3:]))
                     else:
                         species.append(atom_types.index(items["atom_type"]))
 

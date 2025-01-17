@@ -21,6 +21,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
     config.max_targets_per_graph = 1
+    config.max_num_residues = 128
     config.heavy_first = False
     config.transition_first = False
 
@@ -44,8 +45,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
-    config.max_n_nodes = 512
-    config.max_n_edges = 6 * config.get_ref("max_n_nodes")
+    config.max_n_nodes = 513
+    config.max_n_edges = 7 * config.get_ref("max_n_nodes")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.discretized_loss = False
@@ -97,7 +98,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.generation.num_seeds_per_chunk = 2
     config.generation.init_molecules = "N"
     config.generation.max_num_atoms = 512
-    config.generation.avg_neighbors_per_atom = 5
+    config.generation.avg_neighbors_per_atom = 7
     config.generation.padding_mode = "fixed"
     config.generation.posebusters = True
 
