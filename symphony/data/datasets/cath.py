@@ -153,7 +153,8 @@ def load_cath(
     amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
 
-    def _add_structure(pos, spec):
+    def _add_structure(pos, spec, molfile):
+        assert len(pos) == len(spec), f"Length mismatch: {len(pos)} vs {len(spec)} in {mol_file}"
         # foldingdiff does this
         # (also splits anything >128 residues into random 128-residue chunks)
         if len(spec) < 120:
@@ -189,6 +190,7 @@ def load_cath(
                 items = parse_pdb_format(line.strip())
                 # handle alternate configurations
                 if items["residue"][-3:] not in amino_acid_abbr:
+                    positions = []
                     species = []
                     break
                 if len(items["residue"]) == 4 and items["residue"][0] == "B":
@@ -199,7 +201,7 @@ def load_cath(
                         last_c_term - np.array([items["x"], items["y"], items["z"]])
                     )
                     if dist_from_last > 3.0:  # TODO hardcoded
-                        _add_structure(positions, species)
+                        _add_structure(positions, species, mol_file)
                         positions = []
                         species = []
                 # take out everything that isn't part of the backbone
@@ -209,13 +211,12 @@ def load_cath(
                     # GLY just doesn't get anything i guess (TODO ???)
                     if items["atom_type"] == "CB":
                         species.append(len(atom_types) - 1 + amino_acid_abbr.index(items["residue"][-3:]))
-                    elif items["atom_type"] == "C":
-                        last_c_term = np.array([items["x"], items["y"], items["z"]])
                     else:
                         species.append(atom_types.index(items["atom_type"]))
+                        if items["atom_type"] == "C":
+                            last_c_term = np.array([items["x"], items["y"], items["z"]])
         # add last structure
-        if len(species): _add_structure(positions, species)
-    print(len(all_structures))
+        if len(species): _add_structure(positions, species, mol_file)
 
         
     logging.info(f"Loaded {len(all_structures)} structures.")
