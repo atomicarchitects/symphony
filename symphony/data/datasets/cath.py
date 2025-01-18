@@ -51,7 +51,7 @@ class CATHDataset(datasets.InMemoryDataset):
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         # TODO how are we going to keep track of this
-        return np.asarray([7, 6, 6] + [6] * 22)  # representing residues by their CB atoms
+        return np.asarray([6] * 22 + [6, 6, 7])  # representing residues by their CB atoms
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -149,7 +149,7 @@ def load_cath(
     datasets.utils.extract_tar(path, root_dir)
     mols_path = os.path.join(root_dir, "dompdb")
 
-    atom_types = ["N", "CA", "C", "CB"]
+    atom_types = ["C", "CA", "N", "CB"]
     amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
 
@@ -210,9 +210,9 @@ def load_cath(
                     # encode residues as "atoms" located at their beta carbon
                     # GLY just doesn't get anything i guess (TODO ???)
                     if items["atom_type"] == "CB":
-                        species.append(len(atom_types) - 1 + amino_acid_abbr.index(items["residue"][-3:]))
+                        species.append(amino_acid_abbr.index(items["residue"][-3:]))
                     else:
-                        species.append(atom_types.index(items["atom_type"]))
+                        species.append(len(atom_types) - 1 + atom_types.index(items["atom_type"]))
                         if items["atom_type"] == "C":
                             last_c_term = np.array([items["x"], items["y"], items["z"]])
         # add last structure

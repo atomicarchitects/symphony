@@ -20,6 +20,7 @@ import numpy as np
 import tqdm
 import chex
 import optax
+import time
 
 import analyses.analysis as analysis
 from symphony import datatypes, models
@@ -205,24 +206,6 @@ def generate_molecules(
     padding_mode: str,
     verbose: bool = False,
 ):
-# def generate_molecules(
-#     apply_fn: Callable[[datatypes.Fragments, chex.PRNGKey], datatypes.Predictions],
-#     params: optax.Params,
-#     molecules_outputdir: str,
-#     radial_cutoff: float,
-#     focus_and_atom_type_inverse_temperature: float,
-#     position_inverse_temperature: float,
-#     start_seed: int,
-#     num_seeds: int,
-#     num_seeds_per_chunk: int,
-#     init_molecules: Sequence[Union[str, ase.Atoms]],
-#     max_num_atoms: int,
-#     avg_neighbors_per_atom: int,
-#     atomic_numbers: np.ndarray = np.arange(1, 81),
-#     visualize: bool = False,
-#     visualizations_dir: Optional[str] = None,
-#     verbose: bool = True,
-# ):
     """Generates molecules from a model."""
 
     if verbose:
@@ -365,41 +348,41 @@ def generate_molecules(
     logging_fn("Compilation time: %.2f s", compilation_time)
 
     final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
-
+    n_nodes = final_padded_fragments.n_node.reshape(-1,).astype(int)
+    logging_fn(f"n_nodes size: {n_nodes.shape}")
+    print(f"n_nodes size: {n_nodes.shape}")
+    fragment_starts = jnp.cumsum(
+        jnp.concatenate([jnp.zeros((1,)), n_nodes[:-1]]),
+        dtype=int,
+    )
     molecule_list = []
-    for i, seed in tqdm.tqdm(enumerate(seeds), desc="Visualizing molecules"):
+    for i, seed in tqdm.tqdm(enumerate(seeds), desc="Processing molecules"):
+        t = time.time()
+        num_valid_nodes = n_nodes[i]
+        logging_fn(f"num_valid_nodes: {time.time() - t}")
+        t = time.time()
+        start_ndx = fragment_starts[i]
+        end_ndx = start_ndx + num_valid_nodes
+        logging_fn(f"Getting indices: {time.time() - t}")
+        t = time.time()
         init_molecule_name = init_molecule_names[i]
-        # We already have the final padded fragment.
-        final_padded_fragment = jax.tree_util.tree_map(
-            lambda x: x[i], final_padded_fragments
-        )
-        stop = jax.tree_util.tree_map(lambda x: x[i], stops)
-
-        num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
-            positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
+            positions=final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx],
             numbers=models.get_atomic_numbers(
-                final_padded_fragment.nodes.species[:num_valid_nodes],
-                atomic_numbers
+                final_padded_fragments.nodes.species.reshape(-1,)[start_ndx:end_ndx],
+                atomic_numbers,
+                dataset=="cath",
             ),
         )
-        if stop:
+        logging_fn(f"Creating molecule: {time.time() - t}")
+        if stops[i]:
             logging_fn("Generated %s", generated_molecule.get_chemical_formula())
             outputfile = f"{init_molecule_name}_seed={seed}.xyz"
         else:
             logging_fn("STOP was not produced. Discarding...")
             outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
-
         ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
-
-    # Save the generated molecules as an ASE database.
-    #output_db = os.path.join(
-    #    molecules_outputdir, f"generated_molecules_init={init_molecule_name}.db"
-    #)
-    #with connect(output_db) as conn:
-    #    for mol in molecule_list:
-    #        conn.write(mol)
 
     return molecule_list
 

@@ -20,11 +20,10 @@ embedder=nequip
 workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan14/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
-    # --workdir=$workdir
-    # --num_seeds=50 \
-    # --num_seeds_per_chunk=1 \
-    # --max_num_atoms=200 \
-    # --init=analyses/molecules/downloaded/Ni.xyz
+#     --workdir=$workdir \
+#     --num_seeds=1 \
+#     --num_seeds_per_chunk=1 \
+#     --init="N"
 
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --workdir=$workdir \
@@ -35,7 +34,7 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config.shuffle_datasets=False \
     --config.eval_every_steps=5000 \
     --config.generate_every_steps=5000 \
-    --config.generation.num_seeds=1 \
+    --config.generation.num_seeds=10 \
     --config.generation.num_seeds_per_chunk=1 \
     --config.generation.posebusters=False \
     --config.num_train_steps=1000000 \

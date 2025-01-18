@@ -261,7 +261,10 @@ def ase_atoms_to_jraph_graph(
     species = np.searchsorted(atomic_numbers, atoms.numbers)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(np.asarray(atoms.positions), np.asarray(species)),
+        nodes=datatypes.NodesInfo(
+            np.asarray(atoms.positions),
+            np.asarray(species)
+        ),
         edges=np.ones(len(senders)),
         globals=None,
         senders=np.asarray(senders),

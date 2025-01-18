@@ -10,10 +10,13 @@ import jraph
 
 
 def get_atomic_numbers(
-    species: jnp.ndarray, atomic_numbers: jnp.ndarray
+    species: jnp.ndarray, atomic_numbers: jnp.ndarray, amino_acids=False
 ) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
-    return jnp.asarray(atomic_numbers)[species]
+    out = jnp.asarray(atomic_numbers)[species]
+    if amino_acids:
+        out = jnp.where(species < 22, 0, species - 22)
+    return out
 
 
 def get_first_node_indices(graphs: jraph.GraphsTuple) -> jnp.ndarray:
