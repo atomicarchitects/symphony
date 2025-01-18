@@ -15,7 +15,7 @@ def get_atomic_numbers(
     """Returns the atomic numbers for the species."""
     out = jnp.asarray(atomic_numbers)[species]
     if amino_acids:
-        out = jnp.where(species < 22, 0, species - 22)
+        out = jnp.where(species < 22, 6, species - 22)  # these are beta carbons
     return out
 
 
