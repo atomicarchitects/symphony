@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import ase
+from Bio import PDB
 import tqdm
 from rdkit import RDLogger
 import rdkit.Chem as Chem
@@ -217,7 +218,7 @@ def check_molecule_validity(mol: Chem.Mol) -> bool:
     """Checks whether a molecule is valid using xyz2mol."""
 
     # We should only have one conformer.
-    assert mol.GetNumConformers() == 1
+    assert mol.GetNumConformers() == 1, mol.GetNumConformers()
 
     try:
         rdDetermineBonds.DetermineBonds(mol, charge=0)
@@ -502,6 +503,22 @@ def get_posebusters_results(
     return posebusters.PoseBusters(config="mol").bust(
         mol_pred=molecules, full_report=full_report
     )
+
+
+def compute_backbone_validity(mol: PDB.Structure) -> bool:
+    # ok the silliest easiest check is to look for -N-C-C- repeat
+    atoms = [a.get_name() for a in mol.get_atoms()]
+    # print(f"atoms: {atoms}")
+    # logging.info(f"atoms: {atoms}")
+    # jax.debug.print("atoms: {atoms}", atoms=atoms)
+    n_count = np.array([a == "N" for a in atoms]).sum()
+    c_count = np.array([a == "C" for a in atoms]).sum()
+    ca_count = np.array([a == "CA" for a in atoms]).sum()
+    return n_count == c_count and c_count == ca_count
+
+
+def compute_backbone_validity_percentage(molecules: Sequence[PDB.Structure]) -> float:
+    return sum([compute_backbone_validity(mol) for mol in molecules]) / len(molecules)
 
 
 def get_all_edm_analyses_results(

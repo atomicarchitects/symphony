@@ -80,6 +80,10 @@ class CATHDataset(datasets.InMemoryDataset):
             "VAL",
         ]
 
+    @staticmethod
+    def get_species() -> List[str]:
+        return CATHDataset.get_amino_acids() + ["C", "CA", "N"]
+
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:
             self.all_structures = load_cath(self.root_dir)
@@ -212,7 +216,7 @@ def load_cath(
                     if items["atom_type"] == "CB":
                         species.append(amino_acid_abbr.index(items["residue"][-3:]))
                     else:
-                        species.append(len(atom_types) - 1 + atom_types.index(items["atom_type"]))
+                        species.append(22 + atom_types.index(items["atom_type"]))
                         if items["atom_type"] == "C":
                             last_c_term = np.array([items["x"], items["y"], items["z"]])
         # add last structure

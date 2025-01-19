@@ -10,12 +10,12 @@ import jraph
 
 
 def get_atomic_numbers(
-    species: jnp.ndarray, atomic_numbers: jnp.ndarray, amino_acids=False
+    species: jnp.ndarray, atomic_numbers: jnp.ndarray
 ) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
     out = jnp.asarray(atomic_numbers)[species]
-    if amino_acids:
-        out = jnp.where(species < 22, 6, species - 22)  # these are beta carbons
+    # if amino_acids:
+    #     out = jnp.where(species < 22, 0, species - 22)  # these are beta carbons
     return out
 
 

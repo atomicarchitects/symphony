@@ -9,6 +9,8 @@ import flax
 import chex
 from absl import logging
 import flax.struct
+import ase
+import numpy as np
 from rdkit import Chem
 import wandb
 from clu import metric_writers, checkpoint
@@ -105,18 +107,43 @@ class GenerateMoleculesHook:
         )
 
         # Convert to RDKit molecules.
-        molecules = metrics.ase_to_rdkit_molecules(molecules_ase)
+        # replace residues (0) with carbon (6)
+        if self.dataset == "cath":
+            molecules = []
+            for mol in molecules_ase:
+                names = np.array([a.get_name() for a in mol.get_atoms()])
+                names_lengths = np.vectorize(len)(names)
+                names = np.where(names_lengths > 1, "C", names)
+                positions = np.array([a.get_coord() for a in mol.get_atoms()])
+                # print("names: ", names)
+                # print("positions: ", positions)
+                molecules.append(
+                    ase.Atoms(
+                        positions=positions, symbols=names,
+                    )
+                )
+            molecules = metrics.ase_to_rdkit_molecules(molecules)
+        else:
+            molecules = metrics.ase_to_rdkit_molecules(
+                [ase.Atoms(
+                    positions=mol.positions, numbers=mol.numbers,
+                ) for mol in molecules_ase]
+            )
 
         # Plot molecules.
         plot_molecules_in_wandb(molecules, state.get_step())
 
         # Compute metrics.
         logging.info("Computing metrics...")
-        validity = metrics.compute_validity(molecules)
-        uniqueness = metrics.compute_uniqueness(molecules)
+        if self.dataset == "cath":
+            validity = metrics.compute_backbone_validity_percentage(molecules_ase)
+        else:
+            validity = metrics.compute_validity(molecules)
+        # TODO protein uniqueness? rdkit currently throws a fit
+        # uniqueness = metrics.compute_uniqueness(molecules)
         metrics_agg = {}
         metrics_agg["validity"] = validity
-        metrics_agg["uniqueness"] = uniqueness
+        # metrics_agg["uniqueness"] = uniqueness
         if self.posebusters:
             metrics_df = metrics.get_posebusters_results(molecules)
             for col in metrics_df.columns:

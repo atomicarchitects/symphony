@@ -12,6 +12,7 @@ import ase.data
 #from ase.db import connect
 import ase.io
 import ase.visualize
+from Bio import PDB
 import jax
 import jax.numpy as jnp
 import jraph
@@ -160,8 +161,14 @@ def generate_one_step(
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
+    t = time.time()
     pred = apply_fn(padded_fragment, rng)
+    logging.info(f"Time for apply_fn: {time.time() - t:.3f} s")
+    print(f"Time for apply_fn: {time.time() - t:.3f} s")
+    t = time.time()
     next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
+    logging.info(f"Time for append_predictions: {time.time() - t:.3f} s")
+    print(f"Time for append_predictions: {time.time() - t:.3f} s")
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -349,39 +356,52 @@ def generate_molecules(
 
     final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
     n_nodes = final_padded_fragments.n_node.reshape(-1,).astype(int)
-    logging_fn(f"n_nodes size: {n_nodes.shape}")
-    print(f"n_nodes size: {n_nodes.shape}")
     fragment_starts = jnp.cumsum(
         jnp.concatenate([jnp.zeros((1,)), n_nodes[:-1]]),
         dtype=int,
     )
     molecule_list = []
+    pdbparser = PDB.PDBParser()
+    if dataset == "cath":
+        filetype = "pdb"
+    else:
+        filetype = "xyz"
     for i, seed in tqdm.tqdm(enumerate(seeds), desc="Processing molecules"):
-        t = time.time()
         num_valid_nodes = n_nodes[i]
-        logging_fn(f"num_valid_nodes: {time.time() - t}")
-        t = time.time()
         start_ndx = fragment_starts[i]
         end_ndx = start_ndx + num_valid_nodes
-        logging_fn(f"Getting indices: {time.time() - t}")
-        t = time.time()
         init_molecule_name = init_molecule_names[i]
-        generated_molecule = ase.Atoms(
-            positions=final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx],
-            numbers=models.get_atomic_numbers(
-                final_padded_fragments.nodes.species.reshape(-1,)[start_ndx:end_ndx],
-                atomic_numbers,
-                dataset=="cath",
-            ),
-        )
-        logging_fn(f"Creating molecule: {time.time() - t}")
         if stops[i]:
-            logging_fn("Generated %s", generated_molecule.get_chemical_formula())
-            outputfile = f"{init_molecule_name}_seed={seed}.xyz"
+            logging_fn("Generated molecule.")
+            outputfile = f"{init_molecule_name}_seed={seed}.{filetype}"
         else:
             logging_fn("STOP was not produced. Discarding...")
-            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.xyz"
-        ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
+            outputfile = f"{init_molecule_name}_seed={seed}_no_stop.{filetype}"
+        if dataset == "cath":
+            def pdb_line(atom, atomnum, resname, resnum, x, y, z):
+                return f"ATOM  {atomnum:5}  {atom:3} {resname:3} A{resnum:4}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00"
+            lines = []
+            for ndx in range(start_ndx, end_ndx):
+                species = final_padded_fragments.nodes.species.flatten()[ndx]
+                if species < 22:
+                    atom = "CB"
+                else:
+                    atom = ["C", "CA", "N"][species-22]
+                x, y, z = final_padded_fragments.nodes.positions.reshape(-1, 3)[ndx]
+                atomnum = ndx - start_ndx + 1
+                lines.append(pdb_line(atom, atomnum, "UNK", atomnum, x, y, z))
+            with open(os.path.join(molecules_outputdir, outputfile), "w") as f:
+                f.write("\n".join(lines))
+            generated_molecule = pdbparser.get_structure(f"{init_molecule_name}_{i}", os.path.join(molecules_outputdir, outputfile))
+        else:
+            generated_molecule = ase.Atoms(
+                positions=final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx],
+                numbers=models.get_atomic_numbers(
+                    final_padded_fragments.nodes.species.reshape(-1,)[start_ndx:end_ndx],
+                    atomic_numbers,
+                ),
+            )
+            ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
         molecule_list.append(generated_molecule)
 
     return molecule_list
