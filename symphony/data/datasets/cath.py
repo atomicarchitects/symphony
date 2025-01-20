@@ -25,6 +25,7 @@ class CATHDataset(datasets.InMemoryDataset):
         num_test_molecules: int,
         train_on_single_molecule: bool = False,
         train_on_single_molecule_index: int = 0,
+        rng_seed: int = 6489,  # consistent w foldingdiff
     ):
         super().__init__()
 
@@ -47,6 +48,7 @@ class CATHDataset(datasets.InMemoryDataset):
             self.num_test_molecules = num_test_molecules
 
         self.all_structures = None
+        self.rng = np.random.default_rng(seed=6489)
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
@@ -99,7 +101,9 @@ class CATHDataset(datasets.InMemoryDataset):
                 "test": [self.train_on_single_molecule_index],
             }
 
-        # TODO fix
+        # using cath splits from foldingdiff
+        indices = np.arange(len(self.all_structures))
+        self.rng.shuffle(indices)
         splits = {
             "train": np.arange(self.num_train_molecules),
             "val": np.arange(
@@ -113,21 +117,7 @@ class CATHDataset(datasets.InMemoryDataset):
                 + self.num_test_molecules,
             ),
         }
-        requested_splits = {
-            "train": self.num_train_molecules,
-            "val": self.num_val_molecules,
-            "test": self.num_test_molecules,
-        }
-        for split_name, num_molecules in requested_splits.items():
-            original_split_size = len(splits[split_name])
-            if num_molecules > original_split_size:
-                raise ValueError(
-                    f"Requested {num_molecules} molecules for split {split_name}, but only {original_split_size} are available."
-                )
-            logging.info(
-                f"Using {num_molecules} molecules out of {original_split_size} in split {split_name}.",
-            )
-            splits[split_name] = splits[split_name][:num_molecules]
+        splits = {k: indices[v] for k, v in splits.items()}
         return splits
 
 
@@ -204,7 +194,7 @@ def load_cath(
                     dist_from_last = np.linalg.norm(
                         last_c_term - np.array([items["x"], items["y"], items["z"]])
                     )
-                    if dist_from_last > 3.0:  # TODO hardcoded
+                    if dist_from_last > 5.0:  # TODO hardcoded
                         _add_structure(positions, species, mol_file)
                         positions = []
                         species = []

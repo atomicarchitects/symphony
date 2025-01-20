@@ -527,7 +527,12 @@ def compute_backbone_validity(structure_list: Sequence[struc.AtomArrayStack]) ->
 def compute_backbone_uniqueness(structure_list: Sequence[struc.AtomArrayStack]) -> float:
     '''Computes the percentage of unique structures in the given list, 
     where uniqueness is defined by residue sequence'''
-    sequences = [str(struc.to_sequence(s)[0][0]) for s in structure_list]
+    sequences = []
+    for s in structure_list:
+        try:
+            sequences.append(str(struc.to_sequence(s)[0][0]))
+        except:
+            sequences.append("")
     return len(set(sequences)) / len(sequences)
 
 

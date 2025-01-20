@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Sequence, Callable, Dict, Any
+from typing import Sequence, Callable, Dict, Any, Union
 import os
 import time
 import tempfile
@@ -10,6 +10,7 @@ import chex
 from absl import logging
 import flax.struct
 import ase
+from biotite import structure as struc
 import numpy as np
 from rdkit import Chem
 import wandb
@@ -27,58 +28,31 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     return {f"{prefix}/{key}": val for key, val in result.items()}
 
 
-def plot_molecules_in_wandb(
-    molecules: Sequence[Chem.Mol],
+def plot_in_wandb(
+    molecules: Sequence[Union[Chem.Mol, struc.AtomArrayStack]],
     step: int,
+    plot_fn: Callable,
+    plot_name: str,
     num_to_plot: int = 8,
     **plot_kwargs,
 ):
     """Plots molecules in the Weights & Biases UI."""
 
     if wandb.run is None:
-        logging.info("No Weights & Biases run found. Skipping plotting of molecules.")
+        logging.info("No Weights & Biases run found. Skipping plotting.")
         return
 
     # Limit the number of molecules to plot.
     molecules = molecules[:num_to_plot]
 
     # Plot and save the view to a temporary HTML file.
-    view = graphics.plot_molecules_with_py3Dmol(molecules, **plot_kwargs)
+    view = plot_fn(molecules, **plot_kwargs)
     temp_html_path = os.path.join(tempfile.gettempdir(), f"{wandb.run.name}.html")
     view.write_html(temp_html_path)
 
     # Log the HTML file to Weights & Biases.
     logging.info("Logging generated molecules to wandb...")
-    wandb.run.log({"samples": wandb.Html(open(temp_html_path)), "global_step": step})
-
-    # Delete the temporary HTML file, after a short delay.
-    time.sleep(1)
-    os.remove(temp_html_path)
-
-
-def plot_ramachandran_plots_wandb(
-    molecules: Sequence[ase.Atoms],
-    step: int,
-    num_to_plot: int = 8,
-    **plot_kwargs,
-):
-    """Plots Ramachandran plots in the Weights & Biases UI."""
-
-    if wandb.run is None:
-        logging.info("No Weights & Biases run found. Skipping plotting of Ramachandran plots.")
-        return
-
-    # Limit the number of molecules to plot.
-    molecules = molecules[:num_to_plot]
-
-    # Plot and save the view to a temporary HTML file.
-    view = metrics.get_ramachandran_plots(molecules, **plot_kwargs)
-    temp_html_path = os.path.join(tempfile.gettempdir(), f"{wandb.run.name}_ramachandran.html")
-    view.write_html(temp_html_path)
-
-    # Log the HTML file to Weights & Biases.
-    logging.info("Logging Ramachandran plots to wandb...")
-    wandb.run.log({"ramachandran": wandb.Html(open(temp_html_path)), "global_step": step})
+    wandb.run.log({plot_name: wandb.Html(open(temp_html_path)), "global_step": step})
 
     # Delete the temporary HTML file, after a short delay.
     time.sleep(1)
@@ -159,20 +133,30 @@ class GenerateMoleculesHook:
             )
 
         # Plot molecules.
-        plot_molecules_in_wandb(molecules, state.get_step())
+        plot_in_wandb(
+            molecules,
+            state.get_step(),
+            graphics.plot_molecules_with_py3Dmol,
+            "samples",
+        )
 
         # Compute metrics.
         logging.info("Computing metrics...")
         metrics_agg = {}
         if self.dataset == "cath":
             validity = metrics.compute_backbone_validity(molecules_ase)
-            uniqueness = metrics.compute_backbone_uniqueness(molecules_ase)
-            plot_ramachandran_plots_wandb(molecules_ase, state.get_step())
+            # uniqueness = metrics.compute_backbone_uniqueness(molecules_ase)
+            # plot_in_wandb(
+            #     molecules_ase,
+            #     state.get_step(),
+            #     metrics.get_ramachandran_plots,
+            #     "ramachandran",
+            # )
         else:
             validity = metrics.compute_validity(molecules)
             uniqueness = metrics.compute_uniqueness(molecules)
+            metrics_agg["uniqueness"] = uniqueness
         metrics_agg["validity"] = validity
-        metrics_agg["uniqueness"] = uniqueness
         if self.posebusters:
             metrics_df = metrics.get_posebusters_results(molecules)
             for col in metrics_df.columns:
