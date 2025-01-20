@@ -9,6 +9,8 @@ import functools
 
 from absl import logging
 import chex
+from collections import Counter
+from itertools import groupby
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -22,6 +24,8 @@ from rdkit.Chem import rdDetermineBonds
 import e3nn_jax as e3nn
 import posebusters
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 try:
     # This requires Torch.
@@ -506,33 +510,100 @@ def get_posebusters_results(
     )
 
 
-def compute_backbone_validity(mol: struc.AtomArray) -> bool:
-    # ok the silliest easiest check is to look for -N-C-C- repeat
-    atoms = [a.get_name() for a in mol.get_atoms()]
-    # print(f"atoms: {atoms}")
-    # logging.info(f"atoms: {atoms}")
-    # jax.debug.print("atoms: {atoms}", atoms=atoms)
+def check_backbone_validity(mol: struc.AtomArray) -> bool:
+    '''ok the silliest easiest check is to look for -N-C-C- repeat'''
+    atoms = mol.atom_name
     n_count = np.array([a == "N" for a in atoms]).sum()
     c_count = np.array([a == "C" for a in atoms]).sum()
     ca_count = np.array([a == "CA" for a in atoms]).sum()
     return n_count == c_count and c_count == ca_count
 
 
-def compute_backbone_validity_percentage(molecules: Sequence[struc.AtomArray]) -> float:
-    return sum([compute_backbone_validity(mol) for mol in molecules]) / len(molecules)
+def compute_backbone_validity(structure_list: Sequence[struc.AtomArrayStack]) -> float:
+    '''Computes the percentage of given structures that have a valid protein backbone'''
+    return sum([check_backbone_validity(s.get_array(0)) for s in structure_list]) / len(structure_list)
 
 
-# dihedral angles phi, psi, omega can be computed as struc.dihedral_backbone(structure)
+def compute_backbone_uniqueness(structure_list: Sequence[struc.AtomArrayStack]) -> float:
+    '''Computes the percentage of unique structures in the given list, 
+    where uniqueness is defined by residue sequence'''
+    sequences = [str(struc.to_sequence(s)[0][0]) for s in structure_list]
+    return len(set(sequences)) / len(sequences)
 
 
-def compute_secondary_structures(mol: struc.AtomArray) -> np.ndarray:
-    ss = []
-    for model in mol:
-        for chain in model:
-            polypeptides = PDB.PPBuilder().build_peptides(chain)
-            for polypeptide in polypeptides:
-                ss.append(polypeptide.get_secondary_structure())
-    return np.asarray(ss)
+def get_ramachandran_plot(
+        structure: struc.AtomArray,
+        window_size: Tuple[int, int] = (300, 300),
+    ):
+    phi_angles, psi_angles, _ = struc.dihedral_backbone(structure.get_array(0))
+    phi_angles = phi_angles[1:-1][:300]
+    psi_angles = psi_angles[1:-1][:300]
+    phi_angles = np.rad2deg(phi_angles)
+    psi_angles = np.rad2deg(psi_angles)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=phi_angles, y=psi_angles, mode="markers", marker=dict(size=5, color="blue")))
+    fig.add_trace(go.Scatter(x=[-180, 180], y=[0, 0], mode="lines", line=dict(color="black", width=1, dash="dash")))
+    fig.add_trace(go.Scatter(x=[0, 0], y=[-180, 180], mode="lines", line=dict(color="black", width=1, dash="dash")))
+
+    fig.update_layout(
+        xaxis_title=r"${\phi}$",
+        yaxis_title=r"${\psi}$",
+        xaxis_range=[-180, 180],
+        yaxis_range=[-180, 180],
+        xaxis_tick0=-180,
+        xaxis_dtick=45,
+        yaxis_tick0=-180,
+        yaxis_dtick=45,
+        xaxis_tickfont=dict(size=12),
+        yaxis_tickfont=dict(size=12),
+        width=window_size[0],
+        height=window_size[1],
+    )
+
+    return fig
+
+
+def get_ramachandran_plots(
+    structure_list: Sequence[struc.AtomArrayStack],
+    window_size: Tuple[int, int] = (300, 300),
+    rows: int = 2,
+    cols: int = 4,
+):
+    bigfig = make_subplots(rows=rows, cols=cols)
+    for i, structure in enumerate(structure_list):
+        fig = get_ramachandran_plot(structure)
+        row = i // cols + 1
+        col = i % cols + 1
+        bigfig.add_trace(fig.data[0], row=row, col=col)
+        bigfig.update_xaxes(fig.layout.xaxis, row=row, col=col)
+        bigfig.update_yaxes(fig.layout.yaxis, row=row, col=col)
+    bigfig.update_layout(
+        margin=dict(l=80, r=80, t=80, b=80),
+        width=window_size[0]*cols+80*2,
+        height=window_size[1]+80*2,
+        showlegend=False,
+    )
+    return bigfig
+
+
+def count_secondary_structures(structure: struc.AtomArray) -> Tuple[int, int]:
+    """Count the secondary structures (# alpha, # beta) in the given pdb file.
+    Adapted from foldingdiff: https://github.com/microsoft/foldingdiff/tree/main"""
+    chain_ids = np.unique(structure.chain_id)
+    assert len(chain_ids) == 1
+    chain_id = chain_ids[0]
+
+    # a = alpha helix, b = beta sheet, c = coil
+    ss = struc.annotate_sse(structure, chain_id)
+    # https://stackoverflow.com/questions/6352425/whats-the-most-pythonic-way-to-identify-consecutive-duplicates-in-a-list
+    ss_grouped = [(k, sum(1 for _ in g)) for k, g in groupby(ss)]
+    ss_counts = Counter([chain for chain, _ in ss_grouped])
+
+    num_alpha = ss_counts["a"] if "a" in ss_counts else 0
+    num_beta = ss_counts["b"] if "b" in ss_counts else 0
+
+    return num_alpha, num_beta
 
 
 def get_all_edm_analyses_results(

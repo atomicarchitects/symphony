@@ -56,6 +56,35 @@ def plot_molecules_in_wandb(
     os.remove(temp_html_path)
 
 
+def plot_ramachandran_plots_wandb(
+    molecules: Sequence[ase.Atoms],
+    step: int,
+    num_to_plot: int = 8,
+    **plot_kwargs,
+):
+    """Plots Ramachandran plots in the Weights & Biases UI."""
+
+    if wandb.run is None:
+        logging.info("No Weights & Biases run found. Skipping plotting of Ramachandran plots.")
+        return
+
+    # Limit the number of molecules to plot.
+    molecules = molecules[:num_to_plot]
+
+    # Plot and save the view to a temporary HTML file.
+    view = metrics.get_ramachandran_plots(molecules, **plot_kwargs)
+    temp_html_path = os.path.join(tempfile.gettempdir(), f"{wandb.run.name}_ramachandran.html")
+    view.write_html(temp_html_path)
+
+    # Log the HTML file to Weights & Biases.
+    logging.info("Logging Ramachandran plots to wandb...")
+    wandb.run.log({"ramachandran": wandb.Html(open(temp_html_path)), "global_step": step})
+
+    # Delete the temporary HTML file, after a short delay.
+    time.sleep(1)
+    os.remove(temp_html_path)
+
+
 @dataclass
 class GenerateMoleculesHook:
     workdir: str
@@ -111,12 +140,11 @@ class GenerateMoleculesHook:
         if self.dataset == "cath":
             molecules = []
             for mol in molecules_ase:
-                names = np.array([a.get_name() for a in mol.get_atoms()])
+                mol = mol.get_array(0)
+                names = mol.atom_name
                 names_lengths = np.vectorize(len)(names)
                 names = np.where(names_lengths > 1, "C", names)
-                positions = np.array([a.get_coord() for a in mol.get_atoms()])
-                # print("names: ", names)
-                # print("positions: ", positions)
+                positions = mol.coord
                 molecules.append(
                     ase.Atoms(
                         positions=positions, symbols=names,
@@ -135,15 +163,16 @@ class GenerateMoleculesHook:
 
         # Compute metrics.
         logging.info("Computing metrics...")
+        metrics_agg = {}
         if self.dataset == "cath":
-            validity = metrics.compute_backbone_validity_percentage(molecules_ase)
+            validity = metrics.compute_backbone_validity(molecules_ase)
+            uniqueness = metrics.compute_backbone_uniqueness(molecules_ase)
+            plot_ramachandran_plots_wandb(molecules_ase, state.get_step())
         else:
             validity = metrics.compute_validity(molecules)
-        # TODO protein uniqueness? rdkit currently throws a fit
-        # uniqueness = metrics.compute_uniqueness(molecules)
-        metrics_agg = {}
+            uniqueness = metrics.compute_uniqueness(molecules)
         metrics_agg["validity"] = validity
-        # metrics_agg["uniqueness"] = uniqueness
+        metrics_agg["uniqueness"] = uniqueness
         if self.posebusters:
             metrics_df = metrics.get_posebusters_results(molecules)
             for col in metrics_df.columns:

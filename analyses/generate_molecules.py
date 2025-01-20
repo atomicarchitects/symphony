@@ -225,6 +225,7 @@ def bfs_ordering(positions, species):
         indices.append(node)
         neighbors = struct.receivers[struct.senders == node]
         queue.extend(neighbors)
+    indices = np.array(indices)
     return positions[indices], species[indices]
 
 
@@ -447,9 +448,10 @@ def generate_molecules(
                     ))
             with open(os.path.join(molecules_outputdir, outputfile), "w") as f:
                 f.write("\n".join(lines))
-            generated_molecule = pdb.get_structure(os.path.join(molecules_outputdir, outputfile))
+            pdb_file = pdb.PDBFile.read(os.path.join(molecules_outputdir, outputfile))
+            generated_molecule = pdb.get_structure(pdb_file)
         # for regular molecules it's much simpler
-        else:
+        else:   
             generated_molecule = ase.Atoms(
                 positions=positions,
                 numbers=models.get_atomic_numbers(
