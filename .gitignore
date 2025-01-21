@@ -189,3 +189,4 @@ cached/
 *.mol_dict
 
 analyses/molecules
+analyses/platonic_solids/structures

@@ -212,7 +212,8 @@ if __name__ == "__main__":
     flags.DEFINE_float("beta_com", 0.0, "Beta for center of mass.")
     flags.DEFINE_float("nn_tolerance", 0.125, "NN tolerance (in Angstrom).")
     flags.DEFINE_float("nn_cutoff", 5.0, "NN cutoff (in Angstrom).")
-    flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
+    flags.DEFINE_float("max_radius", 1.7, "Max radius (in Angstrom).")
+    # flags.DEFINE_float("max_radius", 2.03, "Max radius (in Angstrom).")
     flags.DEFINE_integer(
         "max_targets_per_graph", 1, "Max num of targets per focus atom."
     )

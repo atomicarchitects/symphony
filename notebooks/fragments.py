@@ -73,12 +73,19 @@ def get_dataset(method, seed=0):
     return dataset
 
 
-num_targets = {"nn_edm_1": [], "nn_edm_4": [], "radius_1": [], "radius_4": []}
+stop = {"nn_edm_1": [0, 0], "nn_edm_4": [0, 0], "radius_1": [0, 0], "radius_4": [0, 0]}
+# num_targets = {"nn_edm_1": [], "nn_edm_4": [], "radius_1": [], "radius_4": []}
 for frag_method in workdirs:
     dataset = get_dataset(frag_method)
     for graph in tqdm.tqdm(dataset.as_numpy_iterator()):
-        targets = graph.globals.target_position_mask.sum()
-        num_targets[frag_method].append(targets)
-import pickle
-with open("valid_target_counts.pkl", 'wb') as f:
-    pickle.dump(num_targets, f)
+        if graph.globals.stop.item():
+            stop[frag_method][0] += 1
+        stop[frag_method][1] += 1
+        # targets = graph.globals.target_position_mask.sum()
+        # num_targets[frag_method].append(targets)
+# import pickle
+# with open("valid_target_counts.pkl", 'wb') as f:
+#     pickle.dump(num_targets, f)
+
+for frag_method in stop:
+    print(frag_method, stop[frag_method][0] / stop[frag_method][1])

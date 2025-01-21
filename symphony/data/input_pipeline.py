@@ -221,12 +221,16 @@ def pad_graph_to_nearest_ceil_mantissa(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float
+    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, nn_cutoff: float, cell: np.ndarray = np.eye(3)
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
+<<<<<<< HEAD
+        quantities="ij", positions=atoms.positions, cutoff=nn_cutoff, cell=cell
+=======
         quantities="ij", positions=atoms.positions, cutoff=nn_cutoff,
         cell=np.eye(3),
+>>>>>>> 360cf8c4cff0a3a3532c9f79c216c128e309b776
     )
 
     # Get the species indices
