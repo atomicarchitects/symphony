@@ -164,7 +164,6 @@ def generate_one_step(
     pred = apply_fn(padded_fragment, rng)
     next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
     stop = pred.globals.stop[0] | stop
-    jax.debug.print("pred.globals.stop: {pred}", pred=pred.globals.stop)
     return jax.lax.cond(
         stop,
         lambda: ((padded_fragment, True), (padded_fragment, pred)),
@@ -386,24 +385,17 @@ def generate_molecules(
     logging_fn("Compilation time: %.2f s", compilation_time)
 
     final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
-    n_nodes = final_padded_fragments.n_node.reshape(-1,).astype(int)
-    fragment_starts = jnp.cumsum(
-        jnp.concatenate([jnp.zeros((1,)), n_nodes[:-1]]),
-        dtype=int,
-    )
-    jax.debug.print("n_nodes: {n_nodes}", n_nodes=n_nodes)
-    jax.debug.print("fragment starts: {fragment_starts}", fragment_starts=fragment_starts)
-    jax.debug.print("stops: {stops}", stops=stops)
+    # n_node shape = [num_seeds, 2]
+    n_nodes = final_padded_fragments.n_node[:, 0].astype(int)
     molecule_list = []
     if dataset == "cath":
         filetype = "pdb"
     else:
         filetype = "xyz"
     for i, seed in tqdm.tqdm(enumerate(seeds), desc="Processing molecules"):
-        num_valid_nodes = n_nodes[i]
-        start_ndx = fragment_starts[i]
-        end_ndx = start_ndx + num_valid_nodes
         init_molecule_name = init_molecule_names[i]
+        positions = final_padded_fragments.nodes.positions[i, :n_nodes[i], :]
+        species = final_padded_fragments.nodes.species[i, :n_nodes[i]]
         if stops[i]:
             logging_fn("Generated molecule.")
             outputfile = f"{init_molecule_name}_seed={seed}.{filetype}"
@@ -414,29 +406,30 @@ def generate_molecules(
         if dataset == "cath":
             def pdb_line(atom, atomnum, resname, resnum, x, y, z):
                 return f"ATOM  {atomnum:5}  {atom:3} {resname:3} A{resnum:4}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00"
-            positions = final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx]
-            species = final_padded_fragments.nodes.species.flatten()[start_ndx:end_ndx]
-            # in order for biopython to properly process the pdb file, atoms need to be properly assigned to residues
+            if not len(species):
+                logging_fn("No residues found in molecule. Discarding...")
+                continue
+            # in order for biotite to properly process the pdb file, atoms need to be properly assigned to residues
             positions, species = bfs_ordering(positions, species)
             # prepare pdb file
             lines = []
-            residue_start_ndx = start_ndx
+            residue_start_ndx = 0
             curr_residue = ""
             species_names = cath.CATHDataset.get_species()
             residue_species = []
             residue_ct = 1
-            for ndx in range(start_ndx, end_ndx):
+            for ndx in range(n_nodes[i]):
                 if species[ndx] < 22:  # amino acid
                     curr_residue = species_names[species[ndx]]
                     residue_species.append("CB")
-                elif species[ndx] == 24 and ndx != start_ndx:  # N
+                elif species[ndx] == 24 and ndx != 0:  # N
                     for i in range(residue_start_ndx, ndx):
                         lines.append(pdb_line(
                             residue_species[i - residue_start_ndx],
                             i - residue_start_ndx + 1,
                             curr_residue,
                             residue_ct,
-                            *positions[i - start_ndx]
+                            *positions[i]
                         ))
                     residue_start_ndx = ndx
                     residue_ct += 1
@@ -445,22 +438,22 @@ def generate_molecules(
                     residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
                 for i in range(residue_start_ndx, ndx):
-                        lines.append(pdb_line(
-                            residue_species[i - residue_start_ndx],
-                            i - residue_start_ndx + 1,
-                            curr_residue,
-                            residue_ct,
-                            *positions[i - start_ndx]
-                        ))
+                    lines.append(pdb_line(
+                        residue_species[i - residue_start_ndx],
+                        i - residue_start_ndx + 1,
+                        curr_residue,
+                        residue_ct,
+                        *positions[i]
+                    ))
             with open(os.path.join(molecules_outputdir, outputfile), "w") as f:
                 f.write("\n".join(lines))
             generated_molecule = pdb.get_structure(os.path.join(molecules_outputdir, outputfile))
         # for regular molecules it's much simpler
         else:
             generated_molecule = ase.Atoms(
-                positions=final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx],
+                positions=positions,
                 numbers=models.get_atomic_numbers(
-                    final_padded_fragments.nodes.species.reshape(-1,)[start_ndx:end_ndx],
+                    species,
                     atomic_numbers,
                 ),
             )
