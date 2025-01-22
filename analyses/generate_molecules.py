@@ -426,7 +426,7 @@ def generate_molecules(
                     for i in range(residue_start_ndx, ndx):
                         lines.append(pdb_line(
                             residue_species[i - residue_start_ndx],
-                            i - residue_start_ndx + 1,
+                            i + 1,
                             curr_residue,
                             residue_ct,
                             *positions[i]
@@ -440,7 +440,7 @@ def generate_molecules(
                 for i in range(residue_start_ndx, ndx):
                     lines.append(pdb_line(
                         residue_species[i - residue_start_ndx],
-                        i - residue_start_ndx + 1,
+                        i + 1,
                         curr_residue,
                         residue_ct,
                         *positions[i]
