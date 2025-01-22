@@ -21,8 +21,9 @@ workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan19/
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir \
-#     --num_seeds=1 \
+#     --num_seeds=2 \
 #     --num_seeds_per_chunk=1 \
+#     --dataset=$dataset \
 #     --init="N"
 
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
