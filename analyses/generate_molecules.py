@@ -437,7 +437,7 @@ def generate_molecules(
                 else:
                     residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
-                for i in range(residue_start_ndx, ndx):
+                for i in range(residue_start_ndx, n_nodes[i]):
                     lines.append(pdb_line(
                         residue_species[i - residue_start_ndx],
                         i + 1,
