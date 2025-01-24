@@ -24,6 +24,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.max_num_residues = 128
     config.heavy_first = False
     config.transition_first = False
+    config.alpha_carbons_only = False
 
     # Optimizer.
     config.optimizer = "adam"
@@ -31,7 +32,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.learning_rate = 5e-4
 
     # Training.
-    config.rng_seed = 0
+    config.rng_seed = 6489
     config.use_same_rng_across_structures = False
     config.num_train_steps = 1_000_000
     config.log_every_steps = 1000
@@ -77,12 +78,12 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.angular_predictor.sampling_init_step_size = 10.0
 
     config.target_position_predictor.radial_predictor = ml_collections.ConfigDict()
-    config.target_position_predictor.radial_predictor_type = "rational_quadratic_spline"
-    config.target_position_predictor.radial_predictor.num_bins = 16
+    config.target_position_predictor.radial_predictor_type = "discretized_radial_predictor"
+    config.target_position_predictor.radial_predictor.num_bins = 64
     config.target_position_predictor.radial_predictor.num_param_mlp_layers = 2
     config.target_position_predictor.radial_predictor.num_layers = 2
-    config.target_position_predictor.radial_predictor.min_radius = 0.0
-    config.target_position_predictor.radial_predictor.max_radius = 3.0
+    config.target_position_predictor.radial_predictor.min_radius = 1.0
+    config.target_position_predictor.radial_predictor.max_radius = 5.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
 
