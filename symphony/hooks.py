@@ -78,6 +78,7 @@ class GenerateMoleculesHook:
     dataset: str
     padding_mode: str
     posebusters: bool
+    alpha_carbons_only: bool
 
     def __call__(self, state: train_state.TrainState) -> None:
         molecules_outputdir = os.path.join(
@@ -105,6 +106,7 @@ class GenerateMoleculesHook:
             dataset=self.dataset,
             padding_mode=self.padding_mode,
             verbose=False,
+            alpha_carbons_only=self.alpha_carbons_only,
         )
         logging.info(
             "Generated and saved %d molecules at %s",

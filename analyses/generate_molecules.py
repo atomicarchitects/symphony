@@ -115,6 +115,8 @@ def append_predictions(
     focus_position = positions[focus]
     target_position = pred.globals.position_vectors[0] + focus_position
     new_positions = positions.at[num_valid_nodes].set(target_position)
+    jax.debug.print("index {ndx}: positions: {positions}, focus: {focus}", ndx=num_valid_nodes, positions=positions, focus=focus)
+    jax.debug.print("")
 
     # Update the species of the first dummy node.
     species = padded_fragment.nodes.species
@@ -244,6 +246,7 @@ def generate_molecules(
     dataset: str,
     padding_mode: str,
     verbose: bool = False,
+    alpha_carbons_only: bool = False,
 ):
     """Generates molecules from a model."""
 
@@ -278,14 +281,14 @@ def generate_molecules(
         max_num_atoms = 512
         avg_nodes_per_graph = 512
         avg_edges_per_graph = 512 * 5
-        species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers()
-        atoms_to_species = cath.CATHDataset.atoms_to_species()
+        species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers(alpha_carbons_only)
+        atoms_to_species = cath.CATHDataset.atoms_to_species(alpha_carbons_only)
     elif dataset == "miniprotein":
         max_num_atoms = 260
         avg_nodes_per_graph = 260
         avg_edges_per_graph = 260 * 5
-        species_to_atomic_numbers = miniprotein.MiniProteinDataset.species_to_atomic_numbers()
-        atoms_to_species = miniprotein.MiniProteinDataset.atoms_to_species()
+        species_to_atomic_numbers = miniprotein.MiniProteinDataset.species_to_atomic_numbers(alpha_carbons_only)
+        atoms_to_species = miniprotein.MiniProteinDataset.atoms_to_species(alpha_carbons_only)
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -439,28 +442,37 @@ def generate_molecules(
             lines = []
             residue_start_ndx = 0
             curr_residue = ""
-            species_names = cath.CATHDataset.get_species()
+            species_names = cath.CATHDataset.get_species(alpha_carbons_only)
             residue_species = []
             residue_ct = 1
             for ndx in range(n_nodes[i]):
-                if species[ndx] < 22:  # amino acid
-                    curr_residue = species_names[species[ndx]]
-                    residue_species.append("CB")
-                elif species[ndx] >= 24 and ndx != 0:  # N
-                    for k in range(residue_start_ndx, ndx):
-                        lines.append(pdb_line(
-                            residue_species[k - residue_start_ndx],
-                            k + 1,
-                            curr_residue,
-                            residue_ct,
-                            *positions[k]
-                        ))
-                    residue_start_ndx = ndx
-                    residue_ct += 1
-                    residue_species = ["N"]
+                if alpha_carbons_only:
+                    lines.append(pdb_line(
+                        "CA",
+                        ndx + 1,
+                        "UNK",
+                        ndx + 1,
+                        *positions[ndx]
+                    ))
                 else:
-                    if species[ndx] == 25: species = species.at[ndx].set(24)
-                    residue_species.append(species_names[species[ndx]])
+                    if species[ndx] < 22:  # amino acid
+                        curr_residue = species_names[species[ndx]]
+                        residue_species.append("CB")
+                    elif species[ndx] >= 24 and ndx != 0:  # N
+                        for k in range(residue_start_ndx, ndx):
+                            lines.append(pdb_line(
+                                residue_species[k - residue_start_ndx],
+                                k + 1,
+                                curr_residue,
+                                residue_ct,
+                                *positions[k]
+                            ))
+                        residue_start_ndx = ndx
+                        residue_ct += 1
+                        residue_species = ["N"]
+                    else:
+                        if species[ndx] == 25: species = species.at[ndx].set(24)
+                        residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
                 for k in range(residue_start_ndx, n_nodes[i]):
                     lines.append(pdb_line(
@@ -508,7 +520,8 @@ def generate_molecules_from_workdir(
     padding_mode: str,
     res_alpha: Optional[int] = None,
     res_beta: Optional[int] = None,
-    verbose: bool = False,    
+    verbose: bool = False,  
+    alpha_carbons_only: bool = False,  
 ):
     """Generates molecules from a trained model at the given workdir."""
 
@@ -564,6 +577,7 @@ def generate_molecules_from_workdir(
             dataset=dataset,
             padding_mode=padding_mode,
             verbose=verbose,
+            alpha_carbons_only=alpha_carbons_only,
         )
 
 def main(unused_argv: Sequence[str]) -> None:
@@ -586,6 +600,7 @@ def main(unused_argv: Sequence[str]) -> None:
         FLAGS.res_alpha,
         FLAGS.res_beta,
         verbose=True,
+        alpha_carbons_only=FLAGS.alpha_carbons_only,
     )
 
 
@@ -662,6 +677,11 @@ if __name__ == "__main__":
         "padding_mode",
         "dynamic",
         "How to determine molecule padding.",
+    )
+    flags.DEFINE_bool(
+        "alpha_carbons_only",
+        False,
+        "Whether to generate only alpha/beta carbons for CATH dataset.",
     )
     flags.mark_flags_as_required(["workdir"])
     app.run(main)

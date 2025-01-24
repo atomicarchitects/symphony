@@ -358,6 +358,7 @@ def train_and_evaluate(
         dataset=config.dataset,
         padding_mode=config.generation.padding_mode,
         posebusters=config.generation.posebusters,
+        alpha_carbons_only=config.alpha_carbons_only,
     )
 
     # Begin training loop.

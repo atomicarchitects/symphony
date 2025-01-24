@@ -79,6 +79,7 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_train_molecules=config.num_train_molecules,
             num_val_molecules=config.num_val_molecules,
             num_test_molecules=config.num_test_molecules,
+            alpha_carbons_only=config.alpha_carbons_only,
         )
 
     if config.dataset == "miniprotein":

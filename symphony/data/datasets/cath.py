@@ -26,6 +26,7 @@ class CATHDataset(datasets.InMemoryDataset):
         num_test_molecules: int,
         train_on_single_molecule: bool = False,
         train_on_single_molecule_index: int = 0,
+        alpha_carbons_only: bool = False,
         rng_seed: int = 6489,  # consistent w foldingdiff
     ):
         super().__init__()
@@ -49,14 +50,16 @@ class CATHDataset(datasets.InMemoryDataset):
             self.num_test_molecules = num_test_molecules
 
         self.all_structures = None
-        self.rng = np.random.default_rng(seed=6489)
+        self.rng = np.random.default_rng(seed=rng_seed)
+        self.alpha_carbons_only = alpha_carbons_only
 
     @staticmethod
-    def get_atomic_numbers() -> np.ndarray:
-        return np.asarray([6, 7])  # representing residues by their CB atoms
+    def get_atomic_numbers(alpha_carbons_only: bool) -> np.ndarray:
+        return np.asarray([6]) if alpha_carbons_only else np.asarray([6, 7])  # representing residues by their CB atoms
 
     @staticmethod
-    def species_to_atomic_numbers() -> Dict[int, int]:
+    def species_to_atomic_numbers(alpha_carbons_only: bool) -> Dict[int, int]:
+        if alpha_carbons_only: return {0: 6}
         mapping = {}
         # C first, then CA, then amino acids
         for i in range(24):
@@ -66,7 +69,8 @@ class CATHDataset(datasets.InMemoryDataset):
         return mapping
     
     @staticmethod
-    def atoms_to_species() -> Dict[str, int]:
+    def atoms_to_species(alpha_carbons_only: bool) -> Dict[str, int]:
+        if alpha_carbons_only: return {"CA": 0}
         mapping = {}
         amino_acid_abbr = CATHDataset.get_amino_acids()
         for i, aa in enumerate(amino_acid_abbr):
@@ -76,6 +80,9 @@ class CATHDataset(datasets.InMemoryDataset):
         mapping["N"] = 24
         mapping["X"] = 25
         return mapping
+
+    def num_species(self) -> int:
+        return len(CATHDataset.get_atomic_numbers(self.alpha_carbons_only))
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -105,14 +112,15 @@ class CATHDataset(datasets.InMemoryDataset):
         ]
 
     @staticmethod
-    def get_species() -> List[str]:
-        return CATHDataset.get_amino_acids() + ["C", "CA", "N", "X"]
+    def get_species(alpha_carbons_only) -> List[str]:
+        if alpha_carbons_only: return ["CA"]
+        return CATHDataset.get_amino_acids() + ["C", "CA", "N"]
 
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                self.all_structures = load_cath(self.root_dir)
+                self.all_structures = load_cath(self.root_dir, self.alpha_carbons_only)
 
         return self.all_structures
 
@@ -150,6 +158,7 @@ class CATHDataset(datasets.InMemoryDataset):
 
 def load_cath(
     root_dir: str,
+    alpha_carbons_only: bool = False,
 ) -> List[ase.Atoms]:
     """Load the CATH dataset."""
 
@@ -172,6 +181,12 @@ def load_cath(
         pos = np.asarray(pos)
         spec = np.asarray(spec)
 
+        # TODO temporary truncation
+        scale = 4
+        if alpha_carbons_only: scale = 1
+        pos = pos[20*scale:36*scale]
+        spec = spec[20*scale:36*scale]
+
         # Convert to Structure.
         structure = datatypes.Structures(
             nodes=datatypes.NodesInfo(
@@ -190,6 +205,7 @@ def load_cath(
         )
         all_structures.append(structure)
 
+    max_radius = 8.0 if alpha_carbons_only else 5.0
     logging.info("Loading structures...")
     for mol_file in os.listdir(mols_path):
         mol_path = os.path.join(mols_path, mol_file)
@@ -197,24 +213,29 @@ def load_cath(
         f = pdb.PDBFile.read(mol_path)
         structure = pdb.get_structure(f)
         backbone = structure.get_array(0)
-        mask = np.isin(backbone.atom_name, ["CA", "N", "C", "CB"])
+        if alpha_carbons_only:
+            mask = np.isin(backbone.atom_name, ["CA"])
+        else:
+            mask = np.isin(backbone.atom_name, ["CA", "N", "C", "CB"])
         backbone = backbone[mask]
+        max_len = 4.0 if alpha_carbons_only else 2.6
         fragment_starts = np.concatenate([
             np.array([0]),
             # distance between CB and N is ~2.4 angstroms + some wiggle room
-            struc.check_backbone_continuity(backbone, max_len=2.6),
+            struc.check_backbone_continuity(backbone, max_len=max_len),
             np.array([len(backbone)]),
         ])
         for i in range(len(fragment_starts) - 1):
             fragment = backbone[fragment_starts[i]:fragment_starts[i + 1]]
             try:
-                first_n = np.argwhere(fragment.atom_name == "N")[0][0]
                 positions = fragment.coord
                 elements = fragment.atom_name
-                elements[first_n] = "X"
-                # set CB to corresponding residue name
-                cb_atoms = np.argwhere(fragment.atom_name == "CB").flatten()
-                elements[cb_atoms] = fragment.res_name[cb_atoms]
+                if not alpha_carbons_only:
+                    first_n = np.argwhere(elements == "N")[0][0]
+                    elements[first_n] = "X"
+                    # set CB to corresponding residue name
+                    cb_atoms = np.argwhere(fragment.atom_name == "CB").flatten()
+                    elements[cb_atoms] = fragment.res_name[cb_atoms]
                 species = np.vectorize(CATHDataset.atoms_to_species().get)(elements)
                 residue_starts = struc.get_residue_starts(fragment)
                 _add_structure(positions, species, mol_file, residue_starts)
