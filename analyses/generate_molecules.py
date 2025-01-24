@@ -423,13 +423,13 @@ def generate_molecules(
                     curr_residue = species_names[species[ndx]]
                     residue_species.append("CB")
                 elif species[ndx] == 24 and ndx != 0:  # N
-                    for i in range(residue_start_ndx, ndx):
+                    for k in range(residue_start_ndx, ndx):
                         lines.append(pdb_line(
-                            residue_species[i - residue_start_ndx],
-                            i + 1,
+                            residue_species[k - residue_start_ndx],
+                            k + 1,
                             curr_residue,
                             residue_ct,
-                            *positions[i]
+                            *positions[k]
                         ))
                     residue_start_ndx = ndx
                     residue_ct += 1
@@ -437,13 +437,13 @@ def generate_molecules(
                 else:
                     residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
-                for i in range(residue_start_ndx, n_nodes[i]):
+                for k in range(residue_start_ndx, n_nodes[i]):
                     lines.append(pdb_line(
-                        residue_species[i - residue_start_ndx],
-                        i + 1,
+                        residue_species[k - residue_start_ndx],
+                        k + 1,
                         curr_residue,
                         residue_ct,
-                        *positions[i]
+                        *positions[k]
                     ))
             with open(os.path.join(molecules_outputdir, outputfile), "w") as f:
                 f.write("\n".join(lines))
