@@ -58,6 +58,16 @@ class QM9Dataset(datasets.InMemoryDataset):
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.asarray([1, 6, 7, 8, 9])
+    
+    @staticmethod
+    def species_to_atomic_numbers() -> Dict[int, int]:
+        return {
+            0: 1,
+            1: 6,
+            2: 7,
+            3: 8,
+            4: 9,
+        }
 
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:

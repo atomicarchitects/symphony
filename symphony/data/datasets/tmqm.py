@@ -60,6 +60,12 @@ class TMQMDataset(datasets.InMemoryDataset):
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.arange(1, 81)
+    
+    @staticmethod
+    def species_to_atomic_numbers() -> Dict[int, int]:
+        return {
+            i: i for i in range(1, 81)
+        }
 
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures == None:

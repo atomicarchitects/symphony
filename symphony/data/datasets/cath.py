@@ -53,22 +53,19 @@ class CATHDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
-        # TODO how are we going to keep track of this
-        # representing residues by their CB atoms
-        return np.asarray([6] * 22 + [6, 6, 7, 7])
-    
-    @staticmethod
-    def atoms_to_species() -> Dict[str, int]:
-        mapping = {}
-        mapping["C"] = 0
-        mapping["CA"] = 1
-        amino_acid_abbr = CATHDataset.get_amino_acids()
-        for i, aa in enumerate(amino_acid_abbr):
-            mapping[aa] = i + 2
-        mapping["N"] = 24
-        mapping["X"] = 25
-        return mapping
+        return np.asarray([6, 7])  # representing residues by their CB atoms
 
+    @staticmethod
+    def species_to_atomic_numbers() -> Dict[int, int]:
+        mapping = {}
+        # amino acids
+        for i in range(22):
+            mapping[i] = 6
+        mapping[22] = 6  # C
+        mapping[23] = 6  # CA
+        mapping[24] = 7  # N
+        mapping[25] = 7  # X
+        return mapping
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -217,11 +214,11 @@ def load_cath(
             try:
                 first_n = np.argwhere(fragment.atom_name == "N")[0][0]
                 positions = fragment.coord
-                species = fragment.atom_name
-                species[first_n] = "X"
+                elements = fragment.atom_name
+                elements[first_n] = "X"
                 # set CB to corresponding residue name
                 cb_atoms = np.argwhere(fragment.atom_name == "CB").flatten()
-                species[cb_atoms] = fragment.res_name[cb_atoms]
+                elements[cb_atoms] = fragment.res_name[cb_atoms]
                 species = np.vectorize(CATHDataset.atoms_to_species().get)(species)
                 residue_starts = struc.get_residue_starts(fragment)
                 _add_structure(positions, species, mol_file, residue_starts)

@@ -256,7 +256,7 @@ def get_datasets(
 
 
 def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, atomic_numbers: jnp.ndarray, radial_cutoff: float
+    atoms: ase.Atoms, species_to_atomic_numbers: Dict[int, int], radial_cutoff: float
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
@@ -264,8 +264,7 @@ def ase_atoms_to_jraph_graph(
     )
 
     # Get the species indices
-    species = np.searchsorted(atomic_numbers, atoms.numbers)
-    species = np.ones_like(atoms.numbers) * (len(atomic_numbers) - 1)
+    species = np.array([species_to_atomic_numbers[atom.number] for atom in atoms])
 
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(
