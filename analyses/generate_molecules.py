@@ -12,7 +12,7 @@ import ase.data
 #from ase.db import connect
 import ase.io
 import ase.visualize
-from Bio import PDB
+from biotite.structure.io import pdb
 import jax
 import jax.numpy as jnp
 import jraph
@@ -161,15 +161,10 @@ def generate_one_step(
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
-    t = time.time()
     pred = apply_fn(padded_fragment, rng)
-    logging.info(f"Time for apply_fn: {time.time() - t:.3f} s")
-    print(f"Time for apply_fn: {time.time() - t:.3f} s")
-    t = time.time()
     next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
-    logging.info(f"Time for append_predictions: {time.time() - t:.3f} s")
-    print(f"Time for append_predictions: {time.time() - t:.3f} s")
     stop = pred.globals.stop[0] | stop
+    jax.debug.print("pred.globals.stop: {pred}", pred=pred.globals.stop)
     return jax.lax.cond(
         stop,
         lambda: ((padded_fragment, True), (padded_fragment, pred)),
@@ -196,6 +191,42 @@ def generate_for_one_seed(
         return padded_fragments, preds
     else:
         return final_padded_fragment, stop
+
+
+def bfs_ordering(positions, species):
+    struct = datatypes.Structures(
+        nodes=datatypes.NodesInfo(
+            positions=positions, species=species
+        ),
+        edges=None,
+        receivers=None,
+        senders=None,
+        globals=None,
+        n_node=jnp.asarray([len(species)]),
+        n_edge=None,
+    )
+    # add edges between nearest neighbors
+    struct = input_pipeline.infer_edges_with_radial_cutoff_on_positions(
+        struct, 1.7
+    )
+    visited = np.zeros_like(species, dtype=bool)
+    start_ndx = 0
+    for i in range(len(species)):
+        if species[i] == 24:  # "N"
+            start_ndx = i
+            if len(struct.receivers[struct.senders == i]) == 1:
+                break
+    queue = [start_ndx]
+    indices = []
+    while queue:
+        node = queue.pop(0)
+        if visited[node]:
+            continue
+        visited[node] = True
+        indices.append(node)
+        neighbors = struct.receivers[struct.senders == node]
+        queue.extend(neighbors)
+    return positions[indices], species[indices]
 
 
 def generate_molecules(
@@ -360,8 +391,10 @@ def generate_molecules(
         jnp.concatenate([jnp.zeros((1,)), n_nodes[:-1]]),
         dtype=int,
     )
+    jax.debug.print("n_nodes: {n_nodes}", n_nodes=n_nodes)
+    jax.debug.print("fragment starts: {fragment_starts}", fragment_starts=fragment_starts)
+    jax.debug.print("stops: {stops}", stops=stops)
     molecule_list = []
-    pdbparser = PDB.PDBParser()
     if dataset == "cath":
         filetype = "pdb"
     else:
@@ -377,22 +410,52 @@ def generate_molecules(
         else:
             logging_fn("STOP was not produced. Discarding...")
             outputfile = f"{init_molecule_name}_seed={seed}_no_stop.{filetype}"
+        # write protein backbones to pdb file
         if dataset == "cath":
             def pdb_line(atom, atomnum, resname, resnum, x, y, z):
                 return f"ATOM  {atomnum:5}  {atom:3} {resname:3} A{resnum:4}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00"
+            positions = final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx]
+            species = final_padded_fragments.nodes.species.flatten()[start_ndx:end_ndx]
+            # in order for biopython to properly process the pdb file, atoms need to be properly assigned to residues
+            positions, species = bfs_ordering(positions, species)
+            # prepare pdb file
             lines = []
+            residue_start_ndx = start_ndx
+            curr_residue = ""
+            species_names = cath.CATHDataset.get_species()
+            residue_species = []
+            residue_ct = 1
             for ndx in range(start_ndx, end_ndx):
-                species = final_padded_fragments.nodes.species.flatten()[ndx]
-                if species < 22:
-                    atom = "CB"
+                if species[ndx] < 22:  # amino acid
+                    curr_residue = species_names[species[ndx]]
+                    residue_species.append("CB")
+                elif species[ndx] == 24 and ndx != start_ndx:  # N
+                    for i in range(residue_start_ndx, ndx):
+                        lines.append(pdb_line(
+                            residue_species[i - residue_start_ndx],
+                            i - residue_start_ndx + 1,
+                            curr_residue,
+                            residue_ct,
+                            *positions[i - start_ndx]
+                        ))
+                    residue_start_ndx = ndx
+                    residue_ct += 1
+                    residue_species = ["N"]
                 else:
-                    atom = ["C", "CA", "N"][species-22]
-                x, y, z = final_padded_fragments.nodes.positions.reshape(-1, 3)[ndx]
-                atomnum = ndx - start_ndx + 1
-                lines.append(pdb_line(atom, atomnum, "UNK", atomnum, x, y, z))
+                    residue_species.append(species_names[species[ndx]])
+            if len(residue_species) > 0:
+                for i in range(residue_start_ndx, ndx):
+                        lines.append(pdb_line(
+                            residue_species[i - residue_start_ndx],
+                            i - residue_start_ndx + 1,
+                            curr_residue,
+                            residue_ct,
+                            *positions[i - start_ndx]
+                        ))
             with open(os.path.join(molecules_outputdir, outputfile), "w") as f:
                 f.write("\n".join(lines))
-            generated_molecule = pdbparser.get_structure(f"{init_molecule_name}_{i}", os.path.join(molecules_outputdir, outputfile))
+            generated_molecule = pdb.get_structure(os.path.join(molecules_outputdir, outputfile))
+        # for regular molecules it's much simpler
         else:
             generated_molecule = ase.Atoms(
                 positions=final_padded_fragments.nodes.positions.reshape(-1, 3)[start_ndx:end_ndx],
