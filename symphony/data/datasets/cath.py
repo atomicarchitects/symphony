@@ -53,7 +53,8 @@ class CATHDataset(datasets.InMemoryDataset):
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         # TODO how are we going to keep track of this
-        return np.asarray([6] * 22 + [6, 6, 7])  # representing residues by their CB atoms
+        # representing residues by their CB atoms
+        return np.asarray([6] * 22 + [6, 6, 7, 7])
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -84,7 +85,7 @@ class CATHDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def get_species() -> List[str]:
-        return CATHDataset.get_amino_acids() + ["C", "CA", "N"]
+        return CATHDataset.get_amino_acids() + ["C", "CA", "N", "X"]
 
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:
@@ -143,7 +144,7 @@ def load_cath(
     datasets.utils.extract_tar(path, root_dir)
     mols_path = os.path.join(root_dir, "dompdb")
 
-    atom_types = ["C", "CA", "N", "CB"]
+    atom_types = ["C", "CA", "N", "X", "CB"]
     amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
 
@@ -154,8 +155,8 @@ def load_cath(
         if len(spec) < 120:
             return
 
-        pos = np.asarray(pos)
-        spec = np.asarray(spec)
+        pos = np.asarray(pos)[:64]
+        spec = np.asarray(spec)[:64]
 
         # Convert to Structure.
         structure = datatypes.Structures(
@@ -178,12 +179,14 @@ def load_cath(
         positions = []
         species = []  # arbitrary ordering: atoms, then amino acids
         last_c_term = None
+        first_n = None
         # read pdb
         with open(mol_path, "r") as f:
             for line in f:
                 items = parse_pdb_format(line.strip())
                 # handle alternate configurations
                 if items["residue"][-3:] not in amino_acid_abbr:
+                    print(f"Skipping {items['residue']}")
                     positions = []
                     species = []
                     break
@@ -196,6 +199,8 @@ def load_cath(
                     )
                     if dist_from_last > 5.0:  # TODO hardcoded
                         _add_structure(positions, species, mol_file)
+                        last_c_term = None
+                        first_n = None
                         positions = []
                         species = []
                 # take out everything that isn't part of the backbone
@@ -206,11 +211,16 @@ def load_cath(
                     if items["atom_type"] == "CB":
                         species.append(amino_acid_abbr.index(items["residue"][-3:]))
                     else:
+                        if first_n is None and items["atom_type"] == "N":
+                            items["atom_type"] = "X"
+                            first_n = np.array([items["x"], items["y"], items["z"]])
                         species.append(22 + atom_types.index(items["atom_type"]))
                         if items["atom_type"] == "C":
                             last_c_term = np.array([items["x"], items["y"], items["z"]])
         # add last structure
-        if len(species): _add_structure(positions, species, mol_file)
+        if len(species):
+            _add_structure(positions, species, mol_file)
+            first_n = None
 
         
     logging.info(f"Loaded {len(all_structures)} structures.")

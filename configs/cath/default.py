@@ -64,6 +64,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.focus_and_target_species_predictor.latent_size = 128
     config.focus_and_target_species_predictor.num_layers = 3
     config.focus_and_target_species_predictor.activation = "softplus"
+    config.focus_and_target_species_predictor.k = -1
 
     config.target_position_predictor = ml_collections.ConfigDict()
     config.target_position_predictor.angular_predictor = ml_collections.ConfigDict()

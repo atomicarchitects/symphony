@@ -18,6 +18,7 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         num_layers: int,
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         num_species: int,
+        k: int = -1,
         name: Optional[str] = None,
     ):
         super().__init__(name)
@@ -26,6 +27,7 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         self.num_layers = num_layers
         self.activation = activation
         self.num_species = num_species
+        self.k = k
 
     def __call__(
         self, graphs: datatypes.Fragments, inverse_temperature: float = 1.0

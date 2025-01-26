@@ -16,9 +16,10 @@ def generate_fragments(
     nn_tolerance: Optional[float],
     max_radius: Optional[float],
     mode: str,
-    heavy_first: bool,
     max_targets_per_graph: int,
-    transition_first: bool,  # TODO currently only handles structures w 1 transition metal
+    heavy_first: bool,
+    transition_first: bool,
+    n_terminus: bool,
 ) -> Iterator[datatypes.Fragments]:
     """Generative sequence for a molecular graph.
 
@@ -29,8 +30,10 @@ def generate_fragments(
         nn_tolerance: Tolerance for the nearest neighbours.
         max_radius: The maximum distance of the focus-target
         mode: How to generate the fragments. Either "nn" or "radius".
-        heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
         max_targets_per_graph: The maximum number of targets per graph.
+        heavy_first: If true, the hydrogen atoms in the molecule will be placed last.
+        transition_first: If true, the transition metals in the molecule will be placed first.
+        n_terminus: If true, the N-terminus of the protein will be placed first.
 
     Returns:
         A sequence of fragments.
@@ -67,9 +70,10 @@ def generate_fragments(
             nn_tolerance,
             max_radius,
             mode,
-            heavy_first,
             max_targets_per_graph,
+            heavy_first,
             transition_first,
+            n_terminus,
         )
         yield frag
 
@@ -122,9 +126,10 @@ def _make_first_fragment(
     nn_tolerance,
     max_radius,
     mode,
-    heavy_first,
     max_targets_per_graph,
+    heavy_first,
     transition_first,
+    n_terminus,
 ):
     rng, k = jax.random.split(rng)
     if transition_first:
@@ -139,6 +144,8 @@ def _make_first_fragment(
     elif heavy_first and (graph.nodes.species != 0).sum() > 0:
         heavy_indices = np.argwhere(graph.nodes.species != 0).squeeze(-1)
         first_node = jax.random.choice(k, heavy_indices)
+    elif n_terminus:
+        first_node = 0
     else:
         first_node = jax.random.choice(k, np.arange(0, len(graph.nodes.positions)))
     first_node = int(first_node)

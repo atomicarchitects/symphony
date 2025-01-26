@@ -211,7 +211,7 @@ def bfs_ordering(positions, species):
     visited = np.zeros_like(species, dtype=bool)
     start_ndx = 0
     for i in range(len(species)):
-        if species[i] == 24:  # "N"
+        if species[i] == 25:  # "X" the starting N atom
             start_ndx = i
             if len(struct.receivers[struct.senders == i]) == 1:
                 break
@@ -423,7 +423,7 @@ def generate_molecules(
                 if species[ndx] < 22:  # amino acid
                     curr_residue = species_names[species[ndx]]
                     residue_species.append("CB")
-                elif species[ndx] == 24 and ndx != 0:  # N
+                elif species[ndx] >= 24 and ndx != 0:  # N
                     for k in range(residue_start_ndx, ndx):
                         lines.append(pdb_line(
                             residue_species[k - residue_start_ndx],
@@ -436,6 +436,7 @@ def generate_molecules(
                     residue_ct += 1
                     residue_species = ["N"]
                 else:
+                    if species[ndx] == 25: species = species.at[ndx].set(24)
                     residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
                 for k in range(residue_start_ndx, n_nodes[i]):

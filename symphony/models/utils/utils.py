@@ -29,6 +29,7 @@ def segment_softmax_2D_with_stop(
     stop_logits: jnp.ndarray,
     segment_ids: jnp.ndarray,
     num_segments: int,
+    k: int = 1,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Returns the species probabilities and stop probabilities with segment softmax over 2D arrays of species logits."""
     # Subtract the max to avoid numerical issues.

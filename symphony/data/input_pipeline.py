@@ -53,6 +53,7 @@ def create_fragments_dataset(
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
     transition_first: Optional[bool] = False,
+    n_terminus: Optional[bool] = False,
     fragment_number: Optional[int] = -1,
 ) -> Iterator[datatypes.Fragments]:
     """Creates an iterator of fragments from a sequence of structures."""
@@ -92,6 +93,8 @@ def create_fragments_dataset(
                             structure, radial_cutoff=radial_cutoff
                         )
 
+                    # print(structure)
+                    # jax.debug.print("structure: {structure}", structure=structure)
                     frag_generator = fragments.generate_fragments(
                         rng=structure_rng,
                         graph=structure,
@@ -99,9 +102,10 @@ def create_fragments_dataset(
                         nn_tolerance=nn_tolerance,
                         max_radius=max_radius,
                         mode=fragment_logic,
-                        heavy_first=heavy_first,
                         max_targets_per_graph=max_targets_per_graph,
+                        heavy_first=heavy_first,
                         transition_first=transition_first,
+                        n_terminus=n_terminus,
                     )
 
                     if fragment_number == -1:
@@ -231,6 +235,7 @@ def get_datasets(
             max_num_residues=config.get("max_num_residues", None),
             transition_first=config.transition_first,
             fragment_number=config.get("fragment_number", -1),
+            n_terminus=config.dataset=="cath",
         )
         for split in ["train", "val", "test"]
     }
@@ -259,6 +264,7 @@ def ase_atoms_to_jraph_graph(
 
     # Get the species indices
     species = np.searchsorted(atomic_numbers, atoms.numbers)
+    species = np.ones_like(atoms.numbers) * (len(atomic_numbers) - 1)
 
     return jraph.GraphsTuple(
         nodes=datatypes.NodesInfo(
