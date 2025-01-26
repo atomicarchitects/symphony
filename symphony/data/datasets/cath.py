@@ -155,8 +155,8 @@ def load_cath(
         if len(spec) < 120:
             return
 
-        pos = np.asarray(pos)[:64]
-        spec = np.asarray(spec)[:64]
+        pos = np.asarray(pos)
+        spec = np.asarray(spec)
 
         # Convert to Structure.
         structure = datatypes.Structures(

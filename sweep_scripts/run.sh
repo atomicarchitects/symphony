@@ -17,14 +17,14 @@ cuda=1
 dataset=cath
 embedder=nequip
 # train=1000
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan25_nfirst/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan26/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir \
 #     --num_seeds=20 \
 #     --num_seeds_per_chunk=1 \
 #     --dataset=$dataset \
-#     --step=60000 \
+#     --step=100000 \
 #     --init="N"
 
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
@@ -43,7 +43,7 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config.generation.posebusters=False \
     --config.num_train_steps=1000000 \
     --config.position_noise_std=0.1 \
-    --config.max_num_residues=16 \
+    --config.max_num_residues=32 \
     --config.generation.init_molecules="N" \
     --config.target_distance_noise_std=0.1 \
     --config.max_targets_per_graph=$max_targets_per_graph \
