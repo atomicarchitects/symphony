@@ -50,8 +50,18 @@ class CATHDataset(datasets.InMemoryDataset):
 
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
-        # TODO how are we going to keep track of this
-        return np.asarray([7, 6, 6] + [6] * 22)  # representing residues by their CB atoms
+        return np.asarray([6, 7])  # representing residues by their CB atoms
+
+    @staticmethod
+    def species_to_atomic_numbers() -> Dict[int, int]:
+        mapping = {}
+        # amino acids
+        for i in range(22):
+            mapping[i] = 6
+        mapping[22] = 6  # C
+        mapping[23] = 6  # CA
+        mapping[24] = 7  # N
+        return mapping
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -149,7 +159,7 @@ def load_cath(
     datasets.utils.extract_tar(path, root_dir)
     mols_path = os.path.join(root_dir, "dompdb")
 
-    atom_types = ["N", "CA", "C", "CB"]
+    atom_types = ["C", "CA", "N", "CB"]
     amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
 

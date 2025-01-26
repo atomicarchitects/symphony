@@ -238,22 +238,22 @@ def generate_molecules(
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 350
-        atomic_numbers = qm9.QM9Dataset.get_atomic_numbers()
+        species_to_atomic_numbers = qm9.QM9Dataset.species_to_atomic_numbers()
     elif dataset == "tmqm":
         max_num_atoms = 60
         avg_nodes_per_graph = 50
         avg_edges_per_graph = 500
-        atomic_numbers = tmqm.TMQMDataset.get_atomic_numbers()
+        species_to_atomic_numbers = tmqm.TMQMDataset.species_to_atomic_numbers()
     elif dataset == "platonic_solids":
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 175
-        atomic_numbers = np.array([1])
+        species_to_atomic_numbers = {0: 1}
     elif dataset == "cath":
         max_num_atoms = 512
         avg_nodes_per_graph = 512
         avg_edges_per_graph = 512 * 5
-        atomic_numbers = cath.CATHDataset.get_atomic_numbers()
+        species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -272,7 +272,7 @@ def generate_molecules(
         init_molecules = [init_molecule] * num_seeds
         init_molecules = [
             input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, atomic_numbers, radial_cutoff,
+                init_molecule, species_to_atomic_numbers, radial_cutoff,
             )
         ] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
@@ -283,7 +283,7 @@ def generate_molecules(
         ]
         init_molecules = [
             input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, atomic_numbers, radial_cutoff,
+                init_molecule, species_to_atomic_numbers, radial_cutoff,
             )
             for init_molecule in init_molecules
         ]
@@ -378,10 +378,9 @@ def generate_molecules(
         num_valid_nodes = final_padded_fragment.n_node[0]
         generated_molecule = ase.Atoms(
             positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
-            numbers=models.get_atomic_numbers(
-                final_padded_fragment.nodes.species[:num_valid_nodes],
-                atomic_numbers
-            ),
+            numbers=jax.vmap(
+                species_to_atomic_numbers.get
+            )(final_padded_fragment.nodes.species[:num_valid_nodes]),
         )
         if stop:
             logging_fn("Generated %s", generated_molecule.get_chemical_formula())
