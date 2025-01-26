@@ -13,7 +13,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import ase
-from Bio import PDB
+import biotite.structure as struc
+from biotite.structure.io import pdb
 import tqdm
 from rdkit import RDLogger
 import rdkit.Chem as Chem
@@ -505,7 +506,7 @@ def get_posebusters_results(
     )
 
 
-def compute_backbone_validity(mol: PDB.Structure) -> bool:
+def compute_backbone_validity(mol: struc.AtomArray) -> bool:
     # ok the silliest easiest check is to look for -N-C-C- repeat
     atoms = [a.get_name() for a in mol.get_atoms()]
     # print(f"atoms: {atoms}")
@@ -517,8 +518,21 @@ def compute_backbone_validity(mol: PDB.Structure) -> bool:
     return n_count == c_count and c_count == ca_count
 
 
-def compute_backbone_validity_percentage(molecules: Sequence[PDB.Structure]) -> float:
+def compute_backbone_validity_percentage(molecules: Sequence[struc.AtomArray]) -> float:
     return sum([compute_backbone_validity(mol) for mol in molecules]) / len(molecules)
+
+
+# dihedral angles phi, psi, omega can be computed as struc.dihedral_backbone(structure)
+
+
+def compute_secondary_structures(mol: struc.AtomArray) -> np.ndarray:
+    ss = []
+    for model in mol:
+        for chain in model:
+            polypeptides = PDB.PPBuilder().build_peptides(chain)
+            for polypeptide in polypeptides:
+                ss.append(polypeptide.get_secondary_structure())
+    return np.asarray(ss)
 
 
 def get_all_edm_analyses_results(
