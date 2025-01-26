@@ -24,7 +24,7 @@ import optax
 import analyses.analysis as analysis
 from symphony import datatypes, models
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, tmqm
+from symphony.data.datasets import qm9, tmqm, cath
 
 FLAGS = flags.FLAGS
 
@@ -249,6 +249,11 @@ def generate_molecules(
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 175
         atomic_numbers = np.array([1])
+    elif dataset == "cath":
+        max_num_atoms = 512
+        avg_nodes_per_graph = 512
+        avg_edges_per_graph = 512 * 5
+        atomic_numbers = cath.CATHDataset.get_atomic_numbers()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -359,72 +364,11 @@ def generate_molecules(
     compilation_time = time.time() - start_time
     logging_fn("Compilation time: %.2f s", compilation_time)
 
-    # # Generate molecules (and intermediate steps, if visualizing).
-    # if visualize:
-    #     padded_fragments, preds = chunk_and_apply(init_fragments, rngs)
-    # else:
     final_padded_fragments, stops = chunk_and_apply(init_fragments, rngs)
 
     molecule_list = []
     for i, seed in tqdm.tqdm(enumerate(seeds), desc="Visualizing molecules"):
-        init_fragment = jax.tree_util.tree_map(lambda x: x[i], init_fragments)
         init_molecule_name = init_molecule_names[i]
-
-        # if visualize:
-        #     # Get the padded fragment and predictions for this seed.
-        #     padded_fragments_for_seed = jax.tree_util.tree_map(
-        #         lambda x: x[i], padded_fragments
-        #     )
-        #     preds_for_seed = jax.tree_util.tree_map(lambda x: x[i], preds)
-
-        #     figs = []
-        #     for step in range(max_num_atoms):
-        #         if step == 0:
-        #             padded_fragment = init_fragment
-        #         else:
-        #             padded_fragment = jax.tree_util.tree_map(
-        #                 lambda x: x[step - 1], padded_fragments_for_seed
-        #             )
-        #         pred = jax.tree_util.tree_map(lambda x: x[step], preds_for_seed)
-
-        #         # Save visualization of generation process.
-        #         fragment = jraph.unpad_with_graphs(padded_fragment)
-        #         pred = jraph.unpad_with_graphs(pred)
-        #         fragment = fragment._replace(
-        #             globals=jax.tree_util.tree_map(
-        #                 lambda x: np.squeeze(x, axis=0), fragment.globals
-        #             )
-        #         )
-        #         pred = pred._replace(
-        #             globals=jax.tree_util.tree_map(lambda x: np.squeeze(x, axis=0), pred.globals)
-        #         )
-        #         fig = analysis.visualize_predictions(pred, fragment)
-        #         figs.append(fig)
-
-        #         # This may be the final padded fragment.
-        #         final_padded_fragment = padded_fragment
-
-        #         # Check if we should stop.
-        #         stop = pred.globals.stop
-        #         if stop:
-        #             break
-
-        #     # Save the visualizations of the generation process.
-        #     for index, fig in enumerate(figs):
-        #         # Update the title.
-        #         fig.update_layout(
-        #             title=f"Predictions for Seed {seed}",
-        #             title_x=0.5,
-        #         )
-
-        #         # Save to file.
-        #         outputfile = os.path.join(
-        #             visualizations_dir,
-        #             f"seed_{seed}_fragments_{index}.html",
-        #         )
-        #         fig.write_html(outputfile, include_plotlyjs="cdn")
-
-        # else:
         # We already have the final padded fragment.
         final_padded_fragment = jax.tree_util.tree_map(
             lambda x: x[i], final_padded_fragments
