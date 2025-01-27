@@ -13,9 +13,9 @@ def get_config() -> ml_collections.ConfigDict:
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
     config.use_edm_splits = False
-    config.num_train_molecules = 100000
-    config.num_val_molecules = 10000
-    config.num_test_molecules = 13083
+    config.num_train_molecules = 16793
+    config.num_val_molecules = 2100
+    config.num_test_molecules = 2099
     config.num_frag_seeds = 4
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True

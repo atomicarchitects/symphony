@@ -10,6 +10,11 @@ class NodesInfo(NamedTuple):
     species: jnp.ndarray  # [n_node] int array
 
 
+class GlobalsInfo(NamedTuple):
+    num_residues: jnp.ndarray  # [n_graph] int array
+    residue_starts: jnp.ndarray  # [n_graph, n_node] int array
+
+
 class FragmentsGlobals(NamedTuple):
     target_positions_mask: jnp.ndarray  # [n_graph, n_targets] bool array
     target_positions: jnp.ndarray  # [n_graph, n_targets, 3] float array (only for training)

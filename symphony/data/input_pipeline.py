@@ -63,7 +63,6 @@ def create_fragments_dataset(
     def fragment_generator(rng: chex.PRNGKey):
         """Generates fragments for a split."""
         # Loop indefinitely.
-        if max_num_residues: max_num_atoms = max_num_residues * 4
         while True:
             for seed in range(num_seeds):
                 seed_rng = jax.random.fold_in(rng, seed)
@@ -74,16 +73,18 @@ def create_fragments_dataset(
                     else:
                         structure_rng = jax.random.fold_in(seed_rng, index)
                     
-                    if max_num_residues and structure.n_node > max_num_atoms:
+                    if max_num_residues and structure.globals.num_residues > max_num_residues:
                         _, ndx_rng = jax.random.split(structure_rng)
-                        start_ndx = jax.random.randint(ndx_rng, (1,), 0, structure.n_node - max_num_atoms)[0]
-                        end_ndx = start_ndx + max_num_atoms
+                        start_residue = jax.random.randint(ndx_rng, (1,), 0, structure.globals.num_residues - max_num_residues)[0]
+                        end_residue = start_residue + max_num_residues
+                        start_ndx = structure.globals.residue_starts[start_residue]
+                        end_ndx = structure.globals.residue_starts[end_residue]
                         structure = structure._replace(
                             nodes=datatypes.NodesInfo(
                                 structure.nodes.positions[start_ndx:end_ndx],
                                 structure.nodes.species[start_ndx:end_ndx],
                             ),
-                            n_node=np.array([max_num_atoms]),
+                            n_node=np.array([end_ndx - start_ndx]),
                         )
 
                     if infer_edges_with_radial_cutoff:

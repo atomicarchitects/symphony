@@ -4,8 +4,9 @@ from absl import logging
 import os
 import numpy as np
 import ase
-import tqdm
-
+import biotite.structure as struc
+import biotite.structure.io.pdb as pdb
+import warnings
 
 from symphony.data import datasets
 from symphony import datatypes
@@ -55,6 +56,19 @@ class CATHDataset(datasets.InMemoryDataset):
         # TODO how are we going to keep track of this
         # representing residues by their CB atoms
         return np.asarray([6] * 22 + [6, 6, 7, 7])
+    
+    @staticmethod
+    def atoms_to_species() -> Dict[str, int]:
+        mapping = {}
+        mapping["C"] = 0
+        mapping["CA"] = 1
+        amino_acid_abbr = CATHDataset.get_amino_acids()
+        for i, aa in enumerate(amino_acid_abbr):
+            mapping[aa] = i + 2
+        mapping["N"] = 24
+        mapping["X"] = 25
+        return mapping
+
 
     @staticmethod
     def get_amino_acids() -> List[str]:
@@ -89,7 +103,9 @@ class CATHDataset(datasets.InMemoryDataset):
 
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:
-            self.all_structures = load_cath(self.root_dir)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.all_structures = load_cath(self.root_dir)
 
         return self.all_structures
 
@@ -113,9 +129,12 @@ class CATHDataset(datasets.InMemoryDataset):
             ),
             "test": np.arange(
                 self.num_train_molecules + self.num_val_molecules,
-                self.num_train_molecules
-                + self.num_val_molecules
-                + self.num_test_molecules,
+                min(
+                    len(self.all_structures),
+                    (self.num_train_molecules
+                        + self.num_val_molecules
+                        + self.num_test_molecules),
+                )
             ),
         }
         splits = {k: indices[v] for k, v in splits.items()}
@@ -144,11 +163,9 @@ def load_cath(
     datasets.utils.extract_tar(path, root_dir)
     mols_path = os.path.join(root_dir, "dompdb")
 
-    atom_types = ["C", "CA", "N", "X", "CB"]
-    amino_acid_abbr = CATHDataset.get_amino_acids()
     all_structures = []
 
-    def _add_structure(pos, spec, molfile):
+    def _add_structure(pos, spec, molfile, residue_starts):
         assert len(pos) == len(spec), f"Length mismatch: {len(pos)} vs {len(spec)} in {molfile}"
         # foldingdiff does this
         # (also splits anything >128 residues into random 128-residue chunks)
@@ -167,7 +184,10 @@ def load_cath(
             edges=None,
             receivers=None,
             senders=None,
-            globals=None,
+            globals=datatypes.GlobalsInfo(
+                num_residues=np.asarray([len(residue_starts)]),
+                residue_starts=residue_starts,
+            ),
             n_node=np.asarray([len(spec)]),
             n_edge=None,
         )
@@ -181,46 +201,32 @@ def load_cath(
         last_c_term = None
         first_n = None
         # read pdb
-        with open(mol_path, "r") as f:
-            for line in f:
-                items = parse_pdb_format(line.strip())
-                # handle alternate configurations
-                if items["residue"][-3:] not in amino_acid_abbr:
-                    print(f"Skipping {items['residue']}")
-                    positions = []
-                    species = []
-                    break
-                if len(items["residue"]) == 4 and items["residue"][0] == "B":
-                    continue  # TODO executive decision on my end to choose btwn alternatives
-                # check if this is a different fragment
-                if last_c_term is not None and items["atom_type"] == "N":
-                    dist_from_last = np.linalg.norm(
-                        last_c_term - np.array([items["x"], items["y"], items["z"]])
-                    )
-                    if dist_from_last > 5.0:  # TODO hardcoded
-                        _add_structure(positions, species, mol_file)
-                        last_c_term = None
-                        first_n = None
-                        positions = []
-                        species = []
-                # take out everything that isn't part of the backbone
-                if items["atom_type"] in atom_types:
-                    positions.append([items["x"], items["y"], items["z"]])
-                    # encode residues as "atoms" located at their beta carbon
-                    # GLY just doesn't get anything i guess (TODO ???)
-                    if items["atom_type"] == "CB":
-                        species.append(amino_acid_abbr.index(items["residue"][-3:]))
-                    else:
-                        if first_n is None and items["atom_type"] == "N":
-                            items["atom_type"] = "X"
-                            first_n = np.array([items["x"], items["y"], items["z"]])
-                        species.append(22 + atom_types.index(items["atom_type"]))
-                        if items["atom_type"] == "C":
-                            last_c_term = np.array([items["x"], items["y"], items["z"]])
-        # add last structure
-        if len(species):
-            _add_structure(positions, species, mol_file)
-            first_n = None
+        f = pdb.PDBFile.read(mol_path)
+        structure = pdb.get_structure(f)
+        backbone = structure.get_array(0)
+        mask = np.isin(backbone.atom_name, ["CA", "N", "C", "CB"])
+        backbone = backbone[mask]
+        fragment_starts = np.concatenate([
+            np.array([0]),
+            # distance between CB and N is ~2.4 angstroms + some wiggle room
+            struc.check_backbone_continuity(backbone, max_len=2.6),
+            np.array([len(backbone)]),
+        ])
+        for i in range(len(fragment_starts) - 1):
+            fragment = backbone[fragment_starts[i]:fragment_starts[i + 1]]
+            try:
+                first_n = np.argwhere(fragment.atom_name == "N")[0][0]
+                positions = fragment.coord
+                species = fragment.atom_name
+                species[first_n] = "X"
+                # set CB to corresponding residue name
+                cb_atoms = np.argwhere(fragment.atom_name == "CB").flatten()
+                species[cb_atoms] = fragment.res_name[cb_atoms]
+                species = np.vectorize(CATHDataset.atoms_to_species().get)(species)
+                residue_starts = struc.get_residue_starts(fragment)
+                _add_structure(positions, species, mol_file, residue_starts)
+            except:
+                continue
 
         
     logging.info(f"Loaded {len(all_structures)} structures.")
