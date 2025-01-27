@@ -69,6 +69,16 @@ class QM9Dataset(datasets.InMemoryDataset):
             4: 9,
         }
 
+    @staticmethod
+    def atoms_to_species() -> Dict[str, int]:
+        return {
+            "H": 0,
+            "C": 1,
+            "N": 2,
+            "O": 3,
+            "F": 4,
+        }
+
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:
             self.all_structures = load_qm9(self.root_dir, self.check_molecule_sanity)
