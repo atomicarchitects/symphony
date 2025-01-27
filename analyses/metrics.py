@@ -596,12 +596,8 @@ def get_ramachandran_plots(
 def count_secondary_structures(structure: struc.AtomArray) -> Tuple[int, int]:
     """Count the secondary structures (# alpha, # beta) in the given pdb file.
     Adapted from foldingdiff: https://github.com/microsoft/foldingdiff/tree/main"""
-    chain_ids = np.unique(structure.chain_id)
-    assert len(chain_ids) == 1
-    chain_id = chain_ids[0]
-
     # a = alpha helix, b = beta sheet, c = coil
-    ss = struc.annotate_sse(structure, chain_id)
+    ss = struc.annotate_sse(structure)
     # https://stackoverflow.com/questions/6352425/whats-the-most-pythonic-way-to-identify-consecutive-duplicates-in-a-list
     ss_grouped = [(k, sum(1 for _ in g)) for k, g in groupby(ss)]
     ss_counts = Counter([chain for chain, _ in ss_grouped])
@@ -609,6 +605,17 @@ def count_secondary_structures(structure: struc.AtomArray) -> Tuple[int, int]:
     num_alpha = ss_counts["a"] if "a" in ss_counts else 0
     num_beta = ss_counts["b"] if "b" in ss_counts else 0
 
+    return num_alpha, num_beta
+
+
+def count_secondary_structures_multi(structures: List[struc.AtomArrayStack]) -> Tuple[List[int], List[int]]:
+    """Count the secondary structures (# alpha, # beta) in the given protein structures."""
+    num_alpha = []
+    num_beta = []
+    for structure in structures:
+        a, b = count_secondary_structures(structure.get_array(0))
+        num_alpha.append(a)
+        num_beta.append(b)
     return num_alpha, num_beta
 
 

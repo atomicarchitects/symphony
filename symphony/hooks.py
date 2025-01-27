@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Sequence, Callable, Dict, Any, Union
+from typing import Sequence, Callable, Dict, Any, Union, Optional
 import os
 import time
 import tempfile
@@ -12,6 +12,7 @@ import flax.struct
 import ase
 from biotite import structure as struc
 import numpy as np
+from plotly import express as px
 from rdkit import Chem
 import wandb
 from clu import metric_writers, checkpoint
@@ -29,10 +30,10 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 
 
 def plot_in_wandb(
-    molecules: Sequence[Union[Chem.Mol, struc.AtomArrayStack]],
     step: int,
     plot_fn: Callable,
     plot_name: str,
+    molecules: Optional[Sequence[Union[Chem.Mol, struc.AtomArrayStack]]] = None,
     num_to_plot: int = 8,
     **plot_kwargs,
 ):
@@ -42,11 +43,13 @@ def plot_in_wandb(
         logging.info("No Weights & Biases run found. Skipping plotting.")
         return
 
-    # Limit the number of molecules to plot.
-    molecules = molecules[:num_to_plot]
-
-    # Plot and save the view to a temporary HTML file.
-    view = plot_fn(molecules, **plot_kwargs)
+    if molecules:
+        # Limit the number of molecules to plot.
+        molecules = molecules[:num_to_plot]
+        # Plot and save the view to a temporary HTML file.
+        view = plot_fn(molecules, **plot_kwargs)
+    else:
+        view = plot_fn(**plot_kwargs)
     temp_html_path = os.path.join(tempfile.gettempdir(), f"{wandb.run.name}.html")
     view.write_html(temp_html_path)
 
@@ -88,7 +91,7 @@ class GenerateMoleculesHook:
             f"step={state.get_step()}",
         )
 
-        molecules_ase = generate_molecules.generate_molecules(
+        generated_molecules = generate_molecules.generate_molecules(
             apply_fn=state.eval_apply_fn,
             params=flax.jax_utils.unreplicate(state.params),
             molecules_outputdir=molecules_outputdir,
@@ -105,7 +108,7 @@ class GenerateMoleculesHook:
         )
         logging.info(
             "Generated and saved %d molecules at %s",
-            len(molecules_ase),
+            len(generated_molecules),
             molecules_outputdir,
         )
 
@@ -113,7 +116,7 @@ class GenerateMoleculesHook:
         # replace residues (0) with carbon (6)
         if self.dataset == "cath":
             molecules = []
-            for mol in molecules_ase:
+            for mol in generated_molecules:
                 mol = mol.get_array(0)
                 names = mol.atom_name
                 names_lengths = np.vectorize(len)(names)
@@ -129,28 +132,43 @@ class GenerateMoleculesHook:
             molecules = metrics.ase_to_rdkit_molecules(
                 [ase.Atoms(
                     positions=mol.positions, numbers=mol.numbers,
-                ) for mol in molecules_ase]
+                ) for mol in generated_molecules]
             )
 
         # Plot molecules.
         plot_in_wandb(
-            molecules,
             state.get_step(),
             graphics.plot_molecules_with_py3Dmol,
             "samples",
+            molecules=molecules,
         )
 
         # Compute metrics.
         logging.info("Computing metrics...")
         metrics_agg = {}
         if self.dataset == "cath":
-            validity = metrics.compute_backbone_validity(molecules_ase)
-            # uniqueness = metrics.compute_backbone_uniqueness(molecules_ase)
+            validity = metrics.compute_backbone_validity(generated_molecules)
+            uniqueness = metrics.compute_backbone_uniqueness(generated_molecules)
+            num_alpha, num_beta = metrics.count_secondary_structures_multi(generated_molecules)
+            plot_in_wandb(
+                state.get_step(),
+                px.histogram,
+                "alpha_helices",
+                x=num_alpha,
+                nbins=8,
+            )
+            plot_in_wandb(
+                state.get_step(),
+                px.histogram,
+                "beta_sheets",
+                x=num_beta,
+                nbins=8,
+            )
             # plot_in_wandb(
-            #     molecules_ase,
             #     state.get_step(),
             #     metrics.get_ramachandran_plots,
             #     "ramachandran",
+            #     molecules=generated_molecules,
             # )
         else:
             validity = metrics.compute_validity(molecules)
