@@ -18,6 +18,10 @@ class InMemoryDataset(abc.ABC):
     @abc.abstractmethod
     def species_to_atomic_numbers(self) -> Dict[int, int]:
         """Returns a dictionary mapping species indices to atomic numbers."""
+    
+    @abc.abstractmethod
+    def atoms_to_species(self) -> Dict[str, int]:
+        """Returns a dictionary mapping atom symbols to species indices."""
 
     @abc.abstractmethod
     def structures(self) -> Iterable[datatypes.Structures]:

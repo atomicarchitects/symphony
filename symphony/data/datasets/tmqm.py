@@ -60,6 +60,13 @@ class TMQMDataset(datasets.InMemoryDataset):
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.arange(1, 81)
+
+    @staticmethod
+    def atoms_to_species() -> Dict[str, int]:
+        ptable = PeriodicTable()
+        return {
+            ptable.get_symbol(i): i-1 for i in range(1, 81)
+        }
     
     @staticmethod
     def species_to_atomic_numbers() -> Dict[int, int]:

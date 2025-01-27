@@ -58,13 +58,22 @@ class CATHDataset(datasets.InMemoryDataset):
     @staticmethod
     def species_to_atomic_numbers() -> Dict[int, int]:
         mapping = {}
-        # amino acids
-        for i in range(22):
+        # C first, then CA, then amino acids
+        for i in range(24):
             mapping[i] = 6
-        mapping[22] = 6  # C
-        mapping[23] = 6  # CA
         mapping[24] = 7  # N
         mapping[25] = 7  # X
+        return mapping
+    
+    @staticmethod
+    def atoms_to_species() -> Dict[str, int]:
+        mapping = {}
+        mapping["C"] = 0
+        mapping["CA"] = 1
+        amino_acid_abbr = CATHDataset.get_amino_acids()
+        for i, aa in enumerate(amino_acid_abbr):
+            mapping[aa] = i + 2
+        mapping["N"] = 24
         return mapping
 
     @staticmethod
