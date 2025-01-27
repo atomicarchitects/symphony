@@ -306,7 +306,7 @@ def train_and_evaluate(
     # Create the training state.
     state = train_state.TrainState.create(
         apply_fn=jax.jit(net.apply),
-        eval_apply_fn=jax.jit(eval_net.apply),
+        eval_apply_fn=jax.jit(eval_net.apply, device=jax.devices()[-1]),
         params=params,
         tx=tx,
         best_params=params,
