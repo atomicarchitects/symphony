@@ -612,6 +612,15 @@ def count_secondary_structures(structure: struc.AtomArray) -> Tuple[int, int]:
     return num_alpha, num_beta
 
 
+def compute_tm_score(struct1: struc.AtomArray, struct2: struc.AtomArray) -> float:
+    """Compute the TM score between two structures."""
+    coords1 = struct1.get_coord()
+    coords2 = struct2.get_coord()
+    seq1 = struc.to_sequence(struct1)[0][0]
+    seq2 = struc.to_sequence(struct2)[0][0]
+    return tmtools.tm_score(coords1, coords2, str(seq1), str(seq2))
+
+
 def get_all_edm_analyses_results(
     molecules_basedir: str, extract_hyperparams_from_path: bool, read_as_sdf: bool
 ) -> pd.DataFrame:
