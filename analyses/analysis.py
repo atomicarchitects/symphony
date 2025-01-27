@@ -10,6 +10,8 @@ import os
 import haiku as hk
 import ase
 import ase.build
+import biotite.structure as struc
+import biotite.structure.io.pdb as pdb
 import optax
 import jax
 import jax.numpy as jnp
@@ -318,6 +320,21 @@ def load_from_workdir(
         best_state_in_eval_mode,
         cast_keys_as_int(data["metrics_for_best_params"]),
     )
+
+
+def construct_backbone(backbone_file: str) -> Tuple[struc.AtomArray, str]:
+    """Returns a backbone from the given input string.
+
+    The input is interpreted either as a file with atomic numbers and coordinates for biotite.structure.io.pdb.read(),
+    or a sequence of amino acids for biotite.structure.
+    """
+    # If we believe the string is a file, try to read it.
+    if os.path.exists(backbone_file):
+        filename = os.path.basename(backbone_file).split(".")[0]
+        structure = pdb.get_structure(pdb.PDBFile.read(backbone_file))
+        return structure.get_array(0), filename
+    else:
+        raise ValueError("Backbone string is not a valid file.")
 
 
 def construct_molecule(molecule_str: str) -> Tuple[ase.Atoms, str]:

@@ -12,6 +12,7 @@ import ase.data
 #from ase.db import connect
 import ase.io
 import ase.visualize
+import biotite.structure as struc
 from biotite.structure.io import pdb
 import jax
 import jax.numpy as jnp
@@ -260,21 +261,25 @@ def generate_molecules(
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 350
         species_to_atomic_numbers = qm9.QM9Dataset.species_to_atomic_numbers()
+        atoms_to_species = qm9.QM9Dataset.atoms_to_species()
     elif dataset == "tmqm":
         max_num_atoms = 60
         avg_nodes_per_graph = 50
         avg_edges_per_graph = 500
         species_to_atomic_numbers = tmqm.TMQMDataset.species_to_atomic_numbers()
+        atoms_to_species = tmqm.TMQMDataset.atoms_to_species()
     elif dataset == "platonic_solids":
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 175
         species_to_atomic_numbers = {0: 1}
+        atoms_to_species = {1: 0}
     elif dataset == "cath":
         max_num_atoms = 512
         avg_nodes_per_graph = 512
         avg_edges_per_graph = 512 * 5
         species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers()
+        atoms_to_species = cath.CATHDataset.atoms_to_species()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -286,14 +291,26 @@ def generate_molecules(
 
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
-        init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
+        if dataset == "cath":
+            init_molecule, init_molecule_name = analysis.construct_backbone(init_molecules)
+            init_positions = init_molecule.coord
+            init_atomic_symbols = init_molecule.atom_name
+            # replace CB with their respective amino acids
+            cb_mask = init_atomic_symbols == "CB"
+            n_atoms = len(init_atomic_symbols)
+            cb_indices = np.arange(n_atoms)[cb_mask]
+            cb_residues = struc.get_residue_positions(init_molecule, cb_indices)
+            init_atomic_symbols[cb_mask] = init_molecule.res_name[cb_residues]
+        else:
+            init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
+            init_positions = init_molecule.positions
+            init_atomic_symbols = init_molecule.symbols
         logging_fn(
-            f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
+            f"Initial molecule: {init_molecule_name} with atoms {init_atomic_symbols} and positions {init_positions}"
         )
-        init_molecules = [init_molecule] * num_seeds
         init_molecules = [
-            input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, species_to_atomic_numbers, radial_cutoff,
+            input_pipeline.to_jraph_graph(
+                init_positions, init_atomic_symbols, atoms_to_species, radial_cutoff,
             )
         ] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
@@ -303,8 +320,8 @@ def generate_molecules(
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
         init_molecules = [
-            input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, species_to_atomic_numbers, radial_cutoff,
+            input_pipeline.to_jraph_graph(
+                init_molecule.positions, init_molecule.symbols, atoms_to_species, radial_cutoff,
             )
             for init_molecule in init_molecules
         ]
@@ -436,7 +453,6 @@ def generate_molecules(
                     residue_ct += 1
                     residue_species = ["N"]
                 else:
-                    if species[ndx] == 25: species = species.at[ndx].set(24)
                     residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
                 for k in range(residue_start_ndx, n_nodes[i]):

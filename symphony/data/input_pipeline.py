@@ -255,26 +255,23 @@ def get_datasets(
     }
 
 
-def ase_atoms_to_jraph_graph(
-    atoms: ase.Atoms, species_to_atomic_numbers: Dict[int, int], radial_cutoff: float
+def to_jraph_graph(
+    positions: np.ndarray, atom_symbols: np.ndarray, atoms_to_species: Dict[int, int], radial_cutoff: float
 ) -> jraph.GraphsTuple:
     # Create edges
     receivers, senders = matscipy.neighbours.neighbour_list(
-        quantities="ij", positions=atoms.positions, cutoff=radial_cutoff, cell=np.eye(3)
+        quantities="ij", positions=positions, cutoff=radial_cutoff, cell=np.eye(3)
     )
 
     # Get the species indices
-    species = np.array([species_to_atomic_numbers[atom.number] for atom in atoms])
+    species = np.vectorize(atoms_to_species.get)(atom_symbols)
 
     return jraph.GraphsTuple(
-        nodes=datatypes.NodesInfo(
-            np.asarray(atoms.positions),
-            np.asarray(species)
-        ),
-        edges=np.ones(len(senders)),
+        nodes=datatypes.NodesInfo(jnp.asarray(positions), jnp.asarray(species)),
+        edges=jnp.ones(len(senders)),
         globals=None,
-        senders=np.asarray(senders),
-        receivers=np.asarray(receivers),
-        n_node=np.array([len(atoms)]),
-        n_edge=np.array([len(senders)]),
+        senders=jnp.asarray(senders),
+        receivers=jnp.asarray(receivers),
+        n_node=jnp.array([len(atom_symbols)]),
+        n_edge=jnp.array([len(senders)]),
     )
