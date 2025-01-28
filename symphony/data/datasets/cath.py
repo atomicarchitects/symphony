@@ -68,12 +68,13 @@ class CATHDataset(datasets.InMemoryDataset):
     @staticmethod
     def atoms_to_species() -> Dict[str, int]:
         mapping = {}
-        mapping["C"] = 0
-        mapping["CA"] = 1
         amino_acid_abbr = CATHDataset.get_amino_acids()
         for i, aa in enumerate(amino_acid_abbr):
-            mapping[aa] = i + 2
+            mapping[aa] = i
+        mapping["C"] = 22
+        mapping["CA"] = 23
         mapping["N"] = 24
+        mapping["X"] = 25
         return mapping
 
     @staticmethod
@@ -152,16 +153,6 @@ def load_cath(
 ) -> List[ase.Atoms]:
     """Load the CATH dataset."""
 
-    def parse_pdb_format(line):
-        # return type, amino acid, coordinates
-        return {
-            "atom_type": line[13:16].strip(),
-            "residue": line[16:20].strip(),
-            "x": float(line[31:38].strip()),
-            "y": float(line[38:46].strip()),
-            "z": float(line[46:55].strip()),
-        }
-
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
 
@@ -202,10 +193,6 @@ def load_cath(
     logging.info("Loading structures...")
     for mol_file in os.listdir(mols_path):
         mol_path = os.path.join(mols_path, mol_file)
-        positions = []
-        species = []  # arbitrary ordering: atoms, then amino acids
-        last_c_term = None
-        first_n = None
         # read pdb
         f = pdb.PDBFile.read(mol_path)
         structure = pdb.get_structure(f)
@@ -228,7 +215,7 @@ def load_cath(
                 # set CB to corresponding residue name
                 cb_atoms = np.argwhere(fragment.atom_name == "CB").flatten()
                 elements[cb_atoms] = fragment.res_name[cb_atoms]
-                species = np.vectorize(CATHDataset.atoms_to_species().get)(species)
+                species = np.vectorize(CATHDataset.atoms_to_species().get)(elements)
                 residue_starts = struc.get_residue_starts(fragment)
                 _add_structure(positions, species, mol_file, residue_starts)
             except:

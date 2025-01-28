@@ -471,10 +471,11 @@ def generate_molecules(
         else:
             dict_species = jnp.array(list(species_to_atomic_numbers.keys()))
             dict_numbers = jnp.array(list(species_to_atomic_numbers.values()))
+            jit_friendly_get_number = lambda x: dict_numbers[jnp.where(dict_species == x, size=1)[0]]
             generated_molecule = ase.Atoms(
                 positions=positions,
                 numbers=jax.vmap(
-                    lambda x: dict_numbers[jnp.where(dict_species == x, size=1)[0]]
+                    jit_friendly_get_number
                 )(species).flatten(),
             )
             ase.io.write(os.path.join(molecules_outputdir, outputfile), generated_molecule)
