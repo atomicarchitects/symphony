@@ -599,13 +599,14 @@ def count_secondary_structures(structure: struc.AtomArray) -> Tuple[int, int]:
     # a = alpha helix, b = beta sheet, c = coil
     ss = struc.annotate_sse(structure)
     # https://stackoverflow.com/questions/6352425/whats-the-most-pythonic-way-to-identify-consecutive-duplicates-in-a-list
-    ss_grouped = [(k, sum(1 for _ in g)) for k, g in groupby(ss)]
-    ss_counts = Counter([chain for chain, _ in ss_grouped])
+    ss_grouped = ss_grouped = {k: sum(1 for _ in g) for k, g in groupby(sorted(ss))}
 
-    num_alpha = ss_counts["a"] if "a" in ss_counts else 0
-    num_beta = ss_counts["b"] if "b" in ss_counts else 0
+    num_alpha = ss_grouped.get("a", 0)
+    num_beta = ss_grouped.get("b", 0)
 
-    return num_alpha, num_beta
+    num_residues = struc.get_residue_count(structure)
+
+    return num_alpha/num_residues, num_beta/num_residues
 
 
 def count_secondary_structures_multi(structures: List[struc.AtomArrayStack]) -> Tuple[List[int], List[int]]:
