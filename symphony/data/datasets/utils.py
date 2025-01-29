@@ -14,7 +14,7 @@ import urllib
 import ml_collections
 
 from symphony.data.datasets import (
-    dataset, platonic_solids, qm9, geom_drugs, tmqm, cath, miniprotein)
+    dataset, platonic_solids, proteins, qm9, geom_drugs, tmqm, miniprotein)
 
 
 def species_to_atomic_numbers(
@@ -30,7 +30,7 @@ def species_to_atomic_numbers(
     elif dataset == "geom_drugs":
         species_to_atomic_numbers_dict = geom_drugs.GEOMDrugsDataset.species_to_atomic_numbers()
     elif dataset == "cath" or dataset == "miniprotein":
-        species_to_atomic_numbers_dict = cath.CATHDataset.species_to_atomic_numbers()
+        species_to_atomic_numbers_dict = proteins.ProteinDataset.species_to_atomic_numbers()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
     return jax.vmap(species_to_atomic_numbers_dict.get)(species)
@@ -73,21 +73,14 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
             num_test_molecules=config.num_test_molecules,
         )
 
-    if config.dataset == "cath":
-        return cath.CATHDataset(
+    if config.dataset == "cath" or config.dataset == "miniprotein":
+        return proteins.ProteinDataset(
+            dataset=config.dataset,
             root_dir=config.root_dir,
             num_train_molecules=config.num_train_molecules,
             num_val_molecules=config.num_val_molecules,
             num_test_molecules=config.num_test_molecules,
             alpha_carbons_only=config.alpha_carbons_only,
-        )
-
-    if config.dataset == "miniprotein":
-        return miniprotein.MiniProteinDataset(
-            root_dir=config.root_dir,
-            num_train_molecules=config.num_train_molecules,
-            num_val_molecules=config.num_val_molecules,
-            num_test_molecules=config.num_test_molecules,
         )
 
     raise ValueError(

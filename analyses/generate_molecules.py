@@ -27,7 +27,7 @@ import time
 import analyses.analysis as analysis
 from symphony import datatypes, models
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, tmqm, cath, miniprotein
+from symphony.data.datasets import proteins, qm9, tmqm, miniprotein
 
 FLAGS = flags.FLAGS
 
@@ -281,14 +281,14 @@ def generate_molecules(
         max_num_atoms = 512
         avg_nodes_per_graph = 512
         avg_edges_per_graph = 512 * 5
-        species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers(alpha_carbons_only)
-        atoms_to_species = cath.CATHDataset.atoms_to_species(alpha_carbons_only)
+        species_to_atomic_numbers = proteins.ProteinDataset.species_to_atomic_numbers(alpha_carbons_only)
+        atoms_to_species = proteins.ProteinDataset.atoms_to_species(alpha_carbons_only)
     elif dataset == "miniprotein":
         max_num_atoms = 260
         avg_nodes_per_graph = 260
         avg_edges_per_graph = 260 * 5
-        species_to_atomic_numbers = miniprotein.MiniProteinDataset.species_to_atomic_numbers(alpha_carbons_only)
-        atoms_to_species = miniprotein.MiniProteinDataset.atoms_to_species(alpha_carbons_only)
+        species_to_atomic_numbers = miniprotein.ProteinDataset.species_to_atomic_numbers(alpha_carbons_only)
+        atoms_to_species = miniprotein.ProteinDataset.atoms_to_species(alpha_carbons_only)
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -442,7 +442,7 @@ def generate_molecules(
             lines = []
             residue_start_ndx = 0
             curr_residue = ""
-            species_names = cath.CATHDataset.get_species(alpha_carbons_only)
+            species_names = proteins.ProteinDataset.get_species(alpha_carbons_only)
             residue_species = []
             residue_ct = 1
             for ndx in range(n_nodes[i]):
