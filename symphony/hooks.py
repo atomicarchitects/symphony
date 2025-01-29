@@ -114,7 +114,7 @@ class GenerateMoleculesHook:
 
         # Convert to RDKit molecules.
         # replace residues (0) with carbon (6)
-        if self.dataset == "cath":
+        if self.dataset == "cath" or self.dataset == "miniprotein":
             molecules = []
             for mol in generated_molecules:
                 mol = mol.get_array(0)
@@ -146,7 +146,7 @@ class GenerateMoleculesHook:
         # Compute metrics.
         logging.info("Computing metrics...")
         metrics_agg = {}
-        if self.dataset == "cath":
+        if self.dataset == "cath" or self.dataset == "miniprotein":
             validity = metrics.compute_backbone_validity(generated_molecules)
             uniqueness = metrics.compute_backbone_uniqueness(generated_molecules)
             num_alpha, num_beta = metrics.count_secondary_structures_multi(generated_molecules)

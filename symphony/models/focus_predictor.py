@@ -28,6 +28,7 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         self.activation = activation
         self.num_species = num_species
         self.k = k
+        self.big_embedding_size = 384
 
     def __call__(
         self, graphs: datatypes.Fragments, inverse_temperature: float = 1.0
@@ -39,6 +40,12 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
 
         num_nodes, _ = node_embeddings.shape
         node_embeddings = node_embeddings.filter(keep="0e")
+        # big_logits = e3nn.haiku.MultiLayerPerceptron(
+        #     list_neurons=[self.latent_size] * (self.num_layers - 1)
+        #         + [self.big_embedding_size],
+        #     act=self.activation,
+        #     output_activation=False,
+        # )(node_embeddings)
         focus_and_target_species_logits = e3nn.haiku.MultiLayerPerceptron(
             list_neurons=[self.latent_size] * (self.num_layers - 1)
             + [self.num_species],
@@ -54,4 +61,4 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
         focus_and_target_species_logits *= inverse_temperature
         stop_logits *= inverse_temperature
 
-        return focus_and_target_species_logits, stop_logits
+        return focus_and_target_species_logits, stop_logits#, big_logits

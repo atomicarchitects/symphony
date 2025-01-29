@@ -27,7 +27,7 @@ import time
 import analyses.analysis as analysis
 from symphony import datatypes, models
 from symphony.data import input_pipeline
-from symphony.data.datasets import qm9, tmqm, cath
+from symphony.data.datasets import qm9, tmqm, cath, miniprotein
 
 FLAGS = flags.FLAGS
 
@@ -280,6 +280,12 @@ def generate_molecules(
         avg_edges_per_graph = 512 * 5
         species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers()
         atoms_to_species = cath.CATHDataset.atoms_to_species()
+    elif dataset == "miniprotein":
+        max_num_atoms = 260
+        avg_nodes_per_graph = 260
+        avg_edges_per_graph = 260 * 5
+        species_to_atomic_numbers = miniprotein.MiniProteinDataset.species_to_atomic_numbers()
+        atoms_to_species = miniprotein.MiniProteinDataset.atoms_to_species()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -291,7 +297,7 @@ def generate_molecules(
 
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
-        if dataset == "cath":
+        if dataset == "cath" or dataset == "miniprotein":
             init_molecule, init_molecule_name = analysis.construct_backbone(init_molecules)
             init_positions = init_molecule.coord
             init_atomic_symbols = init_molecule.atom_name
@@ -406,7 +412,7 @@ def generate_molecules(
     # n_node shape = [num_seeds, 2]
     n_nodes = final_padded_fragments.n_node[:, 0].astype(int)
     molecule_list = []
-    if dataset == "cath":
+    if dataset == "cath" or dataset == "miniprotein":
         filetype = "pdb"
     else:
         filetype = "xyz"
@@ -415,13 +421,13 @@ def generate_molecules(
         positions = final_padded_fragments.nodes.positions[i, :n_nodes[i], :]
         species = final_padded_fragments.nodes.species[i, :n_nodes[i]]
         if stops[i]:
-            logging_fn("Generated %s", generated_molecule.get_chemical_formula())
+            logging_fn(f"Generated molecule {seed}")
             outputfile = f"{init_molecule_name}_seed={seed}.xyz"
         else:
             logging_fn("STOP was not produced. Discarding...")
             outputfile = f"{init_molecule_name}_seed={seed}_no_stop.{filetype}"
         # write protein backbones to pdb file
-        if dataset == "cath":
+        if dataset == "cath" or dataset == "miniprotein":
             def pdb_line(atom, atomnum, resname, resnum, x, y, z):
                 return f"ATOM  {atomnum:5}  {atom:3} {resname:3} A{resnum:4}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00"
             if not len(species):
@@ -453,6 +459,7 @@ def generate_molecules(
                     residue_ct += 1
                     residue_species = ["N"]
                 else:
+                    if species[ndx] == 25: species = species.at[ndx].set(24)
                     residue_species.append(species_names[species[ndx]])
             if len(residue_species) > 0:
                 for k in range(residue_start_ndx, n_nodes[i]):

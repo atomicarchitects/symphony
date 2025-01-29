@@ -13,7 +13,8 @@ import tarfile
 import urllib
 import ml_collections
 
-from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm, cath
+from symphony.data.datasets import (
+    dataset, platonic_solids, qm9, geom_drugs, tmqm, cath, miniprotein)
 
 
 def species_to_atomic_numbers(
@@ -28,7 +29,7 @@ def species_to_atomic_numbers(
         species_to_atomic_numbers_dict = platonic_solids.PlatonicSolidsDataset.species_to_atomic_numbers()
     elif dataset == "geom_drugs":
         species_to_atomic_numbers_dict = geom_drugs.GEOMDrugsDataset.species_to_atomic_numbers()
-    elif dataset == "cath":
+    elif dataset == "cath" or dataset == "miniprotein":
         species_to_atomic_numbers_dict = cath.CATHDataset.species_to_atomic_numbers()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
@@ -74,6 +75,14 @@ def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:
 
     if config.dataset == "cath":
         return cath.CATHDataset(
+            root_dir=config.root_dir,
+            num_train_molecules=config.num_train_molecules,
+            num_val_molecules=config.num_val_molecules,
+            num_test_molecules=config.num_test_molecules,
+        )
+
+    if config.dataset == "miniprotein":
+        return miniprotein.MiniProteinDataset(
             root_dir=config.root_dir,
             num_train_molecules=config.num_train_molecules,
             num_val_molecules=config.num_val_molecules,

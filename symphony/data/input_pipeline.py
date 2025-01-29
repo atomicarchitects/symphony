@@ -236,7 +236,7 @@ def get_datasets(
             max_num_residues=config.get("max_num_residues", None),
             transition_first=config.transition_first,
             fragment_number=config.get("fragment_number", -1),
-            n_terminus=config.dataset=="cath",
+            n_terminus=config.dataset=="cath" or config.dataset == "miniprotein",
         )
         for split in ["train", "val", "test"]
     }

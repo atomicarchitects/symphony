@@ -8,14 +8,14 @@ def get_config() -> ml_collections.ConfigDict:
     config = ml_collections.ConfigDict()
 
     # Dataset.
-    config.dataset = "cath"
+    config.dataset = "miniprotein"
     config.fragment_logic = "nn"
     config.train_on_split_smaller_than_chunk = False
     config.root_dir = None
     config.use_edm_splits = False
-    config.num_train_molecules = 16793
-    config.num_val_molecules = 2100
-    config.num_test_molecules = 2099
+    config.num_train_molecules = 18345
+    config.num_val_molecules = 2248
+    config.num_test_molecules = 2248
     config.num_frag_seeds = 4
     config.shuffle_datasets = True
     config.infer_edges_with_radial_cutoff = True
@@ -46,8 +46,8 @@ def get_config() -> ml_collections.ConfigDict:
     config.nn_tolerance = 0.5
     config.compute_padding_dynamically = False
     config.max_n_graphs = 16
-    config.max_n_nodes = 513
-    config.max_n_edges = 12 * config.get_ref("max_n_nodes")
+    config.max_n_nodes = 300
+    config.max_n_edges = 32 * config.get_ref("max_n_nodes")
     config.loss_kwargs = ml_collections.ConfigDict()
     config.loss_kwargs.ignore_position_loss_for_small_fragments = False
     config.loss_kwargs.discretized_loss = False
@@ -84,7 +84,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.target_position_predictor.radial_predictor.num_param_mlp_layers = 2
     config.target_position_predictor.radial_predictor.num_layers = 2
     config.target_position_predictor.radial_predictor.min_radius = 1.0
-    config.target_position_predictor.radial_predictor.max_radius = 2.0
+    config.target_position_predictor.radial_predictor.max_radius = 8.0
     config.target_position_predictor.radial_predictor.boundary_error = 0.35
     config.target_position_predictor.radial_predictor.latent_size = 128
 

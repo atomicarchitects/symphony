@@ -65,6 +65,7 @@ class TargetPositionPredictor(hk.Module):
     def get_training_predictions(
         self,
         graphs: datatypes.Fragments,
+        # big_logits: jnp.ndarray,
     ) -> Tuple[e3nn.IrrepsArray, e3nn.SphericalSignal]:
         num_graphs, num_targets, _ = graphs.globals.target_positions.shape
 
@@ -76,6 +77,7 @@ class TargetPositionPredictor(hk.Module):
         conditioning = self.compute_conditioning(
             graphs, focus_node_indices, target_species
         )
+        # conditioning = conditioning * big_logits
 
         target_positions = graphs.globals.target_positions
         target_positions = e3nn.IrrepsArray("1o", target_positions)
@@ -113,6 +115,7 @@ class TargetPositionPredictor(hk.Module):
     def get_evaluation_predictions(
         self,
         graphs: datatypes.Fragments,
+        # big_logits: jnp.ndarray,
         focus_indices: jnp.ndarray,
         target_species: jnp.ndarray,
         inverse_temperature: float,
@@ -120,7 +123,10 @@ class TargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the conditioning based on the focus nodes and target species.
-        conditioning = self.compute_conditioning(graphs, focus_indices, target_species)
+        conditioning = self.compute_conditioning(
+            graphs, focus_indices, target_species
+        )
+        # conditioning = conditioning * big_logits
         assert conditioning.shape == (num_graphs, conditioning.irreps.dim)
 
         # Sample the radial component.

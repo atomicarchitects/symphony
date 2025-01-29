@@ -1,8 +1,10 @@
 from typing import Union, Optional
 
+import e3nn_jax as e3nn
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import jraph
 
 from symphony import datatypes
 from symphony.models.focus_predictor import FocusAndTargetSpeciesPredictor
@@ -37,6 +39,7 @@ class Predictor(hk.Module):
         (
             focus_and_target_species_logits,
             stop_logits,
+            # big_logits,
         ) = self.focus_and_target_species_predictor(graphs)
 
         # Get the species and stop probabilities.
@@ -47,12 +50,27 @@ class Predictor(hk.Module):
         # Get the focus node indices.
         focus_node_indices = utils.get_first_node_indices(graphs)
 
+        # segment_starts = jnp.concatenate(
+        #     [jnp.zeros(1), jnp.cumsum(graphs.n_node)]
+        # )
+        # def f(i):
+        #     mask1 = segment_starts[i] <= jnp.arange(num_nodes)
+        #     mask2 = jnp.arange(num_nodes) < segment_starts[i + 1]
+        #     mask = mask1 * mask2
+        #     big_logits_masked = big_logits * mask[:, None]
+        #     return e3nn.IrrepsArray(
+        #         big_logits_masked.irreps,
+        #         big_logits_masked.array.sum(axis=0) / jnp.maximum(mask.sum(), 1)
+        #     )
+        # big_logits = jax.vmap(f)(jnp.arange(num_graphs))
+
         # Get the logits at the target positions.
         (
             radial_logits,
             angular_logits,
         ) = self.target_position_predictor.get_training_predictions(
             graphs,
+            # big_logits,
         )
 
         # Check the shapes.
@@ -110,6 +128,7 @@ class Predictor(hk.Module):
         (
             focus_and_target_species_logits,
             stop_logits,
+            # big_logits,
         ) = self.focus_and_target_species_predictor(
             graphs, inverse_temperature=focus_and_atom_type_inverse_temperature
         )
@@ -137,9 +156,24 @@ class Predictor(hk.Module):
             focus_and_target_species_probs, segment_ids, num_graphs, focus_rng
         )
 
+        # segment_starts = jnp.concatenate(
+        #     [jnp.zeros(1), jnp.cumsum(graphs.n_node)]
+        # )
+        # def f(i):
+        #     mask1 = segment_starts[i] <= jnp.arange(num_nodes)
+        #     mask2 = jnp.arange(num_nodes) < segment_starts[i + 1]
+        #     mask = mask1 * mask2
+        #     big_logits_masked = big_logits * mask[:, None]
+        #     return e3nn.IrrepsArray(
+        #         big_logits_masked.irreps,
+        #         big_logits_masked.array.sum(axis=0) / jnp.maximum(mask.sum(), 1)
+        #     )
+        # big_logits = jax.vmap(f)(jnp.arange(num_graphs))
+
         # Compute the position coefficients.
         radial_logits, angular_logits, position_vectors = self.target_position_predictor.get_evaluation_predictions(
             graphs,
+            # big_logits,
             focus_indices,
             target_species,
             position_inverse_temperature,
