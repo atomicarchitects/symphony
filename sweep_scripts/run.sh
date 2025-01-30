@@ -17,7 +17,7 @@ cuda=0,1
 dataset=miniprotein
 embedder=nequip
 # train=1000
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan28_edge_cutoff_7/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan29_ca_only/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir \
@@ -39,17 +39,18 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config.num_train_steps=1000000 \
     --config.position_noise_std=0.1 \
     --config.max_num_residues=65 \
-    --config.generation.init_molecules=analyses/molecules/downloaded/N.pdb \
+    --config.generation.init_molecules=analyses/molecules/downloaded/CA.pdb \
     --config.target_distance_noise_std=0.1 \
     --config.num_frag_seeds=8 \
-    --config.radial_cutoff=7.0 \
+    --config.radial_cutoff=8.0 \
+    --config.alpha_carbons_only=True \
+    --config.target_position_predictor.radial_predictor.min_radius=2.0 \
+    --config.target_position_predictor.radial_predictor.max_radius=8.0 \
     --config.max_targets_per_graph=$max_targets_per_graph \
     --config.target_position_predictor.radial_predictor_type="discretized"
 
     # --config.focus_and_target_species_predictor.k=5 \
 
     # --config.alpha_carbons_only=True \
-    # --config.target_position_predictor.radial_predictor.min_radius=2.0 \
-    # --config.target_position_predictor.radial_predictor.max_radius=8.0 \
 
     # --config.use_edm_splits=False \

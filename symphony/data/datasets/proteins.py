@@ -192,10 +192,10 @@ def load_data(
 
     def _add_structure(pos, spec, molfile, residue_starts):
         assert len(pos) == len(spec), f"Length mismatch: {len(pos)} vs {len(spec)} in {molfile}"
-        # foldingdiff does this
-        # (also splits anything >128 residues into random 128-residue chunks)
-        if len(spec) < 120:
-            return
+        # # foldingdiff does this
+        # # (also splits anything >128 residues into random 128-residue chunks)
+        # if len(spec) < 120:
+        #     return
 
         pos = np.asarray(pos)
         spec = np.asarray(spec)
@@ -220,7 +220,7 @@ def load_data(
 
     logging.info("Loading structures...")
     for mol_file in mol_files_list:
-        mol_path = os.path.join(mols_path, mol_file)
+        mol_path = os.path.join(mols_path, mol_file).strip()
         # read pdb
         f = pdb.PDBFile.read(mol_path)
         structure = pdb.get_structure(f)
@@ -248,10 +248,13 @@ def load_data(
                     # set CB to corresponding residue name
                     cb_atoms = np.argwhere(fragment.atom_name == "CB").flatten()
                     elements[cb_atoms] = fragment.res_name[cb_atoms]
-                species = np.vectorize(ProteinDataset.atoms_to_species().get)(elements)
+                species = np.vectorize(
+                    ProteinDataset.atoms_to_species(alpha_carbons_only).get
+                )(elements)
                 residue_starts = struc.get_residue_starts(fragment)
                 _add_structure(positions, species, mol_file, residue_starts)
-            except:
+            except Exception as e:
+                print(e)
                 continue
 
         

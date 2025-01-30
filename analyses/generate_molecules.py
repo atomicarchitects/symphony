@@ -114,9 +114,8 @@ def append_predictions(
     focus = pred.globals.focus_indices[0]
     focus_position = positions[focus]
     target_position = pred.globals.position_vectors[0] + focus_position
+    # jax.debug.print("pred position: {pred}, focus position: {focus}", pred=pred.globals.position_vectors[0], focus=focus_position)
     new_positions = positions.at[num_valid_nodes].set(target_position)
-    jax.debug.print("index {ndx}: positions: {positions}, focus: {focus}", ndx=num_valid_nodes, positions=positions, focus=focus)
-    jax.debug.print("")
 
     # Update the species of the first dummy node.
     species = padded_fragment.nodes.species
@@ -195,7 +194,7 @@ def generate_for_one_seed(
         return final_padded_fragment, stop
 
 
-def bfs_ordering(positions, species):
+def bfs_ordering(positions, species, cutoff):
     struct = datatypes.Structures(
         nodes=datatypes.NodesInfo(
             positions=positions, species=species
@@ -209,7 +208,7 @@ def bfs_ordering(positions, species):
     )
     # add edges between nearest neighbors
     struct = input_pipeline.infer_edges_with_radial_cutoff_on_positions(
-        struct, 1.7
+        struct, cutoff
     )
     visited = np.zeros_like(species, dtype=bool)
     start_ndx = 0
@@ -287,8 +286,8 @@ def generate_molecules(
         max_num_atoms = 260
         avg_nodes_per_graph = 260
         avg_edges_per_graph = 260 * 5
-        species_to_atomic_numbers = miniprotein.ProteinDataset.species_to_atomic_numbers(alpha_carbons_only)
-        atoms_to_species = miniprotein.ProteinDataset.atoms_to_species(alpha_carbons_only)
+        species_to_atomic_numbers = proteins.ProteinDataset.species_to_atomic_numbers(alpha_carbons_only)
+        atoms_to_species = proteins.ProteinDataset.atoms_to_species(alpha_carbons_only)
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -437,7 +436,8 @@ def generate_molecules(
                 logging_fn("No residues found in molecule. Discarding...")
                 continue
             # in order for biotite to properly process the pdb file, atoms need to be properly assigned to residues
-            positions, species = bfs_ordering(positions, species)
+            cutoff = 4.0 if alpha_carbons_only else 1.7
+            positions, species = bfs_ordering(positions, species, cutoff)
             # prepare pdb file
             lines = []
             residue_start_ndx = 0
