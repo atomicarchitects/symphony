@@ -37,6 +37,27 @@ def infer_edges_with_radial_cutoff_on_positions(
     )
 
 
+def get_random_edges(
+    rng: chex.PRNGKey, structure: datatypes.Structures, num_edges: int
+):
+    """Get random edges for a structure."""
+    n_node = structure.n_node[0]
+    n_edge = structure.n_edge[0]
+    assert num_edges >= n_edge, "Number of edges must be greater than the current number of edges."
+    total_n_edge = n_node * (n_node - 1) // 2
+    senders = jnp.repeat(jnp.arange(n_node), n_node)
+    receivers = jnp.tile(jnp.arange(n_node), n_node)
+    num_edges = min(total_n_edge, num_edges)
+    indices = jax.random.choice(rng, total_n_edge, (num_edges - n_edge,), replace=False)
+    # indices = jnp.pad(indices, (0, total_n_edge - num_edges))
+    return structure._replace(
+        edges=np.ones(num_edges),
+        senders=jnp.concatenate([structure.senders, senders[indices] + n_node]),
+        receivers=jnp.concatenate([structure.receivers, receivers[indices] + n_node]),
+        n_edge=np.array([num_edges]),
+    )
+
+
 def create_fragments_dataset(
     rng: chex.PRNGKey,
     structures: Sequence[datatypes.Structures],
@@ -49,6 +70,7 @@ def create_fragments_dataset(
     heavy_first: bool,
     max_targets_per_graph: int,
     num_seeds: int,
+    max_edges: Optional[int] = None,
     max_num_residues: Optional[int] = None,
     max_radius: Optional[float] = None,
     nn_tolerance: Optional[float] = None,
@@ -59,6 +81,8 @@ def create_fragments_dataset(
     """Creates an iterator of fragments from a sequence of structures."""
     if infer_edges_with_radial_cutoff and radial_cutoff is None:
         raise ValueError("radial_cutoff must be provided if infer_edges is True.")
+    if not infer_edges_with_radial_cutoff and max_edges is None:
+        raise ValueError("max_edges must be provided if infer_edges is False.")
 
     def fragment_generator(rng: chex.PRNGKey):
         """Generates fragments for a split."""
@@ -87,15 +111,28 @@ def create_fragments_dataset(
                             n_node=np.array([end_ndx - start_ndx]),
                         )
 
-                    if infer_edges_with_radial_cutoff:
-                        if structure.n_edge is not None:
-                            raise ValueError("Structure already has edges.")
-                        structure = infer_edges_with_radial_cutoff_on_positions(
-                            structure, radial_cutoff=radial_cutoff
-                        )
+                    # if infer_edges_with_radial_cutoff:
+                    #     if structure.n_edge is not None:
+                    #         raise ValueError("Structure already has edges.")
+                    #     structure = infer_edges_with_radial_cutoff_on_positions(
+                    #         structure, radial_cutoff=radial_cutoff
+                    #     )
+                    
+                    # else:
+                    #     if structure.n_edge is None:
+                    #         structure = get_random_edges(
+                    #             structure_rng, structure, num_edges=max_edges
+                    #         )
 
-                    # print(structure)
-                    # jax.debug.print("structure: {structure}", structure=structure)
+                    if structure.n_edge is not None:
+                        raise ValueError("Structure already has edges.")
+                    structure = infer_edges_with_radial_cutoff_on_positions(
+                        structure, radial_cutoff=radial_cutoff
+                    )
+                    structure = get_random_edges(
+                        structure_rng, structure, num_edges=max_edges
+                    )
+
                     frag_generator = fragments.generate_fragments(
                         rng=structure_rng,
                         graph=structure,
@@ -232,6 +269,7 @@ def get_datasets(
             max_radius=config.get("max_radius", None),
             num_seeds=config.get("num_frag_seeds", 1),
             heavy_first=config.heavy_first,
+            max_edges=config.get("max_edges_per_mol", None),
             max_targets_per_graph=config.max_targets_per_graph,
             max_num_residues=config.get("max_num_residues", None),
             transition_first=config.transition_first,

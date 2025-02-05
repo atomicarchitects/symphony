@@ -21,6 +21,7 @@ def get_config() -> ml_collections.ConfigDict:
     config.infer_edges_with_radial_cutoff = True
     config.radial_cutoff = 5.0
     config.max_targets_per_graph = 1
+    config.max_edges_per_mol = 100
     config.max_num_residues = 128
     config.heavy_first = False
     config.transition_first = False

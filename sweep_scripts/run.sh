@@ -17,7 +17,7 @@ cuda=0,1
 dataset=miniprotein
 embedder=nequip
 # train=1000
-workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan29_ca_only/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_feb3_ca_only/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
 #     --workdir=$workdir \
@@ -43,6 +43,8 @@ CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --config.target_distance_noise_std=0.1 \
     --config.num_frag_seeds=8 \
     --config.radial_cutoff=8.0 \
+    --config.infer_edges_with_radial_cutoff=False \
+    --config.max_edges_per_mol=1000 \
     --config.alpha_carbons_only=True \
     --config.target_position_predictor.radial_predictor.min_radius=2.0 \
     --config.target_position_predictor.radial_predictor.max_radius=8.0 \
