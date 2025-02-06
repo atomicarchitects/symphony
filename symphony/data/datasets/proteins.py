@@ -174,15 +174,17 @@ def load_data(
         os.makedirs(root_dir)
 
     if dataset == "cath":
-        path = datasets.utils.download_url(CATH_URL, root_dir)
-        datasets.utils.extract_tar(path, root_dir)
         mols_path = os.path.join(root_dir, "dompdb")
+        if not os.path.isfile(mols_path):
+            path = datasets.utils.download_url(CATH_URL, root_dir)
+            datasets.utils.extract_tar(path, root_dir)
         mol_files_list = os.listdir(mols_path)
     elif dataset == "miniprotein":
-        path = datasets.utils.download_url(MINIPROTEIN_URL, root_dir)
-        datasets.utils.extract_tar(path, root_dir)
         mols_path = os.path.join(root_dir, "supplemental_files", "scaffolds")
         scaffolds_path = os.path.join(mols_path, "recommended_scaffolds.list")
+        if not os.path.isfile(scaffolds_path):
+            path = datasets.utils.download_url(MINIPROTEIN_URL, root_dir)
+            datasets.utils.extract_tar(path, root_dir)
         with open(scaffolds_path, "r") as scaffolds_file:
             mol_files_list = scaffolds_file.readlines()
     else:
@@ -192,10 +194,6 @@ def load_data(
 
     def _add_structure(pos, spec, molfile, residue_starts):
         assert len(pos) == len(spec), f"Length mismatch: {len(pos)} vs {len(spec)} in {molfile}"
-        # # foldingdiff does this
-        # # (also splits anything >128 residues into random 128-residue chunks)
-        # if len(spec) < 120:
-        #     return
 
         pos = np.asarray(pos)
         spec = np.asarray(spec)
@@ -212,6 +210,8 @@ def load_data(
             globals=datatypes.GlobalsInfo(
                 num_residues=np.asarray([len(residue_starts)]),
                 residue_starts=residue_starts,
+                n_short_edge=None,
+                n_long_edge=None,
             ),
             n_node=np.asarray([len(spec)]),
             n_edge=None,

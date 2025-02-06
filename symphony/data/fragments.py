@@ -317,6 +317,8 @@ def _into_fragment(
         target_species=target_species[0],
         target_positions=pos[padded_target_nodes] - pos[focus_node],
         target_positions_mask=target_positions_mask,
+        n_short_edge=graph.globals.n_short_edge.squeeze(),
+        n_long_edge=graph.globals.n_long_edge.squeeze(),
     )
     globals = jax.tree_map(lambda x: np.expand_dims(x, axis=0), globals)
     graph = graph._replace(nodes=nodes, globals=globals)
@@ -358,6 +360,14 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
 
     # Find all edges that connect to the nodes.
     edges = np.isin(graph.senders, nodes) & np.isin(graph.receivers, nodes)
+    edges_short = (
+        np.isin(graph.senders[:graph.globals.n_short_edge[0].squeeze()], nodes) & 
+        np.isin(graph.receivers[:graph.globals.n_short_edge[0].squeeze()], nodes)
+    )
+    edges_long = (
+        np.isin(graph.senders[graph.globals.n_short_edge[0].squeeze():], nodes) & 
+        np.isin(graph.receivers[graph.globals.n_short_edge[0].squeeze():], nodes)
+    )
 
     new_node_indices = -np.ones(graph.n_node[0], dtype=int)
     new_node_indices[nodes] = np.arange(len(nodes))
@@ -365,7 +375,10 @@ def subgraph(graph: jraph.GraphsTuple, nodes: np.ndarray) -> jraph.GraphsTuple:
     return jraph.GraphsTuple(
         nodes=jax.tree_util.tree_map(lambda x: x[nodes], graph.nodes),
         edges=jax.tree_util.tree_map(lambda x: x[edges], graph.edges),
-        globals=graph.globals,
+        globals=graph.globals._replace(
+            n_short_edge=np.array([np.sum(edges_short)]),
+            n_long_edge=np.array([np.sum(edges_long)]),
+        ),
         senders=new_node_indices[graph.senders[edges]],
         receivers=new_node_indices[graph.receivers[edges]],
         n_node=np.array([len(nodes)]),

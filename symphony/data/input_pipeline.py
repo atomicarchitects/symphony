@@ -34,6 +34,12 @@ def infer_edges_with_radial_cutoff_on_positions(
         senders=np.asarray(senders),
         receivers=np.asarray(receivers),
         n_edge=np.array([len(senders)]),
+        globals=datatypes.GlobalsInfo(
+            num_residues=structure.globals.num_residues,
+            residue_starts=structure.globals.residue_starts,
+            n_short_edge=jnp.array([len(senders)]),
+            n_long_edge=None,
+        ),
     )
 
 
@@ -52,9 +58,15 @@ def get_random_edges(
     # indices = jnp.pad(indices, (0, total_n_edge - num_edges))
     return structure._replace(
         edges=np.ones(num_edges),
-        senders=jnp.concatenate([structure.senders, senders[indices] + n_node]),
-        receivers=jnp.concatenate([structure.receivers, receivers[indices] + n_node]),
+        senders=jnp.concatenate([structure.senders, senders[indices]]),
+        receivers=jnp.concatenate([structure.receivers, receivers[indices]]),
         n_edge=np.array([num_edges]),
+        globals=datatypes.GlobalsInfo(
+            num_residues=structure.globals.num_residues,
+            residue_starts=structure.globals.residue_starts,
+            n_short_edge=structure.globals.n_short_edge,
+            n_long_edge=jnp.array([num_edges - n_edge]),
+        ),
     )
 
 

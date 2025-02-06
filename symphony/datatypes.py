@@ -13,6 +13,23 @@ class NodesInfo(NamedTuple):
 class GlobalsInfo(NamedTuple):
     num_residues: jnp.ndarray  # [n_graph] int array
     residue_starts: jnp.ndarray  # [n_graph, n_node] int array
+    n_short_edge: jnp.ndarray  # [n_graph] int array
+    n_long_edge: jnp.ndarray  # [n_graph] int array
+
+
+class SendersInfo(NamedTuple):
+    short_edges: jnp.ndarray  # [n_edge] int array
+    long_edges: jnp.ndarray  # [n_edge] int array
+
+
+class ReceiversInfo(NamedTuple):
+    short_edges: jnp.ndarray  # [n_edge] int array
+    long_edges: jnp.ndarray  # [n_edge] int array
+
+
+class EdgesInfo(NamedTuple):
+    short_edges: jnp.ndarray  # [n_edge] float array
+    long_edges: jnp.ndarray  # [n_edge] float array
 
 
 class FragmentsGlobals(NamedTuple):
@@ -20,6 +37,8 @@ class FragmentsGlobals(NamedTuple):
     target_positions: jnp.ndarray  # [n_graph, n_targets, 3] float array (only for training)
     target_species: jnp.ndarray  # [n_graph, n_targets] int array (only for training)
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
+    n_short_edge: jnp.ndarray  # [n_graph] int array
+    n_long_edge: jnp.ndarray  # [n_graph] int array
 
 
 class FragmentsNodes(NamedTuple):
