@@ -49,6 +49,7 @@ class NequIP(hk.Module):
     def __call__(
         self,
         graphs: datatypes.Fragments,
+        edge_feats: jnp.ndarray,
     ):
         relative_positions = (
             graphs.nodes.positions[graphs.receivers]
@@ -73,7 +74,12 @@ class NequIP(hk.Module):
                 mlp_n_layers=self.mlp_n_layers,
                 n_radial_basis=self.n_radial_basis,
             )(
-                relative_positions, node_feats, species, graphs.senders, graphs.receivers
+                relative_positions,
+                node_feats,
+                species,
+                graphs.senders,
+                graphs.receivers,
+                edge_feats,
             )
             if interaction < self.num_interactions - 1:
                 new_node_feats = e3nn.haiku.Linear(

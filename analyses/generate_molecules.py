@@ -104,6 +104,7 @@ def append_predictions(
     pred: datatypes.Predictions,
     padded_fragment: datatypes.Fragments,
     radial_cutoff: float,
+    rng: chex.PRNGKey,
 ) -> datatypes.Fragments:
     """Appends the predictions to the padded fragment."""
     # Update the positions of the first dummy node.
@@ -130,13 +131,25 @@ def append_predictions(
 
     # Avoid self-edges.
     valid_edges = (distance_matrix > 0) & (distance_matrix < radial_cutoff)
-    valid_edges = (
+    short_mask = (
         valid_edges
         & (node_indices[None, :] <= num_valid_nodes)
         & (node_indices[:, None] <= num_valid_nodes)
     )
-    senders, receivers = jnp.nonzero(
-        valid_edges, size=num_edges, fill_value=-1
+    short_indices = jnp.nonzero(short_mask, size=num_edges, fill_value=-1)
+    # TODO get random edges and not just the first k
+    rng, structure_rng = jax.random.split(rng)
+    long_mask = (
+        distance_matrix > 0
+        & (node_indices[None, :] <= num_valid_nodes)
+        & (node_indices[:, None] <= num_valid_nodes)
+    )
+    long_indices = jnp.nonzero(long_mask, size=num_edges, fill_value=-1)
+    print(long_indices)
+    long_indices = jax.random.permutation(structure_rng, long_indices)
+    indices = jnp.concatenate([short_indices, long_indices], axis=0)
+    senders, receivers = jnp.where(
+        indices != -1, size=num_edges, fill_value=-1
     )
     num_valid_edges = jnp.sum(valid_edges)
     num_valid_nodes += 1
@@ -163,8 +176,9 @@ def generate_one_step(
     Tuple[datatypes.Fragments, bool], Tuple[datatypes.Fragments, datatypes.Predictions]
 ]:
     """Generates the next fragment for a given seed."""
-    pred = apply_fn(padded_fragment, rng)
-    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff)
+    rng, pred_rng = jax.random.split(rng)
+    pred = apply_fn(padded_fragment, pred_rng)
+    next_padded_fragment = append_predictions(pred, padded_fragment, radial_cutoff, rng)
     stop = pred.globals.stop[0] | stop
     return jax.lax.cond(
         stop,
@@ -207,9 +221,10 @@ def bfs_ordering(positions, species, cutoff):
         n_edge=None,
     )
     # add edges between nearest neighbors
-    struct = input_pipeline.infer_edges_with_radial_cutoff_on_positions(
+    senders, receivers = input_pipeline.infer_edges_with_radial_cutoff_on_positions(
         struct, cutoff
     )
+    struct = struct._replace(senders=senders, receivers=receivers)
     visited = np.zeros_like(species, dtype=bool)
     start_ndx = 0
     for i in range(len(species)):

@@ -50,20 +50,6 @@ class Predictor(hk.Module):
         # Get the focus node indices.
         focus_node_indices = utils.get_first_node_indices(graphs)
 
-        # segment_starts = jnp.concatenate(
-        #     [jnp.zeros(1), jnp.cumsum(graphs.n_node)]
-        # )
-        # def f(i):
-        #     mask1 = segment_starts[i] <= jnp.arange(num_nodes)
-        #     mask2 = jnp.arange(num_nodes) < segment_starts[i + 1]
-        #     mask = mask1 * mask2
-        #     big_logits_masked = big_logits * mask[:, None]
-        #     return e3nn.IrrepsArray(
-        #         big_logits_masked.irreps,
-        #         big_logits_masked.array.sum(axis=0) / jnp.maximum(mask.sum(), 1)
-        #     )
-        # big_logits = jax.vmap(f)(jnp.arange(num_graphs))
-
         # Get the logits at the target positions.
         (
             radial_logits,
@@ -91,7 +77,7 @@ class Predictor(hk.Module):
                     graphs
                 ),
                 embeddings_for_positions=self.target_position_predictor.node_embedder(
-                    graphs
+                    graphs, jnp.ones(graphs.edges.shape[0])
                 ),
             ),
             edges=None,
@@ -199,7 +185,7 @@ class Predictor(hk.Module):
                     graphs
                 ),
                 embeddings_for_positions=self.target_position_predictor.node_embedder(
-                    graphs
+                    graphs, jnp.ones(graphs.edges.shape[0])
                 ),
             ),
             edges=None,

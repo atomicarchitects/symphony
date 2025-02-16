@@ -175,7 +175,8 @@ def load_data(
 
     if dataset == "cath":
         mols_path = os.path.join(root_dir, "dompdb")
-        if not os.path.isfile(mols_path):
+        if not os.path.isdir(mols_path):
+            logging.info("Downloading cath dataset...")
             path = datasets.utils.download_url(CATH_URL, root_dir)
             datasets.utils.extract_tar(path, root_dir)
         mol_files_list = os.listdir(mols_path)
@@ -183,6 +184,7 @@ def load_data(
         mols_path = os.path.join(root_dir, "supplemental_files", "scaffolds")
         scaffolds_path = os.path.join(mols_path, "recommended_scaffolds.list")
         if not os.path.isfile(scaffolds_path):
+            logging.info("Downloading miniprotein dataset...")
             path = datasets.utils.download_url(MINIPROTEIN_URL, root_dir)
             datasets.utils.extract_tar(path, root_dir)
         with open(scaffolds_path, "r") as scaffolds_file:

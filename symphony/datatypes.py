@@ -37,8 +37,8 @@ class FragmentsGlobals(NamedTuple):
     target_positions: jnp.ndarray  # [n_graph, n_targets, 3] float array (only for training)
     target_species: jnp.ndarray  # [n_graph, n_targets] int array (only for training)
     stop: jnp.ndarray  # [n_graph] bool array (only for training)
-    n_short_edge: jnp.ndarray  # [n_graph] int array
-    n_long_edge: jnp.ndarray  # [n_graph] int array
+    # n_short_edge: jnp.ndarray  # [n_graph] int array
+    # n_long_edge: jnp.ndarray  # [n_graph] int array
 
 
 class FragmentsNodes(NamedTuple):

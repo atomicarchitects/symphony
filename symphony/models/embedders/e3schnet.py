@@ -50,6 +50,7 @@ class E3SchNetInteractionBlock(hk.Module):
         f_ij: jnp.ndarray,
         rcut_ij: jnp.ndarray,
         Yr_ij: jnp.ndarray,
+        edge_feats: jnp.ndarray,
     ) -> e3nn.IrrepsArray:
         """Compute interaction output. Notation matches SchNetPack implementation in PyTorch.
         Args:
@@ -60,6 +61,7 @@ class E3SchNetInteractionBlock(hk.Module):
             rcut_ij: d_ij passed through the cutoff function
             r_ij: relative position of neighbor j to atom i
             Yr_ij: spherical harmonics of r_ij
+            edge_feats: edge features
         Returns:
             atom features after interaction
         """
@@ -71,10 +73,11 @@ class E3SchNetInteractionBlock(hk.Module):
         )(x)
 
         # Select senders.
-        x_j = x[idx_j]
-        x_j = x_j.mul_to_axis(self.num_filters, axis=-2)
+        x_j = x[idx_j]  # [senders, irreps]
+        x_j = x_j.mul_to_axis(self.num_filters, axis=-2)  # [mul, senders, irreps]
         x_j = e3nn.tensor_product(x_j, Yr_ij)
         x_j = x_j.axis_to_mul(axis=-2)
+        x_j = x_j * jnp.repeat(edge_feats[:, None], x_j.irreps.num_irreps, axis=1)
 
         # Compute filter.
         W_ij = hk.Sequential(
@@ -150,7 +153,11 @@ class E3SchNet(hk.Module):
         self.periodic_table_embedding = periodic_table_embedding
         self.ptable = PeriodicTable()
 
-    def __call__(self, fragments: datatypes.Fragments) -> jnp.ndarray:
+    def __call__(
+        self,
+        fragments: datatypes.Fragments,
+        edge_feats: jnp.ndarray,
+    ) -> jnp.ndarray:
         # 'species' are actually atomic numbers mapped to [0, self.num_species).
         # But we keep the same name for consistency with SchNetPack.
         species = fragments.nodes.species
@@ -200,7 +207,7 @@ class E3SchNet(hk.Module):
         for _ in range(self.num_interactions):
             v = E3SchNetInteractionBlock(
                 self.num_filters, self.max_ell, self.activation
-            )(x, idx_i, idx_j, f_ij, rcut_ij, Yr_ij)
+            )(x, idx_i, idx_j, f_ij, rcut_ij, Yr_ij, edge_feats,)
             x = x + v
         # In SchNetPack, the output is only the scalar features.
         # Here, we return the entire IrrepsArray.

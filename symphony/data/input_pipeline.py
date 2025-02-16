@@ -29,45 +29,22 @@ def infer_edges_with_radial_cutoff_on_positions(
         cell=np.eye(3),
     )
 
-    return structure._replace(
-        edges=np.ones(len(senders)),
-        senders=np.asarray(senders),
-        receivers=np.asarray(receivers),
-        n_edge=np.array([len(senders)]),
-        globals=datatypes.GlobalsInfo(
-            num_residues=structure.globals.num_residues,
-            residue_starts=structure.globals.residue_starts,
-            n_short_edge=jnp.array([len(senders)]),
-            n_long_edge=None,
-        ),
-    )
+    return np.asarray(senders), np.asarray(receivers)
 
 
-def get_random_edges(
-    rng: chex.PRNGKey, structure: datatypes.Structures, num_edges: int
+def get_long_range_edges(
+    rng: chex.PRNGKey, structure: datatypes.Structures, current_edges: int, num_edges: int
 ):
     """Get random edges for a structure."""
     n_node = structure.n_node[0]
-    n_edge = structure.n_edge[0]
-    assert num_edges >= n_edge, "Number of edges must be greater than the current number of edges."
+    assert num_edges >= current_edges, "Number of edges must be greater than the current number of edges."
     total_n_edge = n_node * (n_node - 1) // 2
     senders = jnp.repeat(jnp.arange(n_node), n_node)
     receivers = jnp.tile(jnp.arange(n_node), n_node)
     num_edges = min(total_n_edge, num_edges)
-    indices = jax.random.choice(rng, total_n_edge, (num_edges - n_edge,), replace=False)
+    indices = jax.random.choice(rng, total_n_edge, (num_edges - current_edges,), replace=False)
     # indices = jnp.pad(indices, (0, total_n_edge - num_edges))
-    return structure._replace(
-        edges=np.ones(num_edges),
-        senders=jnp.concatenate([structure.senders, senders[indices]]),
-        receivers=jnp.concatenate([structure.receivers, receivers[indices]]),
-        n_edge=np.array([num_edges]),
-        globals=datatypes.GlobalsInfo(
-            num_residues=structure.globals.num_residues,
-            residue_starts=structure.globals.residue_starts,
-            n_short_edge=structure.globals.n_short_edge,
-            n_long_edge=jnp.array([num_edges - n_edge]),
-        ),
-    )
+    return senders[indices], receivers[indices]
 
 
 def create_fragments_dataset(
@@ -123,26 +100,21 @@ def create_fragments_dataset(
                             n_node=np.array([end_ndx - start_ndx]),
                         )
 
-                    # if infer_edges_with_radial_cutoff:
-                    #     if structure.n_edge is not None:
-                    #         raise ValueError("Structure already has edges.")
-                    #     structure = infer_edges_with_radial_cutoff_on_positions(
-                    #         structure, radial_cutoff=radial_cutoff
-                    #     )
-                    
-                    # else:
-                    #     if structure.n_edge is None:
-                    #         structure = get_random_edges(
-                    #             structure_rng, structure, num_edges=max_edges
-                    #         )
-
                     if structure.n_edge is not None:
                         raise ValueError("Structure already has edges.")
-                    structure = infer_edges_with_radial_cutoff_on_positions(
+                    senders_short, receivers_short = infer_edges_with_radial_cutoff_on_positions(
                         structure, radial_cutoff=radial_cutoff
                     )
-                    structure = get_random_edges(
-                        structure_rng, structure, num_edges=max_edges
+                    senders_long, receivers_long = get_long_range_edges(
+                        structure_rng, structure, current_edges=senders_short.shape[0], num_edges=max_edges
+                    )
+                    senders = jnp.concatenate([senders_short, senders_long])
+                    receivers = jnp.concatenate([receivers_short, receivers_long])
+                    structure = structure._replace(
+                        edges=jnp.where(jnp.arange(len(senders)) < len(senders_short), 1, 0),
+                        senders=senders,
+                        receivers=receivers,
+                        n_edge=jnp.array([len(senders)]),
                     )
 
                     frag_generator = fragments.generate_fragments(

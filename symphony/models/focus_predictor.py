@@ -35,33 +35,14 @@ class FocusAndTargetSpeciesPredictor(hk.Module):
 
 
     def node_embedder(self, graphs: datatypes.Fragments) -> e3nn.IrrepsArray:
-        num_edges = graphs.senders.shape[0]
-
-        # Get the node embeddings.
-        short_edges_start = jnp.cumsum(
-            jnp.concatenate([jnp.zeros(1), graphs.n_edge])
+        node_embeddings_short = self.node_embedder_short(graphs, graphs.edges)
+        node_embeddings_long = self.node_embedder_long(graphs, 1 - graphs.edges)
+        return e3nn.concatenate(
+            [
+                node_embeddings_short.filter(keep="0e"),
+                node_embeddings_long.filter(keep="0e"),
+            ]
         )
-        long_edges_start = short_edges_start[:-1] + graphs.globals.n_short_edge
-        mask_short = jax.vmap(
-            lambda i: (i >= short_edges_start[i]) & (i < long_edges_start[i])
-        )(jnp.arange(num_edges)).squeeze()
-        mask_long = jax.vmap(
-            lambda i: (i >= long_edges_start[i]) & (i < short_edges_start[i + 1])
-        )(jnp.arange(num_edges)).squeeze()
-        graphs_short = graphs._replace(
-            edges=graphs.edges,
-            senders=graphs.senders[jnp.where(mask_short, size=num_edges)],
-            receivers=graphs.receivers[jnp.where(mask_short, size=num_edges)],
-        )
-        graphs_long = graphs._replace(
-            edges=graphs.edges,
-            senders=graphs.senders[jnp.where(mask_long, size=num_edges)],
-            receivers=graphs.receivers[jnp.where(mask_long, size=num_edges)],
-        )
-        node_embeddings_short = self.node_embedder_short(graphs_short)
-        node_embeddings_long = self.node_embedder_long(graphs_long)
-
-        return node_embeddings_short.filter(keep="0e") * node_embeddings_long.filter(keep="0e")
 
     def __call__(
         self, graphs: datatypes.Fragments, inverse_temperature: float = 1.0

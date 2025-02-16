@@ -39,7 +39,7 @@ class TargetPositionPredictor(hk.Module):
         num_graphs = graphs.n_node.shape[0]
 
         # Compute the focus node embeddings.
-        node_embeddings = self.node_embedder(graphs)
+        node_embeddings = self.node_embedder(graphs, jnp.ones(graphs.edges.shape[0]))
         focus_node_embeddings = node_embeddings[focus_node_indices]
 
         assert focus_node_embeddings.shape == (
