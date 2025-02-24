@@ -5,6 +5,7 @@ import os
 import numpy as np
 
 from symphony.data import datasets
+from symphony.models import PeriodicTable
 from symphony import datatypes
 
 
@@ -28,6 +29,17 @@ class GEOMDrugsDataset(datasets.InMemoryDataset):
     @staticmethod
     def get_atomic_numbers() -> np.ndarray:
         return np.asarray([1, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 33, 35, 53, 80, 83])
+
+    @staticmethod
+    def species_to_atomic_numbers(self) -> Dict[int, int]:
+        atomic_numbers = GEOMDrugsDataset.get_atomic_numbers()
+        return {i: atomic_numbers[i] for i in range(len(atomic_numbers))}
+
+    @staticmethod
+    def atoms_to_species(self) -> Dict[str, int]:
+        ptable = PeriodicTable()
+        atomic_numbers = GEOMDrugsDataset.get_atomic_numbers()
+        return {ptable.get_symbol(z): i for i, z in enumerate(atomic_numbers)}
 
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures is None:

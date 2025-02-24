@@ -13,15 +13,14 @@
 
 mode=nn
 max_targets_per_graph=1
-cuda=0
-dataset=qm9
+cuda=1
+dataset=cath
 embedder=nequip
 # train=1000
-workdir=/data/NFS/radish/songk/spherical-harmonic-net/workdirs/"$dataset"_dec31/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
-# workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_nov18_"$train"/e3schnet_and_nequip/$mode/max_targets_$max_targets_per_graph
+workdir=/data/NFS/potato/songk/spherical-harmonic-net/workdirs/"$dataset"_jan14/e3schnet_and_"$embedder"/$mode/max_targets_$max_targets_per_graph
 
 # CUDA_VISIBLE_DEVICES=$cuda python -m analyses.generate_molecules \
-#     --workdir=$workdir
+    # --workdir=$workdir
     # --num_seeds=50 \
     # --num_seeds_per_chunk=1 \
     # --max_num_atoms=200 \
@@ -30,16 +29,22 @@ workdir=/data/NFS/radish/songk/spherical-harmonic-net/workdirs/"$dataset"_dec31/
 CUDA_VISIBLE_DEVICES=$cuda python -m symphony \
     --workdir=$workdir \
     --config=configs/$dataset/e3schnet_and_"$embedder".py \
+    --config.num_train_molecules=10 \
+    --config.num_val_molecules=1 \
+    --config.num_test_molecules=1 \
+    --config.shuffle_datasets=False \
     --config.eval_every_steps=5000 \
     --config.generate_every_steps=5000 \
+    --config.generation.num_seeds=1 \
+    --config.generation.num_seeds_per_chunk=1 \
+    --config.generation.posebusters=False \
     --config.num_train_steps=1000000 \
     --config.position_noise_std=0.1 \
+    --config.max_num_residues=64 \
     --config.target_distance_noise_std=0.1 \
-    --config.max_targets_per_graph=$max_targets_per_graph
+    --config.max_targets_per_graph=$max_targets_per_graph \
+    --config.target_position_predictor.radial_predictor_type="discretized"
 
+    # --config.num_frag_seeds=8 \
 
-    # --config.num_train_molecules=1000 \
-    # --config.num_val_molecules=1 \
-    # --config.num_test_molecules=1 \
     # --config.use_edm_splits=False \
-    # --config.shuffle_datasets=False \

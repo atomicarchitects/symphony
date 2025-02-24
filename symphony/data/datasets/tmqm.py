@@ -61,6 +61,19 @@ class TMQMDataset(datasets.InMemoryDataset):
     def get_atomic_numbers() -> np.ndarray:
         return np.arange(1, 81)
 
+    @staticmethod
+    def atoms_to_species() -> Dict[str, int]:
+        ptable = PeriodicTable()
+        return {
+            ptable.get_symbol(i): i-1 for i in range(1, 81)
+        }
+    
+    @staticmethod
+    def species_to_atomic_numbers() -> Dict[int, int]:
+        return {
+            i: i for i in range(1, 81)
+        }
+
     def structures(self) -> Iterable[datatypes.Structures]:
         if self.all_structures == None:
             self.all_structures = load_tmqm(self.root_dir)

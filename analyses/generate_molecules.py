@@ -12,6 +12,7 @@ import ase.data
 #from ase.db import connect
 import ase.io
 import ase.visualize
+import biotite.structure as struc
 import jax
 import jax.numpy as jnp
 import jraph
@@ -238,22 +239,26 @@ def generate_molecules(
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 350
-        atomic_numbers = qm9.QM9Dataset.get_atomic_numbers()
+        species_to_atomic_numbers = qm9.QM9Dataset.species_to_atomic_numbers()
+        atoms_to_species = qm9.QM9Dataset.atoms_to_species()
     elif dataset == "tmqm":
         max_num_atoms = 60
         avg_nodes_per_graph = 50
         avg_edges_per_graph = 500
-        atomic_numbers = tmqm.TMQMDataset.get_atomic_numbers()
+        species_to_atomic_numbers = tmqm.TMQMDataset.species_to_atomic_numbers()
+        atoms_to_species = tmqm.TMQMDataset.atoms_to_species()
     elif dataset == "platonic_solids":
         max_num_atoms = 35
         avg_nodes_per_graph = 35
         avg_edges_per_graph = 175
-        atomic_numbers = np.array([1])
+        species_to_atomic_numbers = {0: 1}
+        atoms_to_species = {1: 0}
     elif dataset == "cath":
         max_num_atoms = 512
         avg_nodes_per_graph = 512
         avg_edges_per_graph = 512 * 5
-        atomic_numbers = cath.CATHDataset.get_atomic_numbers()
+        species_to_atomic_numbers = cath.CATHDataset.species_to_atomic_numbers()
+        atoms_to_species = cath.CATHDataset.atoms_to_species()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -265,14 +270,26 @@ def generate_molecules(
 
     # Create initial molecule, if provided.
     if isinstance(init_molecules, str):
-        init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
+        if dataset == "cath":
+            init_molecule, init_molecule_name = analysis.construct_backbone(init_molecules)
+            init_positions = init_molecule.coord
+            init_atomic_symbols = init_molecule.atom_name
+            # replace CB with their respective amino acids
+            cb_mask = init_atomic_symbols == "CB"
+            n_atoms = len(init_atomic_symbols)
+            cb_indices = np.arange(n_atoms)[cb_mask]
+            cb_residues = struc.get_residue_positions(init_molecule, cb_indices)
+            init_atomic_symbols[cb_mask] = init_molecule.res_name[cb_residues]
+        else:
+            init_molecule, init_molecule_name = analysis.construct_molecule(init_molecules)
+            init_positions = init_molecule.positions
+            init_atomic_symbols = init_molecule.symbols
         logging_fn(
-            f"Initial molecule: {init_molecule.get_chemical_formula()} with numbers {init_molecule.numbers} and positions {init_molecule.positions}"
+            f"Initial molecule: {init_molecule_name} with atoms {init_atomic_symbols} and positions {init_positions}"
         )
-        init_molecules = [init_molecule] * num_seeds
         init_molecules = [
-            input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, atomic_numbers, radial_cutoff,
+            input_pipeline.to_jraph_graph(
+                init_positions, init_atomic_symbols, atoms_to_species, radial_cutoff,
             )
         ] * num_seeds
         init_molecule_names = [init_molecule_name] * num_seeds
@@ -282,8 +299,8 @@ def generate_molecules(
             init_molecule.get_chemical_formula() for init_molecule in init_molecules
         ]
         init_molecules = [
-            input_pipeline.ase_atoms_to_jraph_graph(
-                init_molecule, atomic_numbers, radial_cutoff,
+            input_pipeline.to_jraph_graph(
+                init_molecule.positions, init_molecule.symbols, atoms_to_species, radial_cutoff,
             )
             for init_molecule in init_molecules
         ]
@@ -376,12 +393,14 @@ def generate_molecules(
         stop = jax.tree_util.tree_map(lambda x: x[i], stops)
 
         num_valid_nodes = final_padded_fragment.n_node[0]
+        # hacky way to use a dictionary for jitted objects
+        dict_species = jnp.array(list(species_to_atomic_numbers.keys()))
+        dict_numbers = jnp.array(list(species_to_atomic_numbers.values()))
         generated_molecule = ase.Atoms(
             positions=final_padded_fragment.nodes.positions[:num_valid_nodes],
-            numbers=models.get_atomic_numbers(
-                final_padded_fragment.nodes.species[:num_valid_nodes],
-                atomic_numbers
-            ),
+            numbers=jax.vmap(
+                lambda x: dict_numbers[jnp.where(dict_species == x, size=1)[0]]
+            )(final_padded_fragment.nodes.species[:num_valid_nodes]).flatten(),
         )
         if stop:
             logging_fn("Generated %s", generated_molecule.get_chemical_formula())

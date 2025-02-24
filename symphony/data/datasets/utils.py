@@ -3,6 +3,7 @@
 from typing import Dict
 import os
 
+import jax
 import jax.numpy as jnp
 from absl import logging
 import tqdm
@@ -15,28 +16,23 @@ import ml_collections
 from symphony.data.datasets import dataset, platonic_solids, qm9, geom_drugs, tmqm, cath
 
 
-def get_atomic_numbers(dataset: str) -> Dict[str, int]:
-    """Returns a dictionary mapping atomic symbols to atomic numbers."""
-    if dataset == "qm9":
-        return qm9.QM9Dataset.get_atomic_numbers()
-    elif dataset == "tmqm":
-        return tmqm.TMQMDataset.get_atomic_numbers()
-    elif dataset == "platonic_solids":
-        return platonic_solids.PlatonicSolidsDataset.get_atomic_numbers()
-    elif dataset == "geom_drugs":
-        return geom_drugs.GEOMDrugsDataset.get_atomic_numbers()
-    elif dataset == "cath":
-        return cath.CATHDataset.get_atomic_numbers()
-    else:
-        raise ValueError(f"Unknown dataset: {dataset}")
-
-
 def species_to_atomic_numbers(
     species: jnp.ndarray, dataset: str,
 ) -> jnp.ndarray:
     """Returns the atomic numbers for the species."""
-    atomic_numbers = get_atomic_numbers(dataset)
-    return jnp.asarray(atomic_numbers)[species]
+    if dataset == "qm9":
+        species_to_atomic_numbers_dict = qm9.QM9Dataset.species_to_atomic_numbers()
+    elif dataset == "tmqm":
+        species_to_atomic_numbers_dict = tmqm.TMQMDataset.species_to_atomic_numbers()
+    elif dataset == "platonic_solids":
+        species_to_atomic_numbers_dict = platonic_solids.PlatonicSolidsDataset.species_to_atomic_numbers()
+    elif dataset == "geom_drugs":
+        species_to_atomic_numbers_dict = geom_drugs.GEOMDrugsDataset.species_to_atomic_numbers()
+    elif dataset == "cath":
+        species_to_atomic_numbers_dict = cath.CATHDataset.species_to_atomic_numbers()
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+    return jax.vmap(species_to_atomic_numbers_dict.get)(species)
     
 
 def get_dataset(config: ml_collections.ConfigDict) -> dataset.InMemoryDataset:

@@ -9,11 +9,19 @@ class InMemoryDataset(abc.ABC):
 
     def num_species(self) -> int:
         """Return the number of atom types."""
-        return len(self.get_atomic_numbers())
+        return len(self.species_to_atomic_numbers())
 
     @abc.abstractmethod
     def get_atomic_numbers(self) -> Sequence[int]:
         """Returns a sorted list of the atomic numbers observed in the dataset."""
+
+    @abc.abstractmethod
+    def species_to_atomic_numbers(self) -> Dict[int, int]:
+        """Returns a dictionary mapping species indices to atomic numbers."""
+    
+    @abc.abstractmethod
+    def atoms_to_species(self) -> Dict[str, int]:
+        """Returns a dictionary mapping atom symbols to species indices."""
 
     @abc.abstractmethod
     def structures(self) -> Iterable[datatypes.Structures]:

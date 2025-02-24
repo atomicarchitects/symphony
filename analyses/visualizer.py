@@ -148,8 +148,7 @@ def get_plotly_traces_for_fragment(
     dataset: str = "qm9",
 ) -> Sequence[go.Scatter3d]:
     """Returns the plotly traces for the fragment."""
-    atomic_numbers = dataset_utils.get_atomic_numbers(dataset)
-    fragment_atomic_numbers = atomic_numbers[fragment.nodes.species]
+    fragment_atomic_numbers = dataset_utils.species_to_atomic_numbers(fragment.nodes.species, dataset)
     molecule_traces = []
     molecule_traces.append(
         go.Scatter3d(
@@ -194,9 +193,9 @@ def get_plotly_traces_for_fragment(
             target_positions = (
                 fragment.globals.target_positions + fragment.nodes.positions[0]
             )
-            target_atomic_number = atomic_numbers[
-                fragment.globals.target_species.item()
-            ]
+            target_atomic_number = dataset_utils.species_to_atomic_numbers(
+                fragment.globals.target_species.item(), dataset
+            )
             molecule_traces.append(
                 go.Scatter3d(
                     x=target_positions[:, 0],
